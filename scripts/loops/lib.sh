@@ -70,3 +70,57 @@ prd_count() {
   done
   echo "$n"
 }
+
+die() { echo "$*" >&2; exit 1; }
+
+# here_name → the name of the .loops worktree the shell is in, or nothing.
+here_name() {
+  local top
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || return 0
+  [[ $top == "$loops"/* ]] && basename "$top"
+  return 0
+}
+
+# topic_of NAME → the PRD topic of a worktree name or branch (prd/x, x, x-3 → x).
+topic_of() {
+  local b
+  b=$(git -C "$loops/$1" branch --show-current 2>/dev/null || echo "$1")
+  case $b in
+    slice/*/*) b=${b#slice/}; echo "${b%/*}" ;;
+    prd/*) echo "${b#prd/}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# web_port DIR → the dev server port of a stacked worktree, or nothing.
+web_port() { env_get "$1/apps/web/.env" WEB_PORT; }
+
+# server_pids PORT → pids listening on PORT.
+server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
+
+# stop_server DIR → stop the worktree's dev server, if one is running.
+stop_server() {
+  local port pids
+  port=$(web_port "$1"); [[ -n $port ]] || return 0
+  pids=$(server_pids "$port"); [[ -n $pids ]] || return 0
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+}
+
+# checked_file DIR → where `pnpm prd check` records the commit it passed on
+# (in the worktree's git dir, so it never shows up as a change).
+checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
+
+# use_node → Node 24 from .nvmrc (the machine default is older).
+use_node() {
+  export NVM_DIR=${NVM_DIR:-$HOME/.nvm}
+  # shellcheck disable=SC1091
+  source "$NVM_DIR/nvm.sh" >/dev/null && nvm use >/dev/null
+}
+
+# trunk_drift BRANCH → the files dev changed since BRANCH last merged it, other
+# than the backlog files (pnpm backlog commits those onto dev all day, and they
+# never affect a branch's code). Empty means BRANCH is up to date with dev.
+trunk_drift() {
+  git -C "$main" diff --name-only "$1...$trunk" | grep -vxF -e plans/backlog.md -e plans/inbox.md || true
+}

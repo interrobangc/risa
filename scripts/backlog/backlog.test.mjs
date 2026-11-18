@@ -49,7 +49,9 @@ describe("backlog CLI", () => {
     expect(cli(prd, "add", "bug", "Sign-in", "twice", "--prd", "quick-fixes")).toBe("added B-1");
     expect(file()).toContain("### B-1 · bug · Sign-in twice");
     expect(lastFiles()).toBe("plans/backlog.md");
-    expect(git(main, "log", "-1", "--format=%s%n%b")).toBe("backlog: add B-1 (bug) Sign-in twice\nBy: prd/x");
+    expect(git(main, "log", "-1", "--format=%s%n%b")).toBe(
+      "chore(backlog): add B-1 (bug) Sign-in twice\nBy: prd/x",
+    );
     expect(git(main, "diff", "--cached", "--name-only")).toBe("other.txt"); // the dev keeper's staging is untouched
     git(main, "reset", "-q", "other.txt");
     git(main, "checkout", "-q", "other.txt");
