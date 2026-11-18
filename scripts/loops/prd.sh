@@ -22,11 +22,12 @@ pnpm prd <command>
     rm <name> [--force]       remove a worktree, its stack and, if merged, its branch
 
   Inside a worktree (name or topic defaults to the one you're in)
-    serve [name] [--restart|--stop]   its dev server, in the background; prints the link
+    serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
     check                     pnpm check, and record that this commit passed
     sync                      merge dev into this PRD branch
-    browser <check> [args…]   run one browser check, at most two at once machine-wide
-                              (--timeout S; --suite runs the full suite with a table)
+    browser <check>           one browser check; at most four run at once machine-wide
+    browser --changed         the checks this worktree's changes need (--base REF, --list)
+    browser --suite           every check, with a table (--timeout S; one retry on contention)
 
   Land
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
