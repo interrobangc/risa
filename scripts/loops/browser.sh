@@ -7,9 +7,12 @@
 #   browser.sh --suite [--timeout S]           every check in $suite, one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
 #                                              (scripts/loops/check-areas), then a table
+#   browser.sh --dev …                         any of the above, against the dev server
 #
-# In a worktree that serves a check build (pnpm prd serve --built), a build
-# older than the source is rebuilt and restarted first.
+# In a .loops worktree with a stack, checks run against a check build (pnpm prd
+# serve --built): one is started when no server is running, swapped in for a
+# running dev server, and rebuilt and restarted when the source is newer than
+# the build. --dev keeps (or starts) the dev server instead.
 #
 # --changed diffs REF (default: $BASE_BRANCH from .env.loop, else origin/dev,
 # else dev) against the working tree: committed, staged, unstaged and untracked
@@ -68,9 +71,9 @@ transient='(timed out|Timed out|timeout|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET
 # Checks run for a changed file no rule covers (check-areas).
 unmapped_default="sign-in phase2 roundtrip"
 
-usage() { sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; }
 
-mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only=""
+mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only="" use_dev=""
 while (($#)); do
   case $1 in
     --suite) mode=suite; shift ;;
@@ -80,6 +83,7 @@ while (($#)); do
     --head) head_ref=${2:?--head needs a ref}; shift 2 ;;
     --list) list_only=1; shift ;;
     --no-retry) retry=0; shift ;;
+    --dev) use_dev=1; shift ;;
     --timeout) timeout=${2:?--timeout needs seconds}; shift 2 ;;
     --timeout=*) timeout=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -199,17 +203,34 @@ if [[ -f .env.loop ]]; then
   set +a
 fi
 
-# fresh_build → when this worktree serves a check build (pnpm prd serve --built)
-# and the source is newer than it, rebuild and restart it, so checks never run
-# against stale code.
-fresh_build() {
-  [[ $(cat "$top/.serve-mode" 2>/dev/null) == built ]] || return 0
-  local newer
-  newer=$(cd "$top" && find apps/web/app apps/web/vite.config.ts apps/web/react-router.config.ts \
-    packages/*/src -type f -newer .serve-built 2>/dev/null | head -1)
-  [[ -z $newer && -f $top/.serve-built ]] && return 0
-  echo "The check build is older than the source (${newer:-no build yet}): rebuilding."
-  "$(dirname "$0")/serve.sh" "$here" --restart --built
+# ensure_server → the server the checks run against, in a .loops worktree with
+# a stack: a check build (pnpm prd serve --built), started if nothing runs,
+# swapped in for a dev server, and rebuilt when the source (or the env baked
+# into it) is newer than the build, so checks never run against stale code.
+# With --dev, the dev server instead. The main checkout's server is the user's:
+# left alone.
+ensure_server() {
+  [[ $here != main && -n $(web_port "$top") ]] || return 0
+  local serve newer
+  serve=$(dirname "$0")/serve.sh
+  if [[ -n $use_dev ]]; then
+    "$serve" "$here" --dev
+    return
+  fi
+  if [[ $(cat "$top/.serve-mode" 2>/dev/null) == built && -n $(server_pids "$(web_port "$top")") ]]; then
+    newer=$(cd "$top" && find apps/web/app apps/web/public apps/web/vite.config.ts apps/web/react-router.config.ts \
+      apps/web/build-target.ts apps/web/package.json apps/web/.env packages/*/src packages/*/package.json \
+      pnpm-lock.yaml -type f ! -name '*.test.ts' -newer .serve-built 2>/dev/null | head -1)
+    if [[ -z $newer && -f $top/.serve-built ]]; then
+      "$serve" "$here" --built
+      return
+    fi
+    echo "The check build is older than the source (${newer:-no build yet}): rebuilding."
+    "$serve" "$here" --restart --built
+    return
+  fi
+  echo "Checks run against a check build (pnpm prd browser --dev for the dev server)."
+  "$serve" "$here" --built
 }
 
 # run_once FILE [args…] → runs it; sets verdict (pass, FAIL, TIMEOUT, ended),
@@ -313,7 +334,7 @@ run_check() {
 
 if [[ $mode == one ]]; then
   file=$(resolve_check "$check") || die "no check $check in $checks_dir"
-  fresh_build
+  ensure_server
   acquire "$(basename "$file")"
   run_check "$file" "${args[@]}"
   exit "$rc"
@@ -405,7 +426,7 @@ fi
 # Both: one lease for the whole run, one check at a time, every check runs.
 suite=("${suite[@]//,/ }")
 read -r -a suite <<< "${suite[*]}"
-fresh_build
+ensure_server
 acquire "$mode"
 rows=() failed=0 i=0 suite_start=$(date +%s)
 echo "Running ${#suite[@]} checks: ${suite[*]}"
