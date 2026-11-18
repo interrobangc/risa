@@ -132,7 +132,7 @@ if ((stack)); then
   echo "Worktree $name ready (slot $slot) at $dir on $branch (from $base)"
   echo "  dev server   pnpm prd serve      → http://localhost:$web"
   echo "  Postgres     :$pg   test :$pgt   PowerSync :$ps (project caretook-loop$slot)"
-  echo "  browser      set -a; source .env.loop; set +a; node scripts/browser-checks/<check>.mjs"
+  echo "  browser      pnpm prd browser --changed   (or one check: pnpm prd browser <check>)"
 else
   echo
   echo "Worktree $name ready (no stack) at $dir on $branch (from $base)"

@@ -130,7 +130,7 @@ trunk_drift() {
 # lock), holding a `name` file of key=value lines: worktree, check, pid (the
 # browser.sh that holds it), started (epoch seconds).
 browser_leases=$loops/.browser
-browser_slots=${CARETOOK_BROWSER_SLOTS:-2}
+browser_slots=${CARETOOK_BROWSER_SLOTS:-4}
 
 # browser_lease_field DIR KEY → one field of a lease's name file.
 browser_lease_field() { env_get "$1/name" "$2"; }
