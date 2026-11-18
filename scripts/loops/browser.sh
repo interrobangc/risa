@@ -17,8 +17,12 @@
 # output goes to the terminal and to a log in the worktree's git dir.
 #
 # --timeout S kills the check (and its Chrome) after S seconds. The checks that
-# never exit on their own ($hangs) get 300 s by default; when they hit it, the
-# verdict comes from their "N/M passed" line, or "ended" when they print none.
+# never exit on their own ($hangs) are stopped 2 s after they print their last
+# line ($hang_done: layout-offline's "N/M passed", signout-wipe's "errors:"),
+# so they don't hold a lease for nothing; 300 s is their default timeout, as a
+# backstop (TIMEOUT: the last line never came). Their verdict comes from the
+# "N/M passed" line, or "ended" when they print none (signout-wipe has no
+# assertions: read its output).
 #
 # Env: CARETOOK_BROWSER_SLOTS (leases, default 2), CARETOOK_BROWSER_WAIT (s),
 # CARETOOK_BROWSER_SUITE (the suite, space or comma separated),
@@ -32,6 +36,9 @@ source "$(dirname "$0")/lib.sh"
 suite_default="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe providers"
 hangs=" signout-wipe.mjs layout-offline.mjs "
 hang_timeout=300
+# The line each never-exiting check prints last, once its work is done.
+hang_done='^([0-9]+/[0-9]+ passed|errors: )'
+hang_grace=2
 wait_max=${CARETOOK_BROWSER_WAIT:-1200}
 poll=${CARETOOK_BROWSER_POLL:-5}
 pause=${CARETOOK_BROWSER_PAUSE:-10}
@@ -164,13 +171,14 @@ fi
 # run_check FILE [args…] → runs it; sets verdict (pass, FAIL, TIMEOUT, ended),
 # rc and elapsed.
 run_check() {
-  local file=$1 base t start load0 log marker tally tee_pid
+  local file=$1 base t start load0 log marker finished hang="" tally tee_pid
   shift
   base=$(basename "$file")
   t=$timeout
   [[ -z $t && $hangs == *" $base "* ]] && t=$hang_timeout
   log=$logdir/${base%.mjs}-$(date +%Y%m%d-%H%M%S).log
-  marker=$log.timedout
+  marker=$log.timedout finished=$log.finished
+  [[ $hangs == *" $base "* ]] && hang=1
   start=$(date +%s) load0=$(load_avg)
   echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)}$([[ -n $t ]] && echo " · timeout ${t}s")"
   cd "$checks_dir"
@@ -178,8 +186,20 @@ run_check() {
   tee_pid=$!
   node "$file" "$@" >&3 2>&1 &
   child=$!
-  if [[ -n $t ]]; then
-    (sleep "$t" && touch "$marker" && kill_tree "$child" TERM && sleep 5 && kill_tree "$child" KILL) &
+  if [[ -n $t || -n $hang ]]; then
+    # One watcher: stop a never-exiting check once its last line is out, and any
+    # check at its timeout.
+    (
+      while kill -0 "$child" 2>/dev/null; do
+        if [[ -n $hang ]] && grep -Eq "$hang_done" "$log" 2>/dev/null; then
+          sleep "$hang_grace"; touch "$finished"; break
+        fi
+        if [[ -n $t ]] && (($(date +%s) - start >= t)); then touch "$marker"; break; fi
+        sleep 1
+      done
+      kill -0 "$child" 2>/dev/null || exit 0
+      kill_tree "$child" TERM; sleep 5; kill_tree "$child" KILL
+    ) &
     watchdog=$!
   fi
   rc=0
@@ -190,19 +210,19 @@ run_check() {
   wait "$tee_pid" 2>/dev/null || true
   cd "$top"
   elapsed=$(($(date +%s) - start))
-  if [[ -f $marker ]]; then
-    rm -f "$marker"
+  if [[ -f $finished ]]; then
+    rm -f "$finished" "$marker"
     tally=$(grep -Eo '^[0-9]+/[0-9]+ passed' "$log" | tail -1 || true)
-    if [[ $hangs == *" $base "* ]]; then
-      if [[ -z $tally ]]; then verdict=ended rc=0
-      elif [[ ${tally%%/*} == "$(echo "$tally" | sed -E 's#^[0-9]+/([0-9]+).*#\1#')" ]]; then verdict=pass rc=0
-      else verdict=FAIL rc=1
-      fi
-      echo "(stopped at its ${t}s timeout, as expected for $base${tally:+: $tally})"
-    else
-      verdict=TIMEOUT rc=124
-      echo "(killed at its ${t}s timeout)"
+    if [[ -z $tally ]]; then verdict=ended rc=0
+    elif [[ ${tally%%/*} == "$(echo "$tally" | sed -E 's#^[0-9]+/([0-9]+).*#\1#')" ]]; then verdict=pass rc=0
+    else verdict=FAIL rc=1
     fi
+    echo "(stopped ${hang_grace}s after its last line, as expected for $base${tally:+: $tally})"
+  elif [[ -f $marker ]]; then
+    # A never-exiting check that gets here never printed its last line either.
+    rm -f "$marker"
+    verdict=TIMEOUT rc=124
+    echo "(killed at its ${t}s timeout$([[ -n $hang ]] && echo " before its last line"))"
   elif ((rc == 0)); then verdict=pass
   else verdict=FAIL
   fi
@@ -238,5 +258,5 @@ echo
 echo "Browser suite in $here: $((${#suite[@]} - failed))/${#suite[@]} passed in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
 printf '%-24s %-8s %s\n' CHECK RESULT TIME
 printf '%s\n' "${rows[@]}"
-echo "(ended: stopped at its timeout without printing a tally; read its log in $logdir)"
+echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"
 ((failed == 0))
