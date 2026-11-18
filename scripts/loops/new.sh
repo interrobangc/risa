@@ -59,6 +59,7 @@ echo "WEB_PORT=$web" >> apps/web/.env
 cat > .env.loop <<ENV
 BASE=http://localhost:$web
 CDP_PORT_OFFSET=$off
+PG_CONTAINER=caretook-loop$slot-postgres-1
 ENV
 grep '^SEED_USER_PASSWORD=' packages/data/.env >> .env.loop || true
 
