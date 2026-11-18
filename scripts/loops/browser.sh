@@ -258,5 +258,5 @@ echo
 echo "Browser suite in $here: $((${#suite[@]} - failed))/${#suite[@]} passed in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
 printf '%-24s %-8s %s\n' CHECK RESULT TIME
 printf '%s\n' "${rows[@]}"
-echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"
+[[ "${rows[*]}" == *" ended "* ]] && echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"
 ((failed == 0))
