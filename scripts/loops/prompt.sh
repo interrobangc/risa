@@ -2,7 +2,7 @@
 # Print the first prompt for a session, so starting one is a single command.
 #
 #   prompt.sh orchestrator <topic>     paste into a new session in .loops/<topic>:
-#     cd .loops/<topic> && claude "$(scripts/loops/prompt.sh orchestrator <topic>)"
+#     cd .loops/<topic> && claude --remote-control prd-<topic> "$(scripts/loops/prompt.sh orchestrator <topic>)"
 #     (pnpm prd start <topic> prints this)
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 set -euo pipefail

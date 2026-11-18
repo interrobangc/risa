@@ -52,7 +52,7 @@ case $cmd in
       echo "Worktree $topic already exists at $loops/$topic."
       echo
       echo "Open its orchestrator in a new terminal:"
-      echo "  cd $loops/$topic && claude \"\$(scripts/loops/prompt.sh orchestrator $topic)\""
+      echo "  cd $loops/$topic && claude --remote-control prd-$topic \"\$(scripts/loops/prompt.sh orchestrator $topic)\""
     else
       exec "$bin/new.sh" prd "$@"
     fi
