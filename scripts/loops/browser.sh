@@ -8,6 +8,9 @@
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
 #                                              (scripts/loops/check-areas), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
+#   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
+#                                              runs only its core path (cdp.mjs step()); without
+#                                              it, checks run in full (SMOKE=0)
 #
 # In a .loops worktree with a stack, checks run against a check build (pnpm prd
 # serve --built): one is started when no server is running, swapped in for a
@@ -47,8 +50,9 @@
 #
 # Env: CARETOOK_BROWSER_SLOTS (leases, default 4), CARETOOK_BROWSER_WAIT (s),
 # CARETOOK_BROWSER_SUITE (the suite, space or comma separated),
-# CARETOOK_BROWSER_PAUSE (s between suite checks, default 10: Better Auth allows
-# about 3 sign-ins per 10 s), CARETOOK_BROWSER_RETRY (0: no retry), CARETOOK_BROWSER_BUSY
+# CARETOOK_BROWSER_PAUSE (s between suite checks, default 2: Better Auth allows
+# about 3 sign-ins per 10 s per client IP, and cdp.mjs gives every page its own),
+# CARETOOK_BROWSER_RETRY (0: no retry), CARETOOK_BROWSER_BUSY
 # (the load that counts as busy, default 40).
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -63,7 +67,7 @@ hang_done='^([0-9]+/[0-9]+ passed|errors: )'
 hang_grace=2
 wait_max=${CARETOOK_BROWSER_WAIT:-1200}
 poll=${CARETOOK_BROWSER_POLL:-5}
-pause=${CARETOOK_BROWSER_PAUSE:-10}
+pause=${CARETOOK_BROWSER_PAUSE:-2}
 retry=${CARETOOK_BROWSER_RETRY:-1}
 busy=${CARETOOK_BROWSER_BUSY:-40}
 # Log lines that mean contention more often than a bug.
@@ -71,9 +75,9 @@ transient='(timed out|Timed out|timeout|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET
 # Checks run for a changed file no rule covers (check-areas).
 unmapped_default="sign-in phase2 roundtrip"
 
-usage() { sed -n '2,52p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,56p' "$0" | sed 's/^# \{0,1\}//'; }
 
-mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only="" use_dev=""
+mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only="" use_dev="" smoke=""
 while (($#)); do
   case $1 in
     --suite) mode=suite; shift ;;
@@ -84,6 +88,7 @@ while (($#)); do
     --list) list_only=1; shift ;;
     --no-retry) retry=0; shift ;;
     --dev) use_dev=1; shift ;;
+    --smoke) smoke=1; shift ;;
     --timeout) timeout=${2:?--timeout needs seconds}; shift 2 ;;
     --timeout=*) timeout=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -202,6 +207,8 @@ if [[ -f .env.loop ]]; then
   source .env.loop
   set +a
 fi
+# Full mode unless --smoke, whatever the shell has set.
+export SMOKE=$([[ -n $smoke ]] && echo 1 || echo 0)
 
 # ensure_server → the server the checks run against, in a .loops worktree with
 # a stack: a check build (pnpm prd serve --built), started if nothing runs,
@@ -246,7 +253,7 @@ run_once() {
   marker=$log.timedout finished=$log.finished
   [[ $hangs == *" $base "* ]] && hang=1
   start=$(date +%s) load0=$(load_avg)
-  echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)}$([[ -n $t ]] && echo " · timeout ${t}s")"
+  echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)}$([[ -n $t ]] && echo " · timeout ${t}s")$([[ -n $smoke ]] && echo " · smoke")"
   cd "$checks_dir"
   exec 3> >(tee "$log")
   tee_pid=$!
@@ -320,7 +327,7 @@ run_check() {
     ((waited == 0)) && echo "Waiting for the load ($(load_avg)) to drop below $busy before retrying…"
     sleep 15; waited=$((waited + 15))
   done
-  sleep "$pause" # Better Auth's sign-in limit
+  sleep "$pause"
   echo "↻ retrying $(basename "$file") once ($why)"
   run_once "$@"
   elapsed=$((elapsed + first_elapsed))
@@ -442,7 +449,7 @@ for c in "${suite[@]}"; do
   rows+=("$(printf '%-24s %-8s %s' "$(basename "$file")" "$verdict" "$(fmt_secs "$elapsed")")")
 done
 echo
-echo "Browser $([[ $mode == changed ]] && echo "checks for the changes" || echo suite) in $here: $((${#suite[@]} - failed))/${#suite[@]} passed in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
+echo "Browser $([[ $mode == changed ]] && echo "checks for the changes" || echo suite)$([[ -n $smoke ]] && echo " (smoke)") in $here: $((${#suite[@]} - failed))/${#suite[@]} passed in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
 printf '%-24s %-8s %s\n' CHECK RESULT TIME
 printf '%s\n' "${rows[@]}"
 [[ "${rows[*]}" == *" ended "* ]] && echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"

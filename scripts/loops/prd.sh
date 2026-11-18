@@ -27,6 +27,7 @@ pnpm prd <command>
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
+    browser --smoke …         any of these in smoke mode: each check's core path only (after a merge)
     browser --suite           every check, with a table (--timeout S; one retry on contention)
 
   Land
