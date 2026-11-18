@@ -110,3 +110,72 @@ describe("changes", () => {
     expect(fmt.derive({ ...it, commit: "" }, { dev: true, staging: true, main: true })).toBe("ready");
   });
 });
+
+describe("inbox", () => {
+  const INBOX = `# Inbox
+
+Add a line under a heading.
+
+- not under a heading, ignored
+
+## Bugs
+
+- Login link can be clicked twice (B-1)
+- The timeline jumps when I scroll
+  It happens on my phone.
+  Only in cards view.
+
+## Change requests
+* Bigger day headers
+
+## Big plans
+- Medication tracking
+
+## Random thoughts
+- Dark mode?
+
+### Deeper heading
+- ignored too
+
+\`\`\`
+## Bugs
+- inside a code fence
+\`\`\`
+`;
+
+  it("finds bullets under ## headings, with their type, details and tag", () => {
+    const entries = fmt.parseInbox(INBOX);
+    expect(entries.map((e) => [e.type, e.text, e.id])).toEqual([
+      ["bug", "Login link can be clicked twice", "B-1"],
+      ["bug", "The timeline jumps when I scroll", null],
+      ["change", "Bigger day headers", null],
+      ["plan", "Medication tracking", null],
+      ["feature", "Dark mode?", null],
+    ]);
+    expect(entries[1].details).toBe("It happens on my phone.\nOnly in cards view.");
+    expect(fmt.newInboxEntries(INBOX)).toHaveLength(4);
+  });
+
+  it("maps headings to types", () => {
+    expect(fmt.typeForHeading("BUGS:")).toBe("bug");
+    expect(fmt.typeForHeading("Feature requests")).toBe("feature");
+    expect(fmt.typeForHeading("Questions")).toBe("question");
+    expect(fmt.typeForHeading("Something else")).toBe("feature");
+  });
+
+  it("tags a line in place, leaving every other line as it was", () => {
+    const line = fmt.parseInbox(INBOX)[1].line;
+    const out = fmt.tagInboxLine(INBOX, line, "B-7");
+    expect(out.split("\n")[line]).toBe("- The timeline jumps when I scroll (B-7)");
+    expect(out.replace(" (B-7)", "")).toBe(INBOX);
+    expect(fmt.newInboxEntries(out)).toHaveLength(3);
+  });
+
+  it("shortens long bullets to a title", () => {
+    const long = "word ".repeat(40).trim();
+    const title = fmt.titleFromBullet(long);
+    expect(title.length).toBeLessThanOrEqual(101);
+    expect(title.endsWith("…")).toBe(true);
+    expect(fmt.titleFromBullet("short  one")).toBe("short one");
+  });
+});

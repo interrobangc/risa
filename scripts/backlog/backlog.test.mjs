@@ -109,6 +109,29 @@ describe("backlog CLI", () => {
     expect(git(main, "status", "--porcelain")).toBe("");
   });
 
+  it("files new inbox bullets, tags them, and commits both files", () => {
+    writeFileSync(
+      join(main, "plans/inbox.md"),
+      "# Inbox\n\n## Bugs\n\n- Already filed (B-1)\n- Scrolling jumps\n  on my phone\n\n## Questions\n\n- Why so slow?\n",
+    );
+    git(main, "add", "plans/inbox.md");
+    git(main, "commit", "-q", "-m", "inbox");
+    expect(cli(main, "inbox")).toContain("2 not filed yet");
+    const out = cli(prd, "ingest");
+    expect(out).toMatch(/B-7 +bug +Scrolling jumps/);
+    expect(out).toMatch(/B-8 +question +Why so slow\?/);
+    const inbox = readFileSync(join(main, "plans/inbox.md"), "utf8");
+    expect(inbox).toContain("- Scrolling jumps (B-7)\n  on my phone");
+    expect(inbox).toContain("- Why so slow? (B-8)");
+    expect(inbox).toContain("- Already filed (B-1)\n");
+    expect(cli(main, "show", "B-7")).toMatch(/status: inbox[\s\S]*From the inbox: on my phone/);
+    expect(git(main, "show", "--name-only", "--format=", "HEAD").split("\n").sort()).toEqual([
+      "plans/backlog.md",
+      "plans/inbox.md",
+    ]);
+    expect(cli(prd, "ingest")).toBe("nothing new in the inbox");
+  });
+
   it("refuses when the main checkout isn't on dev", () => {
     git(main, "switch", "-q", "-c", "elsewhere");
     try {

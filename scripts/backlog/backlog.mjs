@@ -1,11 +1,15 @@
 #!/usr/bin/env node
-// The live backlog: plans/backlog.md on dev, in the main checkout.
+// The live backlog, on dev in the main checkout:
+//   plans/inbox.md    the user's plain list: bullets under headings, no fields
+//   plans/backlog.md  the tracker: ids, status, PRD, owner, commit, notes
 //
 // Anyone (the user, orchestrators, PRD-writing and slice agents) runs this from
-// any worktree. Every write takes a lock, edits the main checkout's copy, and
-// commits only that file onto dev, so the list is live for everyone without
-// merges. Reads show the main checkout's copy too.
+// any worktree. Every write takes a lock, edits the main checkout's copies, and
+// commits only those two files onto dev, so the list is live for everyone
+// without merges. Reads show the main checkout's copy too.
 //
+//   pnpm backlog ingest                      file new inbox bullets (status inbox), tag them (B-n)
+//   pnpm backlog inbox                       show inbox bullets not filed yet
 //   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O]
 //   pnpm backlog show B-n
 //   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT]
@@ -15,7 +19,7 @@
 //   pnpm backlog release B-n
 //   pnpm backlog done B-n… [--commit SHA]    work merged into its PRD branch (default: your HEAD)
 //   pnpm backlog refresh [--no-fetch]        write the derived statuses (landed, staging, live)
-//   pnpm backlog commit [message]            commit hand edits of backlog.md (normalised)
+//   pnpm backlog commit [message]            commit hand edits of either file (backlog.md normalised)
 //   pnpm backlog path
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
@@ -28,6 +32,7 @@ import * as fmt from "./format.mjs";
 const TRUNK = process.env.BACKLOG_BRANCH ?? "dev";
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = "plans/backlog.md";
+const INBOX_REL = "plans/inbox.md";
 
 const git = (cwd, ...args) =>
   execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -44,6 +49,7 @@ const mainCheckout = git(here, "worktree", "list", "--porcelain")
   .split("\n")[0]
   .replace(/^worktree /, "");
 const file = join(mainCheckout, REL);
+const inboxFile = join(mainCheckout, INBOX_REL);
 const lockDir = join(
   resolve(mainCheckout, git(mainCheckout, "rev-parse", "--git-common-dir")),
   "caretook-backlog.lock",
@@ -114,8 +120,11 @@ function withLock(fn) {
 }
 
 /**
- * Read, change, write and commit backlog.md on dev in the main checkout.
- * `message` is the commit subject, or a function of `change`'s result.
+ * Read, change, write and commit the backlog on dev in the main checkout.
+ * `change(backlog, inbox)` edits the parsed backlog, and may set `inbox.text`
+ * (the raw inbox.md). Only the files that changed are committed, and nothing
+ * else the dev keeper has staged. `message` is the commit subject, or a
+ * function of `change`'s result.
  */
 function write(message, change) {
   return withLock(() => {
@@ -126,15 +135,25 @@ function write(message, change) {
       );
     if (existsSync(join(mainCheckout, ".git", "MERGE_HEAD")))
       throw new fmt.BacklogError("the main checkout is in the middle of a merge; try again when it's done");
-    const tracked = tryGit(mainCheckout, "ls-files", "--error-unmatch", REL) !== null;
-    const handEdited = tracked && tryGit(mainCheckout, "diff", "--quiet", "HEAD", "--", REL) === null;
+    const handEdited = [REL, INBOX_REL].filter(
+      (rel) =>
+        tryGit(mainCheckout, "ls-files", "--error-unmatch", rel) !== null &&
+        tryGit(mainCheckout, "diff", "--quiet", "HEAD", "--", rel) === null,
+    );
     const b = read();
-    const result = change(b);
+    const inbox = { text: existsSync(inboxFile) ? readFileSync(inboxFile, "utf8") : null };
+    const before = inbox.text;
+    const result = change(b, inbox);
     writeFileSync(file, fmt.render(b));
-    git(mainCheckout, "add", "--", REL);
-    if (tryGit(mainCheckout, "diff", "--cached", "--quiet", "--", REL) !== null) return result; // nothing changed
+    if (inbox.text !== null && inbox.text !== before) writeFileSync(inboxFile, inbox.text);
+    const paths = [REL, ...(existsSync(inboxFile) ? [INBOX_REL] : [])];
+    git(mainCheckout, "add", "--", ...paths);
+    if (tryGit(mainCheckout, "diff", "--cached", "--quiet", "--", ...paths) !== null) return result; // nothing changed
     const subject = typeof message === "function" ? message(result) : message;
-    const body = [`By: ${who()}`, ...(handEdited ? ["Includes uncommitted hand edits of backlog.md."] : [])];
+    const body = [
+      `By: ${who()}`,
+      ...(handEdited.length ? [`Includes uncommitted hand edits of ${handEdited.join(" and ")}.`] : []),
+    ];
     git(
       mainCheckout,
       "commit",
@@ -144,10 +163,29 @@ function write(message, change) {
       "-m",
       body.join("\n"),
       "--",
-      REL,
+      ...paths,
     );
     return result;
   });
+}
+
+/** File every new inbox bullet as a tracker item (status inbox) and tag it with its id. */
+function ingest(b, inbox) {
+  if (inbox.text === null) return [];
+  const ctx = { by: who(), date: today() };
+  const filed = [];
+  // In file order. Tagging only appends to a line, so line numbers never shift.
+  for (const e of fmt.newInboxEntries(inbox.text)) {
+    const title = fmt.titleFromBullet(e.text);
+    const asked = [title !== e.text.replace(/\s+/g, " ").trim() ? e.text : "", e.details]
+      .filter(Boolean)
+      .join("\n");
+    const it = fmt.add(b, { type: e.type, title, status: "inbox", ...ctx });
+    if (asked) fmt.addNote(it, { text: `From the inbox: ${asked.replace(/\n/g, " / ")}`, ...ctx });
+    inbox.text = fmt.tagInboxLine(inbox.text, e.line, it.id);
+    filed.push(it);
+  }
+  return filed;
 }
 
 // ---- deriving statuses from git -------------------------------------------
@@ -232,7 +270,22 @@ function main() {
     case "show":
       return show(ids(pos)[0]);
     case "path":
-      return console.log(file);
+      return console.log(`${file}\n${inboxFile}`);
+    case "inbox": {
+      const pending = existsSync(inboxFile) ? fmt.newInboxEntries(readFileSync(inboxFile, "utf8")) : [];
+      for (const e of pending) console.log(`${e.type.padEnd(8)}  ${e.text}`);
+      return console.log(
+        pending.length ? `${pending.length} not filed yet (pnpm backlog ingest)` : "nothing new in the inbox",
+      );
+    }
+    case "ingest": {
+      const filed = write(
+        (items) => `file ${items.map((i) => i.id).join(", ")} from the inbox`,
+        (b, inbox) => ingest(b, inbox),
+      );
+      for (const it of filed) console.log(`${it.id}  ${it.type.padEnd(8)}  ${it.title}`);
+      return console.log(filed.length ? `filed ${filed.length}` : "nothing new in the inbox");
+    }
     case "add": {
       const [type, ...words] = pos;
       if (!type) throw new fmt.BacklogError("usage: add <type> <title…>");

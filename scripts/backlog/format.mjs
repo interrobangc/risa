@@ -215,3 +215,92 @@ export function derive(it, has) {
   if (has.dev) return "landed";
   return "ready";
 }
+
+// ---- the inbox (plans/inbox.md): the user's plain list ----------------------
+//
+//   # Inbox
+//   (instructions)
+//   ## Bugs
+//   - Login link can be clicked twice (B-1)      ← filed: tagged with its id
+//   - The timeline jumps when I scroll           ← new: ingest files it
+//     It happens on my phone.                    ← indented lines are details
+//
+// Ingest only ever appends " (B-<n>)" to a new bullet's first line, so the
+// user's own wording and layout are never rewritten.
+
+/** Heading words → item type. A heading that matches none files as "feature". */
+const HEADING_TYPES = [
+  [/bug/i, "bug"],
+  [/question/i, "question"],
+  [/plan|big/i, "plan"],
+  [/chore|tooling|housekeeping/i, "chore"],
+  [/change/i, "change"],
+  [/feature|idea|request/i, "feature"],
+];
+const BULLET = /^[-*+] +(.*\S)\s*$/;
+const TAG = /\s\((B-\d+)\)\s*$/;
+const TITLE_MAX = 100;
+
+/** @param {string} heading */
+export const typeForHeading = (heading) => HEADING_TYPES.find(([re]) => re.test(heading))?.[1] ?? "feature";
+
+/** @typedef {{ line: number, type: string, text: string, details: string, id: string | null }} InboxEntry */
+
+/** Every top-level bullet under a "##" heading. @param {string} text @returns {InboxEntry[]} */
+export function parseInbox(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  /** @type {InboxEntry[]} */
+  const entries = [];
+  let type = null;
+  /** @type {InboxEntry | null} */
+  let cur = null;
+  let fence = false;
+  lines.forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    if (fence) return;
+    if (/^## /.test(line)) {
+      type = typeForHeading(line.slice(3));
+      cur = null;
+      return;
+    }
+    if (/^#/.test(line)) {
+      type = null; // the title, or a deeper heading: not a list
+      cur = null;
+      return;
+    }
+    const b = type ? BULLET.exec(line) : null;
+    if (b) {
+      const tag = TAG.exec(b[1]);
+      cur = {
+        line: i,
+        type,
+        text: tag ? b[1].slice(0, tag.index).trim() : b[1],
+        details: "",
+        id: tag?.[1] ?? null,
+      };
+      entries.push(cur);
+      return;
+    }
+    if (cur && /^\s+\S/.test(line)) cur.details = [cur.details, line.trim()].filter(Boolean).join("\n");
+    else if (line.trim() !== "") cur = null;
+  });
+  return entries;
+}
+
+/** The new (untagged, non-empty) bullets. @param {string} text */
+export const newInboxEntries = (text) => parseInbox(text).filter((e) => !e.id && e.text.trim());
+
+/** Append " (B-n)" to line `line`. @param {string} text @param {number} line @param {string} id */
+export function tagInboxLine(text, line, id) {
+  const lines = text.split("\n");
+  lines[line] = `${lines[line].replace(/\s+$/, "")} (${id})`;
+  return lines.join("\n");
+}
+
+/** A tracker title from a bullet: up to 100 characters, cut at a word. @param {string} text */
+export function titleFromBullet(text) {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= TITLE_MAX) return t;
+  const cut = t.slice(0, TITLE_MAX);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 60))}…`;
+}
