@@ -34,6 +34,8 @@ if [[ -z $force && $branch == prd/* ]]; then
 fi
 
 if [[ -n $(env_get "$dir/.env" CARETOOK_STACK) ]]; then
+  stop_server "$dir"
+  rm -f "$dir/.dev.log"
   (cd "$dir" && docker compose down --remove-orphans && docker compose -f docker-compose.test.yml down --remove-orphans)
   # Postgres writes its data as the container user; remove it through a container.
   docker run --rm -v "$dir:/w" postgres:18.7-alpine rm -rf /w/.postgres

@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
-# it merges into, dirty state, and its stack. Then any stale slot lease.
+# it merges into, dirty state, its containers and its dev server link. Then any
+# stale slot lease. (pnpm prd status)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-printf '%-26s %-4s %-32s %-26s %-6s %s\n' NAME SLOT BRANCH "AHEAD OF PARENT" STATE STACK
+fmt='%-22s %-4s %-28s %-22s %-6s %-10s %s\n'
+# shellcheck disable=SC2059
+printf "$fmt" NAME SLOT BRANCH "AHEAD OF" STATE CONTAINERS "DEV SERVER"
+found=""
 for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
   dir=${dir%/}; name=$(basename "$dir")
@@ -17,12 +21,17 @@ for dir in "$loops"/*/; do
   if [[ -n $proj ]]; then
     slot=${proj#caretook-loop}
     up=$(docker compose -p "$proj" ps -q 2>/dev/null | wc -l | tr -d ' ')
-    stack="$proj ($up up) web :$(env_get "$dir/apps/web/.env" WEB_PORT)"
+    port=$(web_port "$dir")
+    stack="$up up"
+    web="http://localhost:$port $([[ -n $(server_pids "$port") ]] && echo "(running)" || echo "(stopped: pnpm prd serve $name)")"
   else
-    slot=- stack=none
+    slot=- stack=none web=-
   fi
-  printf '%-26s %-4s %-32s %-26s %-6s %s\n' "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack"
+  found=1
+  # shellcheck disable=SC2059
+  printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
 done
+[[ -n $found ]] || echo "(no worktrees: pnpm prd start <topic>)"
 echo "PRD worktrees: $(prd_count) of $max_prds"
 
 for d in "$leases"/*/; do

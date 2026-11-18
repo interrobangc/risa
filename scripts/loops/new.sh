@@ -13,6 +13,7 @@
 # are copied from the main checkout's env files. If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most CARETOOK_MAX_PRDS
 # (default 3) PRD worktrees exist at once. Tear down with rm.sh <name>.
+# (pnpm prd start|slice|plan wrap this.)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -129,7 +130,7 @@ if ((stack)); then
   pnpm datastore:start:test
   echo
   echo "Worktree $name ready (slot $slot) at $dir on $branch (from $base)"
-  echo "  dev server   pnpm dev            → http://localhost:$web"
+  echo "  dev server   pnpm prd serve      → http://localhost:$web"
   echo "  Postgres     :$pg   test :$pgt   PowerSync :$ps (project caretook-loop$slot)"
   echo "  browser      set -a; source .env.loop; set +a; node scripts/browser-checks/<check>.mjs"
 else

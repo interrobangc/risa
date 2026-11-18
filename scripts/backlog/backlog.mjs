@@ -5,12 +5,12 @@
 //
 // Anyone (the user, orchestrators, PRD-writing and slice agents) runs this from
 // any worktree. Every write takes a lock, edits the main checkout's copies, and
-// commits only those two files onto dev, so the list is live for everyone
-// without merges. Reads show the main checkout's copy too.
+// commits only those two files onto dev (as "chore(backlog): …"), so the list
+// is live for everyone without merges. Reads show the main checkout's copy too.
 //
 //   pnpm backlog ingest                      file new inbox bullets (status inbox), tag them (B-n)
 //   pnpm backlog inbox                       show inbox bullets not filed yet
-//   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O]
+//   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   pnpm backlog show B-n
 //   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT]
 //   pnpm backlog set B-n key=value…          keys: status type title prd owner commit
@@ -75,7 +75,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "force", "no-fetch"].includes(key);
+      const flag = ["all", "force", "no-fetch", "json"].includes(key);
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -159,7 +159,7 @@ function write(message, change) {
       "commit",
       "--quiet",
       "-m",
-      `backlog: ${subject}`.slice(0, 72),
+      `chore(backlog): ${subject}`.slice(0, 72),
       "-m",
       body.join("\n"),
       "--",
@@ -221,6 +221,7 @@ function list(opts) {
     .filter((i) => !opts.status || i.status === opts.status)
     .filter((i) => !opts.type || i.type === opts.type)
     .filter((i) => !opts.owner || i.owner === opts.owner);
+  if (opts.json) return console.log(JSON.stringify(rows.map(({ notes: _notes, ...r }) => r)));
   const w = (k, min) => Math.max(min, ...rows.map((r) => r[k].length));
   const ws = {
     id: w("id", 4),

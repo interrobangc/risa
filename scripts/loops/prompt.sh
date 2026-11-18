@@ -3,6 +3,7 @@
 #
 #   prompt.sh orchestrator <topic>     paste into a new session in .loops/<topic>:
 #     cd .loops/<topic> && claude "$(scripts/loops/prompt.sh orchestrator <topic>)"
+#     (pnpm prd start <topic> prints this)
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -26,8 +27,10 @@ You are the PRD orchestrator for "$topic".
 - Your integration worktree is $loops/$topic, on branch prd/$topic. Work only there; never in the main checkout ($main, which stays on dev and belongs to the user, the dev keeper).
 - Read AGENTS.md first, especially _PRDs and parallel loops_. Then read ${prd_read}plans/$topic-plan.md${no_prd:-} (its _Status_ section is where the last orchestrator left off).
 - At every wave boundary, starting now: \`pnpm backlog ingest\` (files the user's new inbox bullets), then \`pnpm backlog list\`. For new items (status inbox) that belong to "$topic", propose it: \`pnpm backlog set B-<n> prd=$topic status=triaged\` plus a \`note\` saying why; the user reviews. Claim each item before you work it (\`pnpm backlog claim B-<n>\`).
-- Run one wave: start only the slices the user asks for, with \`scripts/loops/new.sh slice $topic <n>\`, and spawn one background agent per slice with the prompt from \`scripts/loops/prompt.sh slice $topic <n>\`.
-- Merge finished slices into prd/$topic in plan order, check, and tear down. When the wave is green, sync dev into prd/$topic and tell the user it's ready to land. Don't merge into dev yourself.
+- Run a wave: start only the slices the user asks for, with \`pnpm prd slice $topic <n>\`, and spawn one background agent per slice with the prompt from \`pnpm prd prompt slice $topic <n>\`.
+- Merge finished slices into prd/$topic in plan order (\`git merge --no-ff -m "feat($topic): <what it adds> (slice <n>, B-<n>)" slice/$topic/<n>\`), check, mark their items \`pnpm backlog done\`, and tear down.
+- When the wave is green: \`pnpm prd sync\`, \`pnpm prd check\`, \`pnpm prd serve --restart\`, then show the user the output of \`pnpm prd ready\` (the link to try it, and what it addresses) with anything worth trying by hand. Land with \`pnpm prd land $topic -m "<subject>"\` only after the user says to land this wave; never before.
+- Every commit subject is a Conventional Commit (\`feat($topic): …\`, \`fix($topic): …\`, \`docs\`, \`test\`, \`chore\`…); the commit-msg hook refuses anything else.
 
 Start by summarising the plan's status and the backlog items for "$topic", and ask the user which slices to run.
 EOF
@@ -41,7 +44,8 @@ You are the agent for slice $n of the "$topic" PRD.
 - Read AGENTS.md first, then ${prd_read}slice $n in plans/$topic-plan.md${no_prd:-}.
 - Build only slice $n. Leave other slices' regions and files alone.
 - Follow AGENTS.md's _Loop rules_ and _Rules across PRDs_ exactly, including the hand-off format for your final message.
-- Your stack's slot and ports are in \`.env.loop\` and \`apps/web/.env\` (\`WEB_PORT\`). Delete any scratch scripts before you commit.
+- Your stack's slot and ports are in \`.env.loop\` and \`apps/web/.env\` (\`WEB_PORT\`). \`pnpm prd serve\` runs your dev server in the background. Delete any scratch scripts before you commit.
+- Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`pnpm backlog note B-<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
 EOF
     ;;
