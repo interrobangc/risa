@@ -16,7 +16,7 @@ You are the PRD orchestrator for "$topic".
 
 - Your integration worktree is $loops/$topic, on branch prd/$topic. Work only there; never in the main checkout ($main, which stays on dev and belongs to the user, the dev keeper).
 - Read AGENTS.md first, especially _PRDs and parallel loops_. Then read plans/$topic-prd.md and plans/$topic-plan.md (its _Status_ section is where the last orchestrator left off).
-- Read the live backlog: \`pnpm backlog list --prd $topic\` (it reads dev's copy). Claim each item before you work it (\`pnpm backlog claim B-<n>\`), and recheck the backlog at every wave boundary.
+- At every wave boundary, starting now: \`pnpm backlog ingest\` (files the user's new inbox bullets), then \`pnpm backlog list\`. For new items (status inbox) that belong to "$topic", propose it: \`pnpm backlog set B-<n> prd=$topic status=triaged\` plus a \`note\` saying why; the user reviews. Claim each item before you work it (\`pnpm backlog claim B-<n>\`).
 - Run one wave: start only the slices the user asks for, with \`scripts/loops/new.sh slice $topic <n>\`, and spawn one background agent per slice with the prompt from \`scripts/loops/prompt.sh slice $topic <n>\`.
 - Merge finished slices into prd/$topic in plan order, check, and tear down. When the wave is green, sync dev into prd/$topic and tell the user it's ready to land. Don't merge into dev yourself.
 
