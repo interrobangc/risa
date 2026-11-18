@@ -25,6 +25,8 @@ pnpm prd <command>
     serve [name] [--restart|--stop]   its dev server, in the background; prints the link
     check                     pnpm check, and record that this commit passed
     sync                      merge dev into this PRD branch
+    browser <check> [args…]   run one browser check, at most two at once machine-wide
+                              (--timeout S; --suite runs the full suite with a table)
 
   Land
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
@@ -39,6 +41,7 @@ case $cmd in
   ready) exec "$bin/ready.sh" "$@" ;;
   land) exec "$bin/land.sh" "$@" ;;
   serve) exec "$bin/serve.sh" "$@" ;;
+  browser) exec "$bin/browser.sh" "$@" ;;
   rm) exec "$bin/rm.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   plan) exec "$bin/new.sh" plan "$@" ;;
