@@ -13,6 +13,7 @@ pnpm prd <command>
 
   See what's going on
     status                    every worktree: branch, changes, dev server link
+    status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     ready [topic]             the ready-to-land report: link, what it addresses, blockers
 
   Start and stop work
@@ -39,6 +40,19 @@ USAGE
 cmd=${1:-help}; (($#)) && shift
 case $cmd in
   status | ls) exec "$bin/ls.sh" "$@" ;;
+  status-watch | watch)
+    every=${1:-5}
+    [[ $every =~ ^[0-9]+$ ]] && ((every > 0)) || die "status-watch takes a whole number of seconds (default 5)"
+    trap 'echo; exit 0' INT TERM
+    while :; do
+      # Collect first, then redraw, so the screen never sits empty while ls.sh
+      # runs. A failed poll shows its error and the watch carries on.
+      out=$("$bin/ls.sh" 2>&1) || out+=$'\n'"(pnpm prd status failed; retrying)"
+      [[ -t 1 ]] && printf '\033[H\033[2J\033[3J'
+      printf '%s\n\n%s  ·  every %ss  ·  Ctrl-C to stop\n' "$out" "$(date '+%H:%M:%S')" "$every"
+      sleep "$every"
+    done
+    ;;
   ready) exec "$bin/ready.sh" "$@" ;;
   land) exec "$bin/land.sh" "$@" ;;
   serve) exec "$bin/serve.sh" "$@" ;;
