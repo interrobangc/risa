@@ -97,8 +97,17 @@ ENV
     -e "s#^POWERSYNC_URL=.*#POWERSYNC_URL=\"http://localhost:$ps\"#" \
     -e "s#^VITE_POWERSYNC_URL=.*#VITE_POWERSYNC_URL=\"http://localhost:$ps\"#" \
     -e "/^WEB_PORT=/d" \
+    -e "/^APP_URL=/d" \
     "$main/apps/web/.env" > apps/web/.env
-  echo "WEB_PORT=$web" >> apps/web/.env
+  # Emailed links point at this worktree's dev server. The mail secrets
+  # (CRON_SECRET, INVITE_LINK_KEY, …) come over with the rest of the file.
+  printf 'WEB_PORT=%s\nAPP_URL="http://localhost:%s"\n' "$web" "$web" >> apps/web/.env
+  # A main checkout without a CRON_SECRET still gives the worktree one (random,
+  # local), so /api/cron/outbox can be called there.
+  if ! grep -Eq '^CRON_SECRET="?[^"]' apps/web/.env; then
+    sed -i.bak '/^CRON_SECRET=/d' apps/web/.env && rm -f apps/web/.env.bak
+    printf 'CRON_SECRET="%s"\n' "$(openssl rand -hex 32)" >> apps/web/.env
+  fi
 
   # For browser checks: `set -a; source .env.loop; set +a`.
   cat > .env.loop <<ENV
