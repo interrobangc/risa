@@ -74,7 +74,7 @@ source "$(dirname "$0")/lib.sh"
 
 # The suite when there's no manifest (an older tree): every check in the
 # Browser check budget table. The manifest (scripts/loops/checks) wins.
-suite_fallback="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe session-end providers invites ui groups medications upcoming search profiles profiles-contacts care-periods devices"
+suite_fallback="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe session-end providers invites ui groups medications upcoming search profiles profiles-contacts care-periods devices admin"
 hangs_fallback="signout-wipe layout-offline"
 default_cap=600
 # The line each never-exiting check prints last, once its work is done.
