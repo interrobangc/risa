@@ -36,6 +36,13 @@ case $kind in
       echo "already $(prd_count) PRD worktrees (cap $max_prds; raise CARETOOK_MAX_PRDS to override)" >&2; exit 1
     fi ;;
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
+    # The plan's Stack field (AGENTS.md, _Slice fields_). For now it's only
+    # reported: stackless slices by default come with orchestration slice 5.
+    plan_text=$(git -C "$main" show "${base:-prd/$topic}:plans/$topic-plan.md" 2>/dev/null || true)
+    if [[ -n $plan_text ]]; then
+      planned=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
+      echo "plan: slice $n says Stack: $planned${stack:+ (overridden by --stack/--no-stack)}"
+    fi
     name=$topic-$n branch=slice/$topic/$n base=${base:-prd/$topic} stack=${stack:-1} ;;
   plan) name=plan-$topic branch=plan/$topic base=${base:-$trunk} stack=${stack:-0} ;;
   *) echo "kind must be prd, slice or plan" >&2; exit 1 ;;
