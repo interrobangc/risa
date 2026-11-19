@@ -202,6 +202,11 @@ describe("archive and doctor helpers", () => {
     expect(fmt.removeInboxEntries(text, [])).toBe(text);
   });
 
+  it("leaves an emptied section and the end of the file formatted", () => {
+    const text = "# Inbox\n\n## Bugs\n\n- One (B-1)\n  detail\n\n## Questions\n\n- Two (B-2)\n";
+    expect(fmt.removeInboxEntries(text, ["B-1", "B-2"])).toBe("# Inbox\n\n## Bugs\n\n## Questions\n");
+  });
+
   it("tells whether a title came from a bullet", () => {
     expect(fmt.titleFromEntry(entry("Dates overflow on phones"), item("Dates overflow on phones"))).toBe(
       true,
