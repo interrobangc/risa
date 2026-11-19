@@ -18,7 +18,10 @@ pnpm prd <command>
 
   Start and stop work
     start <topic>             create (or resume) a PRD's worktree and stack; prints how to open its orchestrator
-    plan <topic>              a docs-only worktree for writing a PRD or plan
+    queue <topic> [--manual]  wait for a free PRD slot (in queue order), then create the worktree and open a
+                              fully autonomous orchestrator in this terminal (--manual: it asks how to land)
+    plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
+                              planning session here (it interviews you, writes both, lands them)
     slice <topic> <n>         a slice's worktree and stack (orchestrators run this)
     rm <name> [--force]       remove a worktree, its stack and, if merged, its branch
 
@@ -34,7 +37,7 @@ pnpm prd <command>
   Land
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
 
-  prompt orchestrator|slice <topic> [n]   the first prompt for a session
+  prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session
 USAGE
 }
 
@@ -60,7 +63,22 @@ case $cmd in
   browser) exec "$bin/browser.sh" "$@" ;;
   rm) exec "$bin/rm.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
-  plan) exec "$bin/new.sh" plan "$@" ;;
+  queue) exec "$bin/queue.sh" "$@" ;;
+  plan)
+    topic=${1:?topic}; shift; open=0 items=()
+    for a in "$@"; do
+      case $a in --open) open=1 ;; B-[0-9]*) items+=("$a") ;; *) die "plan: unknown argument $a" ;; esac
+    done
+    dir=$loops/plan-$topic
+    [[ -d $dir ]] || "$bin/new.sh" plan "$topic"
+    cmd_line="cd $dir && claude --remote-control plan-$topic \"\$(scripts/loops/prompt.sh plan $topic ${items[*]:-})\""
+    if ((open)); then
+      cd "$dir" && exec claude --remote-control "plan-$topic" "$("$bin/prompt.sh" plan "$topic" ${items[@]+"${items[@]}"})"
+    fi
+    echo
+    echo "Start its planning session in a new terminal (or rerun with --open):"
+    echo "  $cmd_line"
+    ;;
   slice) exec "$bin/new.sh" slice "$@" ;;
   start)
     topic=${1:?topic}
