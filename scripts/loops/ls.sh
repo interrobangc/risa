@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
 # it merges into, dirty state, its containers and its dev server link. Then the
-# machine's load averages, any stale slot lease, and who holds the machine-wide
-# leases (browser checks and pnpm prd check: lease.sh holders).
-# (pnpm prd status, and pnpm prd status-watch)
+# machine's load averages, any stale slot lease, the shared test Postgres,
+# leftovers for `pnpm prd gc` (merged slice worktrees and stacks stopped for over
+# a day), and who holds the machine-wide leases (browser checks and pnpm prd
+# check: lease.sh holders). (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
-# shellcheck source=lib.sh
-source "$(dirname "$0")/lib.sh"
+# shellcheck source=stack-lib.sh
+source "$(dirname "$0")/stack-lib.sh"
 
 fmt='%-22s %-4s %-28s %-22s %-6s %-10s %s\n'
 # shellcheck disable=SC2059
 printf "$fmt" NAME SLOT BRANCH "AHEAD OF" STATE CONTAINERS "DEV SERVER"
-found=""
+found="" leftovers=""
+limit=$(gc_stopped_after)
 for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
   dir=${dir%/}; name=$(basename "$dir")
@@ -25,11 +27,17 @@ for dir in "$loops"/*/; do
     up=$(docker compose -p "$proj" ps -q 2>/dev/null | wc -l | tr -d ' ')
     port=$(web_port "$dir")
     stack="$up up"
+    if ((up == 0)); then
+      secs=$(stack_stopped_secs "$dir")
+      [[ -n $secs ]] && ((secs >= limit)) &&
+        leftovers+="stopped stack: $name ($proj stopped $(fmt_age "$secs") ago): pnpm prd gc"$'\n'
+    fi
     web="http://localhost:$port $([[ -n $(server_pids "$port") ]] && echo "(running)" || echo "(stopped: pnpm prd serve $name)")"
   else
     slot=- stack=none web=-
   fi
   found=1
+  slice_merged "$dir" && leftovers+="merged: $name ($branch is merged into $parent): pnpm prd gc"$'\n'
   # shellcheck disable=SC2059
   printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
 done
@@ -44,6 +52,10 @@ for d in "$leases"/*/; do
   [[ -d $loops/$holder ]] || stale+="stale lease: slot $(basename "$d") held by $holder (no worktree; rm -r $d)"$'\n'
 done
 [[ -z $stale ]] || printf '\n%s' "$stale"
+[[ -z $leftovers ]] || printf '\n%s' "$leftovers"
+
+echo
+"$(dirname "$0")/test-db.sh" status 2>/dev/null || echo "shared test Postgres: unknown (is Docker running?)"
 
 echo
 "$(dirname "$0")/lease.sh" holders
