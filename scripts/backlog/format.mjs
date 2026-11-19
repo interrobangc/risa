@@ -18,6 +18,15 @@ export const STATUSES = ["inbox", "triaged", "in-progress", "ready", "landed", "
 export const FIELDS = ["status", "prd", "owner", "commit"];
 /** Statuses worked out from git once an item has a commit. */
 export const DERIVED = ["ready", "landed", "staging", "live"];
+/** Finished: `archive` moves these to plans/backlog-archive.md. */
+export const FINISHED = ["landed", "staging", "live", "dropped"];
+
+/** The archive's preamble, when `archive` creates it. */
+export const ARCHIVE_PREAMBLE = [
+  "# Backlog archive",
+  "",
+  "Finished items (landed, staging, live and dropped), moved here from [backlog.md](backlog.md) by `pnpm backlog archive`, with their notes; their inbox lines were removed. `pnpm backlog show B-n` and `pnpm backlog list --all` still find them. Don't edit it by hand.",
+].join("\n");
 
 const SUMMARY = "## Summary";
 const ITEMS = "## Items";
@@ -28,10 +37,14 @@ const FIELD = new RegExp(`^- (${FIELDS.join("|")}):[ \\t]*(.*)$`);
 export class BacklogError extends Error {}
 
 /** @typedef {{ id: string, type: string, title: string, status: string, prd: string, owner: string, commit: string, notes: string }} Item */
-/** @typedef {{ preamble: string, items: Item[] }} Backlog */
+/** @typedef {{ preamble: string, items: Item[], reserved?: string[], archived?: string[] }} Backlog */
 
-/** @param {string} text @returns {Backlog} */
-export function parse(text) {
+/**
+ * @param {string} text
+ * @param {{ lenient?: boolean }} [opts] lenient: keep duplicate ids (for `doctor`) instead of refusing them
+ * @returns {Backlog}
+ */
+export function parse(text, opts = {}) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const at = (h) => lines.findIndex((l) => l.trim() === h);
   const itemsAt = at(ITEMS);
@@ -82,22 +95,52 @@ export function parse(text) {
   }
   finish();
 
-  const seen = new Set();
-  for (const it of items) {
-    if (seen.has(it.id)) throw new BacklogError(`${it.id} appears twice in backlog.md`);
-    seen.add(it.id);
+  if (!opts.lenient) {
+    const [dup] = duplicateIds(items);
+    if (dup) throw new BacklogError(`${dup} appears twice in backlog.md (run pnpm backlog doctor)`);
   }
   return { preamble, items };
 }
+
+/** Ids that appear more than once. @param {{ id: string }[]} items */
+export function duplicateIds(items) {
+  const seen = new Set();
+  const dups = new Set();
+  for (const it of items) (seen.has(it.id) ? dups : seen).add(it.id);
+  return [...dups];
+}
+
+/**
+ * The summary table's rows as written in the file (not as `render` would write them).
+ * @param {string} text @returns {{ id: string, row: string }[]}
+ */
+export function summaryRows(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const start = lines.findIndex((l) => l.trim() === SUMMARY);
+  if (start < 0) return [];
+  const rows = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === ITEMS) break;
+    const m = /^\| (B-\d+) \|/.exec(line);
+    if (m) rows.push({ id: m[1], row: line.trimEnd() });
+  }
+  return rows;
+}
+
+/** The summary rows `render` writes. @param {Backlog} b */
+export const expectedSummaryRows = (b) =>
+  [...b.items].sort((x, y) => num(x.id) - num(y.id)).map((i) => ({ id: i.id, row: summaryRow(i) }));
+
+/** @param {Item} i */
+const summaryRow = (i) =>
+  `| ${i.id} | ${i.type} | ${i.status} | ${cell(i.prd)} | ${cell(i.owner)} | ${cell(i.title)} |`;
 
 const cell = (s) => (s || "").replace(/\|/g, "\\|");
 
 /** @param {Backlog} b @returns {string} */
 export function render(b) {
   const items = [...b.items].sort((x, y) => num(x.id) - num(y.id));
-  const rows = items.map(
-    (i) => `| ${i.id} | ${i.type} | ${i.status} | ${cell(i.prd)} | ${cell(i.owner)} | ${cell(i.title)} |`,
-  );
+  const rows = items.map(summaryRow);
   const blocks = items.map((i) =>
     [
       `### ${i.id} · ${i.type} · ${i.title}`,
@@ -126,16 +169,26 @@ export function render(b) {
 
 const num = (id) => Number(id.slice(2));
 
-/** @param {Backlog} b */
-export const nextId = (b) => `B-${b.items.reduce((m, i) => Math.max(m, num(i.id)), 0) + 1}`;
+/**
+ * The next free id: past every item, and past `b.reserved` (archived ids and
+ * inbox tags), so an id is never given twice.
+ * @param {Backlog & { reserved?: string[] }} b
+ */
+export const nextId = (b) =>
+  `B-${[...b.items.map((i) => i.id), ...(b.reserved ?? [])].reduce((m, id) => Math.max(m, num(id)), 0) + 1}`;
 
 /** @param {Backlog} b @param {string} id @returns {Item} */
 export function find(b, id) {
-  const norm = /^\d+$/.test(id) ? `B-${id}` : id.toUpperCase();
+  const norm = normId(id);
   const it = b.items.find((i) => i.id === norm);
+  if (!it && b.archived?.includes(norm))
+    throw new BacklogError(`${norm} is archived (plans/backlog-archive.md); it can't be changed here`);
   if (!it) throw new BacklogError(`no item ${norm}`);
   return it;
 }
+
+/** "12", "b-12" → "B-12". @param {string} id */
+export const normId = (id) => (/^\d+$/.test(id) ? `B-${id}` : id.toUpperCase());
 
 /** @param {string} type */
 export function checkType(type) {
@@ -303,4 +356,63 @@ export function titleFromBullet(text) {
   if (t.length <= TITLE_MAX) return t;
   const cut = t.slice(0, TITLE_MAX);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 60))}…`;
+}
+
+/**
+ * Remove the bullets tagged with any of `ids`, with their indented detail lines.
+ * @param {string} text @param {string[]} ids
+ */
+export function removeInboxEntries(text, ids) {
+  const want = new Set(ids);
+  const lines = text.split("\n");
+  const drop = new Set();
+  for (const e of parseInbox(text)) {
+    if (!e.id || !want.has(e.id)) continue;
+    drop.add(e.line);
+    // Details: indented lines, and blank lines between them.
+    let last = e.line;
+    for (let i = e.line + 1; i < lines.length; i++) {
+      if (/^\s+\S/.test(lines[i])) last = i;
+      else if (lines[i].trim() !== "") break;
+    }
+    for (let i = e.line + 1; i <= last; i++) drop.add(i);
+  }
+  return lines.filter((_, i) => !drop.has(i)).join("\n");
+}
+
+// ---- does an item's title come from its inbox bullet? -----------------------
+
+const STOP_WORDS = new Set(
+  "the and for with that this from into are was were but not you your our can should when then than have has its also all any".split(
+    " ",
+  ),
+);
+/** Content words, folded and lightly stemmed. @param {string} s */
+const contentWords = (s) =>
+  new Set(
+    s
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3 && !STOP_WORDS.has(w))
+      .map((w) => w.replace(/(ing|ed|es|s)$/, "")),
+  );
+
+/**
+ * Whether item `it` could have been filed from bullet `e` (fuzzy: agents
+ * retitle items). True when the title is the bullet's, when ingest's
+ * "From the inbox" note quotes it, or when the title shares at least two
+ * content words, or a quarter of them, with the bullet and its details.
+ * @param {InboxEntry} e @param {Item} it
+ */
+export function titleFromEntry(e, it) {
+  const text = e.text.replace(/\s+/g, " ").trim();
+  if (titleFromBullet(text) === it.title) return true;
+  if (text && it.notes.replace(/\s+/g, " ").includes(`From the inbox: ${text}`)) return true;
+  const title = contentWords(it.title);
+  if (!title.size) return true;
+  const source = contentWords(`${e.text} ${e.details}`);
+  const shared = [...title].filter((w) => source.has(w)).length;
+  return shared >= 2 || shared / title.size >= 0.25;
 }

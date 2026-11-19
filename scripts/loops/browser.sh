@@ -11,6 +11,7 @@
 #   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
 #                                              runs only its core path (cdp.mjs step()); without
 #                                              it, checks run in full (SMOKE=0)
+#   browser.sh --verbose …                     any of the above, printing each check's whole output
 #
 # In a .loops worktree with a stack, checks run against a check build (pnpm prd
 # serve --built): one is started when no server is running, swapped in for a
@@ -38,30 +39,44 @@
 #
 # The check runs from scripts/browser-checks/ with the worktree's .env.loop
 # (the main checkout's defaults when there is none) and Node from .nvmrc. Its
-# output goes to the terminal and to a log in the worktree's git dir.
+# full output goes to a log in the worktree's git dir. The terminal gets only
+# the ▶ and ■ lines, FAIL lines with their diagnostics block (a timed-out wait's
+# page state), TIMEOUT and FLAKY lines, and the table (a failure that printed
+# none of those gets the log's last lines). --verbose prints everything.
 #
-# --timeout S kills the check (and its Chrome) after S seconds. The checks that
-# never exit on their own ($hangs) are stopped 2 s after they print their last
-# line ($hang_done: layout-offline's "N/M passed", signout-wipe's "errors:"),
-# so they don't hold a lease for nothing; 300 s is their default timeout, as a
-# backstop (TIMEOUT: the last line never came). Their verdict comes from the
+# The manifest scripts/loops/checks lists every check: its usual seconds, its
+# cap, whether it never exits, and whether it's in the suite (e2e), in suite
+# order. Three limits end a check, each as TIMEOUT (so the one retry applies):
+#   - silence: no output line for CARETOOK_BROWSER_SILENCE seconds (default 90);
+#   - its cap: --timeout S, else the manifest's cap, else 600 s;
+#   - the suite cap (--suite and --changed): CARETOOK_BROWSER_SUITE_CAP seconds,
+#     default the sum of the selected checks' caps. Past it the running check is
+#     killed, nothing is retried, and the rest are listed as NOT-RUN.
+# A kill stops the check's whole process tree (node, Chrome, proxies).
+# Checks that never exit on their own (never-exits yes: layout-offline,
+# signout-wipe) are stopped 2 s after they print their last line ($hang_done:
+# "N/M passed", or signout-wipe's "errors:"). Their verdict comes from the
 # "N/M passed" line, or "ended" when they print none (signout-wipe has no
-# assertions: read its output).
+# assertions: read its log).
 #
 # Env: CARETOOK_BROWSER_SLOTS (leases, default 4), CARETOOK_BROWSER_WAIT (s),
-# CARETOOK_BROWSER_SUITE (the suite, space or comma separated),
-# CARETOOK_BROWSER_PAUSE (s between suite checks, default 2: Better Auth allows
-# about 3 sign-ins per 10 s per client IP, and cdp.mjs gives every page its own),
-# CARETOOK_BROWSER_RETRY (0: no retry), CARETOOK_BROWSER_BUSY
-# (the load that counts as busy, default 40).
+# CARETOOK_BROWSER_SUITE (the suite, space or comma separated; default the
+# manifest's e2e checks), CARETOOK_BROWSER_SILENCE (s, default 90),
+# CARETOOK_BROWSER_SUITE_CAP (s), CARETOOK_BROWSER_PAUSE (s between suite
+# checks, default 2: Better Auth allows about 3 sign-ins per 10 s per client
+# IP, and cdp.mjs gives every page its own), CARETOOK_BROWSER_RETRY (0: no
+# retry), CARETOOK_BROWSER_BUSY (the load that counts as busy, default 40),
+# CARETOOK_BROWSER_LEASES and CARETOOK_BROWSER_FLAKES (the lease directory and
+# the flakes log; tests point them elsewhere).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-# The full suite: every check in AGENTS.md's Browser check budget table.
-suite_default="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe session-end providers invites ui groups medications upcoming search profiles profiles-contacts care-periods devices admin"
-hangs=" signout-wipe.mjs layout-offline.mjs "
-hang_timeout=300
+# The suite when there's no manifest (an older tree): every check in the
+# Browser check budget table. The manifest (scripts/loops/checks) wins.
+suite_fallback="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe session-end providers invites ui groups medications upcoming search profiles profiles-contacts care-periods devices admin"
+hangs_fallback="signout-wipe layout-offline"
+default_cap=600
 # The line each never-exiting check prints last, once its work is done.
 hang_done='^([0-9]+/[0-9]+ passed|errors: )'
 hang_grace=2
@@ -70,14 +85,17 @@ poll=${CARETOOK_BROWSER_POLL:-5}
 pause=${CARETOOK_BROWSER_PAUSE:-2}
 retry=${CARETOOK_BROWSER_RETRY:-1}
 busy=${CARETOOK_BROWSER_BUSY:-40}
+silence=${CARETOOK_BROWSER_SILENCE:-90}
+suite_cap=${CARETOOK_BROWSER_SUITE_CAP:-}
+flakes_log=${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}
 # Log lines that mean contention more often than a bug.
 transient='(timed out|Timed out|timeout|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET|socket hang up)'
 # Checks run for a changed file no rule covers (check-areas).
 unmapped_default="sign-in phase2 roundtrip"
 
-usage() { sed -n '2,56p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
-mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only="" use_dev="" smoke=""
+mode=one timeout="" check="" args=() base_ref="" head_ref="" list_only="" use_dev="" smoke="" verbose=""
 while (($#)); do
   case $1 in
     --suite) mode=suite; shift ;;
@@ -89,6 +107,7 @@ while (($#)); do
     --no-retry) retry=0; shift ;;
     --dev) use_dev=1; shift ;;
     --smoke) smoke=1; shift ;;
+    --verbose | -v) verbose=1; shift ;;
     --timeout) timeout=${2:?--timeout needs seconds}; shift 2 ;;
     --timeout=*) timeout=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
@@ -97,6 +116,8 @@ while (($#)); do
   esac
 done
 [[ -z $timeout || $timeout =~ ^[0-9]+$ ]] || die "--timeout takes whole seconds"
+[[ $silence =~ ^[0-9]+$ ]] || die "CARETOOK_BROWSER_SILENCE takes whole seconds"
+[[ -z $suite_cap || $suite_cap =~ ^[0-9]+$ ]] || die "CARETOOK_BROWSER_SUITE_CAP takes whole seconds"
 [[ $mode != one || -n $check ]] || { usage >&2; exit 1; }
 
 top=$(git rev-parse --show-toplevel 2>/dev/null) || die "run pnpm prd browser inside the repo or a .loops worktree"
@@ -104,6 +125,43 @@ here=$(basename "$top"); [[ $top == "$main" ]] && here=main
 checks_dir=$top/scripts/browser-checks
 logdir=$(git -C "$top" rev-parse --absolute-git-dir)/caretook-browser
 mkdir -p "$logdir"
+
+# The manifest: this tree's, else the one beside this script.
+manifest=$top/scripts/loops/checks
+[[ -f $manifest ]] || manifest=$(dirname "$0")/checks
+[[ -f $manifest ]] || manifest=""
+
+# manifest_get CHECK COLUMN → a manifest field (2 usual, 3 cap, 4 never-exits,
+# 5 e2e), or nothing when the check isn't listed.
+manifest_get() {
+  [[ -n $manifest ]] || return 0
+  awk -v c="${1%.mjs}" -v k="$2" '!/^#/ && NF >= 5 && $1 == c { print $k; exit }' "$manifest"
+}
+
+# The suite: the manifest's e2e checks, in its order.
+if [[ -n $manifest ]]; then
+  suite_default=$(awk '!/^#/ && NF >= 5 && $5 == "yes" { printf "%s ", $1 }' "$manifest")
+else
+  suite_default=$suite_fallback
+fi
+
+# never_exits CHECK → whether the check never exits on its own.
+never_exits() {
+  local v
+  v=$(manifest_get "$1" 4)
+  [[ -n $manifest ]] && { [[ $v == yes ]]; return; }
+  [[ " $hangs_fallback " == *" ${1%.mjs} "* ]]
+}
+
+# cap_of CHECK → its cap in seconds: the manifest's, else $default_cap.
+cap_of() {
+  local v
+  v=$(manifest_get "$1" 3)
+  [[ $v =~ ^[0-9]+$ ]] && echo "$v" || echo "$default_cap"
+}
+
+# vsay … → echo only with --verbose (lease bookkeeping and other chatter).
+vsay() { [[ -z $verbose ]] || echo "$@"; }
 
 # resolve_check X → the check's absolute path (phase2, phase2.mjs, or a path).
 resolve_check() {
@@ -125,13 +183,35 @@ kill_tree() {
   kill "-$2" "$1" 2>/dev/null || true
 }
 
+# tree_pids PID → PID and every process below it.
+tree_pids() {
+  local c
+  echo "$1"
+  for c in $(pgrep -P "$1" 2>/dev/null); do tree_pids "$c"; done
+}
+
+# stop_tree PID → TERM the process tree, then KILL whatever is left of it after
+# 5 s (the processes, not just PID's descendants: Chrome outlives its node).
+stop_tree() {
+  local pids p i alive
+  pids=$(tree_pids "$1")
+  for p in $pids; do kill -TERM "$p" 2>/dev/null || true; done
+  for i in $(seq 1 20); do
+    alive=""
+    for p in $pids; do kill -0 "$p" 2>/dev/null && alive=1; done
+    [[ -z $alive ]] && return 0
+    sleep 0.25
+  done
+  for p in $pids; do kill -KILL "$p" 2>/dev/null || true; done
+}
+
 lease="" child="" watchdog=""
 cleanup() {
   [[ -n $watchdog ]] && kill_tree "$watchdog" TERM
   [[ -n $child ]] && kill -0 "$child" 2>/dev/null && kill_tree "$child" TERM
   if [[ -n $lease && $(browser_lease_field "$lease" pid) == "$$" ]]; then
     rm -rf "$lease"
-    echo "Released browser lease $(basename "$lease")."
+    vsay "Released browser lease $(basename "$lease")."
   fi
 }
 trap cleanup EXIT
@@ -169,7 +249,11 @@ acquire() {
       if mkdir "$browser_leases/$n" 2>/dev/null; then
         lease=$browser_leases/$n lease_started=$(date +%s)
         write_lease "$1"
-        echo "Took browser lease $n of $browser_slots$([[ -n $announced ]] && echo " after waiting $(fmt_secs "$waited")")."
+        if [[ -n $announced ]]; then
+          echo "Took browser lease $n of $browser_slots after waiting $(fmt_secs "$waited")."
+        else
+          vsay "Took browser lease $n of $browser_slots."
+        fi
         return 0
       fi
     done
@@ -240,64 +324,116 @@ ensure_server() {
   "$serve" "$here" --built
 }
 
+# start_server → ensure_server, its output in the log dir unless --verbose
+# (shown when it fails).
+start_server() {
+  if [[ -n $verbose ]]; then ensure_server; return; fi
+  local out=$logdir/server.log
+  if ! (ensure_server) > "$out" 2>&1; then
+    cat "$out" >&2
+    die "the server for the checks didn't start (log $out)"
+  fi
+}
+
+# show_output → the terminal's share of a check's output (see the top): all of
+# it with --verbose, else FAIL, TIMEOUT and error lines with the indented block
+# after them. Writes how many lines it showed to $1.
+show_output() {
+  if [[ -n $verbose ]]; then cat; echo 1 > "$1"; return; fi
+  awk -v shown="$1" '
+    function out(l) { print l; fflush(); n++ }
+    /^(FAIL|FAILED|TIMEOUT)([ :(]|$)/ || /timed out waiting for/ || /^[A-Za-z]*Error:/ || /^✗/ { out($0); block = 1; next }
+    block && (/^[ \t]/ || /^\[.*\] at /) { out($0); next }
+    { block = 0 }
+    END { print n + 0 > shown }'
+}
+
 # run_once FILE [args…] → runs it; sets verdict (pass, FAIL, TIMEOUT, ended),
-# rc, elapsed and log.
+# rc, elapsed and log. A check is killed when it's silent for $silence s, at its
+# cap, or at the suite's deadline ($deadline, epoch seconds, when set).
 run_once() {
-  local file=$1 base t start load0 marker finished hang="" tally tee_pid
+  local file=$1 base t why start load0 marker finished silent shown_file hang="" tally tee_pid left i shown killed
   shift
   base=$(basename "$file")
-  t=$timeout
-  [[ -z $t && $hangs == *" $base "* ]] && t=$hang_timeout
+  t=${timeout:-$(cap_of "$base")} why=cap
+  [[ -n $timeout ]] && why=--timeout
+  if [[ -n ${deadline:-} ]]; then
+    left=$((deadline - $(date +%s)))
+    ((left < 1)) && left=1
+    ((left < t)) && { t=$left why="suite cap"; }
+  fi
+  never_exits "$base" && hang=1
   log=$logdir/${base%.mjs}-$(date +%Y%m%d-%H%M%S).log
   [[ -e $log ]] && log=${log%.log}-retry.log
-  marker=$log.timedout finished=$log.finished
-  [[ $hangs == *" $base "* ]] && hang=1
+  marker=$log.timedout finished=$log.finished silent=$log.silent shown_file=$log.shown
   start=$(date +%s) load0=$(load_avg)
-  echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)}$([[ -n $t ]] && echo " · timeout ${t}s")$([[ -n $smoke ]] && echo " · smoke")"
+  echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)} · cap ${t}s$([[ $why != cap ]] && echo " ($why)")$([[ -n $smoke ]] && echo " · smoke")"
   cd "$checks_dir"
-  exec 3> >(tee "$log")
+  : > "$log"
+  exec 3> >(tee -a "$log" | show_output "$shown_file")
   tee_pid=$!
   node "$file" "$@" >&3 2>&1 &
   child=$!
-  if [[ -n $t || -n $hang ]]; then
-    # One watcher: stop a never-exiting check once its last line is out, and any
-    # check at its timeout.
-    (
-      while kill -0 "$child" 2>/dev/null; do
-        if [[ -n $hang ]] && grep -Eq "$hang_done" "$log" 2>/dev/null; then
-          sleep "$hang_grace"; touch "$finished"; break
-        fi
-        if [[ -n $t ]] && (($(date +%s) - start >= t)); then touch "$marker"; break; fi
-        sleep 1
-      done
-      kill -0 "$child" 2>/dev/null || exit 0
-      kill_tree "$child" TERM; sleep 5; kill_tree "$child" KILL
-    ) &
-    watchdog=$!
-  fi
+  # One watcher: stop a never-exiting check once its last line is out, and any
+  # check that goes silent or reaches its cap.
+  (
+    while kill -0 "$child" 2>/dev/null; do
+      now=$(date +%s)
+      if [[ -n $hang ]] && grep -Eq "$hang_done" "$log" 2>/dev/null; then
+        sleep "$hang_grace"; touch "$finished"; break
+      fi
+      if ((now - start >= t)); then touch "$marker"; break; fi
+      last=$(stat -f %m "$log" 2>/dev/null || echo "$start")
+      ((last < start)) && last=$start
+      if ((now - last >= silence)); then touch "$silent"; break; fi
+      sleep 1
+    done
+    kill -0 "$child" 2>/dev/null || exit 0
+    stop_tree "$child"
+  ) 3>&- &
+  watchdog=$!
   rc=0
   wait "$child" || rc=$?
   child=""
-  [[ -n $watchdog ]] && { kill_tree "$watchdog" TERM; wait "$watchdog" 2>/dev/null || true; watchdog=""; }
+  # A watcher that's stopping the check finishes the job (Chrome can outlive node).
+  [[ -f $marker || -f $silent || -f $finished ]] || kill_tree "$watchdog" TERM
+  wait "$watchdog" 2>/dev/null || true
+  watchdog=""
   exec 3>&-
+  # The filter ends once every writer has closed the pipe; don't wait forever
+  # on a stray process that kept it open.
+  for i in $(seq 1 40); do kill -0 "$tee_pid" 2>/dev/null || break; sleep 0.1; done
+  kill_tree "$tee_pid" TERM
   wait "$tee_pid" 2>/dev/null || true
   cd "$top"
   elapsed=$(($(date +%s) - start))
   if [[ -f $finished ]]; then
-    rm -f "$finished" "$marker"
+    rm -f "$finished" "$marker" "$silent"
     tally=$(grep -Eo '^[0-9]+/[0-9]+ passed' "$log" | tail -1 || true)
     if [[ -z $tally ]]; then verdict=ended rc=0
     elif [[ ${tally%%/*} == "$(echo "$tally" | sed -E 's#^[0-9]+/([0-9]+).*#\1#')" ]]; then verdict=pass rc=0
     else verdict=FAIL rc=1
     fi
-    echo "(stopped ${hang_grace}s after its last line, as expected for $base${tally:+: $tally})"
-  elif [[ -f $marker ]]; then
+    vsay "(stopped ${hang_grace}s after its last line, as expected for $base${tally:+: $tally})"
+  elif [[ -f $marker || -f $silent ]]; then
     # A never-exiting check that gets here never printed its last line either.
-    rm -f "$marker"
+    if [[ -f $silent ]]; then
+      killed="TIMEOUT (silent: no output for ${silence}s)"
+    else
+      killed="TIMEOUT (killed at its ${t}s $why${hang:+, before its last line})"
+    fi
+    rm -f "$marker" "$silent"
+    echo "$killed" >> "$log"
+    echo "$killed"
     verdict=TIMEOUT rc=124
-    echo "(killed at its ${t}s timeout$([[ -n $hang ]] && echo " before its last line"))"
   elif ((rc == 0)); then verdict=pass
   else verdict=FAIL
+  fi
+  shown=$(cat "$shown_file" 2>/dev/null || echo 0)
+  rm -f "$shown_file"
+  if [[ $verdict == FAIL && ${shown:-0} == 0 ]]; then
+    echo "  (the log's last lines)"
+    tail -n 12 "$log" | sed 's/^/  /'
   fi
   load_start=$load0 load_end=$(load_avg)
   echo "■ $base: $verdict (exit $rc) in $(fmt_secs "$elapsed") · load at start $load_start, at end $load_end · log $log"
@@ -319,11 +455,15 @@ run_check() {
   run_once "$@"
   [[ $verdict == pass || $verdict == ended ]] && return 0
   ((retry)) || return 0
+  if [[ -n ${deadline:-} ]] && (($(date +%s) >= deadline)); then
+    echo "(not retried: the suite cap is reached)"
+    return 0
+  fi
   looks_transient || { echo "(not retried: the failure doesn't look like contention)"; return 0; }
   first_log=$log first_elapsed=$elapsed
   why="load $(load1 "$load_start")→$(load1 "$load_end")"
   grep -Eq "$transient" "$first_log" 2>/dev/null && why+=", $(grep -Eo "$transient" "$first_log" | head -1 | xargs)"
-  while (($(load1 "$(load_avg)") > busy && waited < 300)); do
+  while (($(load1 "$(load_avg)") > busy && waited < 300)) && [[ -z ${deadline:-} || $(date +%s) -lt $deadline ]]; do
     ((waited == 0)) && echo "Waiting for the load ($(load_avg)) to drop below $busy before retrying…"
     sleep 15; waited=$((waited + 15))
   done
@@ -334,14 +474,14 @@ run_check() {
   if [[ $verdict == pass || $verdict == ended ]]; then
     verdict=FLAKY rc=0
     printf '%s\t%s\t%s\t%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$here" "$(basename "$file")" "$why" "$first_log" \
-      >> "$loops/.browser-flakes.log"
-    echo "■ $(basename "$file"): FLAKY (failed, then passed on the retry; recorded in .loops/.browser-flakes.log)"
+      >> "$flakes_log"
+    echo "■ $(basename "$file"): FLAKY (failed, then passed on the retry; recorded in $flakes_log)"
   fi
 }
 
 if [[ $mode == one ]]; then
   file=$(resolve_check "$check") || die "no check $check in $checks_dir"
-  ensure_server
+  start_server
   acquire "$(basename "$file")"
   run_check "$file" "${args[@]}"
   exit "$rc"
@@ -433,12 +573,20 @@ fi
 # Both: one lease for the whole run, one check at a time, every check runs.
 suite=("${suite[@]//,/ }")
 read -r -a suite <<< "${suite[*]}"
-ensure_server
+start_server
 acquire "$mode"
-rows=() failed=0 i=0 suite_start=$(date +%s)
-echo "Running ${#suite[@]} checks: ${suite[*]}"
+rows=() failed=0 notrun=0 i=0 suite_start=$(date +%s)
+if [[ -z $suite_cap ]]; then
+  suite_cap=0
+  for c in "${suite[@]}"; do suite_cap=$((suite_cap + $(cap_of "$c"))); done
+fi
+deadline=$((suite_start + suite_cap))
+echo "Running ${#suite[@]} checks (suite cap $(fmt_secs "$suite_cap")): ${suite[*]}"
 for c in "${suite[@]}"; do
   i=$((i + 1))
+  if (($(date +%s) >= deadline)); then
+    rows+=("$(printf '%-24s %-8s %s' "${c%.mjs}.mjs" NOT-RUN "-")"); notrun=$((notrun + 1)); continue
+  fi
   if ! file=$(resolve_check "$c"); then
     rows+=("$(printf '%-24s %-8s %s' "$c" MISSING "-")"); failed=$((failed + 1)); continue
   fi
@@ -449,8 +597,8 @@ for c in "${suite[@]}"; do
   rows+=("$(printf '%-24s %-8s %s' "$(basename "$file")" "$verdict" "$(fmt_secs "$elapsed")")")
 done
 echo
-echo "Browser $([[ $mode == changed ]] && echo "checks for the changes" || echo suite)$([[ -n $smoke ]] && echo " (smoke)") in $here: $((${#suite[@]} - failed))/${#suite[@]} passed in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
+echo "Browser $([[ $mode == changed ]] && echo "checks for the changes" || echo suite)$([[ -n $smoke ]] && echo " (smoke)") in $here: $((${#suite[@]} - failed - notrun))/${#suite[@]} passed$( ((notrun)) && echo ", $notrun not run (suite cap $(fmt_secs "$suite_cap") reached)") in $(fmt_secs $(($(date +%s) - suite_start))) · load now $(load_avg)"
 printf '%-24s %-8s %s\n' CHECK RESULT TIME
 printf '%s\n' "${rows[@]}"
 [[ "${rows[*]}" == *" ended "* ]] && echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"
-((failed == 0))
+((failed == 0 && notrun == 0))
