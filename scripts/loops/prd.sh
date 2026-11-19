@@ -24,8 +24,11 @@ pnpm prd <command>
                               planning session here (it interviews you, writes both, lands them)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (it reads the backlog and helps you decide what's next)
-    slice <topic> <n>         a slice's worktree and stack (orchestrators run this)
-    rm <name> [--force]       remove a worktree, its stack and, if merged, its branch
+    slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
+    stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
+    rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
+    gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
+    test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
@@ -65,6 +68,9 @@ case $cmd in
   serve) exec "$bin/serve.sh" "$@" ;;
   browser) exec "$bin/browser.sh" "$@" ;;
   rm) exec "$bin/rm.sh" "$@" ;;
+  stack) exec "$bin/stack.sh" "$@" ;;
+  gc) exec "$bin/gc.sh" "$@" ;;
+  test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
   plan)
