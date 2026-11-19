@@ -108,6 +108,12 @@ ENV
     sed -i.bak '/^CRON_SECRET=/d' apps/web/.env && rm -f apps/web/.env.bak
     printf 'CRON_SECRET="%s"\n' "$(openssl rand -hex 32)" >> apps/web/.env
   fi
+  # Contact messages from the marketing site go to SUPPORT_EMAIL (the dev
+  # mailbox outside production); the main checkout's value comes over above.
+  if ! grep -Eq '^SUPPORT_EMAIL="?[^"]' apps/web/.env; then
+    sed -i.bak '/^SUPPORT_EMAIL=/d' apps/web/.env && rm -f apps/web/.env.bak
+    printf 'SUPPORT_EMAIL="support@example.com"\n' >> apps/web/.env
+  fi
 
   # For browser checks: `set -a; source .env.loop; set +a`.
   cat > .env.loop <<ENV
