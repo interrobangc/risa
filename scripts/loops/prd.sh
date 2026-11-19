@@ -22,6 +22,8 @@ pnpm prd <command>
                               fully autonomous orchestrator in this terminal (--manual: it asks how to land)
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it interviews you, writes both, lands them)
+    plan                      no topic: a backlog and inbox planning session in the main checkout, here
+                              (it reads the backlog and helps you decide what's next)
     slice <topic> <n>         a slice's worktree and stack (orchestrators run this)
     rm <name> [--force]       remove a worktree, its stack and, if merged, its branch
 
@@ -37,7 +39,7 @@ pnpm prd <command>
   Land
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
 
-  prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session
+  prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
 USAGE
 }
 
@@ -65,7 +67,11 @@ case $cmd in
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
   plan)
-    topic=${1:?topic}; shift; open=0 items=()
+    if [[ ${1:-} == "" || ${1:-} == --open ]]; then
+      (($# <= 1)) || die "plan: give a topic before other arguments"
+      cd "$main" && exec claude --remote-control backlog "$("$bin/prompt.sh" backlog)"
+    fi
+    topic=$1; shift; open=0 items=()
     for a in "$@"; do
       case $a in --open) open=1 ;; B-[0-9]*) items+=("$a") ;; *) die "plan: unknown argument $a" ;; esac
     done

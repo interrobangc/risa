@@ -7,11 +7,25 @@
 #   prompt.sh orchestrator <topic> --auto   the same, landing every wave without asking (pnpm prd queue uses it)
 #   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (pnpm prd plan <topic> --open)
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
+#   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan or slice}; topic=${2:?topic}
+kind=${1:?kind: orchestrator, plan, slice or backlog}
+if [[ $kind == backlog ]]; then
+  cat <<EOF
+You are the new backlog/inbox planning agent. Help me decide what is next.
+
+- You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
+- Read AGENTS.md first, especially _PRDs and parallel loops_ and _The live backlog_. Then \`pnpm backlog ingest\` (files new inbox bullets), \`pnpm backlog list\` and \`pnpm prd status\` (what's running).
+- Triage new items through \`pnpm backlog set B-<n> prd=<topic> status=triaged\` with a \`note\` saying why; the user reviews.
+- Propose what to do next: which PRDs to write or start, given the PRD table's dependencies and hot files and the cap of three running at once. Ask with AskUserQuestion, never numbered question lists.
+- To plan a topic, open its planning session (\`pnpm prd plan <topic> --open [B-n …]\` in a new terminal) or work in its worktree from \`pnpm prd plan <topic>\`, never on dev. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
+EOF
+  exit 0
+fi
+topic=${2:?topic}
 items=${*:3}
 
 # A topic may have no PRD (quick-fixes): then its plan is the whole spec.
@@ -84,5 +98,5 @@ You are the agent for slice $n of the "$topic" PRD.
 - You may update your backlog items' notes (\`pnpm backlog note B-<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
 EOF
     ;;
-  *) echo "kind must be orchestrator, plan or slice" >&2; exit 1 ;;
+  *) echo "kind must be orchestrator, plan, slice or backlog" >&2; exit 1 ;;
 esac
