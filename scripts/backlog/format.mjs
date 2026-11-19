@@ -377,7 +377,12 @@ export function removeInboxEntries(text, ids) {
     }
     for (let i = e.line + 1; i <= last; i++) drop.add(i);
   }
-  return lines.filter((_, i) => !drop.has(i)).join("\n");
+  // Collapse the blank lines a removal leaves behind (an emptied section's
+  // two blanks become one, as Prettier would), so the inbox stays formatted.
+  const kept = lines.filter((_, i) => !drop.has(i));
+  const out = kept.filter((l, i) => !(drop.size && l.trim() === "" && i > 0 && kept[i - 1].trim() === ""));
+  while (drop.size && out.length > 1 && out.at(-1) === "" && out.at(-2) === "") out.pop();
+  return out.join("\n");
 }
 
 // ---- does an item's title come from its inbox bullet? -----------------------

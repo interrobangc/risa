@@ -100,7 +100,11 @@ EOF
     if [[ $stack == yes ]]; then
       stack_line="- Your stack's slot and ports are in \`.env.loop\` and \`apps/web/.env\` (\`WEB_PORT\`). \`pnpm prd serve\` runs your dev server in the background."
     else
-      stack_line="- Your worktree has no Docker stack. Instead of \`pnpm check\`, run \`pnpm typecheck && pnpm lint && pnpm format:check && pnpm exec vitest run --project data:unit --project scripts:unit --project web:unit\` (\`pnpm test:unit\` alone is only data:unit; integration tests, the dev server and browser checks need a stack: ask your orchestrator if you find you need one)."
+      stack_line="- Your worktree has no Docker stack. \`pnpm check\` still runs everything: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`pnpm prd stack up\` adds one and \`pnpm prd stack down\` removes it when you're done (tell your orchestrator)."
+      # A worktree made before the shared test Postgres points its tests at a closed port.
+      if grep -q 'localhost:1/' "$loops/$topic-$n/packages/data/.env.test.local" 2>/dev/null; then
+        stack_line+=" Run \`pnpm prd test-db use\` once first: it points your integration tests at that database."
+      fi
     fi
     cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.

@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+# Machine-wide leases: at most N holders of a kind at once, across every worktree.
+#
+#   lease.sh take <kind> [--wait S] [--label L] [--pid P]   take one for process P (default: the caller),
+#                                                           print its directory, and exit
+#   lease.sh release <kind> [N] [--pid P]                   release lease N, or every one P holds
+#   lease.sh run <kind> [--wait S] [--label L] -- cmd…      hold one while cmd runs; exits with its code
+#   lease.sh hold <kind> [--wait S] [--label L] [--watch P] hold one until stdin closes, P exits, or a
+#                                                           TERM/INT; prints "lease <N> <dir>" once held
+#   lease.sh holders [kind…]                                who holds what (default: browser, check, and
+#                                                           any other kind in use)
+#
+# Kinds and their limits: browser (CARETOOK_BROWSER_SLOTS, default 4), check
+# (CARETOOK_CHECK_SLOTS, default 3), anything else (CARETOOK_<KIND>_SLOTS,
+# default 1). The wait is --wait S, else CARETOOK_<KIND>_WAIT, else 1200 s
+# (check: 1800 s); giving up exits 75. Waiters poll every CARETOOK_<KIND>_POLL
+# (else CARETOOK_LEASE_POLL, else 5) seconds.
+#
+# A lease is the directory <dir>/<N> (mkdir is the atomic take), holding a
+# `name` file of key=value lines: kind, worktree, check (what the holder is
+# doing), pid, cmd (a string the holder's command line contains, so a reused pid
+# isn't mistaken for it) and started (epoch seconds). A lease whose holder is
+# gone is taken over by the next waiter, under a short mutex (<dir>/.takeover).
+# Holders release on every exit (the library's callers trap EXIT; run and hold
+# trap EXIT, TERM and INT, and a SIGKILLed holder is taken over).
+#
+# Where: the main checkout's .loops/.lease/<kind>/, except browser, which stays
+# at .loops/.browser/ (where browser.sh kept it before this library), so a
+# browser.sh from before it and one from after it share one set of leases.
+# A pre-library browser.sh counts a lease alive only while its pid's command
+# line contains "browser.sh"; `run` and `hold` of the browser kind re-exec under
+# a name that contains it, so it doesn't take theirs over (take --pid can't).
+# CARETOOK_LEASE_ROOT moves every kind (tests use a temp dir);
+# CARETOOK_BROWSER_LEASES moves the browser kind alone. CARETOOK_LEASES=off
+# takes nothing (every take succeeds at once).
+#
+# Source it for the functions (browser.sh does): lease_take, lease_write,
+# lease_release, lease_holders. Node callers use lease.mjs (takeLease).
+
+# shellcheck source=lib.sh
+declare -F env_get >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+# The lease this process holds (lease_take sets them; lease_release clears them).
+# Callers may set lease_worktree, lease_pid and lease_cmd before taking, and
+# lease_say to a function for chatter (browser.sh: vsay).
+lease_path="" lease_n="" lease_kind="" lease_started=""
+
+lease_valid_kind() { [[ $1 =~ ^[a-z][a-z0-9-]*$ ]]; }
+
+# lease_var KIND SUFFIX → CARETOOK_<KIND>_<SUFFIX>.
+lease_var() { echo "CARETOOK_$(tr '[:lower:]-' '[:upper:]_' <<< "$1")_$2"; }
+
+# lease_env KIND SUFFIX DEFAULT → that variable's value, or DEFAULT.
+lease_env() {
+  local v
+  v=$(lease_var "$1" "$2")
+  echo "${!v:-$3}"
+}
+
+lease_root() { echo "${CARETOOK_LEASE_ROOT:-$loops/.lease}"; }
+
+# lease_dir KIND → the directory its leases live in.
+lease_dir() {
+  if [[ $1 != browser ]]; then
+    echo "$(lease_root)/$1"
+  elif [[ -n ${CARETOOK_BROWSER_LEASES:-} ]]; then
+    echo "$CARETOOK_BROWSER_LEASES"
+  elif [[ -n ${CARETOOK_LEASE_ROOT:-} ]]; then
+    echo "$CARETOOK_LEASE_ROOT/browser"
+  else
+    echo "$loops/.browser"
+  fi
+}
+
+lease_slots() {
+  local d=1
+  case $1 in browser) d=4 ;; check) d=3 ;; esac
+  lease_env "$1" SLOTS "$d"
+}
+lease_wait_max() {
+  local d=1200
+  [[ $1 == check ]] && d=1800
+  lease_env "$1" WAIT "$d"
+}
+lease_poll() { lease_env "$1" POLL "${CARETOOK_LEASE_POLL:-5}"; }
+
+# lease_here → the worktree's name (main for the main checkout).
+lease_here() {
+  local top
+  top=$(git rev-parse --show-toplevel 2>/dev/null) || { basename "$PWD"; return 0; }
+  if [[ $top == "$main" ]]; then echo main; else basename "$top"; fi
+}
+
+lease_field() { env_get "$1/name" "$2"; }
+
+# lease_mtime PATH → its modification time (epoch seconds), or 0.
+lease_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+# lease_alive DIR KIND → true while the lease's holder is running. A lease with
+# no name file yet is being taken (alive) unless it's over a minute old. A name
+# file without cmd is a pre-library browser lease, held by browser.sh.
+lease_alive() {
+  local pid cmd
+  if [[ ! -f $1/name ]]; then
+    [[ -d $1 ]] || return 1
+    (($(date +%s) - $(lease_mtime "$1") < 60))
+    return
+  fi
+  pid=$(lease_field "$1" pid)
+  [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null || return 1
+  cmd=$(lease_field "$1" cmd)
+  [[ -z $cmd && $2 == browser ]] && cmd=browser.sh
+  [[ -z $cmd ]] || ps -p "$pid" -o command= 2>/dev/null | grep -qF -- "$cmd"
+}
+
+# lease_line DIR → "worktree: what (pid P, 3m12s)" for messages.
+lease_line() {
+  local started
+  [[ -f $1/name ]] || { echo "(being taken)"; return 0; }
+  started=$(lease_field "$1" started)
+  printf '%s: %s (pid %s, %s)' "$(lease_field "$1" worktree)" "$(lease_field "$1" check)" \
+    "$(lease_field "$1" pid)" "$(fmt_secs $(($(date +%s) - ${started:-$(date +%s)})))"
+}
+
+# lease_list KIND → one line per held lease of KIND: "  lease N: …".
+lease_list() {
+  local dir n d
+  dir=$(lease_dir "$1")
+  for n in $(seq 1 "$(lease_slots "$1")"); do
+    d=$dir/$n
+    [[ -d $d ]] || continue
+    if lease_alive "$d" "$1"; then
+      echo "  lease $n: $(lease_line "$d")"
+    else
+      echo "  lease $n: stale, $(lease_line "$d") isn't running (the next taker takes it over)"
+    fi
+  done
+}
+
+# lease_holders [KIND…] → each kind's count, then its held leases.
+lease_holders() {
+  local kinds=("$@") kind d k held
+  if ((${#kinds[@]} == 0)); then
+    kinds=(browser check)
+    for d in "$(lease_root)"/*/; do
+      [[ -d $d ]] || continue
+      k=$(basename "$d")
+      lease_valid_kind "$k" && [[ " ${kinds[*]} " != *" $k "* ]] && kinds+=("$k")
+    done
+  fi
+  for kind in "${kinds[@]}"; do
+    held=0
+    for d in "$(lease_dir "$kind")"/*/; do
+      [[ -d $d && $(basename "$d") =~ ^[0-9]+$ ]] && held=$((held + 1))
+    done
+    echo "$kind leases: $held of $(lease_slots "$kind") held"
+    lease_list "$kind"
+  done
+}
+
+# lease_write LABEL → (re)write our lease's name file atomically.
+lease_write() {
+  [[ -n $lease_path ]] || return 0
+  printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
+    "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "${lease_pid:-$$}" "${lease_cmd-$(basename "$0")}" \
+    "${lease_started:-$(date +%s)}" > "$lease_path/name.tmp"
+  mv "$lease_path/name.tmp" "$lease_path/name"
+}
+
+# lease_take_over KIND N → remove lease N if its holder is gone (under a short
+# mutex, so two waiters can't both remove it and one of them delete a fresh lease).
+lease_take_over() {
+  local dir d mutex
+  dir=$(lease_dir "$1") d=$dir/$2 mutex=$dir/.takeover
+  if ! mkdir "$mutex" 2>/dev/null; then
+    (($(date +%s) - $(lease_mtime "$mutex") > 30)) && rmdir "$mutex" 2>/dev/null
+    return 0
+  fi
+  if [[ -d $d ]] && ! lease_alive "$d" "$1"; then
+    echo "Taking over stale $1 lease $2: $(lease_line "$d") isn't running." >&2
+    rm -rf "$d"
+  fi
+  rmdir "$mutex"
+}
+
+# lease_take KIND LABEL [WAIT] → hold a lease of KIND, waiting while all are
+# taken (up to WAIT seconds, else the kind's default). Returns 75 on giving up.
+# The caller releases it (lease_release, from an EXIT trap).
+lease_take() {
+  local kind=$1 label=$2 wait_max=${3:-} dir slots poll n free waited=0 announced=""
+  lease_valid_kind "$kind" || { echo "lease: not a kind: $kind" >&2; return 64; }
+  if [[ ${CARETOOK_LEASES:-} == off ]]; then
+    lease_kind=$kind lease_path="" lease_n=0
+    return 0
+  fi
+  dir=$(lease_dir "$kind") slots=$(lease_slots "$kind") poll=$(lease_poll "$kind")
+  [[ -n $wait_max ]] || wait_max=$(lease_wait_max "$kind")
+  mkdir -p "$dir"
+  while :; do
+    for n in $(seq 1 "$slots"); do
+      if mkdir "$dir/$n" 2>/dev/null; then
+        lease_kind=$kind lease_path=$dir/$n lease_n=$n lease_started=$(date +%s)
+        lease_write "$label"
+        if [[ -n $announced ]]; then
+          echo "Took $kind lease $n of $slots after waiting $(fmt_secs "$waited")." >&2
+        else
+          ${lease_say:-:} "Took $kind lease $n of $slots."
+        fi
+        return 0
+      fi
+    done
+    for n in $(seq 1 "$slots"); do
+      lease_alive "$dir/$n" "$kind" || lease_take_over "$kind" "$n"
+    done
+    free=""
+    for n in $(seq 1 "$slots"); do [[ -d $dir/$n ]] || free=1; done
+    [[ -n $free ]] && continue # one was just freed: take it at once
+    if [[ -z $announced ]]; then
+      echo "All $slots $kind leases are taken; waiting (up to $(fmt_secs "$wait_max")):" >&2
+      lease_list "$kind" >&2
+      announced=1
+    fi
+    if ((waited >= wait_max)); then
+      echo "Gave up after $(fmt_secs "$waited") waiting for a $kind lease (the limit: --wait, else $(lease_var "$kind" WAIT)). Holders:" >&2
+      lease_list "$kind" >&2
+      return 75
+    fi
+    sleep "$poll"
+    waited=$((waited + poll))
+  done
+}
+
+# lease_release → drop the lease this process took, synchronously, unless it
+# was taken over (its name file names another pid). A lease whose name file
+# is missing is still ours: we made the directory and nobody else has written
+# one since. Safe to call twice, from an EXIT trap, and under errexit.
+lease_release() {
+  local p=$lease_path n=$lease_n owner
+  [[ -n $p ]] || return 0
+  lease_path="" lease_n=""
+  owner=$(lease_field "$p" pid)
+  if [[ -d $p && (-z $owner || $owner == "${lease_pid:-$$}") ]]; then
+    rm -rf "$p" || rm -rf "$p" || true
+    ${lease_say:-:} "Released $lease_kind lease $n."
+  fi
+  return 0
+}
+
+# lease_kill_tree PID → TERM PID and everything under it.
+lease_kill_tree() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do lease_kill_tree "$c"; done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+lease_usage() { sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+lease_main() {
+  set -euo pipefail
+  # A pre-library browser.sh only counts holders whose command line names
+  # browser.sh: run and hold of the browser kind re-exec under such a name.
+  if [[ ${1:-} =~ ^(run|hold)$ && ${2:-} == browser && -z ${CARETOOK_LEASE_ARGV0:-} ]]; then
+    export CARETOOK_LEASE_ARGV0=1
+    exec -a "lease.sh(browser.sh)" "$BASH" "${BASH_SOURCE[0]}" "$@"
+  fi
+  unset CARETOOK_LEASE_ARGV0
+  local cmd=${1:-help} kind="" wait="" label="" pid="" watch="" num="" child="" rc
+  (($#)) && shift
+  case $cmd in
+    take | release | run | hold)
+      kind=${1:-}
+      lease_valid_kind "$kind" || die "lease $cmd: give a kind (browser, check, …)"
+      shift
+      ;;
+  esac
+  while (($#)); do
+    case $1 in
+      --wait) wait=${2:?--wait S}; shift 2 ;;
+      --label) label=${2:?--label L}; shift 2 ;;
+      --pid) pid=${2:?--pid P}; shift 2 ;;
+      --watch) watch=${2:?--watch P}; shift 2 ;;
+      --) shift; break ;;
+      [0-9]*) [[ $cmd == release ]] || die "lease $cmd: unexpected $1"; num=$1; shift ;;
+      *) [[ $cmd == holders ]] || die "lease $cmd: unknown argument $1"; break ;;
+    esac
+  done
+  [[ -z $wait || $wait =~ ^[0-9]+$ ]] || die "lease: --wait takes whole seconds"
+  case $cmd in
+    take)
+      lease_pid=${pid:-$PPID}
+      # A string from the holder's command (its program), so a reused pid isn't it.
+      lease_cmd=$(basename "$(ps -p "$lease_pid" -o comm= 2>/dev/null || echo)")
+      lease_take "$kind" "${label:-pid $lease_pid}" "$wait" || exit
+      echo "$lease_path"
+      ;;
+    release)
+      local dir n
+      lease_pid=${pid:-$PPID} lease_kind=$kind
+      dir=$(lease_dir "$kind")
+      for n in ${num:-$(seq 1 "$(lease_slots "$kind")")}; do
+        lease_path=$dir/$n lease_n=$n
+        lease_release
+      done
+      ;;
+    run)
+      (($#)) || die "lease run: give a command after --"
+      trap lease_release EXIT
+      trap '[[ -n $child ]] && lease_kill_tree "$child"; exit 143' TERM
+      trap '[[ -n $child ]] && lease_kill_tree "$child"; exit 130' INT
+      lease_take "$kind" "${label:-$*}" "$wait" || exit
+      "$@" <&0 &
+      child=$!
+      set +e
+      wait "$child"
+      rc=$?
+      set -e
+      child=""
+      exit "$rc"
+      ;;
+    hold)
+      trap lease_release EXIT
+      trap 'exit 143' TERM
+      trap 'exit 130' INT
+      lease_take "$kind" "${label:-hold}" "$wait" || exit
+      echo "lease $lease_n ${lease_path:-(off)}"
+      while :; do
+        if [[ -n $watch ]] && ! kill -0 "$watch" 2>/dev/null; then break; fi
+        read -r -t 1 _ && continue
+        rc=$?
+        ((rc > 128)) || break # EOF: whoever started us is gone or done
+      done
+      ;;
+    holders) lease_holders "$@" ;;
+    help | -h | --help) lease_usage ;;
+    *) lease_usage >&2; exit 64 ;;
+  esac
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then lease_main "$@"; fi

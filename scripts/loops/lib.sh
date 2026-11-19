@@ -125,38 +125,7 @@ trunk_drift() {
   git -C "$main" diff --name-only "$1...$trunk" | grep -vxF -e plans/backlog.md -e plans/inbox.md || true
 }
 
-# Browser check leases (pnpm prd browser): at most $browser_slots checks run at
-# once, machine-wide. A lease is the directory $browser_leases/<N> (mkdir is the
-# lock), holding a `name` file of key=value lines: worktree, check, pid (the
-# browser.sh that holds it), started (epoch seconds). CARETOOK_BROWSER_LEASES
-# moves the directory (browser.sh's unit tests use their own).
-browser_leases=${CARETOOK_BROWSER_LEASES:-$loops/.browser}
-browser_slots=${CARETOOK_BROWSER_SLOTS:-4}
-
-# browser_lease_field DIR KEY → one field of a lease's name file.
-browser_lease_field() { env_get "$1/name" "$2"; }
-
-# browser_lease_alive DIR → true while the lease's holder is running. A lease
-# with no name file yet is being taken (alive) unless it's over a minute old.
-browser_lease_alive() {
-  local pid
-  if [[ ! -f $1/name ]]; then
-    [[ -d $1 ]] || return 1
-    (($(date +%s) - $(stat -f %m "$1" 2>/dev/null || echo 0) < 60))
-    return
-  fi
-  pid=$(browser_lease_field "$1" pid)
-  [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o command= 2>/dev/null | grep -q browser.sh
-}
-
-# browser_lease_line DIR → "worktree: check (pid P, 3m12s)" for messages.
-browser_lease_line() {
-  local started
-  [[ -f $1/name ]] || { echo "(being taken)"; return; }
-  started=$(browser_lease_field "$1" started)
-  printf '%s: %s (pid %s, %s)' "$(browser_lease_field "$1" worktree)" "$(browser_lease_field "$1" check)" \
-    "$(browser_lease_field "$1" pid)" "$(fmt_secs $(($(date +%s) - ${started:-$(date +%s)})))"
-}
+# Machine-wide leases (browser checks, pnpm prd check) live in lease.sh.
 
 # fmt_secs N → 1m05s.
 fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }

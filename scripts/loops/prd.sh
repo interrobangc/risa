@@ -12,7 +12,7 @@ usage() {
 pnpm prd <command>
 
   See what's going on
-    status                    every worktree: branch, changes, dev server link; the load
+    status                    every worktree: branch, changes, dev server link; lease holders; the load
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     ready [topic]             the ready-to-land report: link, what it addresses, blockers
 
@@ -24,12 +24,16 @@ pnpm prd <command>
                               planning session here (it interviews you, writes both, lands them)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (it reads the backlog and helps you decide what's next)
-    slice <topic> <n>         a slice's worktree and stack (orchestrators run this)
-    rm <name> [--force]       remove a worktree, its stack and, if merged, its branch
+    slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
+    stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
+    rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
+    gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
+    test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
-    check                     pnpm check, and record that this commit passed
+    check                     pnpm check (at most three at once machine-wide), and record that
+                              this commit passed
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
@@ -64,6 +68,9 @@ case $cmd in
   serve) exec "$bin/serve.sh" "$@" ;;
   browser) exec "$bin/browser.sh" "$@" ;;
   rm) exec "$bin/rm.sh" "$@" ;;
+  stack) exec "$bin/stack.sh" "$@" ;;
+  gc) exec "$bin/gc.sh" "$@" ;;
+  test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
   plan)
@@ -102,7 +109,9 @@ case $cmd in
     dir=$loops/$name
     rm -f "$(checked_file "$dir")"
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
-    (cd "$dir" && use_node && pnpm check)
+    # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 3) around it, so a
+    # wave of loops finishing together doesn't run every pnpm check at once.
+    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- pnpm check)
     git -C "$dir" rev-parse HEAD > "$(checked_file "$dir")"
     echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     ;;
