@@ -179,3 +179,67 @@ Add a line under a heading.
     expect(fmt.titleFromBullet("short  one")).toBe("short one");
   });
 });
+
+describe("archive and doctor helpers", () => {
+  const item = (title, notes = "") => ({
+    id: "B-1",
+    type: "bug",
+    title,
+    status: "inbox",
+    prd: "",
+    owner: "",
+    commit: "",
+    notes,
+  });
+  const entry = (text, details = "") => ({ line: 0, type: "bug", text, details, id: "B-1" });
+
+  it("removes tagged bullets with their details, and nothing else", () => {
+    const text =
+      "# Inbox\n\n## Bugs\n\n- One (B-1)\n  detail\n\n  more detail\n- Two (B-2)\n- Three\n  its detail\n\n## Other\n\n- Four (B-1x)\n";
+    expect(fmt.removeInboxEntries(text, ["B-1", "B-3"])).toBe(
+      "# Inbox\n\n## Bugs\n\n- Two (B-2)\n- Three\n  its detail\n\n## Other\n\n- Four (B-1x)\n",
+    );
+    expect(fmt.removeInboxEntries(text, [])).toBe(text);
+  });
+
+  it("tells whether a title came from a bullet", () => {
+    expect(fmt.titleFromEntry(entry("Dates overflow on phones"), item("Dates overflow on phones"))).toBe(
+      true,
+    );
+    // Retitled by an agent, sharing words with the bullet.
+    expect(
+      fmt.titleFromEntry(
+        entry("Login link allows clicking multiple times while already loading login flow... very slow."),
+        item("Sign-in can be submitted again while it's loading, and the first load is slow"),
+      ),
+    ).toBe(true);
+    // Quoted by ingest's note.
+    expect(
+      fmt.titleFromEntry(
+        entry("Some long thing"),
+        item("Other words", "- d (x): From the inbox: Some long thing"),
+      ),
+    ).toBe(true);
+    // The B-106 case.
+    expect(
+      fmt.titleFromEntry(
+        entry("Browser testing without a timeout keeps causing hung processes."),
+        item("Turning email invites off also blocks staff owner invites from /admin"),
+      ),
+    ).toBe(false);
+  });
+
+  it("reads the summary rows as written, and the ones render would write", () => {
+    const b = fmt.parse("# B\n\n## Items\n\n### B-2 · bug · Two\n\n- status: inbox\n");
+    const text = fmt.render(b);
+    expect(fmt.summaryRows(text)).toEqual(fmt.expectedSummaryRows(b));
+    expect(fmt.summaryRows(text).map((r) => r.id)).toEqual(["B-2"]);
+  });
+
+  it("keeps duplicate ids only when lenient, and skips reserved ids", () => {
+    const dup = "# B\n\n## Items\n\n### B-1 · bug · A\n\n### B-1 · bug · B\n";
+    expect(() => fmt.parse(dup)).toThrow(/B-1 appears twice/);
+    expect(fmt.duplicateIds(fmt.parse(dup, { lenient: true }).items)).toEqual(["B-1"]);
+    expect(fmt.nextId({ preamble: "", items: [item("x")], reserved: ["B-7", "B-3"] })).toBe("B-8");
+  });
+});
