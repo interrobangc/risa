@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Tear down a worktree made by new.sh: stop and delete its Docker stacks and
-# data, remove the worktree and release its slot. Then delete its branch if it's
+# data, drop its database on the shared test Postgres, remove the worktree and
+# release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
 # plan/* → dev); an unmerged branch is kept. Refuses uncommitted changes, and a
 # PRD worktree whose slices still have worktrees, unless --force.
 #
 #   scripts/loops/rm.sh <name> [--force] [--keep-branch]
 set -euo pipefail
-# shellcheck source=lib.sh
-source "$(dirname "$0")/lib.sh"
+# shellcheck source=stack-lib.sh
+source "$(dirname "$0")/stack-lib.sh"
 
 name=${1:?name}; shift
 force="" keep=""
@@ -33,13 +34,9 @@ if [[ -z $force && $branch == prd/* ]]; then
   done
 fi
 
-if [[ -n $(env_get "$dir/.env" CARETOOK_STACK) ]]; then
-  stop_server "$dir"
-  rm -f "$dir/.dev.log"
-  (cd "$dir" && docker compose down --remove-orphans && docker compose -f docker-compose.test.yml down --remove-orphans)
-  # Postgres writes its data as the container user; remove it through a container.
-  docker run --rm -v "$dir:/w" postgres:18.7-alpine rm -rf /w/.postgres
-fi
+stack_teardown "$dir"
+# Its database on the shared test Postgres (nothing when that isn't running).
+"$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
 git -C "$main" worktree remove ${force:+--force} "$dir"
 release_slot "$name"
 
