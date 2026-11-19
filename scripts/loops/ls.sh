@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
-# it merges into, dirty state, its containers and its dev server link. Then any
-# stale slot lease, and who holds the browser check leases. (pnpm prd status)
+# it merges into, dirty state, its containers and its dev server link. Then the
+# machine's load averages, any stale slot lease, and who holds the browser check
+# leases. (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -34,12 +35,16 @@ done
 [[ -n $found ]] || echo "(no worktrees: pnpm prd start <topic>)"
 echo "PRD worktrees: $(prd_count) of $max_prds"
 
+# Sections are separated by a blank line; stale leases only show when there are any.
+stale=""
 for d in "$leases"/*/; do
   [[ -f $d/name ]] || continue
   holder=$(cat "$d/name")
-  [[ -d $loops/$holder ]] || echo "stale lease: slot $(basename "$d") held by $holder (no worktree; rm -r $d)"
+  [[ -d $loops/$holder ]] || stale+="stale lease: slot $(basename "$d") held by $holder (no worktree; rm -r $d)"$'\n'
 done
+[[ -z $stale ]] || printf '\n%s' "$stale"
 
+echo
 for n in $(seq 1 "$browser_slots"); do
   d=$browser_leases/$n
   if [[ ! -d $d ]]; then
@@ -50,3 +55,9 @@ for n in $(seq 1 "$browser_slots"); do
     echo "browser lease $n of $browser_slots: stale, $(browser_lease_line "$d") isn't running (the next pnpm prd browser takes it over)"
   fi
 done
+
+echo
+# The load, against the cores and the 1-minute load browser checks treat as busy.
+load=$(load_avg) cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo '?')
+busy=${CARETOOK_BROWSER_BUSY:-40} l1=${load%% *}
+echo "load: $load (1, 5, 15 min) on $cores cores$( ((${l1%%.*} > busy)) && echo " · BUSY: over $busy, browser checks will wait before retrying")"
