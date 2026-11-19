@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
 # it merges into, dirty state, its containers and its dev server link. Then the
-# machine's load averages, any stale slot lease, and who holds the browser check
-# leases. (pnpm prd status, and pnpm prd status-watch)
+# machine's load averages, any stale slot lease, and who holds the machine-wide
+# leases (browser checks and pnpm prd check: lease.sh holders).
+# (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -45,16 +46,7 @@ done
 [[ -z $stale ]] || printf '\n%s' "$stale"
 
 echo
-for n in $(seq 1 "$browser_slots"); do
-  d=$browser_leases/$n
-  if [[ ! -d $d ]]; then
-    echo "browser lease $n of $browser_slots: free"
-  elif browser_lease_alive "$d"; then
-    echo "browser lease $n of $browser_slots: $(browser_lease_line "$d")"
-  else
-    echo "browser lease $n of $browser_slots: stale, $(browser_lease_line "$d") isn't running (the next pnpm prd browser takes it over)"
-  fi
-done
+"$(dirname "$0")/lease.sh" holders
 
 echo
 # The load, against the cores and the 1-minute load browser checks treat as busy.

@@ -31,7 +31,7 @@
 # drop below that. A pass on the retry is FLAKY: it counts as passing, and is
 # recorded in $main/.loops/.browser-flakes.log so flaky steps can be fixed.
 #
-# Each run holds a lease, the directory $main/.loops/.browser/<N> (see lib.sh).
+# Each run holds a browser lease (lease.sh), the directory $main/.loops/.browser/<N>.
 # When every lease is taken it waits, polling every 5 s, and gives up after
 # CARETOOK_BROWSER_WAIT seconds (default 1200). A lease whose holder is gone is
 # taken over. The lease is released on every exit: success, failure, timeout,
@@ -71,6 +71,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
+# shellcheck source=lease.sh
+source "$(dirname "$0")/lease.sh"
 
 # The suite when there's no manifest (an older tree): every check in the
 # Browser check budget table. The manifest (scripts/loops/checks) wins.
@@ -81,7 +83,6 @@ default_cap=600
 hang_done='^([0-9]+/[0-9]+ passed|errors: )'
 hang_grace=2
 wait_max=${CARETOOK_BROWSER_WAIT:-1200}
-poll=${CARETOOK_BROWSER_POLL:-5}
 pause=${CARETOOK_BROWSER_PAUSE:-2}
 retry=${CARETOOK_BROWSER_RETRY:-1}
 busy=${CARETOOK_BROWSER_BUSY:-40}
@@ -205,76 +206,31 @@ stop_tree() {
   for p in $pids; do kill -KILL "$p" 2>/dev/null || true; done
 }
 
-lease="" child="" watchdog=""
+child="" watchdog=""
+# On every exit: stop the check's processes, then release the lease, with
+# errexit off so nothing in here can skip the release. The release is
+# synchronous, so the lease is gone before browser.sh exits; the normal paths
+# also release it before their exit (done_with).
 cleanup() {
+  set +e
   [[ -n $watchdog ]] && kill_tree "$watchdog" TERM
   [[ -n $child ]] && kill -0 "$child" 2>/dev/null && kill_tree "$child" TERM
-  if [[ -n $lease && $(browser_lease_field "$lease" pid) == "$$" ]]; then
-    rm -rf "$lease"
-    vsay "Released browser lease $(basename "$lease")."
-  fi
+  lease_release
 }
+# done_with RC → release the lease, then exit with RC.
+done_with() { lease_release; exit "$1"; }
 trap cleanup EXIT
 trap 'echo; echo "Interrupted."; exit 130' INT
 trap 'exit 143' TERM
 
-# write_lease LABEL → (re)write our lease's name file atomically.
-write_lease() {
-  printf 'worktree=%s\ncheck=%s\npid=%s\nstarted=%s\n' "$here" "$1" "$$" "${lease_started:-$(date +%s)}" \
-    > "$lease/name.tmp"
-  mv "$lease/name.tmp" "$lease/name"
-}
-
-# take_over N → remove lease N if its holder is gone (under a short mutex, so two
-# waiters can't both remove it and one of them delete a fresh lease).
-take_over() {
-  local d=$browser_leases/$1 mutex=$browser_leases/.takeover
-  if ! mkdir "$mutex" 2>/dev/null; then
-    (($(date +%s) - $(stat -f %m "$mutex" 2>/dev/null || date +%s) > 30)) && rmdir "$mutex" 2>/dev/null
-    return 0
-  fi
-  if [[ -d $d ]] && ! browser_lease_alive "$d"; then
-    echo "Taking over stale browser lease $1: $(browser_lease_line "$d") isn't running."
-    rm -rf "$d"
-  fi
-  rmdir "$mutex"
-}
-
-# acquire LABEL → hold a lease, waiting while all are taken.
+# Leases come from lease.sh (kind browser): write_lease LABEL relabels ours
+# (the suite does, per check), acquire LABEL takes one, waiting while all are
+# taken, and gives up with exit 75 after CARETOOK_BROWSER_WAIT seconds.
+lease_say=vsay
+write_lease() { lease_write "$1"; }
 acquire() {
-  local n free waited=0 announced=""
-  mkdir -p "$browser_leases"
-  while :; do
-    for n in $(seq 1 "$browser_slots"); do
-      if mkdir "$browser_leases/$n" 2>/dev/null; then
-        lease=$browser_leases/$n lease_started=$(date +%s)
-        write_lease "$1"
-        if [[ -n $announced ]]; then
-          echo "Took browser lease $n of $browser_slots after waiting $(fmt_secs "$waited")."
-        else
-          vsay "Took browser lease $n of $browser_slots."
-        fi
-        return 0
-      fi
-    done
-    for n in $(seq 1 "$browser_slots"); do
-      browser_lease_alive "$browser_leases/$n" || take_over "$n"
-    done
-    free=""
-    for n in $(seq 1 "$browser_slots"); do [[ -d $browser_leases/$n ]] || free=1; done
-    [[ -n $free ]] && continue # one was just freed: take it at once
-    if [[ -z $announced ]]; then
-      echo "All $browser_slots browser leases are taken; waiting (up to $(fmt_secs "$wait_max")):"
-      for n in $(seq 1 "$browser_slots"); do echo "  lease $n: $(browser_lease_line "$browser_leases/$n")"; done
-      announced=1
-    fi
-    if ((waited >= wait_max)); then
-      echo "Gave up after $(fmt_secs "$waited") waiting for a browser lease (CARETOOK_BROWSER_WAIT=$wait_max). Holders:" >&2
-      for n in $(seq 1 "$browser_slots"); do echo "  lease $n: $(browser_lease_line "$browser_leases/$n")" >&2; done
-      exit 75
-    fi
-    sleep "$poll"; waited=$((waited + poll))
-  done
+  lease_worktree=$here
+  lease_take browser "$1" "$wait_max" || exit 75
 }
 
 # Node 24 from .nvmrc, and the worktree's ports.
@@ -367,7 +323,7 @@ run_once() {
   [[ -e $log ]] && log=${log%.log}-retry.log
   marker=$log.timedout finished=$log.finished silent=$log.silent shown_file=$log.shown
   start=$(date +%s) load0=$(load_avg)
-  echo "▶ $base in $here · lease $(basename "$lease")/$browser_slots · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)} · cap ${t}s$([[ $why != cap ]] && echo " ($why)")$([[ -n $smoke ]] && echo " · smoke")"
+  echo "▶ $base in $here · lease $lease_n/$(lease_slots browser) · $(date +%H:%M:%S) · load $load0 · BASE ${BASE:-(default)} · cap ${t}s$([[ $why != cap ]] && echo " ($why)")$([[ -n $smoke ]] && echo " · smoke")"
   cd "$checks_dir"
   : > "$log"
   exec 3> >(tee -a "$log" | show_output "$shown_file")
@@ -484,7 +440,7 @@ if [[ $mode == one ]]; then
   start_server
   acquire "$(basename "$file")"
   run_check "$file" "${args[@]}"
-  exit "$rc"
+  done_with "$rc"
 fi
 
 # --changed: the checks the changed files need, from scripts/loops/check-areas.
@@ -601,4 +557,5 @@ echo "Browser $([[ $mode == changed ]] && echo "checks for the changes" || echo 
 printf '%-24s %-8s %s\n' CHECK RESULT TIME
 printf '%s\n' "${rows[@]}"
 [[ "${rows[*]}" == *" ended "* ]] && echo "(ended: a never-exiting check stopped without a tally; read its log in $logdir)"
-((failed == 0 && notrun == 0))
+((failed == 0 && notrun == 0)) && done_with 0
+done_with 1

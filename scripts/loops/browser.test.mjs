@@ -1,7 +1,7 @@
 // browser.sh's watchdog, caps, retry and trimmed output, with fake checks in a
 // throwaway repo. Its leases and flakes log are moved into the temp dir, so
 // these never take one of the machine's real browser leases.
-import { spawnSync, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -175,6 +175,17 @@ describe("one check", SLOW, () => {
     expect(out).toMatch(/^step: timed out waiting for x\n\[step\] at \/app\n {2}\(no errors reported\)$/m);
     expect(out).toMatch(/^■ flaky\.mjs: FLAKY/m);
     expect(readFileSync(env.CARETOOK_BROWSER_FLAKES, "utf8")).toMatch(/\tflaky\.mjs\t/);
+  });
+
+  it("releases its lease before it exits when it's TERMed mid-check", async () => {
+    const child = spawn("bash", [BROWSER, "--no-retry", "silent"], { cwd: repo, env, stdio: "ignore" });
+    const exited = new Promise((r) => child.once("exit", (code) => r(code)));
+    const end = Date.now() + 30_000;
+    while (leasesLeft().length === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+    expect(leasesLeft()).toEqual(["1"]);
+    child.kill("SIGTERM");
+    expect(await exited).toBe(143);
+    expect(leasesLeft()).toEqual([]);
   });
 
   it("stops a never-exiting check after its last line", () => {
