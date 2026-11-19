@@ -128,8 +128,9 @@ trunk_drift() {
 # Browser check leases (pnpm prd browser): at most $browser_slots checks run at
 # once, machine-wide. A lease is the directory $browser_leases/<N> (mkdir is the
 # lock), holding a `name` file of key=value lines: worktree, check, pid (the
-# browser.sh that holds it), started (epoch seconds).
-browser_leases=$loops/.browser
+# browser.sh that holds it), started (epoch seconds). CARETOOK_BROWSER_LEASES
+# moves the directory (browser.sh's unit tests use their own).
+browser_leases=${CARETOOK_BROWSER_LEASES:-$loops/.browser}
 browser_slots=${CARETOOK_BROWSER_SLOTS:-4}
 
 # browser_lease_field DIR KEY → one field of a lease's name file.
