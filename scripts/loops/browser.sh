@@ -59,7 +59,7 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
 # The full suite: every check in AGENTS.md's Browser check budget table.
-suite_default="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe providers invites ui groups medications upcoming profiles profiles-contacts"
+suite_default="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe providers invites ui groups medications upcoming search profiles profiles-contacts"
 hangs=" signout-wipe.mjs layout-offline.mjs "
 hang_timeout=300
 # The line each never-exiting check prints last, once its work is done.
