@@ -298,8 +298,8 @@ describe("--changed with the real map", SLOW, () => {
     expect(out).toMatch(/lib\/timeline\/exampleRule\.ts +- \(unit-tested\)$/m);
     expect(out).toMatch(/lib\/timeline\/exampleRule\.test\.ts +-$/m);
     expect(out).toMatch(/lib\/timeline\/timeline\.sync\.ts +phase2 roundtrip$/m);
-    expect(out).toMatch(/MembersList\.tsx +app-shell profiles-contacts$/m);
-    expect(out).toMatch(/^Checks needed: phase2 roundtrip app-shell profiles-contacts$/m);
+    expect(out).toMatch(/MembersList\.tsx +app-shell$/m);
+    expect(out).toMatch(/^Checks needed: phase2 roundtrip app-shell$/m);
   });
 
   it("needs nothing for a check the change deletes (its screens moved to component tests)", () => {
