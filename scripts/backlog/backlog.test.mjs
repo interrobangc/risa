@@ -50,7 +50,7 @@ describe("backlog CLI", () => {
     expect(file()).toContain("### B-1 · bug · Sign-in twice");
     expect(lastFiles()).toBe("plans/backlog.md");
     expect(git(main, "log", "-1", "--format=%s%n%b")).toBe(
-      "chore(backlog): add B-1 (bug) Sign-in twice\nBy: prd/x",
+      "chore(backlog): add B-1 (bug) Sign-in twice\nBy: prd/x\n\nBacklog-Tool: add\nBacklog-Ids: B-1",
     );
     expect(git(main, "diff", "--cached", "--name-only")).toBe("other.txt"); // the dev keeper's staging is untouched
     git(main, "reset", "-q", "other.txt");
@@ -299,5 +299,138 @@ describe("backlog CLI: safety, doctor and archive", () => {
     expect(cli(m2, "add", "bug", "After the archive")).toBe("added B-6");
     expect(cli(m2, "archive")).toBe("nothing to archive");
     expect(doctor().out).toBe("backlog ok\n");
+  });
+});
+
+// Multi-id writes and amending, in a repo of their own.
+describe("backlog CLI: multi-id writes and amending", () => {
+  let r3, m3, p3;
+  const f3 = () => readFileSync(join(m3, "plans/backlog.md"), "utf8");
+  const count = () => Number(git(m3, "rev-list", "--count", "HEAD"));
+  const head = () => git(m3, "rev-parse", "HEAD");
+  const msg = (rev = "HEAD") => git(m3, "log", "-1", "--format=%B", rev);
+  const item = (id) =>
+    f3()
+      .split(/^### /m)
+      .find((s) => s.startsWith(`${id} `)) ?? "";
+  let n = 0;
+  /** A commit of someone's own work on dev: never amended. */
+  const handCommit = () => {
+    writeFileSync(join(m3, "hand.txt"), `${++n}\n`);
+    git(m3, "add", "hand.txt");
+    git(m3, "commit", "-q", "-m", `hand ${n}`);
+    return head();
+  };
+
+  beforeAll(() => {
+    r3 = realpathSync(mkdtempSync(join(tmpdir(), "backlog-test-")));
+    m3 = join(r3, "repo");
+    p3 = join(r3, "prd-z");
+    execFileSync("git", ["init", "-q", "-b", "dev", m3]);
+    git(m3, "config", "user.email", "test@example.com");
+    git(m3, "config", "user.name", "Test");
+    git(m3, "config", "commit.gpgsign", "false");
+    execFileSync("mkdir", ["-p", join(m3, "plans")]);
+    writeFileSync(join(m3, "plans/backlog.md"), "# Backlog\n\n## Items\n");
+    git(m3, "add", ".");
+    git(m3, "commit", "-q", "-m", "init");
+    git(m3, "worktree", "add", "-q", "-b", "prd/z", p3);
+    for (const t of ["One", "Two", "Three", "Four"]) cli(m3, "add", "feature", t);
+  }, 60_000);
+  afterAll(() => rmSync(r3, { recursive: true, force: true }));
+
+  it("set with several ids is one commit that changes them all", () => {
+    handCommit();
+    const before = count();
+    expect(cli(p3, "set", "B-1", "b-2", "prd=x", "status=triaged")).toBe("updated B-1, B-2");
+    expect(count()).toBe(before + 1);
+    for (const id of ["B-1", "B-2"]) expect(item(id)).toMatch(/- status: triaged\n- prd: x/);
+    expect(item("B-3")).not.toMatch(/prd: x/);
+    expect(git(m3, "log", "-1", "--format=%s")).toBe("chore(backlog): B-1, B-2: set prd=x, status=triaged");
+  });
+
+  it("note with several ids is one commit; ids after the first need the B- prefix", () => {
+    handCommit();
+    const before = count();
+    expect(cli(p3, "note", "B-1", "B-3", "2", "tests", "fail")).toBe("noted B-1, B-3");
+    expect(count()).toBe(before + 1);
+    for (const id of ["B-1", "B-3"]) expect(item(id)).toMatch(/\(prd\/z\): 2 tests fail/);
+    expect(item("B-2")).not.toMatch(/tests fail/);
+    expect(git(m3, "log", "-1", "--format=%s")).toBe("chore(backlog): B-1, B-3: note");
+  });
+
+  it("claim with several ids is all or nothing, and names the conflict", () => {
+    expect(cli(m3, "claim", "B-1", "--as", "prd/a")).toBe("B-1 claimed by prd/a");
+    const at = head();
+    const text = f3();
+    expect(cliFails(p3, "claim", "B-2", "B-1", "B-3")).toMatch(
+      /B-1 is already claimed by prd\/a; nothing claimed/,
+    );
+    expect(head()).toBe(at);
+    expect(f3()).toBe(text);
+    expect(cli(p3, "claim", "B-2", "B-3")).toBe("B-2 claimed by prd/z\nB-3 claimed by prd/z");
+    for (const id of ["B-2", "B-3"]) expect(item(id)).toMatch(/- owner: prd\/z/);
+  });
+
+  it("a quick second write amends the first: one commit, every id in the subject, both writes' lines", () => {
+    const hand = handCommit();
+    cli(p3, "note", "B-1", "first");
+    const first = head();
+    cli(m3, "set", "B-4", "prd=y");
+    expect(git(m3, "rev-parse", "HEAD^")).toBe(hand);
+    expect(head()).not.toBe(first);
+    expect(git(m3, "log", "-1", "--format=%s")).toBe("chore(backlog): B-1, B-4: note, set");
+    expect(msg()).toBe(
+      [
+        "chore(backlog): B-1, B-4: note, set",
+        "",
+        "B-1: note",
+        "By: prd/z",
+        "",
+        "B-4: set prd=y",
+        "By: Test",
+        "",
+        "Backlog-Tool: note",
+        "Backlog-Tool: set",
+        "Backlog-Ids: B-1, B-4",
+      ].join("\n"),
+    );
+    expect(item("B-1")).toMatch(/first/);
+    expect(item("B-4")).toMatch(/- prd: y/);
+    cli(p3, "note", "B-2", "B-3", "B-4", "B-1", "third");
+    expect(git(m3, "rev-parse", "HEAD^")).toBe(hand);
+    expect(git(m3, "log", "-1", "--format=%s")).toBe("chore(backlog): B-1, B-4, B-2 +1: note, set");
+    expect(git(m3, "status", "--porcelain")).toBe("");
+  });
+
+  it("a write after the prd/ branch merged dev makes a new commit", () => {
+    handCommit();
+    cli(m3, "note", "B-1", "before the sync");
+    const synced = head();
+    git(p3, "merge", "-q", "--no-ff", "-m", "sync dev", "dev");
+    cli(m3, "note", "B-2", "after the sync");
+    expect(git(m3, "rev-parse", "HEAD^")).toBe(synced);
+    expect(git(m3, "log", "-1", "--format=%s")).toBe("chore(backlog): B-2: note");
+  });
+
+  it("a write after a hand commit makes a new commit", () => {
+    cli(m3, "note", "B-1", "x");
+    const hand = handCommit();
+    cli(m3, "note", "B-2", "y");
+    expect(git(m3, "rev-parse", "HEAD^")).toBe(hand);
+    expect(msg(hand)).toBe("hand " + n);
+  });
+
+  it("a write when HEAD is over 10 minutes old makes a new commit", () => {
+    handCommit();
+    const old = `@${Math.floor(Date.now() / 1000) - 11 * 60} +0000`;
+    execFileSync("node", [CLI, "note", "B-1", "old"], {
+      cwd: m3,
+      encoding: "utf8",
+      env: { ...env, GIT_COMMITTER_DATE: old, GIT_AUTHOR_DATE: old },
+    });
+    const stale = head();
+    cli(m3, "note", "B-2", "new");
+    expect(git(m3, "rev-parse", "HEAD^")).toBe(stale);
   });
 });

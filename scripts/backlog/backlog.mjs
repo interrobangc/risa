@@ -14,15 +14,31 @@
 // So the list is live for everyone without merges. Reads show the main
 // checkout's copy too.
 //
+// One command is one locked write and one commit, however many ids it takes
+// (set, note, claim, release and done take several; the subject names them,
+// shortened past three: "B-1, B-2, B-3 +2: note"). `claim` is all-or-nothing:
+// if any id is another branch's (without --force), nothing is claimed.
+//
+// Every backlog commit ends with the trailer `Backlog-Tool: <command>` (and
+// `Backlog-Ids: …`). A write amends dev's HEAD instead of adding a commit only
+// when HEAD carries that trailer, changes only the backlog's files, has one
+// parent, wasn't rewritten by hand (author and committer times match), is
+// under 10 minutes old, isn't contained by any other ref (a prd/ branch that
+// merged dev, origin/dev, a tag, a stash) or detached worktree, isn't an item's
+// commit, and is still the HEAD read at the start of the write. Otherwise it
+// makes a new commit. The amended commit's parent is HEAD's parent, its
+// subject lists every id, its body keeps each write's lines, and the ref
+// update still compares against the HEAD it read (scripts/backlog/amend.mjs).
+//
 //   pnpm backlog ingest                      file new inbox bullets (status inbox), tag them (B-n)
 //   pnpm backlog inbox                       show inbox bullets not filed yet
 //   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   pnpm backlog show B-n                    finds archived items too (list --all lists them)
 //   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT]
-//   pnpm backlog set B-n key=value…          keys: status type title prd owner commit
-//   pnpm backlog note B-n <text…>
-//   pnpm backlog claim B-n [--as OWNER] [--force]   owner defaults to your branch
-//   pnpm backlog release B-n
+//   pnpm backlog set B-n… key=value…         keys: status type title prd owner commit
+//   pnpm backlog note B-n [B-n…] <text…>     ids after the first need the B- prefix
+//   pnpm backlog claim B-n… [--as OWNER] [--force]   owner defaults to your branch
+//   pnpm backlog release B-n…
 //   pnpm backlog done B-n… [--commit SHA]    work merged into its PRD branch (default: your HEAD)
 //   pnpm backlog refresh [--no-fetch]        write the derived statuses (landed, staging, live)
 //   pnpm backlog commit [message]            commit hand edits of the files (backlog.md normalised)
@@ -35,6 +51,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 
 const TRUNK = process.env.BACKLOG_BRANCH ?? "dev";
@@ -154,14 +171,64 @@ function withLock(fn) {
   }
 }
 
+/** Every file a backlog write commits. */
+const BACKLOG_FILES = [REL, INBOX_REL, ARCHIVE_REL];
+
+/**
+ * What shouldAmend needs to know about `head`. `readHead` is the HEAD read at
+ * the start of the write; `commits` are the items' commit fields.
+ * @returns {Partial<import("./amend.mjs").AmendFacts>}
+ */
+function amendFacts(head, readHead, headRaw, commits) {
+  const trailer = amend.parseMessage(headRaw).backlog;
+  // Most HEADs fail the cheap guards; ask git nothing more then (missing facts mean a new commit).
+  if (!trailer || head !== readHead) return { trailer, moved: head !== readHead };
+  const [commitTime, authorTime, ...parents] = git(mainCheckout, "log", "-1", "--format=%ct %at %P", head)
+    .split(" ")
+    .filter(Boolean);
+  const singleParent = parents.length === 1;
+  const files = singleParent
+    ? git(mainCheckout, "diff-tree", "--no-commit-id", "--name-only", "-r", parents[0], head)
+        .split("\n")
+        .filter(Boolean)
+    : [];
+  const otherRefs = git(mainCheckout, "for-each-ref", "--contains", head, "--format=%(refname)")
+    .split("\n")
+    .filter((r) => r && r !== `refs/heads/${TRUNK}`);
+  const detachedHeads = git(mainCheckout, "worktree", "list", "--porcelain")
+    .split(/\n\n+/)
+    .filter((w) => /^detached$/m.test(w))
+    .map((w) => /^HEAD ([0-9a-f]+)$/m.exec(w)?.[1])
+    .filter(Boolean);
+  const inDetached = detachedHeads.some(
+    (sha) => tryGit(mainCheckout, "merge-base", "--is-ancestor", head, sha) !== null,
+  );
+  return {
+    trailer,
+    singleParent,
+    onlyBacklogFiles: files.length > 0 && files.every((f) => BACKLOG_FILES.includes(f)),
+    rewritten: commitTime !== authorTime,
+    commitTime: Number(commitTime) * 1000,
+    now: Date.now(),
+    containedElsewhere: otherRefs.length > 0 || inDetached,
+    moved: head !== readHead,
+    referenced: commits.some((c) => /^[0-9a-f]{4,64}$/i.test(c) && head.startsWith(c.toLowerCase())),
+  };
+}
+
 /**
  * Commit `contents` ({ path: text }) onto the main checkout's branch, and
  * nothing else: built in a temporary index from HEAD, so neither the dev
  * keeper's staged work nor their unstaged edits of these files go in. The
  * real index then gets the committed copies, so their own edits show as
- * unstaged changes on top. Returns false when nothing changed.
+ * unstaged changes on top. The commit amends HEAD when shouldAmend says so
+ * (its parent is HEAD's parent), and is a new commit on HEAD otherwise;
+ * either way the ref only moves if HEAD is still the commit built on.
+ * Returns false when nothing changed.
+ * @param {Record<string, string>} contents @param {import("./amend.mjs").Write} w
+ * @param {string} readHead @param {string[]} commits
  */
-function commitContents(contents, subject, body) {
+function commitContents(contents, w, readHead, commits) {
   const head = git(mainCheckout, "rev-parse", "HEAD");
   const tmpIndex = join(gitDir, `caretook-backlog-index-${process.pid}`);
   const env = { GIT_INDEX_FILE: tmpIndex };
@@ -174,8 +241,23 @@ function commitContents(contents, subject, body) {
     });
     const tree = gitRaw(mainCheckout, ["write-tree"], { env }).trim();
     if (tree === git(mainCheckout, "rev-parse", "HEAD^{tree}")) return false;
-    const commit = gitRaw(mainCheckout, ["commit-tree", tree, "-p", head, "-m", subject, "-m", body]).trim();
-    git(mainCheckout, "update-ref", "-m", `backlog: ${subject}`, "HEAD", commit, head);
+    const headRaw = gitRaw(mainCheckout, ["log", "-1", "--format=%B", head]);
+    const amending = amend.shouldAmend(amendFacts(head, readHead, headRaw, commits)) === "amend";
+    const parent = amending ? git(mainCheckout, "rev-parse", `${head}^`) : head;
+    const message = amending ? amend.amendedMessage(headRaw, w) : amend.writeMessage(w);
+    const commit = gitRaw(mainCheckout, ["commit-tree", tree, "-p", parent, "-F", "-"], {
+      input: message,
+    }).trim();
+    const subject = message.split("\n")[0];
+    git(
+      mainCheckout,
+      "update-ref",
+      "-m",
+      `backlog: ${amending ? "amend " : ""}${subject}`,
+      "HEAD",
+      commit,
+      head,
+    );
     for (const [rel, blob] of blobs)
       git(mainCheckout, "update-index", "--add", "--cacheinfo", `100644,${blob},${rel}`);
     return true;
@@ -204,13 +286,17 @@ function commitContents(contents, subject, body) {
  *   - `ctx.archive()` returns the archive (created if missing) to change;
  *   - `ctx.commitHandEdits` (the `commit` command): every file as it is.
  * Every write then recomputes derived statuses from local refs (no fetch).
- * `message` is the commit subject, or a function of `change`'s result.
- * @param {string | ((result: any) => string)} message
+ * `tool` is the command (the trailer); `describe` gives the ids it covered
+ * and the subject's text, or is a function of `change`'s result that does.
+ * @typedef {{ ids: string[], text: string }} Describe
+ * @param {string} tool
+ * @param {Describe | ((result: any) => Describe)} describe
  * @param {(b: import("./format.mjs").Backlog, ctx: WriteContext) => any} change
  * @param {{ lenient?: boolean }} [opts]
  */
-function write(message, change, opts = {}) {
+function write(tool, describe, change, opts = {}) {
   return withLock(() => {
+    const readHead = git(mainCheckout, "rev-parse", "HEAD");
     const branch = git(mainCheckout, "branch", "--show-current");
     if (branch !== TRUNK)
       throw new fmt.BacklogError(
@@ -269,16 +355,14 @@ function write(message, change, opts = {}) {
     );
 
     for (const [rel, text] of Object.entries(disk)) writeFileSync(join(mainCheckout, rel), text);
-    const subject = `chore(backlog): ${typeof message === "function" ? message(result) : message}`.slice(
-      0,
-      72,
-    );
-    const body = [
+    const { ids: covered, text } = typeof describe === "function" ? describe(result) : describe;
+    const lines = [
       `By: ${who()}`,
       ...(handEdited.length ? [`Includes uncommitted hand edits of ${handEdited.join(" and ")}.`] : []),
       ...(refreshed.length ? [`Statuses from git: ${refreshed.join(", ")}.`] : []),
     ];
-    commitContents(commit, subject, body.join("\n"));
+    const commits = [...b.items, ...(archive?.items ?? [])].map((i) => i.commit).filter(Boolean);
+    commitContents(commit, { tool, ids: covered, text, lines }, readHead, commits);
     return result;
   });
 }
@@ -551,9 +635,12 @@ function doctor(fix) {
   let found = findings();
   if (fix && found.some((f) => f.fixable)) {
     const n = found.filter((f) => f.fixable).length;
-    write(`doctor: fix ${n} finding${n === 1 ? "" : "s"} (statuses, summary)`, () => undefined, {
-      lenient: true,
-    });
+    write(
+      "doctor",
+      { ids: [], text: `doctor: fix ${n} finding${n === 1 ? "" : "s"} (statuses, summary)` },
+      () => undefined,
+      { lenient: true },
+    );
     console.log(`fixed ${n}`);
     found = findings();
   }
@@ -565,8 +652,10 @@ function doctor(fix) {
 
 const ids = (pos) => {
   if (!pos.length) throw new fmt.BacklogError("which item? (B-n)");
-  return pos;
+  return [...new Set(pos.map(fmt.normId))];
 };
+/** "B-1: …", "B-1, B-2, B-3 +2: …" */
+const about = (list, what) => ({ ids: list, text: `${amend.idList(list)}: ${what}` });
 
 function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -589,7 +678,11 @@ function main() {
     }
     case "ingest": {
       const filed = write(
-        (items) => `file ${items.map((i) => i.id).join(", ")} from the inbox`,
+        "ingest",
+        (items) => {
+          const list = items.map((i) => i.id);
+          return { ids: list, text: `file ${amend.idList(list)} from the inbox` };
+        },
         (b, ctx) => ingest(b, ctx.inbox),
       );
       for (const it of filed) console.log(`${it.id}  ${it.type.padEnd(8)}  ${it.title}`);
@@ -599,7 +692,8 @@ function main() {
       const [type, ...words] = pos;
       if (!type) throw new fmt.BacklogError("usage: add <type> <title…>");
       const it = write(
-        (item) => `add ${item.id} (${item.type}) ${item.title}`,
+        "add",
+        (item) => ({ ids: [item.id], text: `add ${item.id} (${item.type}) ${item.title}` }),
         (b) =>
           fmt.add(b, {
             type,
@@ -613,56 +707,80 @@ function main() {
       return console.log(`added ${it.id}`);
     }
     case "set": {
-      const [id, ...pairs] = pos;
-      if (!pairs.length) throw new fmt.BacklogError("usage: set B-n key=value…");
-      write(`${id.toUpperCase()}: set ${pairs.join(", ")}`, (b) => {
-        const it = fmt.find(b, id);
-        for (const p of pairs) {
-          const eq = p.indexOf("=");
-          if (eq < 1) throw new fmt.BacklogError(`"${p}" isn't key=value`);
-          fmt.setField(it, p.slice(0, eq), p.slice(eq + 1));
+      const at = pos.findIndex((p) => p.includes("="));
+      const list = ids(at < 0 ? pos : pos.slice(0, at));
+      const pairs = at < 0 ? [] : pos.slice(at);
+      if (!pairs.length) throw new fmt.BacklogError("usage: set B-n… key=value…");
+      write("set", about(list, `set ${pairs.join(", ")}`), (b) => {
+        for (const id of list) {
+          const it = fmt.find(b, id);
+          for (const p of pairs) {
+            const eq = p.indexOf("=");
+            if (eq < 1) throw new fmt.BacklogError(`"${p}" isn't key=value`);
+            fmt.setField(it, p.slice(0, eq), p.slice(eq + 1));
+          }
         }
       });
-      return console.log(`updated ${id}`);
+      return console.log(`updated ${list.join(", ")}`);
     }
     case "note": {
-      const [id, ...words] = pos;
-      write(`${id?.toUpperCase()}: note`, (b) =>
-        fmt.addNote(fmt.find(b, ids([id])[0]), { text: words.join(" "), ...ctx() }),
-      );
-      return console.log(`noted ${id}`);
+      // The first word is the id; more ids follow only in the B-n form, so a note can start with a number.
+      let n = 1;
+      while (n < pos.length && /^B-\d+$/i.test(pos[n])) n++;
+      const list = ids(pos.slice(0, n));
+      const text = pos.slice(n).join(" ");
+      if (!text.trim()) throw new fmt.BacklogError("usage: note B-n [B-n…] <text…>");
+      write("note", about(list, "note"), (b) => {
+        for (const id of list) fmt.addNote(fmt.find(b, id), { text, ...ctx() });
+      });
+      return console.log(`noted ${list.join(", ")}`);
     }
     case "claim": {
       const owner = opts.as ?? myBranch();
       if (!owner || owner === TRUNK)
         throw new fmt.BacklogError("claim from your prd/ or plan/ branch, or pass --as OWNER");
-      for (const id of ids(pos)) {
-        write(`${id.toUpperCase()}: claimed by ${owner}`, (b) =>
-          fmt.claim(fmt.find(b, id), owner, !!opts.force),
-        );
-        console.log(`${id} claimed by ${owner}`);
-      }
+      const list = ids(pos);
+      write("claim", about(list, `claimed by ${owner}`), (b) => {
+        const items = list.map((id) => fmt.find(b, id));
+        // All or nothing: name every conflict before changing anything.
+        const taken = items.filter((it) => it.owner && it.owner !== owner && !opts.force);
+        if (taken.length)
+          throw new fmt.BacklogError(
+            `${taken.map((it) => `${it.id} is already claimed by ${it.owner}`).join(", ")}; ` +
+              `nothing claimed (pass --force to take ${taken.length === 1 ? "it" : "them"})`,
+          );
+        for (const it of items) fmt.claim(it, owner, !!opts.force);
+      });
+      for (const id of list) console.log(`${id} claimed by ${owner}`);
       return;
     }
-    case "release":
-      for (const id of ids(pos)) write(`${id.toUpperCase()}: released`, (b) => fmt.release(fmt.find(b, id)));
+    case "release": {
+      const list = ids(pos);
+      write("release", about(list, "released"), (b) => {
+        for (const id of list) fmt.release(fmt.find(b, id));
+      });
       return;
+    }
     case "done": {
       const sha = git(here, "rev-parse", "--short", `${opts.commit ?? "HEAD"}^{commit}`);
-      for (const id of ids(pos))
-        write(`${id.toUpperCase()}: ready at ${sha}`, (b) => {
+      const list = ids(pos);
+      write("done", about(list, `ready at ${sha}`), (b) => {
+        for (const id of list) {
           const it = fmt.find(b, id);
           it.commit = sha;
           it.status = "ready";
-        });
-      return console.log(`${pos.join(", ")} ready at ${sha}`);
+        }
+      });
+      return console.log(`${list.join(", ")} ready at ${sha}`);
     }
     case "refresh": {
-      const changed = write("refresh derived statuses", (b) => refreshStatuses(b, !opts["no-fetch"]));
+      const changed = write("refresh", { ids: [], text: "refresh derived statuses" }, (b) =>
+        refreshStatuses(b, !opts["no-fetch"]),
+      );
       return console.log(changed.length ? changed.join("\n") : "no status changes");
     }
     case "commit":
-      write(pos.join(" ") || "hand edits", (_b, c) => {
+      write("commit", { ids: [], text: pos.join(" ") || "hand edits" }, (_b, c) => {
         c.commitHandEdits = true;
       });
       return console.log("committed");
@@ -670,7 +788,11 @@ function main() {
       return doctor(!!opts.fix);
     case "archive": {
       const moved = write(
-        (items) => `archive ${items.length} finished item${items.length === 1 ? "" : "s"}`,
+        "archive",
+        (items) => ({
+          ids: items.map((i) => i.id),
+          text: `archive ${items.length} finished item${items.length === 1 ? "" : "s"}`,
+        }),
         (b, c) => archiveFinished(b, c),
       );
       return console.log(
