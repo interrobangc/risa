@@ -57,8 +57,7 @@
 # Checks that never exit on their own (never-exits yes: layout-offline,
 # signout-wipe) are stopped 2 s after they print their last line ($hang_done:
 # "N/M passed", or signout-wipe's "errors:"). Their verdict comes from the
-# "N/M passed" line, or "ended" when they print none (signout-wipe has no
-# assertions: read its log).
+# "N/M passed" line, or "ended" when they print none.
 #
 # Env: CARETOOK_BROWSER_SLOTS (leases, default 4), CARETOOK_BROWSER_WAIT (s),
 # CARETOOK_BROWSER_SUITE (the suite, space or comma separated; default the
@@ -445,7 +444,11 @@ checks_for() {
     if [[ $f == $glob ]]; then
       if [[ $rest == @self ]]; then
         stem=$(basename "$f"); stem=${stem%.mjs}
-        [[ $f == *.mjs ]] && echo "$stem" || echo "-"
+        # A check deleted by the change (moved to component tests) needs no run.
+        if [[ $f != *.mjs ]]; then echo "-"
+        elif [[ -f $top/$f ]]; then echo "$stem"
+        else echo "- (deleted)"
+        fi
       else echo "$rest"
       fi
       return
