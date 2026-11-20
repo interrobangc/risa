@@ -97,8 +97,8 @@ describe("orchestrator", () => {
     expect(out).toContain(RESUME);
     expect(out).toContain("**Git wins over a stale line**, so correct _Status_ first");
     expect(out).toContain(`git -C ${loops}/T-<n> status --short`);
-    expect(out).toContain("git log --oneline prd/T..slice/T/<n>");
-    expect(out).toContain("git log --merges --oneline dev..prd/T");
+    expect(out).toContain("pnpm log --oneline prd/T..slice/T/<n>");
+    expect(out).toContain("pnpm log --merges --oneline dev..prd/T");
     expect(out).toContain("ListAgents");
     expect(out).toContain("`pnpm prd prompt slice T <n> --continue`");
     expect(out).toContain("**A slice handed off but not merged**");
@@ -150,7 +150,7 @@ describe("slice", () => {
     expect(out.startsWith(plain)).toBe(true);
     expect(out).toContain("  - Stack: yes\n  - Reads: none\n  - Tests: e2e:invites\n");
     expect(out).toContain("**You're continuing slice 2, not starting it.**");
-    expect(out).toContain("`git log --oneline prd/T..HEAD`, `git status`, `git diff prd/T...HEAD`");
+    expect(out).toContain("`pnpm log --oneline prd/T..HEAD`, `git status`, `git diff prd/T...HEAD`");
     expect(out).toContain("`git diff` (what isn't)");
     expect(out).toContain("Don't start over, and don't redo committed work.");
     expect(out).toContain("If everything is committed and `pnpm check` passes, don't rebuild");
