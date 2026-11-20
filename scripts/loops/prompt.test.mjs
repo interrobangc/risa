@@ -203,7 +203,7 @@ describe("hotfix", () => {
     expect(text).toContain(`Your worktree is ${loops}/hotfix-trim, on branch hotfix/trim (from dev)`);
     expect(text).toContain("**Ask the user before every step that takes time or changes shared state**");
     expect(text).toContain("Background agents are allowed");
-    expect(text).toContain("docs/loops.md, _Hotfixes_");
+    expect(text).toContain("docs/agents/hotfix.md");
     expect(text).toContain('`pnpm prd land hotfix/trim -m "fix(<area>): …"`');
     expect(text).toContain("The fix: Trim the day summary");
     expect(text).not.toContain(RESUME);
