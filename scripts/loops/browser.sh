@@ -223,12 +223,7 @@ acquire() {
 
 # Node 24 from .nvmrc, and the worktree's ports.
 cd "$top"
-use_node || true
-want=$(cat .nvmrc 2>/dev/null || echo 24)
-if [[ $(node -v 2>/dev/null) != v${want%%.*}* ]]; then
-  PATH=${NVM_DIR:-$HOME/.nvm}/versions/node/v${want#v}/bin:$PATH
-fi
-[[ $(node -v 2>/dev/null) == v${want%%.*}* ]] || die "need Node ${want%%.*} (from .nvmrc); got $(node -v 2>/dev/null || echo none)"
+use_node || exit 1
 if [[ -f .env.loop ]]; then
   set -a
   # shellcheck disable=SC1091
