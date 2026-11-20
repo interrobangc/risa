@@ -195,3 +195,22 @@ describe("recover", () => {
     expect(ok("recover", "ignored")).toMatch(/^You are the recovery agent\./);
   });
 });
+
+describe("hotfix", () => {
+  it("is the hotfix agent: its worktree, ask before long steps, background agents, document the pattern", () => {
+    const text = ok("hotfix", "trim", "Trim the day summary");
+    expect(text).toMatch(/^You are the hotfix agent for "trim"/);
+    expect(text).toContain(`Your worktree is ${loops}/hotfix-trim, on branch hotfix/trim (from dev)`);
+    expect(text).toContain("**Ask the user before every step that takes time or changes shared state**");
+    expect(text).toContain("Background agents are allowed");
+    expect(text).toContain("docs/loops.md, _Hotfixes_");
+    expect(text).toContain('`pnpm prd land hotfix/trim -m "fix(<area>): …"`');
+    expect(text).toContain("The fix: Trim the day summary");
+    expect(text).not.toContain(RESUME);
+  });
+
+  it("leaves the fix out when none is given, and needs a name", () => {
+    expect(ok("hotfix", "trim")).not.toContain("The fix:");
+    expect(prompt("hotfix").code).not.toBe(0);
+  });
+});

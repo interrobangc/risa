@@ -109,3 +109,8 @@ if [[ $kind == prd ]]; then
   echo "Start its orchestrator in a new terminal:"
   echo "  cd $dir && claude --remote-control prd-$topic \"\$(scripts/loops/prompt.sh orchestrator $topic)\""
 fi
+if [[ $kind == hotfix ]]; then
+  echo
+  echo "Start its session in a new terminal (or carry on in the one that asked for it):"
+  echo "  cd $dir && claude --remote-control hotfix-$topic \"\$(scripts/loops/prompt.sh hotfix $topic '<the fix>')\""
+fi
