@@ -284,6 +284,26 @@ describe("--changed with the real map", SLOW, () => {
     expect(out).toMatch(/No browser checks needed for these changes\./);
   });
 
+  it("needs nothing for a check the change deletes (its screens moved to component tests)", () => {
+    const gone = "scripts/browser-checks/phase2.mjs";
+    execFileSync("git", ["-C", real, "clean", "-qfd", "apps", "packages"]);
+    rmSync(join(real, gone));
+    try {
+      const r = spawnSync("bash", [BROWSER, "--changed", "--base", "HEAD", "--list"], {
+        cwd: real,
+        env,
+        encoding: "utf8",
+      });
+      const out = `${r.stdout}${r.stderr}`;
+      expect(r.status).toBe(0);
+      expect(out).toMatch(/phase2\.mjs +- \(deleted\)$/m);
+      expect(out).not.toMatch(/skipping phase2/);
+      expect(out).toMatch(/No browser checks needed for these changes\./);
+    } finally {
+      execFileSync("git", ["-C", real, "checkout", "--", gone]);
+    }
+  });
+
   it("runs the lean set for a migration, plus an unmoved area's own check, in manifest order", () => {
     const { out, status } = changed([
       "packages/data/src/db/migrations/0099_example.sql",

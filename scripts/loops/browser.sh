@@ -445,7 +445,11 @@ checks_for() {
     if [[ $f == $glob ]]; then
       if [[ $rest == @self ]]; then
         stem=$(basename "$f"); stem=${stem%.mjs}
-        [[ $f == *.mjs ]] && echo "$stem" || echo "-"
+        # A check deleted by the change (moved to component tests) needs no run.
+        if [[ $f != *.mjs ]]; then echo "-"
+        elif [[ -f $top/$f ]]; then echo "$stem"
+        else echo "- (deleted)"
+        fi
       else echo "$rest"
       fi
       return
