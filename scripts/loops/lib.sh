@@ -111,11 +111,32 @@ stop_server() {
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
 
-# use_node → Node 24 from .nvmrc (the machine default is older).
+# use_node → put the Node that .nvmrc names (here, else the main checkout's)
+# first on PATH, with the pnpm beside it. Scripts call this themselves, so no
+# shell needs `nvm use` first. It doesn't rely on `nvm use` taking: in agent
+# shells another node (PNPM_HOME's) sits ahead of nvm's on PATH. Returns 1 when
+# that Node isn't installed.
 use_node() {
+  local want dir
+  want=$(cat .nvmrc 2>/dev/null || cat "$main/.nvmrc" 2>/dev/null || echo 24)
+  want=${want#v}
+  node_is "$want" && return 0
   export NVM_DIR=${NVM_DIR:-$HOME/.nvm}
-  # shellcheck disable=SC1091
-  source "$NVM_DIR/nvm.sh" >/dev/null && nvm use >/dev/null
+  dir=$(ls -d "$NVM_DIR/versions/node/v$want"/bin "$NVM_DIR/versions/node/v$want".*/bin 2>/dev/null | sort -V | tail -1 || true)
+  if [[ -n $dir ]]; then
+    export PATH=$dir:$PATH
+  elif [[ -s $NVM_DIR/nvm.sh ]]; then
+    # shellcheck disable=SC1091
+    source "$NVM_DIR/nvm.sh" >/dev/null && nvm use >/dev/null
+  fi
+  node_is "$want" || { echo "need Node $want (from .nvmrc); got $(node -v 2>/dev/null || echo none)" >&2; return 1; }
+}
+
+# node_is VERSION → true when `node` on PATH is VERSION (24, 24.22 or 24.22.3).
+node_is() {
+  local have
+  have=$(node -v 2>/dev/null) || return 1
+  [[ $have == "v$1" || $have == "v$1".* ]]
 }
 
 # trunk_drift BRANCH → the files dev changed since BRANCH last merged it, other

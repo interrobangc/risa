@@ -85,9 +85,7 @@ fi
 # Postgres (test-db.sh), stack or not; it's created on the first run.
 write_test_env "$dir" "$name"
 
-export NVM_DIR=${NVM_DIR:-$HOME/.nvm}
-# shellcheck disable=SC1091
-source "$NVM_DIR/nvm.sh" >/dev/null && nvm use >/dev/null
+use_node
 pnpm install --frozen-lockfile
 
 if ((stack)); then

@@ -6,6 +6,8 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
+# Every command runs on .nvmrc's Node, whatever shell called it.
+use_node || true
 
 usage() {
   cat <<USAGE
