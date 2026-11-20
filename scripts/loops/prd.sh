@@ -31,7 +31,10 @@ pnpm prd <command>
     reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
                               Vite caches, with sizes; frees them after a yes
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
-    recover --dry-run [--json]   what recovery after a restart would do: each worktree's class, stale locks, actions
+    recover [--at HH:MM] [--wait]   after a restart, crash or usage limit: Docker, stale locks, the test
+                              Postgres, stacks one at a time, servers; --at waits until then, --wait
+                              probes claude every 10 min; recover --dry-run [--json] only shows what it would do
+    down                      before a planned restart: record what's up, stop servers, stacks, the test Postgres
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
@@ -80,6 +83,7 @@ case $cmd in
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
+  down) exec "$bin/down.sh" "$@" ;;
   plan)
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
