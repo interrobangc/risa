@@ -24,7 +24,10 @@ beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lease-test-")));
   env = { ...process.env, CARETOOK_LEASE_ROOT: join(root, "leases"), CARETOOK_LEASE_POLL: "1" };
   for (const k of Object.keys(env)) {
-    if (/^CARETOOK_(BROWSER_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) || /_WAIT$/.test(k))
+    if (
+      /^CARETOOK_(BROWSER_LEASES|BROWSER_OLD_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) ||
+      /_WAIT$/.test(k)
+    )
       delete env[k];
   }
 });
@@ -206,44 +209,51 @@ describe("pnpm prd check's check lease", SLOW, () => {
   });
 });
 
-describe("browser leases and older browser.sh copies", SLOW, () => {
-  it("keeps CARETOOK_BROWSER_LEASES as the browser kind's directory", () => {
+describe("browser leases and the old path", SLOW, () => {
+  it("lives under the lease root, and CARETOOK_BROWSER_LEASES still moves it", () => {
+    const pid = String(process.pid);
+    const r = cli(["take", "browser", "--pid", pid]);
+    expect(r.out.trim()).toBe(join(root, "leases", "browser", "1"));
+    cli(["release", "browser", "--pid", pid]);
     const own = join(root, "own-browser");
-    const r = cli(["take", "browser", "--pid", String(process.pid)], { CARETOOK_BROWSER_LEASES: own });
-    expect(r.out.trim()).toBe(join(own, "1"));
-    cli(["release", "browser", "--pid", String(process.pid)], { CARETOOK_BROWSER_LEASES: own });
+    const o = cli(["take", "browser", "--pid", pid], { CARETOOK_BROWSER_LEASES: own });
+    expect(o.out.trim()).toBe(join(own, "1"));
+    cli(["release", "browser", "--pid", pid], { CARETOOK_BROWSER_LEASES: own });
     expect(existsSync(join(own, "1"))).toBe(false);
   });
 
-  it("counts a pre-library lease alive while its browser.sh runs, and takes it over after", async () => {
-    const legacy = join(root, "legacy");
-    mkdirSync(join(legacy, "1"), { recursive: true });
-    // "; :" keeps bash from exec'ing sleep, so the command line still names browser.sh.
-    const old = spawn("bash", ["-c", "sleep 30; :", "browser.sh"]);
-    children.push(old);
-    // The name file a browser.sh from before lease.sh writes (no kind or cmd).
+  it("counts live holders under the old path until they're gone, and lists them", async () => {
+    const old = join(root, "old-browser");
+    const extra = { CARETOOK_BROWSER_OLD_LEASES: old, CARETOOK_BROWSER_SLOTS: "2" };
+    // An unsynced worktree's browser.sh holding old lease 2 (a lease.sh name file).
+    const holder = spawn("bash", ["-c", "sleep 30; :", "browser.sh"]);
+    children.push(holder);
+    mkdirSync(join(old, "2"), { recursive: true });
     writeFileSync(
-      join(legacy, "1", "name"),
-      `worktree=other-prd\ncheck=phase2.mjs\npid=${old.pid}\nstarted=${Math.floor(Date.now() / 1000)}\n`,
+      join(old, "2", "name"),
+      `kind=browser\nworktree=other-prd\ncheck=phase2.mjs\npid=${holder.pid}\ncmd=browser.sh\nstarted=${Math.floor(Date.now() / 1000)}\n`,
     );
-    const extra = { CARETOOK_BROWSER_LEASES: legacy, CARETOOK_BROWSER_SLOTS: "1" };
-    const r = cli(["take", "browser", "--wait", "1"], extra);
-    expect(r.status).toBe(75);
-    expect(r.err).toMatch(/lease 1: other-prd: phase2\.mjs/);
+    const pid = String(process.pid);
+    const first = cli(["take", "browser", "--pid", pid], extra);
+    expect(first.status).toBe(0);
+    const full = cli(["take", "browser", "--wait", "1", "--pid", pid], extra);
+    expect(full.status).toBe(75);
+    expect(full.err).toMatch(/old path .*other-prd: phase2\.mjs/);
+    expect(cli(["holders", "browser"], extra).out).toMatch(/1 of 2 held[\s\S]*old path/);
 
-    old.kill("SIGKILL");
+    holder.kill("SIGKILL");
     await sleep(200);
-    const again = cli(["take", "browser", "--wait", "2", "--pid", String(process.pid)], extra);
-    expect(again.status).toBe(0);
-    expect(again.err).toMatch(/Taking over stale browser lease 1: other-prd/);
-    cli(["release", "browser", "--pid", String(process.pid)], extra);
+    const second = cli(["take", "browser", "--wait", "2", "--pid", pid], extra);
+    expect(second.status).toBe(0);
+    expect(existsSync(join(old, "2"))).toBe(true); // the old path is left as it was
+    cli(["release", "browser", "--pid", pid], extra);
   });
 
-  it("holds browser leases under a command line an older browser.sh counts as alive", async () => {
+  it("holds browser leases under lease.sh's own command line", async () => {
     const h = await hold("browser", "web:components");
     const command = execFileSync("ps", ["-p", String(h.child.pid), "-o", "command="], { encoding: "utf8" });
-    expect(command).toMatch(/browser\.sh/); // what an older browser.sh greps for
-    expect(command).toMatch(/lease\.sh/); // the cmd this library checks
+    expect(command).toMatch(/lease\.sh/);
+    expect(command).not.toMatch(/browser\.sh\)/);
     h.child.stdin.end();
     await h.exit;
   });

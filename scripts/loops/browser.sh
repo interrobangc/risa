@@ -4,7 +4,8 @@
 # each other.
 #
 #   browser.sh [--timeout S] <check> [args…]   one check (phase2, phase2.mjs, or a path)
-#   browser.sh --suite [--timeout S]           every check in $suite, one at a time, then a table
+#   browser.sh --suite [--timeout S]           the lean end-to-end set (the manifest's e2e checks),
+#                                              one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
 #                                              (scripts/loops/check-areas), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
@@ -31,7 +32,7 @@
 # drop below that. A pass on the retry is FLAKY: it counts as passing, and is
 # recorded in $main/.loops/.browser-flakes.log so flaky steps can be fixed.
 #
-# Each run holds a browser lease (lease.sh), the directory $main/.loops/.browser/<N>.
+# Each run holds a browser lease (lease.sh), the directory $main/.loops/.lease/browser/<N>.
 # When every lease is taken it waits, polling every 5 s, and gives up after
 # CARETOOK_BROWSER_WAIT seconds (default 1200). A lease whose holder is gone is
 # taken over. The lease is released on every exit: success, failure, timeout,
@@ -45,8 +46,8 @@
 # none of those gets the log's last lines). --verbose prints everything.
 #
 # The manifest scripts/loops/checks lists every check: its usual seconds, its
-# cap, whether it never exits, and whether it's in the suite (e2e), in suite
-# order. Three limits end a check, each as TIMEOUT (so the one retry applies):
+# cap, whether it never exits, and whether it's in the lean set (e2e, the
+# suite), in suite order. --changed runs what the files need, lean or not. Three limits end a check, each as TIMEOUT (so the one retry applies):
 #   - silence: no output line for CARETOOK_BROWSER_SILENCE seconds (default 90);
 #   - its cap: --timeout S, else the manifest's cap, else 600 s;
 #   - the suite cap (--suite and --changed): CARETOOK_BROWSER_SUITE_CAP seconds,
@@ -74,10 +75,6 @@ source "$(dirname "$0")/lib.sh"
 # shellcheck source=lease.sh
 source "$(dirname "$0")/lease.sh"
 
-# The suite when there's no manifest (an older tree): every check in the
-# Browser check budget table. The manifest (scripts/loops/checks) wins.
-suite_fallback="phase2 roundtrip live-notes app-shell routing settings-layout layout-offline sign-in first-sync signout-wipe session-end providers invites ui groups medications upcoming search profiles profiles-contacts care-periods devices admin"
-hangs_fallback="signout-wipe layout-offline"
 default_cap=600
 # The line each never-exiting check prints last, once its work is done.
 hang_done='^([0-9]+/[0-9]+ passed|errors: )'
@@ -130,29 +127,21 @@ mkdir -p "$logdir"
 # The manifest: this tree's, else the one beside this script.
 manifest=$top/scripts/loops/checks
 [[ -f $manifest ]] || manifest=$(dirname "$0")/checks
-[[ -f $manifest ]] || manifest=""
+[[ -f $manifest ]] || die "no browser-check manifest (scripts/loops/checks): pnpm prd sync"
 
 # manifest_get CHECK COLUMN → a manifest field (2 usual, 3 cap, 4 never-exits,
 # 5 e2e), or nothing when the check isn't listed.
 manifest_get() {
-  [[ -n $manifest ]] || return 0
   awk -v c="${1%.mjs}" -v k="$2" '!/^#/ && NF >= 5 && $1 == c { print $k; exit }' "$manifest"
 }
 
-# The suite: the manifest's e2e checks, in its order.
-if [[ -n $manifest ]]; then
-  suite_default=$(awk '!/^#/ && NF >= 5 && $5 == "yes" { printf "%s ", $1 }' "$manifest")
-else
-  suite_default=$suite_fallback
-fi
+# The suite: the manifest's e2e checks (the lean set), in its order; every
+# check, in its order, for sorting what --changed picks.
+suite_default=$(awk '!/^#/ && NF >= 5 && $5 == "yes" { printf "%s ", $1 }' "$manifest")
+manifest_order=$(awk '!/^#/ && NF >= 5 { printf "%s ", $1 }' "$manifest")
 
 # never_exits CHECK → whether the check never exits on its own.
-never_exits() {
-  local v
-  v=$(manifest_get "$1" 4)
-  [[ -n $manifest ]] && { [[ $v == yes ]]; return; }
-  [[ " $hangs_fallback " == *" ${1%.mjs} "* ]]
-}
+never_exits() { [[ $(manifest_get "$1" 4) == yes ]]; }
 
 # cap_of CHECK → its cap in seconds: the manifest's, else $default_cap.
 cap_of() {
@@ -500,14 +489,15 @@ if [[ $mode == changed ]]; then
     echo "  (running $unmapped_default for them; add a rule)"
   }
   if [[ -n $full ]]; then
-    read -r -a suite <<< "${CARETOOK_BROWSER_SUITE:-$suite_default}"
-    echo "A change needs every check (build, config, dependencies, sync rules or migrations)."
-  else
-    # Keep the suite's order, then anything else (ui, marketing, a new check).
-    suite=()
-    for c in $suite_default; do [[ " ${selected[*]:-} " == *" $c "* ]] && suite+=("$c"); done
-    for c in "${selected[@]:-}"; do [[ -n $c && " ${suite[*]:-} " != *" $c "* ]] && suite+=("$c"); done
+    # The lean set, plus whatever else the other files named.
+    read -r -a more <<< "${CARETOOK_BROWSER_SUITE:-$suite_default}"
+    selected+=("${more[@]}")
+    echo "A change needs the whole lean set (build, config, dependencies, sync rules or migrations)."
   fi
+  # The manifest's order, then anything it doesn't list.
+  suite=()
+  for c in $manifest_order; do [[ " ${selected[*]:-} " == *" $c "* ]] && suite+=("$c"); done
+  for c in "${selected[@]:-}"; do [[ -n $c && " ${suite[*]:-} " != *" $c "* ]] && suite+=("$c"); done
   # A check that doesn't exist in this tree (marketing.mjs before it lands) is skipped.
   kept=()
   for c in "${suite[@]:-}"; do

@@ -219,3 +219,85 @@ describe("a suite", SLOW, () => {
     expect(leasesLeft()).toEqual([]);
   });
 });
+
+// --changed --list against the real manifest and check-areas, in a throwaway
+// repo with a stub file per check (the selection only, nothing runs).
+describe("--changed with the real map", SLOW, () => {
+  let real;
+  const realFile = (name) => readFileSync(new URL(name, import.meta.url), "utf8");
+  const lean = () =>
+    realFile("./checks")
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("#"))
+      .map((l) => l.split(/\s+/))
+      .filter((f) => f[4] === "yes")
+      .map((f) => f[0]);
+  const changed = (files) => {
+    execFileSync("git", ["-C", real, "clean", "-qfd", "apps", "packages"]);
+    for (const f of files) {
+      mkdirSync(dirname(join(real, f)), { recursive: true });
+      writeFileSync(join(real, f), "// changed\n");
+    }
+    const r = spawnSync("bash", [BROWSER, "--changed", "--base", "HEAD", "--list"], {
+      cwd: real,
+      env,
+      encoding: "utf8",
+    });
+    return { out: `${r.stdout}${r.stderr}`, status: r.status };
+  };
+
+  beforeAll(() => {
+    real = join(root, "real");
+    const checks = join(real, "scripts/browser-checks");
+    mkdirSync(checks, { recursive: true });
+    mkdirSync(join(real, "scripts/loops"), { recursive: true });
+    for (const name of ["checks", "check-areas"])
+      writeFileSync(join(real, "scripts/loops", name), realFile(`./${name}`));
+    for (const line of realFile("./checks").split("\n"))
+      if (line.trim() && !line.startsWith("#"))
+        writeFileSync(join(checks, `${line.split(/\s+/)[0]}.mjs`), "\n");
+    writeFileSync(join(real, ".nvmrc"), `${process.versions.node.split(".")[0]}\n`);
+    execFileSync("git", ["init", "-q", real]);
+    execFileSync("git", ["-C", real, "add", "."]);
+    execFileSync("git", [
+      "-C",
+      real,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@example.com",
+      "commit",
+      "-qm",
+      "base",
+    ]);
+  });
+
+  it("selects no end-to-end check for a timeline-only change (component tests cover it)", () => {
+    const { out, status } = changed([
+      "apps/web/app/routes/app/groups/timeline/TimelineEntryRow.tsx",
+      "apps/web/app/routes/app/groups/timeline/TimelineEntryCard.tsx",
+      "apps/web/app/routes/app/groups/timeline/LatestVitals.tsx",
+      "apps/web/app/routes/app/groups/timeline/timelineLayout.browser.test.tsx",
+    ]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/TimelineEntryRow\.tsx +-$/m);
+    expect(out).toMatch(/No browser checks needed for these changes\./);
+  });
+
+  it("runs the lean set for a migration, plus an unmoved area's own check, in manifest order", () => {
+    const { out, status } = changed([
+      "packages/data/src/db/migrations/0099_example.sql",
+      "apps/web/app/routes/app/groups/providers/ProviderForm.tsx",
+    ]);
+    expect(status).toBe(0);
+    const set = lean();
+    expect(set).toContain("sign-in");
+    expect(set).not.toContain("providers");
+    const all = realFile("./checks")
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("#"))
+      .map((l) => l.split(/\s+/)[0]);
+    const want = all.filter((c) => set.includes(c) || c === "providers");
+    expect(out).toMatch(new RegExp(`^Checks needed: ${want.join(" ")}$`, "m"));
+  });
+});
