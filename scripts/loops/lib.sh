@@ -111,17 +111,52 @@ stop_server() {
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
 
-# checked_ok DIR REV → succeeds when `pnpm prd check` passed on REV, or on an
-# ancestor of it with only Markdown changed since (AGENTS.md: docs-only changes
-# skip `pnpm check`).
+# The record is one line: `<sha> full`, or `<sha> quick <base> <why>` for a
+# `pnpm prd check --quick` (typecheck, lint, format and the tests related to
+# the diff since <base>). A bare `<sha>` (older records) reads as full.
+
+# exempt_re → the paths that need no check: docs and the internal tooling
+# (AGENTS.md: docs-only and tooling-only changes skip `pnpm check`).
+exempt_re='(\.md$|^scripts/loops/|^scripts/backlog/|^\.githooks/)'
+
+# exempt_only DIR FROM TO → succeeds when every file changed between FROM and
+# TO (git diff FROM TO, or FROM...TO when TO is empty) is exempt.
+exempt_only() {
+  local range=$2
+  [[ -n ${3:-} ]] && range="$2 $3"
+  # shellcheck disable=SC2086
+  [[ -z $(git -C "$1" diff --name-only $range | grep -Ev "$exempt_re") ]]
+}
+
+# checked_ok DIR REV → succeeds when `pnpm prd check` (full or --quick) passed
+# on REV, or on an ancestor of it with only exempt files changed since; or when
+# REV's own changes against dev (dev...REV) are all exempt, so it needs none.
 checked_ok() {
   local checked tip
-  checked=$(cat "$(checked_file "$1")" 2>/dev/null || true)
+  checked=$(cut -d' ' -f1 "$(checked_file "$1")" 2>/dev/null || true)
   tip=$(git -C "$1" rev-parse "$2")
-  [[ -n $checked ]] || return 1
-  [[ $checked == "$tip" ]] && return 0
-  git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null || return 1
-  [[ -z $(git -C "$1" diff --name-only "$checked" "$tip" | grep -v '\.md$') ]]
+  if [[ -n $checked ]]; then
+    [[ $checked == "$tip" ]] && return 0
+    git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null && exempt_only "$1" "$checked" "$tip" && return 0
+  fi
+  exempt_only "$1" "$trunk...$tip"
+}
+
+# checked_how DIR REV → how REV passed the gate, for reports: "full on <sha>",
+# "quick on <sha> (<why>)", or "none needed (docs and tooling only)".
+checked_how() {
+  local line sha mode why tip
+  line=$(cat "$(checked_file "$1")" 2>/dev/null || true)
+  read -r sha mode _ why <<< "$line"
+  tip=$(git -C "$1" rev-parse "$2")
+  if [[ -n $sha ]] && { [[ $sha == "$tip" ]] ||
+    { git -C "$1" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null && exempt_only "$1" "$sha" "$tip"; }; }; then
+    if [[ $mode == quick ]]; then echo "quick on ${sha:0:7} ($why)"; else echo "full on ${sha:0:7}"; fi
+  elif exempt_only "$1" "$trunk...$tip"; then
+    echo "none needed (docs and tooling only)"
+  else
+    echo "not checked"
+  fi
 }
 
 # use_node → put the Node that .nvmrc names (here, else the main checkout's)

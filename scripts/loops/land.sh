@@ -8,8 +8,9 @@
 #
 # It refuses unless the branch already contains dev's work (`pnpm prd sync`;
 # backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
-# `pnpm prd check` passed on its tip. The merged code is then exactly the code
-# that was checked, so nothing needs rechecking on dev.
+# `pnpm prd check` (full or --quick) passed on its tip, or on an earlier commit
+# with only docs and tooling changed since, or the branch changes only docs and
+# tooling (lib.sh, checked_ok). It prints which, so the call is on record.
 # --force skips the check requirement, not the sync.
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -45,7 +46,8 @@ if [[ -d $dir ]]; then
 fi
 if [[ ($branch == prd/* || $branch == hotfix/*) && -z $force ]]; then
   [[ -d $dir ]] && checked_ok "$dir" "$branch" ||
-    die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only Markdown changed since): run \`pnpm prd check\` in $dir (or pass --force)"
+    die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only docs and tooling changed since): run \`pnpm prd check\` (or \`--quick \"<why>\"\`) in $dir (or pass --force)"
+  echo "check: $(checked_how "$dir" "$branch")"
 fi
 
 if [[ -z $msg ]]; then

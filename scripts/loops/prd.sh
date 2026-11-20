@@ -27,8 +27,9 @@ pnpm prd <command>
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (it reads the backlog and helps you decide what's next)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
-    hotfix <name>             a stackless worktree on hotfix/<name> from dev, for a fix outside any PRD
-                              (prompt hotfix <name> ["<the fix>"] is its session's first prompt)
+    hotfix <name> [--open] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
+                              outside any PRD (reused if it exists); --open starts its session here
+                              (prompt hotfix <name> ["<the fix>"] is that session's first prompt)
                               (pnpm prd check there, then pnpm prd land hotfix/<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
@@ -47,8 +48,10 @@ pnpm prd <command>
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
-    check                     pnpm check (at most three at once machine-wide), and record that
-                              this commit passed
+    check [--quick "<why>"]   pnpm check (at most three at once machine-wide), and record that
+                              this commit passed; --quick: typecheck, lint, format and only the tests
+                              related to the diff since the last full pass, recorded with its reason
+                              (docs and tooling-only changes need neither: docs/loops.md, _The check gate_)
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
@@ -115,7 +118,24 @@ case $cmd in
     echo "  $cmd_line"
     ;;
   slice) exec "$bin/new.sh" slice "$@" ;;
-  hotfix) exec "$bin/new.sh" hotfix "$@" ;;
+  hotfix)
+    name=${1:?"usage: pnpm prd hotfix <name> [--open] [\"<the fix>\"]"}; shift; open=0 fix=""
+    for a in "$@"; do
+      case $a in
+        --open) open=1 ;;
+        -*) die "hotfix: unknown option $a (--open)" ;;
+        *) [[ -z $fix ]] || die "hotfix: give the fix as one quoted argument"; fix=$a ;;
+      esac
+    done
+    dir=$loops/hotfix-$name
+    if [[ -d $dir ]]; then echo "Worktree hotfix-$name already exists at $dir."; else "$bin/new.sh" hotfix "$name"; fi
+    if ((open)); then
+      cd "$dir" && exec claude --remote-control "hotfix-$name" "$("$bin/prompt.sh" hotfix "$name" ${fix:+"$fix"})"
+    fi
+    echo
+    echo "Start its session in a new terminal (or rerun with --open; or carry on in the one that asked for it):"
+    echo "  cd $dir && claude --remote-control hotfix-$name \"\$(scripts/loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
+    ;;
   start)
     topic=${1:?topic}
     if [[ -d $loops/$topic ]]; then
@@ -129,14 +149,38 @@ case $cmd in
     ;;
   check)
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd check inside a .loops worktree"
-    dir=$loops/$name
-    rm -f "$(checked_file "$dir")"
+    dir=$loops/$name; quick=0 why=""
+    while (($#)); do
+      case $1 in
+        --quick) quick=1; why=${2:-}; [[ -n $why && $why != -* ]] || die "check --quick needs a reason: --quick \"<why>\""; shift ;;
+        *) die "check: unknown argument $1 (--quick \"<why>\")" ;;
+      esac
+      shift
+    done
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
+    record=$(checked_file "$dir")
+    if ((quick)); then
+      # The base is the last full pass (or a quick pass's own base) when it's
+      # an ancestor of HEAD, else where the branch left dev.
+      read -r prev mode qbase _ 2>/dev/null < "$record" || true
+      [[ ${mode:-} == quick ]] && prev=$qbase
+      if [[ -n ${prev:-} ]] && git -C "$dir" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then base=$prev
+      else base=$(git -C "$dir" merge-base "$trunk" HEAD); fi
+    fi
+    rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 3) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
-    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- pnpm check)
-    git -C "$dir" rev-parse HEAD > "$(checked_file "$dir")"
-    echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
+    if ((quick)); then
+      echo "Quick check against ${base:0:7}: typecheck, lint, format, and the tests related to the diff ($why)"
+      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check --quick" -- \
+        sh -c 'pnpm typecheck && pnpm lint && pnpm format:check && pnpm exec vitest run --changed "$1" --passWithNoTests' _ "$base")
+      echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
+      echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
+    else
+      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- pnpm check)
+      echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
+      echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
+    fi
     ;;
   sync)
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd sync inside a PRD's worktree"

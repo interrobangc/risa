@@ -25,7 +25,7 @@ blockers=()
 if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || blockers+=("uncommitted changes in $dir")
   checked_ok "$dir" "$branch" ||
-    blockers+=("\`pnpm check\` hasn't passed on $tip (or on an earlier commit with only Markdown changed since): run \`pnpm prd check\` in $dir")
+    blockers+=("\`pnpm check\` hasn't passed on $tip (or on an earlier commit with only docs and tooling changed since): run \`pnpm prd check\` (or \`--quick \"<why>\"\`) in $dir")
 else
   blockers+=("no worktree at $dir, so the checks can't be confirmed (pnpm prd start $topic)")
 fi
@@ -37,7 +37,7 @@ if ((${#blockers[@]})); then
 else
   echo "# $branch is ready to land"
   echo
-  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, up to date with it, \`pnpm check\` passed on this commit (or on an earlier one, with only Markdown changed since)."
+  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, up to date with it. Check: $(checked_how "$dir" "$branch")."
 fi
 
 echo
