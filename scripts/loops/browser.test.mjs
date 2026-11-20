@@ -289,15 +289,15 @@ describe("--changed with the real map", SLOW, () => {
 
   it("maps a lib module, a device query and a screen through the area rules and fallbacks", () => {
     const { out, status } = changed([
-      "apps/web/app/lib/exampleRule.ts",
-      "apps/web/app/lib/exampleRule.test.ts",
-      "apps/web/app/lib/sync/timeline.ts",
+      "apps/web/app/lib/timeline/exampleRule.ts",
+      "apps/web/app/lib/timeline/exampleRule.test.ts",
+      "apps/web/app/lib/timeline/timeline.sync.ts",
       "apps/web/app/routes/app/groups/settings/members/MembersList.tsx",
     ]);
     expect(status).toBe(0);
-    expect(out).toMatch(/lib\/exampleRule\.ts +- \(unit-tested\)$/m);
-    expect(out).toMatch(/lib\/exampleRule\.test\.ts +-$/m);
-    expect(out).toMatch(/lib\/sync\/timeline\.ts +phase2 roundtrip$/m);
+    expect(out).toMatch(/lib\/timeline\/exampleRule\.ts +- \(unit-tested\)$/m);
+    expect(out).toMatch(/lib\/timeline\/exampleRule\.test\.ts +-$/m);
+    expect(out).toMatch(/lib\/timeline\/timeline\.sync\.ts +phase2 roundtrip$/m);
     expect(out).toMatch(/MembersList\.tsx +app-shell profiles-contacts$/m);
     expect(out).toMatch(/^Checks needed: phase2 roundtrip app-shell profiles-contacts$/m);
   });
