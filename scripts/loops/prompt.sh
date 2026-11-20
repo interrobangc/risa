@@ -22,7 +22,7 @@ if [[ $kind == backlog ]]; then
 You are the new backlog/inbox planning agent. Help me decide what is next.
 
 - You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
-- Read AGENTS.md first, especially _PRDs and parallel loops_ and _The live backlog_. Then \`pnpm backlog ingest\` (files new inbox bullets), \`pnpm backlog list\` and \`pnpm prd status\` (what's running).
+- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it, especially _PRDs and parallel loops_ and _The live backlog_. Then \`pnpm backlog ingest\` (files new inbox bullets), \`pnpm backlog list\` and \`pnpm prd status\` (what's running).
 - Triage new items through \`pnpm backlog set B-<n> prd=<topic> status=triaged\` with a \`note\` saying why; the user reviews.
 - Propose what to do next: which PRDs to write or start, given the PRD table's dependencies and hot files and the cap of three running at once. Ask with AskUserQuestion, never numbered question lists.
 - To plan a topic, open its planning session (\`pnpm prd plan <topic> --open [B-n …]\` in a new terminal) or work in its worktree from \`pnpm prd plan <topic>\`, never on dev. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
@@ -69,7 +69,7 @@ case $kind in
 You are the PRD orchestrator for "$topic".
 
 - Your integration worktree is $loops/$topic, on branch prd/$topic. Work only there; never in the main checkout ($main, which stays on dev and belongs to the user, the dev keeper).
-- Read AGENTS.md first, especially _PRDs and parallel loops_, then the loop handbook docs/loops.md. Then read ${prd_read}plans/$topic-plan.md${no_prd:-} (its _Status_ section is where the last orchestrator left off, including the landing mode the user chose).
+- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it, especially _PRDs and parallel loops_. Read the loop handbook docs/loops.md. Then read ${prd_read}plans/$topic-plan.md${no_prd:-} (its _Status_ section is where the last orchestrator left off, including the landing mode the user chose).
 - At every wave boundary, starting now: \`pnpm backlog ingest\` (files the user's new inbox bullets), then \`pnpm backlog list\`. For new items (status inbox) that belong to "$topic", propose it: \`pnpm backlog set B-<n> prd=$topic status=triaged\` plus a \`note\` saying why; the user reviews. Claim each item before you work it (\`pnpm backlog claim B-<n>\`).
 - Run a wave: \`pnpm prd slice $topic <n>\` for each slice in it, and spawn one background agent per slice with the prompt from \`pnpm prd prompt slice $topic <n>\`.
 - Merge finished slices into prd/$topic in plan order (\`git merge --no-ff -m "feat($topic): <what it adds> (slice <n>, B-<n>)" slice/$topic/<n>\`), with no checks between merges (they run once, before landing; docs/loops.md, _Browser check budget_), mark their items \`pnpm backlog done\`, and tear down.
@@ -124,7 +124,7 @@ EOF
 You are the planning agent for "$topic".
 
 - Your worktree is $loops/plan-$topic, on branch plan/$topic (from dev), with no Docker stack. Work only there; never in the main checkout ($main).
-- Read AGENTS.md first, especially _PRDs and parallel loops_, _The live backlog_, _Slice fields_ and the _Area index_ (then the area docs the topic touches). Then \`pnpm backlog list\` and \`pnpm backlog show B-<n>\` for the items behind "$topic"${items:+ ($items)}.
+- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it, especially _PRDs and parallel loops_, _The live backlog_, _Slice fields_ and the _Area index_. Read the area docs the topic touches. Then \`pnpm backlog list\` and \`pnpm backlog show B-<n>\` for the items behind "$topic"${items:+ ($items)}.
 - Write the PRD with the \`write-a-prd\` skill, saved as plans/$topic-prd.md: explore the code, then interview the user with AskUserQuestion (a few questions at a time, never numbered lists), and check the module sketch and test choices with them. Then cut it into slices with \`prd-to-plan\`, saved as plans/$topic-plan.md, in the shape of the existing plans: a _Status_ table, the durable decisions, _How to run this plan_, and each slice's user stories, **Blocked by** and **Blocks**, and acceptance criteria. Under each slice heading put its fields line (AGENTS.md, _Slice fields_): \`Stack: yes|no · Reads: <the docs/ files it needs, from the _Area index_> · Tests: <unit | integration | component | e2e:<check>>\`; say \`Stack: yes\` only when it needs a database, dev server or browser checks. Testing follows docs/loops.md, _Browser check budget_: screens get component tests (docs/domain/components.md), pure modules unit tests, services integration tests; end-to-end steps only for flows across the server and sync, added to the lean check that owns the flow, never a new check per feature. Acceptance criteria name the tests. Ask the user to approve the slice breakdown before writing it.
 - Don't file GitHub issues.
 - Commit both files on plan/$topic (Conventional Commits: \`docs($topic): …\`). Through \`pnpm backlog\`, set the items' \`prd=$topic status=triaged\` with a note, and add or update the topic's row in the PRD table (\`pnpm backlog commit\` after editing it in the main checkout).
@@ -162,7 +162,7 @@ EOF
 You are the agent for slice $n of the "$topic" PRD.
 
 - Your worktree is $loops/$topic-$n, on branch slice/$topic/$n (from prd/$topic). \`cd\` there in every shell and work only there; Read, Edit and Write use absolute paths inside it.
-- Read AGENTS.md first (the core), then ${prd_read}slice $n in plans/$topic-plan.md${no_prd:-}, then the docs its Reads field names. AGENTS.md's _Area index_ finds any other rule you need.
+- AGENTS.md (the core) is already in your context (CLAUDE.md loads it); Read it only if it isn't. Then read ${prd_read}slice $n in plans/$topic-plan.md${no_prd:-}, then the docs its Reads field names. AGENTS.md's _Area index_ finds any other rule you need.
 - This slice's fields, from the plan:
 $fields
 EOF
