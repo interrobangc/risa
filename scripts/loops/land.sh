@@ -4,11 +4,12 @@
 #
 #   land.sh <topic> [-m "feat(<topic>): what it adds (B-1, B-2)"] [--force]
 #   land.sh plan/<topic> [-m "docs(<topic>): …"]
+#   land.sh hotfix/<name> [-m "fix(<area>): …"]
 #
 # It refuses unless the branch already contains dev's work (`pnpm prd sync`;
-# backlog-only commits on dev don't count) and, for a prd/ branch, `pnpm prd
-# check` passed on its tip. The merged code is then exactly the code that was
-# checked, so nothing needs rechecking on dev.
+# backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
+# `pnpm prd check` passed on its tip. The merged code is then exactly the code
+# that was checked, so nothing needs rechecking on dev.
 # --force skips the check requirement, not the sync.
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -25,11 +26,12 @@ while (($#)); do
 done
 [[ -n $what ]] || die "which PRD? (pnpm prd land <topic>)"
 case $what in
-  prd/* | plan/*) branch=$what ;;
+  prd/* | plan/* | hotfix/*) branch=$what ;;
   *) branch=prd/$what ;;
 esac
 topic=${branch#*/}
-name=$topic; [[ $branch == plan/* ]] && name=plan-$topic
+name=$topic
+case $branch in plan/*) name=plan-$topic ;; hotfix/*) name=hotfix-$topic ;; esac
 dir=$loops/$name
 
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
@@ -41,7 +43,7 @@ git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch
 if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || die "uncommitted changes in $dir"
 fi
-if [[ $branch == prd/* && -z $force ]]; then
+if [[ ($branch == prd/* || $branch == hotfix/*) && -z $force ]]; then
   [[ -d $dir ]] && checked_ok "$dir" "$branch" ||
     die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only Markdown changed since): run \`pnpm prd check\` in $dir (or pass --force)"
 fi
@@ -53,6 +55,7 @@ if [[ -z $msg ]]; then
       console.log(t+"\t"+r.map(i=>i.id).join(", "))')
   type=${ids%%$'\t'*}; ids=${ids#*$'\t'}
   [[ $branch == plan/* ]] && type=docs
+  [[ $branch == hotfix/* ]] && type=fix
   msg="$type($topic): land $branch${ids:+ ($ids)}"
 fi
 
@@ -65,4 +68,4 @@ grep -qE '^packages/data/src/db/(migrations|seeds)/' <<< "$changed" &&
 grep -q '^powersync/' <<< "$changed" && echo "  the sync config changed: run \`docker compose restart powersync\` in $main"
 grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
 echo "  publish it with: git -C $main push origin $trunk"
-echo "  when the whole PRD is done: pnpm prd rm $name"
+if [[ $branch == prd/* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi

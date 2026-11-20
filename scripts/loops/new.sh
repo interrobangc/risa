@@ -4,6 +4,7 @@
 #   new.sh prd <topic>          .loops/<topic>        prd/<topic>        from dev            stack
 #   new.sh slice <topic> <n>    .loops/<topic>-<n>    slice/<topic>/<n>  from prd/<topic>    plan's Stack field
 #   new.sh plan <topic>         .loops/plan-<topic>   plan/<topic>       from dev            no stack
+#   new.sh hotfix <name>        .loops/hotfix-<name>  hotfix/<name>      from dev            no stack
 #
 # Options (before the kind): --slot N (pin a slot), --stack / --no-stack
 # (override the default), --base B (branch from B instead).
@@ -17,7 +18,7 @@
 # are copied from the main checkout's env files. If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most CARETOOK_MAX_PRDS
 # (default 3) PRD worktrees exist at once. Tear down with rm.sh <name>.
-# (pnpm prd start|slice|plan wrap this.)
+# (pnpm prd start|slice|plan|hotfix wrap this.)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -32,7 +33,7 @@ while [[ ${1:-} == --* ]]; do
     *) echo "unknown option $1" >&2; exit 1 ;;
   esac
 done
-kind=${1:?kind: prd, slice or plan}; topic=${2:?topic}
+kind=${1:?kind: prd, slice, plan or hotfix}; topic=${2:?topic}
 [[ $topic =~ ^[a-z0-9-]+$ ]] || { echo "topic: lowercase, digits, dashes" >&2; exit 1; }
 case $kind in
   prd) name=$topic branch=prd/$topic base=${base:-$trunk} stack=${stack:-1}
@@ -51,7 +52,8 @@ case $kind in
     [[ $planned == yes ]] && planned=1 || planned=0
     name=$topic-$n branch=slice/$topic/$n base=${base:-prd/$topic} stack=${stack:-$planned} ;;
   plan) name=plan-$topic branch=plan/$topic base=${base:-$trunk} stack=${stack:-0} ;;
-  *) echo "kind must be prd, slice or plan" >&2; exit 1 ;;
+  hotfix) name=hotfix-$topic branch=hotfix/$topic base=${base:-$trunk} stack=${stack:-0} ;;
+  *) echo "kind must be prd, slice, plan or hotfix" >&2; exit 1 ;;
 esac
 dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }

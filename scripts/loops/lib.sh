@@ -10,7 +10,7 @@ trunk=${TRUNK:-dev}
 max_prds=${CARETOOK_MAX_PRDS:-3}
 
 # parent_of BRANCH → the branch it merges into:
-#   slice/<topic>/<n> → prd/<topic>;  prd/* and plan/* → trunk.
+#   slice/<topic>/<n> → prd/<topic>;  prd/*, plan/* and hotfix/* → trunk.
 parent_of() {
   case $1 in
     slice/*/*) local t=${1#slice/}; echo "prd/${t%/*}" ;;
