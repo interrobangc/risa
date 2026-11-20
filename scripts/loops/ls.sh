@@ -65,3 +65,4 @@ echo
 load=$(load_avg) cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo '?')
 busy=${CARETOOK_BROWSER_BUSY:-40} l1=${load%% *}
 echo "load: $load (1, 5, 15 min) on $cores cores$( ((${l1%%.*} > busy)) && echo " · BUSY: over $busy, browser checks will wait before retrying")"
+disk_line
