@@ -60,8 +60,16 @@ const REL = "plans/backlog.md";
 const INBOX_REL = "plans/inbox.md";
 const ARCHIVE_REL = "plans/backlog-archive.md";
 
+// A git child that stalls (seen once: hash-object waiting on stdin under heavy
+// load) fails the write after this long instead of hanging it; the ref update
+// is atomic, so a killed write leaves dev as it was.
+const GIT_TIMEOUT_MS = 120_000;
 const git = (cwd, ...args) =>
-  execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  execFileSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: GIT_TIMEOUT_MS,
+  }).trim();
 const tryGit = (cwd, ...args) => {
   try {
     return git(cwd, ...args);
@@ -121,6 +129,7 @@ const gitRaw = (cwd, args, { input, env } = {}) =>
     env: env ? { ...process.env, ...env } : process.env,
     maxBuffer: 64 * 1024 * 1024,
     stdio: ["pipe", "pipe", "pipe"],
+    timeout: GIT_TIMEOUT_MS,
   });
 const headText = (rel) => {
   try {
