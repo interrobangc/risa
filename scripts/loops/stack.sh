@@ -25,6 +25,7 @@ base=$(env_get "$dir/.env.loop" BASE_BRANCH); base=${base:-$(parent_of "$branch"
 
 case $cmd in
   up)
+    require_disk "a stack for $name"
     if [[ -n $(stack_project "$dir") ]]; then
       echo "$name already has a stack ($(stack_project "$dir")); starting it"
     else

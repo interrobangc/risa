@@ -59,6 +59,7 @@ git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branc
 
 if ((stack)); then
   require_main_env
+  require_disk "a new stack for $name"
   lease_free_slot "$name" "$slot"
   # Give the slot back if anything fails before the worktree exists.
   trap '[[ -d $dir ]] || release_slot "$name"' ERR

@@ -28,6 +28,8 @@ pnpm prd <command>
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
     gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
+    reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
+                              Vite caches, with sizes; frees them after a yes
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover --dry-run [--json]   what recovery after a restart would do: each worktree's class, stale locks, actions
 
@@ -71,6 +73,7 @@ case $cmd in
   rm) exec "$bin/rm.sh" "$@" ;;
   stack) exec "$bin/stack.sh" "$@" ;;
   gc) exec "$bin/gc.sh" "$@" ;;
+  reclaim) exec "$bin/reclaim.sh" "$@" ;;
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;

@@ -132,3 +132,41 @@ fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
 
 # load_avg → the 1, 5 and 15 minute load averages.
 load_avg() { sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs || uptime | sed 's/.*load average[s]*: //'; }
+
+# The disk guard: free space on the volume holding the main checkout, against
+# CARETOOK_MIN_FREE_GB (default 10). new.sh (a stacked worktree), stack.sh up
+# and browser.sh's check build call require_disk; ls.sh prints disk_line.
+# CARETOOK_FREE_GB stands in for the reading (tests).
+
+# min_free_gb → the line, in whole GB.
+min_free_gb() {
+  local m=${CARETOOK_MIN_FREE_GB:-10}
+  [[ $m =~ ^[0-9]+$ ]] || die "CARETOOK_MIN_FREE_GB takes whole GB (got $m)"
+  echo "$m"
+}
+
+# free_gb → whole GB free on the main checkout's volume, or nothing when df
+# can't tell.
+free_gb() {
+  if [[ -n ${CARETOOK_FREE_GB:-} ]]; then echo "${CARETOOK_FREE_GB%%.*}"; return 0; fi
+  df -Pk "$main" 2>/dev/null | awk 'NR == 2 && $4 ~ /^[0-9]+$/ { printf "%d\n", $4 / 1048576 }'
+}
+
+# require_disk WHAT → die, saying how much is free, when it's under the line.
+# An unreadable disk doesn't block.
+require_disk() {
+  local free min
+  free=$(free_gb) min=$(min_free_gb)
+  [[ $free =~ ^[0-9]+$ ]] || return 0
+  ((free >= min)) && return 0
+  die "Refusing $1: only $free GB free on the disk holding $main, under the $min GB line (CARETOOK_MIN_FREE_GB).
+See what can go, and free it: pnpm prd reclaim"
+}
+
+# disk_line → "disk: N GB free (line M GB)", flagged LOW under the line.
+disk_line() {
+  local free min
+  free=$(free_gb) min=$(min_free_gb)
+  if [[ ! $free =~ ^[0-9]+$ ]]; then echo "disk: free space unknown (df failed)"; return 0; fi
+  echo "disk: $free GB free (line $min GB)$( ((free < min)) && echo " · LOW: new stacks and check builds are refused: pnpm prd reclaim")"
+}

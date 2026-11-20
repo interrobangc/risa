@@ -253,6 +253,7 @@ ensure_server() {
     "$serve" "$here" --dev
     return
   fi
+  require_disk "a check build"
   if [[ $(cat "$top/.serve-mode" 2>/dev/null) == built && -n $(server_pids "$(web_port "$top")") ]]; then
     newer=$(cd "$top" && find apps/web/app apps/web/public apps/web/vite.config.ts apps/web/react-router.config.ts \
       apps/web/build-target.ts apps/web/package.json apps/web/.env packages/*/src packages/*/package.json \
