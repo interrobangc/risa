@@ -3,7 +3,7 @@
 # data, drop its database on the shared test Postgres, remove the worktree and
 # release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
-# plan/* → dev); an unmerged branch is kept. Refuses uncommitted changes, and a
+# plan/* and hotfix/* → dev); an unmerged branch is kept. Refuses uncommitted changes, and a
 # PRD worktree whose slices still have worktrees, unless --force.
 #
 #   scripts/loops/rm.sh <name> [--force] [--keep-branch]
