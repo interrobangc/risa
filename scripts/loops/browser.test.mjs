@@ -307,17 +307,17 @@ describe("--changed with the real map", SLOW, () => {
   it("runs the lean set for a migration, plus an unmoved area's own check, in manifest order", () => {
     const { out, status } = changed([
       "packages/data/src/db/migrations/0099_example.sql",
-      "apps/web/app/routes/app/groups/providers/ProviderForm.tsx",
+      "apps/web/app/routes/account/join/route.tsx",
     ]);
     expect(status).toBe(0);
     const set = lean();
     expect(set).toContain("sign-in");
-    expect(set).not.toContain("providers");
+    expect(set).not.toContain("groups");
     const all = realFile("./checks")
       .split("\n")
       .filter((l) => l.trim() && !l.startsWith("#"))
       .map((l) => l.split(/\s+/)[0]);
-    const want = all.filter((c) => set.includes(c) || c === "providers");
+    const want = all.filter((c) => set.includes(c) || c === "groups");
     expect(out).toMatch(new RegExp(`^Checks needed: ${want.join(" ")}$`, "m"));
   });
 });
