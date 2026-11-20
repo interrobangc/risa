@@ -29,6 +29,7 @@ pnpm prd <command>
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
     gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
+    recover --dry-run [--json]   what recovery after a restart would do: each worktree's class, stale locks, actions
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
@@ -73,6 +74,7 @@ case $cmd in
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
+  recover) exec "$bin/recover.sh" "$@" ;;
   plan)
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
