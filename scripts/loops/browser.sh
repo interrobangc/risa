@@ -7,7 +7,7 @@
 #   browser.sh --suite [--timeout S]           the lean end-to-end set (the manifest's e2e checks),
 #                                              one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
-#                                              (scripts/loops/check-areas), then a table
+#                                              (scripts/loops/check-areas.d/), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
 #   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
 #                                              runs only its core path (cdp.mjs step()); without
@@ -87,7 +87,8 @@ suite_cap=${CARETOOK_BROWSER_SUITE_CAP:-}
 flakes_log=${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}
 # Log lines that mean contention more often than a bug.
 transient='(timed out|Timed out|timeout|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET|socket hang up)'
-# Checks run for a changed file no rule covers (check-areas).
+# Checks run for a changed file no rule covers: check-areas.mjs's UNMAPPED_DEFAULT,
+# which prints them; this copy is for the warning below.
 unmapped_default="sign-in phase2 roundtrip"
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
@@ -427,37 +428,13 @@ if [[ $mode == one ]]; then
   done_with "$rc"
 fi
 
-# --changed: the checks the changed files need, from scripts/loops/check-areas.
-areas=$top/scripts/loops/check-areas
-
-# checks_for FILE → its checks (space separated), "-" for none, or "@suite".
-checks_for() {
-  local f=$1 glob rest stem
-  while read -r glob rest; do
-    [[ -z $glob || $glob == \#* ]] && continue
-    # shellcheck disable=SC2053 # the glob is meant to match as a pattern
-    if [[ $f == $glob ]]; then
-      if [[ $rest == @self ]]; then
-        stem=$(basename "$f"); stem=${stem%.mjs}
-        # A check deleted by the change (moved to component tests) needs no run.
-        if [[ $f != *.mjs ]]; then echo "-"
-        elif [[ -f $top/$f ]]; then echo "$stem"
-        else echo "- (deleted)"
-        fi
-      else echo "$rest"
-      fi
-      return
-    fi
-  done < "$areas"
-  if [[ $f == apps/web/app/lib/* && $f != apps/web/app/lib/sync/* && $f =~ \.tsx?$ ]]; then
-    stem=${f%.*}
-    [[ -f $top/$stem.test.ts ]] && { echo "- (unit-tested)"; return; }
-  fi
-  echo "UNMAPPED $unmapped_default"
-}
+# --changed: the checks the changed files need, from the rules in
+# scripts/loops/check-areas.d/ (most specific wins), resolved by check-areas.mjs.
+areas=$top/scripts/loops/check-areas.d
+resolver=$(dirname "$0")/check-areas.mjs
 
 if [[ $mode == changed ]]; then
-  [[ -f $areas ]] || die "no $areas"
+  [[ -d $areas ]] || die "no $areas"
   if [[ -z $base_ref ]]; then
     for r in "${BASE_BRANCH:-}" origin/dev dev; do
       [[ -n $r ]] && git rev-parse -q --verify "$r^{commit}" >/dev/null && { base_ref=$r; break; }
@@ -472,9 +449,13 @@ if [[ $mode == changed ]]; then
   fi
   selected=() full="" unmapped=()
   echo "Changed since $base_ref ($(git rev-parse --short "$mb")): $(grep -c . <<< "$files" || true) file(s)"
-  while read -r f; do
+  # One line per file: "<file><TAB><checks>". A tie (two equally specific
+  # rules) exits 2 after naming them on stderr: the first still answers.
+  rc=0
+  resolved=$(printf '%s\n' "$files" | node "$resolver" resolve --root "$top" --areas "$areas") || rc=$?
+  ((rc == 0 || rc == 2)) || die "check-areas.mjs failed (exit $rc)"
+  while IFS=$'\t' read -r f c; do
     [[ -z $f ]] && continue
-    c=$(checks_for "$f")
     [[ -n $list_only ]] && printf '  %-60s %s\n' "$f" "$c"
     case $c in
       @suite) full=1 ;;
@@ -482,9 +463,9 @@ if [[ $mode == changed ]]; then
       UNMAPPED*) unmapped+=("$f"); read -r -a more <<< "${c#UNMAPPED }"; selected+=("${more[@]}") ;;
       *) read -r -a more <<< "$c"; selected+=("${more[@]}") ;;
     esac
-  done <<< "$files"
+  done <<< "$resolved"
   ((${#unmapped[@]})) && {
-    echo "No rule in scripts/loops/check-areas for: ${unmapped[*]}"
+    echo "No rule in scripts/loops/check-areas.d/ for: ${unmapped[*]}"
     echo "  (running $unmapped_default for them; add a rule)"
   }
   if [[ -n $full ]]; then

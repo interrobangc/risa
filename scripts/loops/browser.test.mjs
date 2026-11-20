@@ -3,6 +3,7 @@
 // these never take one of the machine's real browser leases.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -220,7 +221,7 @@ describe("a suite", SLOW, () => {
   });
 });
 
-// --changed --list against the real manifest and check-areas, in a throwaway
+// --changed --list against the real manifest and check-areas.d/, in a throwaway
 // repo with a stub file per check (the selection only, nothing runs).
 describe("--changed with the real map", SLOW, () => {
   let real;
@@ -251,8 +252,10 @@ describe("--changed with the real map", SLOW, () => {
     const checks = join(real, "scripts/browser-checks");
     mkdirSync(checks, { recursive: true });
     mkdirSync(join(real, "scripts/loops"), { recursive: true });
-    for (const name of ["checks", "check-areas"])
-      writeFileSync(join(real, "scripts/loops", name), realFile(`./${name}`));
+    writeFileSync(join(real, "scripts/loops/checks"), realFile("./checks"));
+    cpSync(new URL("./check-areas.d", import.meta.url), join(real, "scripts/loops/check-areas.d"), {
+      recursive: true,
+    });
     for (const line of realFile("./checks").split("\n"))
       if (line.trim() && !line.startsWith("#"))
         writeFileSync(join(checks, `${line.split(/\s+/)[0]}.mjs`), "\n");
@@ -282,6 +285,21 @@ describe("--changed with the real map", SLOW, () => {
     expect(status).toBe(0);
     expect(out).toMatch(/TimelineEntryRow\.tsx +-$/m);
     expect(out).toMatch(/No browser checks needed for these changes\./);
+  });
+
+  it("maps a lib module, a device query and a screen through the area rules and fallbacks", () => {
+    const { out, status } = changed([
+      "apps/web/app/lib/exampleRule.ts",
+      "apps/web/app/lib/exampleRule.test.ts",
+      "apps/web/app/lib/sync/timeline.ts",
+      "apps/web/app/routes/app/groups/settings/members/MembersList.tsx",
+    ]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/lib\/exampleRule\.ts +- \(unit-tested\)$/m);
+    expect(out).toMatch(/lib\/exampleRule\.test\.ts +-$/m);
+    expect(out).toMatch(/lib\/sync\/timeline\.ts +phase2 roundtrip$/m);
+    expect(out).toMatch(/MembersList\.tsx +app-shell profiles-contacts$/m);
+    expect(out).toMatch(/^Checks needed: phase2 roundtrip app-shell profiles-contacts$/m);
   });
 
   it("needs nothing for a check the change deletes (its screens moved to component tests)", () => {
