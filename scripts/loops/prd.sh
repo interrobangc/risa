@@ -44,6 +44,8 @@ pnpm prd <command>
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
+                     orchestrator <topic> --resume [--auto]: take over after an interruption
+                     slice <topic> <n> --continue: pick up an interrupted slice
 USAGE
 }
 
