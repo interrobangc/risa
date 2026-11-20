@@ -95,7 +95,7 @@ You are the PRD orchestrator for "$topic".
 - Run a wave: \`pnpm prd slice $topic <n>\` for each slice in it, and spawn one background agent per slice with the prompt from \`pnpm prd prompt slice $topic <n>\`, on the model docs/loops.md, _Models_ gives (sonnet for a mechanical slice; note it in _Status_). Hand light work (reading long check output, searches, summaries, backlog chores) to a haiku helper with a tight brief, so your context and budget go on judgement.
 - Merge finished slices into prd/$topic in plan order (\`git merge --no-ff -m "feat($topic): <what it adds> (slice <n>, B-<n>)" slice/$topic/<n>\`), with no checks between merges (they run once, before landing; docs/loops.md, _Browser check budget_), mark their items \`pnpm backlog done\`, and tear down.
 - When the wave is green: \`pnpm prd sync\`, \`pnpm prd check\` (or \`pnpm prd check --quick "<why>"\` when docs/loops.md, _The check gate_ allows it; docs and tooling-only changes need neither), \`pnpm prd serve --restart\`, then show the user the output of \`pnpm prd ready\` (the link to try it, and what it addresses) with the browser checks you ran and anything worth trying by hand. Land with \`pnpm prd land $topic -m "<subject>"\` (never \`--force\`) as the landing mode allows.
-- When a slice is blocked by another PRD's work (another orchestrator's slice, or a backlog item landing in dev), don't stall: find that orchestrator with ListAgents and ask it with SendMessage to message you when the work lands in dev, and set a background check (a Bash loop with run_in_background that exits once \`git log dev\` or \`pnpm backlog list\` shows it), so you're woken whichever comes first. Then \`pnpm prd sync\` and carry on.
+- When a slice is blocked by another PRD's work (another orchestrator's slice, or a backlog item landing in dev), don't stall: find that orchestrator with ListAgents and ask it with SendMessage to message you when the work lands in dev, and set a background check (a Bash loop with run_in_background that exits once \`pnpm log dev\` or \`pnpm backlog list\` shows it), so you're woken whichever comes first. Then \`pnpm prd sync\` and carry on.
 - At each landing, fold that wave's lasting decisions into the matching area doc (docs/domain/…, listed in AGENTS.md's _Area index_; add a doc and an index row for a new area), keeping AGENTS.md itself to rules and pointers. When the last wave has landed, run \`pnpm prd rm $topic\`.
 - Every commit subject is a Conventional Commit (\`feat($topic): …\`, \`fix($topic): …\`, \`docs\`, \`test\`, \`chore\`…); the commit-msg hook refuses anything else.
 - Keep the plan's _Status_ section current **at every step**, not only at wave boundaries: a slice started (worktree made, agent spawned), handed off, merged (with the merge SHA), a wave landed; plus what's ready, open issues and the landing mode. Write it as you go, so a fresh orchestrator can take over after a crash at any moment (the file survives in your worktree; commit it with your merges, and before \`pnpm prd check\`).
@@ -106,10 +106,10 @@ EOF
 **You're taking over after an interruption** (a restart, a crash or a usage limit). An earlier orchestrator for "$topic" stopped mid-work, and its slice agents may have stopped with it. Before anything else:
 1. Read the plan's _Status_, then reconcile it with git. **Git wins over a stale line**, so correct _Status_ first:
    - slice worktrees: \`pnpm prd status\` lists every \`$topic-<n>\` worktree, dirty or clean (\`git -C $loops/$topic-<n> status --short\` shows what's uncommitted);
-   - \`slice/$topic/<n>\` branches ahead of prd/$topic: \`git log --oneline prd/$topic..slice/$topic/<n>\`;
-   - merges already in prd/$topic: \`git log --merges --oneline dev..prd/$topic\`.
+   - \`slice/$topic/<n>\` branches ahead of prd/$topic: \`pnpm log --oneline prd/$topic..slice/$topic/<n>\`;
+   - merges already in prd/$topic: \`pnpm log --merges --oneline dev..prd/$topic\`.
 2. **Respawn each in-flight slice** (a worktree whose branch isn't merged, with no live agent in ListAgents): one background agent per slice, with the prompt from \`pnpm prd prompt slice $topic <n> --continue\`. It picks up from the worktree's commits and uncommitted changes instead of starting over.
-3. **A slice handed off but not merged** (_Status_ says handed off, or its branch is ahead with a clean worktree): its hand-off message is lost, so review it from its branch (\`git log\`, \`git diff --stat prd/$topic...slice/$topic/<n>\`, the acceptance criteria). When you need a hand-off to judge it (its check output, criteria you can't see in the diff), spawn a \`--continue\` agent for it, which writes the hand-off again without rebuilding. Then merge in plan order as usual.
+3. **A slice handed off but not merged** (_Status_ says handed off, or its branch is ahead with a clean worktree): its hand-off message is lost, so review it from its branch (\`pnpm log\`, \`git diff --stat prd/$topic...slice/$topic/<n>\`, the acceptance criteria). When you need a hand-off to judge it (its check output, criteria you can't see in the diff), spawn a \`--continue\` agent for it, which writes the hand-off again without rebuilding. Then merge in plan order as usual.
 4. **Follow the landing mode _Status_ records**; ask for one only if it records none.
 EOF
     fi
@@ -203,7 +203,7 @@ EOF
       cat <<EOF
 
 **You're continuing slice $n, not starting it.** An earlier agent worked in this worktree and was interrupted (a restart, a crash or a usage limit), and its hand-off was lost. Before writing any code:
-- Read what it did: \`git log --oneline prd/$topic..HEAD\`, \`git status\`, \`git diff prd/$topic...HEAD\` (what's committed) and \`git diff\` (what isn't). Uncommitted changes are its work too: keep them unless they're broken.
+- Read what it did: \`pnpm log --oneline prd/$topic..HEAD\`, \`git status\`, \`git diff prd/$topic...HEAD\` (what's committed) and \`git diff\` (what isn't). Uncommitted changes are its work too: keep them unless they're broken.
 - Check that against the slice's acceptance criteria and finish what's missing from there. Don't start over, and don't redo committed work.
 - If everything is committed and \`pnpm check\` passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
 EOF
