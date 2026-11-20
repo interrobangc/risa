@@ -3,15 +3,16 @@
 # at once machine-wide, so loops don't pile Chrome, Vite and PowerSync on top of
 # each other.
 #
-#   browser.sh [--timeout S] <check> [args…]   one check (phase2, phase2.mjs, or a path)
+#   browser.sh [--timeout S] <check> [args…]   one check (sign-in, sign-in.spec.mjs, phase2.mjs, or a path)
 #   browser.sh --suite [--timeout S]           the lean end-to-end set (the manifest's e2e checks),
 #                                              one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
 #                                              (scripts/loops/check-areas.d/), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
 #   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
-#                                              runs only its core path (cdp.mjs step()); without
-#                                              it, checks run in full (SMOKE=0)
+#                                              runs only its core path (a spec's @smoke tests, an
+#                                              .mjs check's cdp.mjs step() blocks); without it,
+#                                              checks run in full (SMOKE=0)
 #   browser.sh --verbose …                     any of the above, printing each check's whole output
 #
 # In a .loops worktree with a stack, checks run against a check build (pnpm prd
@@ -37,6 +38,14 @@
 # CARETOOK_BROWSER_WAIT seconds (default 1200). A lease whose holder is gone is
 # taken over. The lease is released on every exit: success, failure, timeout,
 # Ctrl-C, kill.
+#
+# A check is a Playwright Test spec, scripts/browser-checks/<check>.spec.mjs (run
+# through Playwright Test's CLI with playwright.config.mjs, one worker, its
+# reporter printing PASS, FAIL and SKIP lines and "N/M passed"; its traces go to
+# the log dir), or, until slice 23 of check-migration ports the rest, a plain
+# Node script, <check>.mjs. A spec wins when both exist. Everything below (the
+# lease, limits, retry, trimmed output, smoke mode, the check build) is the same
+# for both.
 #
 # The check runs from scripts/browser-checks/ with the worktree's .env.loop
 # (the main checkout's defaults when there is none) and Node from .nvmrc. Its
@@ -85,8 +94,12 @@ busy=${CARETOOK_BROWSER_BUSY:-40}
 silence=${CARETOOK_BROWSER_SILENCE:-90}
 suite_cap=${CARETOOK_BROWSER_SUITE_CAP:-}
 flakes_log=${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}
-# Log lines that mean contention more often than a bug.
-transient='(timed out|Timed out|timeout|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET|socket hang up)'
+# Log lines that mean contention more often than a bug (Playwright's included:
+# "Timeout 15000ms exceeded", "Test timeout of 90000ms exceeded").
+transient='(timed out|Timed out|timeout|Timeout [0-9]+ms|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET|socket hang up)'
+# transient_lines LOG → the log without Playwright's call-log lines ("… with
+# timeout 10000ms"), which every locator failure prints, a timeout or not.
+transient_lines() { grep -Ev 'with timeout [0-9]+ms' "$1" 2>/dev/null || true; }
 # Checks run for a changed file no rule covers: check-areas.mjs's UNMAPPED_DEFAULT,
 # which prints them; this copy is for the warning below.
 unmapped_default="sign-in phase2 roundtrip"
@@ -129,10 +142,17 @@ manifest=$top/scripts/loops/checks
 [[ -f $manifest ]] || manifest=$(dirname "$0")/checks
 [[ -f $manifest ]] || die "no browser-check manifest (scripts/loops/checks): pnpm prd sync"
 
+# check_name FILE → the check's name: sign-in for sign-in.spec.mjs or sign-in.mjs.
+check_name() {
+  local b=${1##*/}
+  b=${b%.mjs}
+  echo "${b%.spec}"
+}
+
 # manifest_get CHECK COLUMN → a manifest field (2 usual, 3 cap, 4 never-exits,
 # 5 e2e), or nothing when the check isn't listed.
 manifest_get() {
-  awk -v c="${1%.mjs}" -v k="$2" '!/^#/ && NF >= 5 && $1 == c { print $k; exit }' "$manifest"
+  awk -v c="$(check_name "$1")" -v k="$2" '!/^#/ && NF >= 5 && $1 == c { print $k; exit }' "$manifest"
 }
 
 # The suite: the manifest's e2e checks (the lean set), in its order; every
@@ -153,17 +173,53 @@ cap_of() {
 # vsay … → echo only with --verbose (lease bookkeeping and other chatter).
 vsay() { [[ -z $verbose ]] || echo "$@"; }
 
-# resolve_check X → the check's absolute path (phase2, phase2.mjs, or a path).
+# resolve_check X → the check's absolute path (sign-in, sign-in.spec.mjs,
+# phase2.mjs, or a path): <name>.spec.mjs when there is one, else <name>.mjs.
 resolve_check() {
-  local x=$1
+  local x=$1 name
   if [[ $x == */* ]]; then
     [[ -f $x ]] || return 1
     (cd "$(dirname "$x")" && echo "$PWD/$(basename "$x")")
   else
-    x=${x%.mjs}.mjs
-    [[ -f $checks_dir/$x ]] || return 1
-    echo "$checks_dir/$x"
+    name=$(check_name "$x")
+    if [[ -f $checks_dir/$name.spec.mjs ]]; then echo "$checks_dir/$name.spec.mjs"
+    elif [[ -f $checks_dir/$name.mjs ]]; then echo "$checks_dir/$name.mjs"
+    else return 1
+    fi
   fi
+}
+
+# is_spec FILE → whether the check is a Playwright Test spec.
+is_spec() { [[ $1 == *.spec.mjs ]]; }
+
+# playwright_cli → Playwright Test's CLI: this tree's, else the one beside this script.
+playwright_cli() {
+  local c
+  for c in "$top/node_modules/@playwright/test/cli.js" \
+    "$(cd "$(dirname "$0")/../.." && pwd)/node_modules/@playwright/test/cli.js"; do
+    [[ -f $c ]] && { echo "$c"; return 0; }
+  done
+  return 1
+}
+
+# start_check FILE [args…] → the check in the background (its pid in $child):
+# a spec through Playwright Test (one worker, this directory's config), a
+# plain check with node.
+start_check() {
+  local file=$1 cli
+  shift
+  if is_spec "$file"; then
+    if ! cli=$(playwright_cli); then
+      (echo "FAIL no @playwright/test in this tree (pnpm install)"; exit 1) >&3 2>&1 &
+      child=$!
+      return
+    fi
+    CARETOOK_PW_OUTPUT=$logdir/pw-$(check_name "$file") FORCE_COLOR=0 \
+      node "$cli" test --config "$checks_dir/playwright.config.mjs" --workers=1 "$(basename "$file")" "$@" >&3 2>&1 &
+  else
+    node "$file" "$@" >&3 2>&1 &
+  fi
+  child=$!
 }
 
 # kill_tree PID SIGNAL → signal PID and every process below it (node, Chrome, proxies).
@@ -304,7 +360,7 @@ run_once() {
     ((left < t)) && { t=$left why="suite cap"; }
   fi
   never_exits "$base" && hang=1
-  log=$logdir/${base%.mjs}-$(date +%Y%m%d-%H%M%S).log
+  log=$logdir/$(check_name "$base")-$(date +%Y%m%d-%H%M%S).log
   [[ -e $log ]] && log=${log%.log}-retry.log
   marker=$log.timedout finished=$log.finished silent=$log.silent shown_file=$log.shown
   start=$(date +%s) load0=$(load_avg)
@@ -313,8 +369,7 @@ run_once() {
   : > "$log"
   exec 3> >(tee -a "$log" | show_output "$shown_file")
   tee_pid=$!
-  node "$file" "$@" >&3 2>&1 &
-  child=$!
+  start_check "$file" "$@"
   # One watcher: stop a never-exiting check once its last line is out, and any
   # check that goes silent or reaches its cap.
   (
@@ -387,7 +442,7 @@ load1() { local l=${1%% *}; echo "${l%%.*}"; }
 looks_transient() {
   (($(load1 "$load_start") > busy || $(load1 "$load_end") > busy)) && return 0
   [[ $verdict == TIMEOUT ]] && return 0
-  grep -Eq "$transient" "$log" 2>/dev/null
+  transient_lines "$log" | grep -Eq "$transient"
 }
 
 # run_check FILE [args…] → run_once, and once more if it failed on contention.
@@ -403,7 +458,8 @@ run_check() {
   looks_transient || { echo "(not retried: the failure doesn't look like contention)"; return 0; }
   first_log=$log first_elapsed=$elapsed
   why="load $(load1 "$load_start")→$(load1 "$load_end")"
-  grep -Eq "$transient" "$first_log" 2>/dev/null && why+=", $(grep -Eo "$transient" "$first_log" | head -1 | xargs)"
+  transient_lines "$first_log" | grep -Eq "$transient" &&
+    why+=", $(transient_lines "$first_log" | grep -Eo "$transient" | head -1 | xargs)"
   while (($(load1 "$(load_avg)") > busy && waited < 300)) && [[ -z ${deadline:-} || $(date +%s) -lt $deadline ]]; do
     ((waited == 0)) && echo "Waiting for the load ($(load_avg)) to drop below $busy before retrying…"
     sleep 15; waited=$((waited + 15))
@@ -511,7 +567,7 @@ echo "Running ${#suite[@]} checks (suite cap $(fmt_secs "$suite_cap")): ${suite[
 for c in "${suite[@]}"; do
   i=$((i + 1))
   if (($(date +%s) >= deadline)); then
-    rows+=("$(printf '%-24s %-8s %s' "${c%.mjs}.mjs" NOT-RUN "-")"); notrun=$((notrun + 1)); continue
+    rows+=("$(printf '%-24s %-8s %s' "$(basename "$(resolve_check "$c" || echo "$c")")" NOT-RUN "-")"); notrun=$((notrun + 1)); continue
   fi
   if ! file=$(resolve_check "$c"); then
     rows+=("$(printf '%-24s %-8s %s' "$c" MISSING "-")"); failed=$((failed + 1)); continue

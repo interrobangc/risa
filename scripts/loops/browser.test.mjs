@@ -1,15 +1,18 @@
 // browser.sh's watchdog, caps, retry and trimmed output, with fake checks in a
-// throwaway repo. Its leases and flakes log are moved into the temp dir, so
+// throwaway repo: plain .mjs checks and Playwright Test specs (run with the
+// real config, reporter and fixtures, and this repo's node_modules). Its leases and flakes log are moved into the temp dir, so
 // these never take one of the machine's real browser leases.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,6 +51,47 @@ const FAKES = {
   slow: `let i = 0;\nconst t = setInterval(() => { console.log("PASS " + i++); if (i > 32) { clearInterval(t); console.log("done"); } }, 250);`,
 };
 
+// Fake specs: they import the real fixtures (smoke mode lives there) and never
+// open a browser. `pid` files let a test see that a killed run's worker is gone.
+const SPECS = {
+  specpass: [
+    `import { expect, test } from "./fixtures.mjs";`,
+    `test("core", { tag: "@smoke" }, async () => {`,
+    `  await test.step("a step", () => expect(1).toBe(1));`,
+    `});`,
+    `test("extra", () => expect(2).toBe(2));`,
+  ].join("\n"),
+  specfail: [
+    `import { expect, test } from "./fixtures.mjs";`,
+    `test("fine", () => {});`,
+    `test("broken", async () => {`,
+    `  console.log("  - waiting for something with timeout 10000ms");`,
+    `  await test.step("a soft step", () => expect.soft(2, "soft").toBe(3));`,
+    `  expect(1, "the number").toBe(2);`,
+    `});`,
+  ].join("\n"),
+  specbusy: [
+    `import { writeFileSync } from "node:fs";`,
+    `import { test } from "./fixtures.mjs";`,
+    `test("busy", async () => {`,
+    `  writeFileSync(process.env.FAKE_STATE + "/specbusy.pid", String(process.pid));`,
+    `  for (let i = 0; i < 300; i++) { console.log("tick " + i); await new Promise((r) => setTimeout(r, 200)); }`,
+    `});`,
+  ].join("\n"),
+  specsilent: [
+    `import { test } from "./fixtures.mjs";`,
+    `test("silent", async () => { await new Promise((r) => setTimeout(r, 80_000)); });`,
+  ].join("\n"),
+  specflaky: [
+    `import { existsSync, writeFileSync } from "node:fs";`,
+    `import { test } from "./fixtures.mjs";`,
+    `test("flaky", () => {`,
+    `  const f = process.env.FAKE_STATE + "/specflaky";`,
+    `  if (!existsSync(f)) { writeFileSync(f, "1"); throw new Error("timed out waiting for x"); }`,
+    `});`,
+  ].join("\n"),
+};
+
 // check, usual, cap, never-exits, e2e
 const MANIFEST = `# check usual cap never-exits e2e
 clean      1  20  no   yes
@@ -59,6 +103,11 @@ busy       1   2  no   no
 flaky      1  20  no   no
 lingering  1  20  yes  no
 slow       1  20  no   no
+specpass   1  30  no   no
+specfail   1  30  no   no
+specbusy   1   4  no   no
+specsilent 1  90  no   no
+specflaky  1  30  no   no
 `;
 
 let root, repo, env;
@@ -70,6 +119,11 @@ beforeAll(() => {
   mkdirSync(checks, { recursive: true });
   mkdirSync(join(repo, "scripts/loops"), { recursive: true });
   for (const [name, src] of Object.entries(FAKES)) writeFileSync(join(checks, `${name}.mjs`), `${src}\n`);
+  for (const [name, src] of Object.entries(SPECS))
+    writeFileSync(join(checks, `${name}.spec.mjs`), `${src}\n`);
+  for (const file of ["playwright.config.mjs", "reporter.mjs", "fixtures.mjs"])
+    cpSync(new URL(`../browser-checks/${file}`, import.meta.url), join(checks, file));
+  symlinkSync(new URL("../../node_modules", import.meta.url).pathname, join(repo, "node_modules"));
   writeFileSync(join(repo, "scripts/loops/checks"), MANIFEST);
   writeFileSync(join(repo, ".nvmrc"), `${process.versions.node.split(".")[0]}\n`);
   execFileSync("git", ["init", "-q", repo]);
@@ -196,6 +250,70 @@ describe("one check", SLOW, () => {
   });
 });
 
+describe("one spec", SLOW, () => {
+  it("passes a clean spec through Playwright Test, printing only its ▶ and ■ lines", () => {
+    const { out, status } = run(["specpass"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/^▶ specpass\.spec\.mjs .* cap 30s/m);
+    expect(out).toMatch(/^■ specpass\.spec\.mjs: pass \(exit 0\)/m);
+    expect(out.trim().split("\n")).toHaveLength(2);
+    expect(leasesLeft()).toEqual([]);
+  });
+
+  it("logs a PASS line per test and step, and the tally", () => {
+    const { out } = run(["--verbose", "specpass"]);
+    expect(out).toMatch(/^· {2}core › a step \(/m);
+    expect(out).toMatch(/^PASS core \(/m);
+    expect(out).toMatch(/^PASS extra \(/m);
+    expect(out).toMatch(/^2\/2 passed$/m);
+  });
+
+  it("shows FAIL lines with their errors, and doesn't retry a plain failure (a call log's timeout isn't contention)", () => {
+    const { out, status } = run(["specfail"]);
+    expect(status).toBe(1);
+    expect(out).toMatch(/^✗ broken › a soft step\n {2}Error: soft/m);
+    expect(out).toMatch(/^FAIL broken\n {2}Error: soft[\s\S]* {2}Error: the number/m);
+    expect(out).not.toMatch(/PASS fine/);
+    expect(out).toMatch(/not retried: the failure doesn't look like contention/);
+    expect(out).toMatch(/^■ specfail\.spec\.mjs: FAIL \(exit 1\)/m);
+  });
+
+  it("runs only @smoke tests in smoke mode, and says which it skipped", () => {
+    const { out, status } = run(["--smoke", "--verbose", "specpass"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/· smoke$/m);
+    expect(out).toMatch(/^PASS core /m);
+    expect(out).toMatch(/^SKIP extra \(smoke\)$/m);
+    expect(out).toMatch(/^1\/1 passed$/m);
+  });
+
+  it("kills a spec at its cap, worker and all, and retries it once", () => {
+    const { out, status } = run(["specbusy"]);
+    expect(status).toBe(124);
+    expect(out.match(/^TIMEOUT \(killed at its 4s cap\)$/gm)).toHaveLength(2);
+    expect(out).not.toMatch(/tick/);
+    const pidFile = join(env.FAKE_STATE, "specbusy.pid");
+    expect(existsSync(pidFile)).toBe(true);
+    expect(() => process.kill(Number(readFileSync(pidFile, "utf8")), 0)).toThrow();
+    expect(leasesLeft()).toEqual([]);
+  });
+
+  it("kills a silent spec at the silence limit", () => {
+    const { out, status, secs } = run(["--no-retry", "specsilent"], { CARETOOK_BROWSER_SILENCE: "5" });
+    expect(status).toBe(124);
+    expect(out).toMatch(/^TIMEOUT \(silent: no output for 5s\)$/m);
+    expect(secs).toBeLessThan(40);
+  });
+
+  it("records a spec's pass on the retry as FLAKY", () => {
+    const { out, status } = run(["specflaky"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/^FAIL flaky\n {2}Error: timed out waiting for x/m);
+    expect(out).toMatch(/^■ specflaky\.spec\.mjs: FLAKY/m);
+    expect(readFileSync(env.CARETOOK_BROWSER_FLAKES, "utf8")).toMatch(/\tspecflaky\.spec\.mjs\t/);
+  });
+});
+
 describe("a suite", SLOW, () => {
   it("runs the manifest's e2e checks in order, then a table", () => {
     const { out, status } = run(["--suite"]);
@@ -204,6 +322,14 @@ describe("a suite", SLOW, () => {
     expect(out).toMatch(/^clean\.mjs +pass /m);
     expect(out).toMatch(/^failing\.mjs +FAIL /m);
     expect(out).toMatch(/1\/2 passed/);
+  });
+
+  it("runs specs and plain checks side by side", () => {
+    const { out, status } = run(["--suite"], { CARETOOK_BROWSER_SUITE: "clean specpass" });
+    expect(status).toBe(0);
+    expect(out).toMatch(/^clean\.mjs +pass /m);
+    expect(out).toMatch(/^specpass\.spec\.mjs +pass /m);
+    expect(out).toMatch(/2\/2 passed/);
   });
 
   it("stops at the suite cap and lists the rest as not run", () => {
