@@ -42,9 +42,8 @@ if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || die "uncommitted changes in $dir"
 fi
 if [[ $branch == prd/* && -z $force ]]; then
-  checked=$([[ -d $dir ]] && cat "$(checked_file "$dir")" 2>/dev/null || true)
-  [[ $checked == "$(git -C "$main" rev-parse "$branch")" ]] ||
-    die "\`pnpm check\` hasn't passed on $branch's tip: run \`pnpm prd check\` in $dir (or pass --force)"
+  [[ -d $dir ]] && checked_ok "$dir" "$branch" ||
+    die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only Markdown changed since): run \`pnpm prd check\` in $dir (or pass --force)"
 fi
 
 if [[ -z $msg ]]; then

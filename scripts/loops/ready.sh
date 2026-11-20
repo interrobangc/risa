@@ -24,9 +24,8 @@ blockers=()
 [[ -z $drift ]] || blockers+=("$trunk has newer work ($(wc -l <<< "$drift" | tr -d ' ') file(s) changed): run \`pnpm prd sync\` in $dir, then check again")
 if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || blockers+=("uncommitted changes in $dir")
-  checked=$(cat "$(checked_file "$dir")" 2>/dev/null || true)
-  [[ $checked == "$(git -C "$main" rev-parse "$branch")" ]] ||
-    blockers+=("\`pnpm check\` hasn't passed on $tip: run \`pnpm prd check\` in $dir")
+  checked_ok "$dir" "$branch" ||
+    blockers+=("\`pnpm check\` hasn't passed on $tip (or on an earlier commit with only Markdown changed since): run \`pnpm prd check\` in $dir")
 else
   blockers+=("no worktree at $dir, so the checks can't be confirmed (pnpm prd start $topic)")
 fi
@@ -38,7 +37,7 @@ if ((${#blockers[@]})); then
 else
   echo "# $branch is ready to land"
   echo
-  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, up to date with it, \`pnpm check\` passed on this commit."
+  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, up to date with it, \`pnpm check\` passed on this commit (or on an earlier one, with only Markdown changed since)."
 fi
 
 echo

@@ -111,6 +111,19 @@ stop_server() {
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
 
+# checked_ok DIR REV → succeeds when `pnpm prd check` passed on REV, or on an
+# ancestor of it with only Markdown changed since (AGENTS.md: docs-only changes
+# skip `pnpm check`).
+checked_ok() {
+  local checked tip
+  checked=$(cat "$(checked_file "$1")" 2>/dev/null || true)
+  tip=$(git -C "$1" rev-parse "$2")
+  [[ -n $checked ]] || return 1
+  [[ $checked == "$tip" ]] && return 0
+  git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null || return 1
+  [[ -z $(git -C "$1" diff --name-only "$checked" "$tip" | grep -v '\.md$') ]]
+}
+
 # use_node → put the Node that .nvmrc names (here, else the main checkout's)
 # first on PATH, with the pnpm beside it. Scripts call this themselves, so no
 # shell needs `nvm use` first. It doesn't rely on `nvm use` taking: in agent
