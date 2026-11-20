@@ -51,7 +51,7 @@ pnpm prd <command>
     check [--quick "<why>"]   pnpm check (at most three at once machine-wide), and record that
                               this commit passed; --quick: typecheck, lint, format and only the tests
                               related to the diff since the last full pass, recorded with its reason
-                              (docs and tooling-only changes need neither: docs/loops.md, _The check gate_)
+                              (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
