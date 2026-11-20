@@ -1,7 +1,7 @@
-// browser.sh's watchdog, caps, retry and trimmed output, with fake checks in a
-// throwaway repo: plain .mjs checks and Playwright Test specs (run with the
-// real config, reporter and fixtures, and this repo's node_modules). Its leases and flakes log are moved into the temp dir, so
-// these never take one of the machine's real browser leases.
+// browser.sh's watchdog, caps, retry and trimmed output, with fake Playwright
+// Test specs in a throwaway repo (run with the real config, reporter and
+// fixtures, and this repo's node_modules). Its leases and flakes log are moved
+// into the temp dir, so these never take one of the machine's real browser leases.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
   cpSync,
@@ -20,36 +20,6 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const BROWSER = new URL("./browser.sh", import.meta.url).pathname;
-
-// Each fake check is a tiny Node script; `state` is a file it can use to act
-// differently on its retry.
-const FAKES = {
-  clean: `for (let i = 1; i <= 5; i++) console.log("PASS step " + i);\nconsole.log("5/5 passed");`,
-  failing: [
-    `console.log("PASS one");`,
-    `console.log("FAIL two  (wanted 2, got 3)");`,
-    `console.log("  detail line");`,
-    `console.log("PASS three");`,
-    `console.log("2/3 passed");`,
-    `process.exit(1);`,
-  ].join("\n"),
-  crashing: `console.log("PASS one");\nthrow new Error("boom");`,
-  quiet: `console.log("PASS one");\nconsole.log("something odd");\nprocess.exit(2);`,
-  silent: `console.log("PASS started");\nsetInterval(() => {}, 1000);`,
-  busy: `let i = 0;\nsetInterval(() => console.log("PASS tick " + i++), 200);`,
-  flaky: [
-    `import { existsSync, writeFileSync } from "node:fs";`,
-    `const f = process.env.FAKE_STATE + "/flaky";`,
-    `if (!existsSync(f)) {`,
-    `  writeFileSync(f, "1");`,
-    `  console.log("step: timed out waiting for x\\n[step] at /app\\n  (no errors reported)");`,
-    `  process.exit(1);`,
-    `}`,
-    `console.log("1/1 passed");`,
-  ].join("\n"),
-  lingering: `console.log("PASS a");\nconsole.log("2/2 passed");\nsetInterval(() => {}, 1000);`,
-  slow: `let i = 0;\nconst t = setInterval(() => { console.log("PASS " + i++); if (i > 32) { clearInterval(t); console.log("done"); } }, 250);`,
-};
 
 // Fake specs: they import the real fixtures (smoke mode lives there) and never
 // open a browser. `pid` files let a test see that a killed run's worker is gone.
@@ -90,24 +60,22 @@ const SPECS = {
     `  if (!existsSync(f)) { writeFileSync(f, "1"); throw new Error("timed out waiting for x"); }`,
     `});`,
   ].join("\n"),
+  specslow: [
+    `import { test } from "./fixtures.mjs";`,
+    `test("slow", async () => {`,
+    `  for (let i = 0; i < 240; i++) { console.log("tick " + i); await new Promise((r) => setTimeout(r, 250)); }`,
+    `});`,
+  ].join("\n"),
 };
 
 // check, usual, cap, never-exits, e2e
 const MANIFEST = `# check usual cap never-exits e2e
-clean      1  20  no   yes
-failing    1  20  no   yes
-crashing   1  20  no   no
-quiet      1  20  no   no
-silent     1  60  no   no
-busy       1   2  no   no
-flaky      1  20  no   no
-lingering  1  20  yes  no
-slow       1  20  no   no
-specpass   1  30  no   no
-specfail   1  30  no   no
+specpass   1  30  no   yes
+specfail   1  30  no   yes
 specbusy   1   4  no   no
 specsilent 1  90  no   no
 specflaky  1  30  no   no
+specslow   1  60  no   no
 `;
 
 let root, repo, env;
@@ -118,7 +86,6 @@ beforeAll(() => {
   const checks = join(repo, "scripts/browser-checks");
   mkdirSync(checks, { recursive: true });
   mkdirSync(join(repo, "scripts/loops"), { recursive: true });
-  for (const [name, src] of Object.entries(FAKES)) writeFileSync(join(checks, `${name}.mjs`), `${src}\n`);
   for (const [name, src] of Object.entries(SPECS))
     writeFileSync(join(checks, `${name}.spec.mjs`), `${src}\n`);
   for (const file of ["playwright.config.mjs", "reporter.mjs", "fixtures.mjs"])
@@ -162,78 +129,21 @@ const leasesLeft = () => {
 // Each run sources nvm and starts Node; under `pnpm check` that is slow.
 const SLOW = { timeout: 90_000 };
 
-describe("one check", SLOW, () => {
-  it("passes a clean check, printing only its ▶ and ■ lines", () => {
-    const { out, status } = run(["clean"]);
+describe("a check's run", SLOW, () => {
+  it("prints everything with --verbose, and releases its lease", () => {
+    const { out, status } = run(["--verbose", "specpass"]);
     expect(status).toBe(0);
-    expect(out).toMatch(/^▶ clean\.mjs .* cap 20s/m);
-    expect(out).toMatch(/^■ clean\.mjs: pass \(exit 0\)/m);
-    expect(out).not.toMatch(/PASS step/);
-    expect(out).not.toMatch(/browser lease/);
-    expect(out.trim().split("\n")).toHaveLength(2);
-    expect(leasesLeft()).toEqual([]);
-  });
-
-  it("prints everything with --verbose", () => {
-    const { out, status } = run(["--verbose", "clean"]);
-    expect(status).toBe(0);
-    expect(out).toMatch(/PASS step 3/);
+    expect(out).toMatch(/^PASS core /m);
     expect(out).toMatch(/Released browser lease/);
   });
 
-  it("shows FAIL lines with their block, and doesn't retry a plain failure", () => {
-    const { out, status } = run(["failing"]);
-    expect(status).toBe(1);
-    expect(out).toMatch(/^FAIL two {2}\(wanted 2, got 3\)\n {2}detail line$/m);
-    expect(out).not.toMatch(/PASS/);
-    expect(out).toMatch(/not retried/);
-    expect(out).toMatch(/^■ failing\.mjs: FAIL/m);
-  });
-
-  it("shows an uncaught error with its stack", () => {
-    const { out, status } = run(["--no-retry", "crashing"]);
-    expect(status).toBe(1);
-    expect(out).toMatch(/^Error: boom\n {4}at /m);
-    expect(out).not.toMatch(/PASS/);
-  });
-
-  it("shows the log's last lines for a failure that printed no FAIL line", () => {
-    const { out, status } = run(["--no-retry", "quiet"]);
-    expect(status).toBe(2);
-    expect(out).toMatch(/the log's last lines\)\n {2}PASS one\n {2}something odd$/m);
-  });
-
-  it("kills a silent check at the silence limit, and retries it once", () => {
-    const { out, status, secs } = run(["silent"], { CARETOOK_BROWSER_SILENCE: "2" });
-    expect(status).toBe(124);
-    expect(out.match(/^TIMEOUT \(silent: no output for 2s\)$/gm)).toHaveLength(2);
-    expect(out).toMatch(/↻ retrying silent\.mjs once/);
-    expect(secs).toBeLessThan(30);
-    expect(leasesLeft()).toEqual([]);
-  });
-
-  it("kills a busy check at its cap, and retries it once", () => {
-    const { out, status } = run(["busy"]);
-    expect(status).toBe(124);
-    expect(out.match(/^TIMEOUT \(killed at its 2s cap\)$/gm)).toHaveLength(2);
-    expect(out).not.toMatch(/PASS tick/);
-  });
-
   it("lets --timeout override the manifest's cap", () => {
-    const { out } = run(["--no-retry", "--timeout", "1", "busy"]);
+    const { out } = run(["--no-retry", "--timeout", "1", "specbusy"]);
     expect(out).toMatch(/^TIMEOUT \(killed at its 1s --timeout\)$/m);
   });
 
-  it("records a pass on the retry as FLAKY", () => {
-    const { out, status } = run(["flaky"]);
-    expect(status).toBe(0);
-    expect(out).toMatch(/^step: timed out waiting for x\n\[step\] at \/app\n {2}\(no errors reported\)$/m);
-    expect(out).toMatch(/^■ flaky\.mjs: FLAKY/m);
-    expect(readFileSync(env.CARETOOK_BROWSER_FLAKES, "utf8")).toMatch(/\tflaky\.mjs\t/);
-  });
-
   it("releases its lease before it exits when it's TERMed mid-check", async () => {
-    const child = spawn("bash", [BROWSER, "--no-retry", "silent"], { cwd: repo, env, stdio: "ignore" });
+    const child = spawn("bash", [BROWSER, "--no-retry", "specsilent"], { cwd: repo, env, stdio: "ignore" });
     const exited = new Promise((r) => child.once("exit", (code) => r(code)));
     const end = Date.now() + 30_000;
     while (leasesLeft().length === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
@@ -241,12 +151,6 @@ describe("one check", SLOW, () => {
     child.kill("SIGTERM");
     expect(await exited).toBe(143);
     expect(leasesLeft()).toEqual([]);
-  });
-
-  it("stops a never-exiting check after its last line", () => {
-    const { out, status } = run(["lingering"]);
-    expect(status).toBe(0);
-    expect(out).toMatch(/^■ lingering\.mjs: pass/m);
   });
 });
 
@@ -318,31 +222,23 @@ describe("a suite", SLOW, () => {
   it("runs the manifest's e2e checks in order, then a table", () => {
     const { out, status } = run(["--suite"]);
     expect(status).toBe(1);
-    expect(out).toMatch(/Running 2 checks \(suite cap 0m40s\): clean failing/);
-    expect(out).toMatch(/^clean\.mjs +pass /m);
-    expect(out).toMatch(/^failing\.mjs +FAIL /m);
-    expect(out).toMatch(/1\/2 passed/);
-  });
-
-  it("runs specs and plain checks side by side", () => {
-    const { out, status } = run(["--suite"], { CARETOOK_BROWSER_SUITE: "clean specpass" });
-    expect(status).toBe(0);
-    expect(out).toMatch(/^clean\.mjs +pass /m);
+    expect(out).toMatch(/Running 2 checks \(suite cap 1m00s\): specpass specfail/);
     expect(out).toMatch(/^specpass\.spec\.mjs +pass /m);
-    expect(out).toMatch(/2\/2 passed/);
+    expect(out).toMatch(/^specfail\.spec\.mjs +FAIL /m);
+    expect(out).toMatch(/1\/2 passed/);
   });
 
   it("stops at the suite cap and lists the rest as not run", () => {
     const { out, status } = run(["--suite"], {
-      CARETOOK_BROWSER_SUITE: "clean slow clean",
-      CARETOOK_BROWSER_SUITE_CAP: "4",
+      CARETOOK_BROWSER_SUITE: "specpass specslow specpass",
+      CARETOOK_BROWSER_SUITE_CAP: "15",
     });
     expect(status).toBe(1);
-    expect(out).toMatch(/^TIMEOUT \(killed at its [1-4]s suite cap\)$/m);
+    expect(out).toMatch(/^TIMEOUT \(killed at its ([1-9]|1[0-5])s suite cap\)$/m);
     expect(out).toMatch(/not retried: the suite cap is reached/);
-    expect(out).toMatch(/^slow\.mjs +TIMEOUT /m);
-    expect(out).toMatch(/^clean\.mjs +NOT-RUN /m);
-    expect(out).toMatch(/1\/3 passed, 1 not run \(suite cap 0m04s reached\)/);
+    expect(out).toMatch(/^specslow\.spec\.mjs +TIMEOUT /m);
+    expect(out).toMatch(/^specpass\.spec\.mjs +NOT-RUN /m);
+    expect(out).toMatch(/1\/3 passed, 1 not run \(suite cap 0m15s reached\)/);
     expect(leasesLeft()).toEqual([]);
   });
 });
@@ -384,7 +280,7 @@ describe("--changed with the real map", SLOW, () => {
     });
     for (const line of realFile("./checks").split("\n"))
       if (line.trim() && !line.startsWith("#"))
-        writeFileSync(join(checks, `${line.split(/\s+/)[0]}.mjs`), "\n");
+        writeFileSync(join(checks, `${line.split(/\s+/)[0]}.spec.mjs`), "\n");
     writeFileSync(join(real, ".nvmrc"), `${process.versions.node.split(".")[0]}\n`);
     execFileSync("git", ["init", "-q", real]);
     execFileSync("git", ["-C", real, "add", "."]);
@@ -429,7 +325,7 @@ describe("--changed with the real map", SLOW, () => {
   });
 
   it("needs nothing for a check the change deletes (its screens moved to component tests)", () => {
-    const gone = "scripts/browser-checks/phase2.mjs";
+    const gone = "scripts/browser-checks/phase2.spec.mjs";
     execFileSync("git", ["-C", real, "clean", "-qfd", "apps", "packages"]);
     rmSync(join(real, gone));
     try {
@@ -440,7 +336,7 @@ describe("--changed with the real map", SLOW, () => {
       });
       const out = `${r.stdout}${r.stderr}`;
       expect(r.status).toBe(0);
-      expect(out).toMatch(/phase2\.mjs +- \(deleted\)$/m);
+      expect(out).toMatch(/phase2\.spec\.mjs +- \(deleted\)$/m);
       expect(out).not.toMatch(/skipping phase2/);
       expect(out).toMatch(/No browser checks needed for these changes\./);
     } finally {

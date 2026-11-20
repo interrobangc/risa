@@ -3,15 +3,15 @@
 # at once machine-wide, so loops don't pile Chrome, Vite and PowerSync on top of
 # each other.
 #
-#   browser.sh [--timeout S] <check> [args…]   one check (sign-in, sign-in.spec.mjs, phase2.mjs, or a path)
+#   browser.sh [--timeout S] <check> [args…]   one check (sign-in, sign-in.spec.mjs, or a path)
 #   browser.sh --suite [--timeout S]           the lean end-to-end set (the manifest's e2e checks),
 #                                              one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
 #                                              (scripts/loops/check-areas.d/), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
 #   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
-#                                              runs only its core path (a spec's @smoke tests, an
-#                                              .mjs check's cdp.mjs step() blocks); without it,
+#                                              runs only its core path (a spec's @smoke tests);
+#                                              without it,
 #                                              checks run in full (SMOKE=0)
 #   browser.sh --verbose …                     any of the above, printing each check's whole output
 #
@@ -42,10 +42,8 @@
 # A check is a Playwright Test spec, scripts/browser-checks/<check>.spec.mjs (run
 # through Playwright Test's CLI with playwright.config.mjs, one worker, its
 # reporter printing PASS, FAIL and SKIP lines and "N/M passed"; its traces go to
-# the log dir), or, until slice 23 of check-migration ports the rest, a plain
-# Node script, <check>.mjs. A spec wins when both exist. Everything below (the
-# lease, limits, retry, trimmed output, smoke mode, the check build) is the same
-# for both.
+# the log dir). Everything below (the lease, limits, retry, trimmed output,
+# smoke mode, the check build) applies to every check.
 #
 # The check runs from scripts/browser-checks/ with the worktree's .env.loop
 # (the main checkout's defaults when there is none) and Node from .nvmrc. Its
@@ -73,7 +71,7 @@
 # manifest's e2e checks), CARETOOK_BROWSER_SILENCE (s, default 90),
 # CARETOOK_BROWSER_SUITE_CAP (s), CARETOOK_BROWSER_PAUSE (s between suite
 # checks, default 2: Better Auth allows about 3 sign-ins per 10 s per client
-# IP, and cdp.mjs gives every page its own), CARETOOK_BROWSER_RETRY (0: no
+# IP, and the fixtures give every device its own), CARETOOK_BROWSER_RETRY (0: no
 # retry), CARETOOK_BROWSER_BUSY (the load that counts as busy, default 40),
 # CARETOOK_BROWSER_LEASES and CARETOOK_BROWSER_FLAKES (the lease directory and
 # the flakes log; tests point them elsewhere).
@@ -142,7 +140,7 @@ manifest=$top/scripts/loops/checks
 [[ -f $manifest ]] || manifest=$(dirname "$0")/checks
 [[ -f $manifest ]] || die "no browser-check manifest (scripts/loops/checks): pnpm prd sync"
 
-# check_name FILE → the check's name: sign-in for sign-in.spec.mjs or sign-in.mjs.
+# check_name FILE → the check's name: sign-in for sign-in.spec.mjs.
 check_name() {
   local b=${1##*/}
   b=${b%.mjs}
@@ -173,8 +171,7 @@ cap_of() {
 # vsay … → echo only with --verbose (lease bookkeeping and other chatter).
 vsay() { [[ -z $verbose ]] || echo "$@"; }
 
-# resolve_check X → the check's absolute path (sign-in, sign-in.spec.mjs,
-# phase2.mjs, or a path): <name>.spec.mjs when there is one, else <name>.mjs.
+# resolve_check X → the check's absolute path (sign-in, sign-in.spec.mjs, or a path).
 resolve_check() {
   local x=$1 name
   if [[ $x == */* ]]; then
@@ -182,15 +179,10 @@ resolve_check() {
     (cd "$(dirname "$x")" && echo "$PWD/$(basename "$x")")
   else
     name=$(check_name "$x")
-    if [[ -f $checks_dir/$name.spec.mjs ]]; then echo "$checks_dir/$name.spec.mjs"
-    elif [[ -f $checks_dir/$name.mjs ]]; then echo "$checks_dir/$name.mjs"
-    else return 1
-    fi
+    [[ -f $checks_dir/$name.spec.mjs ]] || return 1
+    echo "$checks_dir/$name.spec.mjs"
   fi
 }
-
-# is_spec FILE → whether the check is a Playwright Test spec.
-is_spec() { [[ $1 == *.spec.mjs ]]; }
 
 # playwright_cli → Playwright Test's CLI: this tree's, else the one beside this script.
 playwright_cli() {
@@ -203,22 +195,17 @@ playwright_cli() {
 }
 
 # start_check FILE [args…] → the check in the background (its pid in $child):
-# a spec through Playwright Test (one worker, this directory's config), a
-# plain check with node.
+# the spec through Playwright Test (one worker, this directory's config).
 start_check() {
   local file=$1 cli
   shift
-  if is_spec "$file"; then
-    if ! cli=$(playwright_cli); then
-      (echo "FAIL no @playwright/test in this tree (pnpm install)"; exit 1) >&3 2>&1 &
-      child=$!
-      return
-    fi
-    CARETOOK_PW_OUTPUT=$logdir/pw-$(check_name "$file") FORCE_COLOR=0 \
-      node "$cli" test --config "$checks_dir/playwright.config.mjs" --workers=1 "$(basename "$file")" "$@" >&3 2>&1 &
-  else
-    node "$file" "$@" >&3 2>&1 &
+  if ! cli=$(playwright_cli); then
+    (echo "FAIL no @playwright/test in this tree (pnpm install)"; exit 1) >&3 2>&1 &
+    child=$!
+    return
   fi
+  CARETOOK_PW_OUTPUT=$logdir/pw-$(check_name "$file") FORCE_COLOR=0 \
+    node "$cli" test --config "$checks_dir/playwright.config.mjs" --workers=1 "$(basename "$file")" "$@" >&3 2>&1 &
   child=$!
 }
 
@@ -534,7 +521,7 @@ if [[ $mode == changed ]]; then
   suite=()
   for c in $manifest_order; do [[ " ${selected[*]:-} " == *" $c "* ]] && suite+=("$c"); done
   for c in "${selected[@]:-}"; do [[ -n $c && " ${suite[*]:-} " != *" $c "* ]] && suite+=("$c"); done
-  # A check that doesn't exist in this tree (marketing.mjs before it lands) is skipped.
+  # A check that doesn't exist in this tree (a manifest line whose spec hasn't landed) is skipped.
   kept=()
   for c in "${suite[@]:-}"; do
     [[ -z $c ]] && continue

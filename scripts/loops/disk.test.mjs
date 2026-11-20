@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -14,6 +15,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -106,7 +108,13 @@ beforeAll(() => {
   );
   writeFileSync(join(main, "scripts/loops/checks"), "# check usual cap never-exits e2e\nclean 1 20 no yes\n");
   mkdirSync(join(main, "scripts/browser-checks"), { recursive: true });
-  writeFileSync(join(main, "scripts/browser-checks/clean.mjs"), 'console.log("1/1 passed");\n');
+  writeFileSync(
+    join(main, "scripts/browser-checks/clean.spec.mjs"),
+    'import { expect, test } from "./fixtures.mjs";\ntest("clean", () => expect(1).toBe(1));\n',
+  );
+  for (const file of ["playwright.config.mjs", "reporter.mjs", "fixtures.mjs"])
+    cpSync(new URL(`../browser-checks/${file}`, import.meta.url), join(main, "scripts/browser-checks", file));
+  symlinkSync(new URL("../../node_modules", import.meta.url).pathname, join(main, "node_modules"));
   writeFileSync(join(main, ".nvmrc"), `${process.versions.node.split(".")[0]}\n`);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");
   mkdirSync(join(main, "plans"));
@@ -226,7 +234,7 @@ describe("browser.sh's check build", () => {
     const r = browser(ROOMY);
     expect(r.status, `${r.stdout}${r.stderr}`).toBe(0);
     expect(calls()).toMatch(/serve t-2 --built/);
-    expect(r.stdout).toMatch(/■ clean\.mjs: pass/);
+    expect(r.stdout).toMatch(/■ clean\.spec\.mjs: pass/);
   });
 });
 
