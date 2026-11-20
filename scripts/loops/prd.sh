@@ -177,7 +177,7 @@ case $cmd in
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
-      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- pnpm check)
+      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- sh -c 'pnpm check && pnpm build:budget')
       echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
       echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     fi

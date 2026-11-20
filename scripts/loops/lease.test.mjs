@@ -175,8 +175,10 @@ describe("releasing", SLOW, () => {
 });
 
 describe("pnpm prd check's check lease", SLOW, () => {
-  it("wraps pnpm check in `lease.sh run check`", () => {
-    expect(readFileSync(PRD_SH, "utf8")).toMatch(/lease\.sh" run check --label "pnpm check" -- pnpm check/);
+  it("wraps pnpm check (then the bundle budget) in `lease.sh run check`", () => {
+    expect(readFileSync(PRD_SH, "utf8")).toMatch(
+      /lease\.sh" run check --label "pnpm check" -- sh -c 'pnpm check && pnpm build:budget'/,
+    );
   });
 
   it("makes two runs beyond the limit of three wait, and holders shows who holds what", async () => {
