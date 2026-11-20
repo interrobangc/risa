@@ -405,7 +405,7 @@ describe("--changed with the real map", SLOW, () => {
     const { out, status } = changed([
       "apps/web/app/routes/app/groups/timeline/TimelineEntryRow.tsx",
       "apps/web/app/routes/app/groups/timeline/TimelineEntryCard.tsx",
-      "apps/web/app/routes/app/groups/timeline/LatestVitals.tsx",
+      "apps/web/app/routes/app/groups/timeline/TodayCard.tsx",
       "apps/web/app/routes/app/groups/timeline/timelineLayout.browser.test.tsx",
     ]);
     expect(status).toBe(0);
