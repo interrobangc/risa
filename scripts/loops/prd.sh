@@ -28,6 +28,7 @@ pnpm prd <command>
                               (it reads the backlog and helps you decide what's next)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name>             a stackless worktree on hotfix/<name> from dev, for a fix outside any PRD
+                              (prompt hotfix <name> ["<the fix>"] is its session's first prompt)
                               (pnpm prd check there, then pnpm prd land hotfix/<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch

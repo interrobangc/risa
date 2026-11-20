@@ -10,13 +10,14 @@
 #   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (pnpm prd plan <topic> --open)
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
+#   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
 #   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan)
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan, slice, backlog or recover}
+kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog or recover}
 if [[ $kind == backlog ]]; then
   cat <<EOF
 You are the new backlog/inbox planning agent. Help me decide what is next.
@@ -46,6 +47,25 @@ EOF
 fi
 topic=${2:?topic}
 items=${*:3}
+if [[ $kind == hotfix ]]; then
+  fix=${3:-}
+  cat <<EOF
+You are the hotfix agent for "$topic": one contained fix, outside the PRD flow, that lands straight in dev.
+
+- Your worktree is $loops/hotfix-$topic, on branch hotfix/$topic (from dev), with no Docker stack. \`cd\` there in every shell and work only there; Read, Edit and Write use absolute paths inside it. Never change the main checkout ($main), other worktrees or other stacks.
+- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read docs/loops.md, _Hotfixes_ (under _Landing a wave_), then the area docs the fix touches (AGENTS.md's _Area index_).
+- **Ask the user before every step that takes time or changes shared state**, unless they say not to: a long test (\`pnpm check\`, \`pnpm prd check\`, component tests, any browser check, \`pnpm prd stack up\`), committing, \`pnpm prd sync\`, landing and \`pnpm prd rm\`. Say what you'll run and why, and wait. Reads, edits, a typecheck and one unit-test file need no ask.
+- When the fix is a judgement call (what to show, what to cut), talk it through first: poll the user with AskUserQuestion, never numbered question lists. Keep it to one contained change; if it grows into PRD work (a migration, a running PRD's hot file, parallel work), say so and stop.
+- Background agents are allowed (a test run, a search, a review), working in this worktree only.
+- Update the docs the fix makes stale on this branch (a hotfix may edit docs/ and AGENTS.md), and write any new hotfix rule you and the user settle on into docs/loops.md, _Hotfixes_: the pattern is still being worked out.
+- Commit on hotfix/$topic only when the user asks (Conventional Commits; \`fix(<area>): …\` by default). Land on their word: \`pnpm prd check\` on the tip, then \`pnpm prd land hotfix/$topic -m "fix(<area>): …"\` and \`pnpm prd rm hotfix-$topic\`. A backlog item, if there is one, goes through \`pnpm backlog\` (claim, note); never edit the backlog files on the branch.
+${fix:+
+The fix: $fix
+}
+Start by reading the code the fix touches and summarising what's there for the user.
+EOF
+  exit 0
+fi
 
 # A topic may have no PRD (quick-fixes): then its plan is the whole spec.
 here=$(git rev-parse --show-toplevel 2>/dev/null || echo "$main")
@@ -188,5 +208,5 @@ EOF
 EOF
     fi
     ;;
-  *) echo "kind must be orchestrator, plan, slice, backlog or recover" >&2; exit 1 ;;
+  *) echo "kind must be orchestrator, plan, slice, hotfix, backlog or recover" >&2; exit 1 ;;
 esac
