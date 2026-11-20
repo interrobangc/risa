@@ -173,3 +173,25 @@ describe("plan and backlog", () => {
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
 });
+
+describe("recover", () => {
+  it("is the recovery agent: inventory, ListAgents, carry-on message, the opener, no code changes", () => {
+    const text = ok("recover");
+    expect(text).toMatch(/^You are the recovery agent\./);
+    expect(text).toContain(`You're in the main checkout (${main}), on dev.`);
+    expect(text).toContain("**Make no code changes and no commits**");
+    expect(text).toContain("`pnpm prd recover --dry-run --json`");
+    expect(text).toContain("`open-session` action");
+    expect(text).toContain("ListAgents");
+    expect(text).toContain("SendMessage");
+    expect(text).toMatch(/> The machine recovered .*Reconcile your plan's _Status_ with git.*carry on/);
+    expect(text).toContain("`pnpm prd open <target>`");
+    expect(text).toContain("never open a session that ListAgents shows as live");
+    expect(text).toMatch(/Then report.*Then end/s);
+    expect(text).not.toContain(RESUME);
+  });
+
+  it("takes no topic", () => {
+    expect(ok("recover", "ignored")).toMatch(/^You are the recovery agent\./);
+  });
+});

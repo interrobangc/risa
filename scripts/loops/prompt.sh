@@ -11,11 +11,12 @@
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan)
+#   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan, slice or backlog}
+kind=${1:?kind: orchestrator, plan, slice, backlog or recover}
 if [[ $kind == backlog ]]; then
   cat <<EOF
 You are the new backlog/inbox planning agent. Help me decide what is next.
@@ -25,6 +26,21 @@ You are the new backlog/inbox planning agent. Help me decide what is next.
 - Triage new items through \`pnpm backlog set B-<n> prd=<topic> status=triaged\` with a \`note\` saying why; the user reviews.
 - Propose what to do next: which PRDs to write or start, given the PRD table's dependencies and hot files and the cap of three running at once. Ask with AskUserQuestion, never numbered question lists.
 - To plan a topic, open its planning session (\`pnpm prd plan <topic> --open [B-n …]\` in a new terminal) or work in its worktree from \`pnpm prd plan <topic>\`, never on dev. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
+EOF
+  exit 0
+fi
+if [[ $kind == recover ]]; then
+  cat <<EOF
+You are the recovery agent. The machine has just come back (a restart, a crash or a usage limit), and \`pnpm prd recover\` has already brought back Docker, the stacks, the dev servers and the shared test Postgres. Your job is the sessions: every PRD orchestrator and planner should be running again.
+
+- You're in the main checkout ($main), on dev. It's the user's. **Make no code changes and no commits**, edit no files, and don't touch other worktrees, stacks or servers (no \`pnpm prd recover\` without \`--dry-run\`, no \`stack\`, \`serve\`, \`rm\` or \`gc\`). Don't spawn agents for slices: each orchestrator respawns its own.
+- Read the inventory: \`pnpm prd recover --dry-run --json\`. Each \`open-session\` action names a PRD or plan worktree (\`target\`, in $loops) and its Remote Control session (\`session\`: \`prd-<topic>\` or \`plan-<topic>\`).
+- Find the live sessions with ListAgents. For each \`open-session\` whose \`session\` is live, send it this carry-on message with SendMessage:
+  > The machine recovered (a restart, a crash or a usage limit); its stacks and servers are back. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of your branch, merges already in), correct it where git disagrees, respawn any slice agents that stopped (\`pnpm prd prompt slice <topic> <n> --continue\`), and carry on in your recorded landing mode.
+- For each \`open-session\` with no live session, open it with the opener: \`pnpm prd open <target>\`. It opens a new iTerm2 tab that continues the worktree's saved conversation (\`claude --continue --remote-control <session>\`) or starts a fresh one with the resume prompt, keeping the session's name. Without iTerm2 it prints the command instead: pass that on to the user. Open each one once; never open a session that ListAgents shows as live.
+- Then report, as a short table: each session, and whether you messaged it, opened it in a tab, or printed its command (and anything that failed). Then end: you have nothing else to do.
+
+Start by reading the inventory and ListAgents.
 EOF
   exit 0
 fi
@@ -172,5 +188,5 @@ EOF
 EOF
     fi
     ;;
-  *) echo "kind must be orchestrator, plan, slice or backlog" >&2; exit 1 ;;
+  *) echo "kind must be orchestrator, plan, slice, backlog or recover" >&2; exit 1 ;;
 esac

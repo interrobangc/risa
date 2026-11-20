@@ -10,8 +10,14 @@
 #                                 4. stacks, one at a time: compose up, wait for
 #                                    its Postgres, migrate (retried once)
 #                                 5. dev servers (serve.sh)
-#                                 6. print the gc offers and the sessions to
-#                                    reopen; delete the down record once used
+#                                 6. print the gc offers; delete the down
+#                                    record once used
+#                                 7. open the recovery agent in this terminal
+#                                    (claude --remote-control recover, in the
+#                                    main checkout; prompt.sh recover): it tells
+#                                    live orchestrators and planners to carry on
+#                                    and reopens dead ones (pnpm prd open)
+#   recover.sh --no-agent         steps 1-6 only: print the sessions instead
 #   recover.sh --at HH:MM         sleep until then (tomorrow's when it has
 #                                 passed), then recover: after a usage limit
 #   recover.sh --wait             probe with `claude -p` every
@@ -22,11 +28,13 @@
 #                                 test Postgres, disk, the down record) and the
 #                                 actions recovery would take, in order; changes
 #                                 nothing
-#   recover.sh --dry-run --json   the same as JSON (for the recovery agent)
+#   recover.sh --dry-run --json   the same as JSON (for the recovery agent);
+#                                 a dry run never launches anything
 #
 # inventory.mjs decides the classes and actions; inventory-facts.mjs collects
 # the facts (read-only: git, docker info|ps|inspect, lsof, df). Every step is
-# skipped when it's already done, so a second recover only prints.
+# skipped when it's already done, so a second recover only prints (and opens
+# the recovery agent again).
 #
 # Env: CARETOOK_DOCKER_WAIT_SECS (180), CARETOOK_RECOVER_PG_SECS (60),
 # CARETOOK_RECOVER_PROBE_SECS (600); CARETOOK_CLOCK_FILE (tests: a file holding
@@ -36,7 +44,7 @@ set -euo pipefail
 source "$(dirname "$0")/stack-lib.sh"
 bin=$(dirname "$0")
 
-dry=0 format=--text at="" wait=0
+dry=0 format=--text at="" wait=0 agent=1
 while (($#)); do
   case $1 in
     --dry-run | -n) dry=1 ;;
@@ -45,8 +53,9 @@ while (($#)); do
     --at) (($# > 1)) || die "recover: --at takes a time (HH:MM)"; at=$2; shift ;;
     --at=*) at=${1#--at=} ;;
     --wait) wait=1 ;;
-    -h | --help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) die "recover: unknown option $1 (--dry-run, --json, --at HH:MM, --wait)" ;;
+    --no-agent) agent=0 ;;
+    -h | --help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "recover: unknown option $1 (--dry-run, --json, --at HH:MM, --wait, --no-agent)" ;;
   esac
   shift
 done
@@ -148,11 +157,12 @@ stack_up() {
   echo "  up and migrated"
 }
 
-# after_infrastructure SESSION… → the last step, once the machine is back.
-# Slice 5 of the loop-recovery plan launches the recovery agent here (it
-# messages live sessions and reopens dead ones); for now it lists them.
+# after_infrastructure SESSION… → the last step, once the machine is back: the
+# recovery agent (prompt.sh recover) in this terminal, in the main checkout. It
+# messages the live sessions and reopens the dead ones; with --no-agent, or when
+# something didn't recover, it only lists them.
 after_infrastructure() {
-  (($#)) || return 0
+  (($#)) || { echo; echo "No PRD or plan sessions to carry on or reopen."; return 0; }
   echo
   echo "Sessions to carry on or reopen (each PRD and plan worktree):"
   local n w
@@ -160,6 +170,15 @@ after_infrastructure() {
     w=$loops/$n
     echo "  $(session_name "$w")  in $w"
   done
+  echo
+  if ((${#failed[@]})); then
+    echo "Not opening the recovery agent until everything above recovers. Then: pnpm prd recover"
+  elif ((agent == 0)); then
+    echo "--no-agent: to message and reopen them, run pnpm prd recover again without it, or pnpm prd open <name> for each."
+  else
+    echo "Opening the recovery agent (claude --remote-control recover) in the main checkout."
+    cd "$main" && exec claude --remote-control recover "$("$bin/prompt.sh" recover)"
+  fi
 }
 
 # session_name DIR → prd-<topic> or plan-<topic> (as inventory.mjs's sessionName).
@@ -215,10 +234,12 @@ run_actions() {
     echo "Didn't recover:" >&2
     printf '  %s\n' "${failed[@]}" >&2
   fi
+  if ((${#failed[@]} == 0)); then
+    echo
+    echo "Recovered."
+  fi
   after_infrastructure ${sessions[@]+"${sessions[@]}"}
   ((${#failed[@]} == 0)) || exit 1
-  echo
-  echo "Recovered."
 }
 
 if ((dry)); then

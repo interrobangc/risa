@@ -31,10 +31,14 @@ pnpm prd <command>
     reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
                               Vite caches, with sizes; frees them after a yes
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
-    recover [--at HH:MM] [--wait]   after a restart, crash or usage limit: Docker, stale locks, the test
-                              Postgres, stacks one at a time, servers; --at waits until then, --wait
-                              probes claude every 10 min; recover --dry-run [--json] only shows what it would do
+    recover [--at HH:MM] [--wait] [--no-agent]   after a restart, crash or usage limit: Docker, stale locks,
+                              the test Postgres, stacks one at a time, servers; then the recovery agent here
+                              (claude --remote-control recover) tells live orchestrators and planners to carry
+                              on and reopens dead ones (--no-agent: stop before it); --at waits until then,
+                              --wait probes claude every 10 min; recover --dry-run [--json] only shows what it would do
     down                      before a planned restart: record what's up, stop servers, stacks, the test Postgres
+    open <name> [--print]     reopen a PRD's or planner's session in a new iTerm2 tab: claude --continue when the
+                              worktree has a saved conversation, else a fresh one with the resume prompt
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
@@ -50,6 +54,7 @@ pnpm prd <command>
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
+                     recover: the recovery agent (pnpm prd recover opens it)
                      orchestrator <topic> --resume [--auto]: take over after an interruption
                      slice <topic> <n> --continue: pick up an interrupted slice
 USAGE
@@ -84,6 +89,7 @@ case $cmd in
   queue) exec "$bin/queue.sh" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
+  open) exec "$bin/open-session.sh" "$@" ;;
   plan)
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"

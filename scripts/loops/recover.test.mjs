@@ -86,8 +86,15 @@ echo "open $*" >> "$FAKE_LOG"; touch "$FAKE_STATE/docker-started"
 echo "sleep $*" >> "$FAKE_LOG"
 [[ -z \${CARETOOK_CLOCK_FILE:-} ]] || echo $(($(cat "$CARETOOK_CLOCK_FILE") + \${1%.*})) > "$CARETOOK_CLOCK_FILE"
 `,
-  // Fails $FAKE_STATE/claude-fails times, then answers.
+  // The recovery agent (--remote-control): logs one line and records its cwd and
+  // args, one per line, in $FAKE_STATE/agent-args. A probe (-p) fails
+  // $FAKE_STATE/claude-fails times, then answers.
   claude: `#!/usr/bin/env bash
+if [[ $1 == --remote-control ]]; then
+  echo "claude --remote-control $2 (agent)" >> "$FAKE_LOG"
+  printf '%s\\n' "$PWD" "$@" > "$FAKE_STATE/agent-args"
+  exit 0
+fi
 echo "claude $*" >> "$FAKE_LOG"
 n=$(cat "$FAKE_STATE/claude-fails" 2>/dev/null || echo 0)
 ((n > 0)) && { echo $((n - 1)) > "$FAKE_STATE/claude-fails"; exit 1; }
@@ -345,6 +352,8 @@ describe("recover --dry-run", () => {
       .filter((l) => l.startsWith("docker "))
       .map((l) => l.split(" ")[1]);
     expect(new Set(docker)).toEqual(new Set(["info", "ps", "inspect"]));
+    expect(calls()).not.toMatch(/^(claude|osascript|open) /m);
+    expect(existsSync(join(state, "agent-args"))).toBe(false);
   });
 
   it("refuses unknown options, a bad time, and waiting in a dry run", () => {
@@ -359,6 +368,9 @@ describe("recover --dry-run", () => {
     expect(r.stdout).toMatch(/recover \[--at HH:MM\] \[--wait\]/);
     expect(r.stdout).toMatch(/recover --dry-run \[--json\]/);
     expect(r.stdout).toMatch(/^ {4}down {2,}before a planned restart/m);
+    expect(r.stdout).toMatch(/\[--no-agent\]/);
+    expect(r.stdout).toMatch(/claude --remote-control recover/);
+    expect(r.stdout).toMatch(/^ {4}open <name> \[--print\] {2,}reopen/m);
   });
 });
 
@@ -439,6 +451,7 @@ describe("down and recover", () => {
       "pnpm -s datastore:migrate [t-2]",
       "serve t",
       "serve t-2",
+      "claude --remote-control recover (agent)",
     ]);
     expect(out).toMatch(/migrate failed; retrying once/);
     // It waited for t's Postgres (two refusals) before migrating.
@@ -451,18 +464,42 @@ describe("down and recover", () => {
     expect(out).toMatch(/Merged slices to clean up[^\n]*\n {2}t-1\n {2}t-4\n/);
     expect(out).toMatch(/Sessions to carry on or reopen[^\n]*\n {2}prd-t {2}in \S+\/t\n {2}plan-u {2}in /);
     expect(out).toMatch(/Recovered\.$/m);
+    // Last, the recovery agent in this terminal, in the main checkout, with its prompt.
+    expect(out).toMatch(/Opening the recovery agent/);
+    const [cwd, ...args] = readFileSync(join(state, "agent-args"), "utf8").split("\n");
+    expect(cwd).toBe(main);
+    expect(args.slice(0, 2)).toEqual(["--remote-control", "recover"]);
+    expect(args[2]).toMatch(/^You are the recovery agent\./);
+    expect(args.join("\n")).toMatch(/ListAgents/);
   });
 
-  it("a second recover does nothing", () => {
-    const out = okRecover([]);
+  it("a second recover does nothing (with --no-agent, launches nothing)", () => {
+    rmSync(join(state, "agent-args"));
+    const out = okRecover(["--no-agent"]);
     expect(effects()).toEqual([]);
     expect(out).not.toMatch(/^• /m);
     expect(calls()).not.toMatch(/^docker (compose|exec)/m);
+    expect(out).toMatch(/Sessions to carry on or reopen/);
+    expect(out).toMatch(/--no-agent: to message and reopen them/);
+    expect(existsSync(join(state, "agent-args"))).toBe(false);
+  });
+
+  it("doesn't open the agent when something didn't recover", () => {
+    allDown();
+    put("pg-slow", "1"); // t's Postgres refuses once, with no time left to wait
+    rmSync(join(state, "agent-args"), { force: true });
+    const r = recover([], { CARETOOK_RECOVER_PG_SECS: "0" });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/Didn't recover:\n {2}stack t/);
+    expect(r.stdout).toMatch(/Not opening the recovery agent/);
+    expect(r.stdout).not.toMatch(/Recovered\./);
+    expect(effects()).not.toContain("claude --remote-control recover (agent)");
+    expect(existsSync(join(state, "agent-args"))).toBe(false);
   });
 
   it("without a record, brings back only the prd and active stacks and the prd server", () => {
     allDown();
-    okRecover([]);
+    okRecover(["--no-agent"]);
     expect(effects()).toEqual([
       "compose up caretook-shared-test",
       "compose up caretook-loop1",
