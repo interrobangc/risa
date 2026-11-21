@@ -29,7 +29,9 @@
 # over its budget, for every kind of branch (a plan branch lands docs).
 # The PR path also refuses unless the PR is open, its head is the branch's
 # local tip, and Codex's verdict on it is clean (pnpm prd review).
-# --no-review skips only the verdict, and only on the user's word.
+# --no-review skips only the verdict, and only on the user's word. A prd/ branch
+# whose whole diff is Markdown (lib.sh, docs_only) needs no verdict: it still
+# goes through its open PR, and land says it skipped the verdict.
 #
 # Test seam: CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) measures the sync against origin/dev instead of dev, and stops the PR
@@ -124,7 +126,9 @@ head=$(field headSha) state=$(field state) url=$(field url)
 [[ $head == "$tip" ]] ||
   die "PR #$number's head is ${head:0:7}, not $branch's local tip ${tip:0:7}: push it (\`pnpm prd pr $what\`), let Codex review it (\`pnpm prd review $what --wait\`), then land"
 line=$(node "$(dirname "$0")/codex-review.mjs" --line <<< "$raw")
-if [[ $state != clean ]]; then
+if [[ $state != clean && $branch == prd/* && -z $noreview ]] && docs_only "$drift_ref" "$branch"; then
+  echo "$line: no Codex verdict needed, the diff against $drift_ref is Markdown only (PR #$number is open with the local tip as its head)"
+elif [[ $state != clean ]]; then
   [[ -n $noreview ]] ||
     die "Codex's verdict on PR #$number isn't clean ($line): \`pnpm prd review $what\`; --no-review only on the user's word"
   echo "$line: merging without a clean review (--no-review, on the user's word)"

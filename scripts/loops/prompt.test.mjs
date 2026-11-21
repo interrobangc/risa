@@ -92,6 +92,9 @@ describe("orchestrator", () => {
       expect(out).toContain("`review --again` until clean");
       expect(out).toContain("After about three rounds, ask the user");
       expect(out).toContain("`--no-review` only when they say so");
+      expect(out).toContain(
+        "When the wave's diff is docs only (Markdown files, nothing else), don't run or wait for `pnpm prd review`: open the PR with `pnpm prd pr T` and land.",
+      );
     }
   });
 
