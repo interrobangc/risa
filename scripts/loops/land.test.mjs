@@ -78,7 +78,20 @@ beforeEach(() => {
     recursive: true,
     filter: (src) => !src.endsWith(".test.mjs"),
   });
-  commit({ "apps/web/a.ts": "1", "README.md": "r" }, "base");
+  // A stubbed backlog: what `backlog list --prd throwaway-x --json` would print.
+  const items = [
+    { id: "B-1", type: "feature", status: "ready", title: "A throwaway feature" },
+    { id: "B-2", type: "bug", status: "triaged", title: "A follow-up bug" },
+    { id: "B-3", type: "feature", status: "landed", title: "An earlier wave" },
+  ];
+  commit(
+    {
+      "apps/web/a.ts": "1",
+      "README.md": "r",
+      "scripts/backlog/backlog.mjs": `process.stdout.write(${JSON.stringify(JSON.stringify(items))});\n`,
+    },
+    "base",
+  );
   git("push", "-q", "origin", "dev");
   git("checkout", "-qb", "feature");
   git("checkout", "-q", "dev");
@@ -167,15 +180,17 @@ describe("land.sh writes a to-test file", () => {
   const files = () => (existsSync(join(repo, "to-test")) ? readdirSync(join(repo, "to-test")) : []);
 
   it("writes one file with its parts after a code landing", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "apps/web/b.ts": "2", "plans/throwaway-x-prd.md": "# PRD: Throwaway (a test topic)\n" });
     const r = landFor();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(files()).toHaveLength(1);
     expect(files()[0]).toMatch(/^\d{4}-\d{2}-\d{2}-\d{4}-throwaway-x\.md$/);
     const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
     for (const part of [
-      "# Landed: throwaway-x",
+      "# Landed: Throwaway (a test topic)",
       "feat(throwaway-x): t (B-1)",
+      "- B-1 A throwaway feature",
+      "- work (`",
       "https://example.test/pr/7",
       "## What landed",
       "## What to try, and where",
@@ -184,8 +199,10 @@ describe("land.sh writes a to-test file", () => {
       "the check was skipped (--force)",
       "merged without a clean Codex verdict (--no-review)",
       "## Follow-ups and still open",
+      "- B-2 A follow-up bug",
     ])
       expect(text).toContain(part);
+    expect(text).not.toContain("An earlier wave");
     expect(text).toContain(git("rev-parse", "--short", "dev"));
   });
 
@@ -194,6 +211,25 @@ describe("land.sh writes a to-test file", () => {
     const r = landFor();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(files()).toEqual([]);
+  });
+
+  it("writes one after a local hotfix landing too, naming the local merge", () => {
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/c.ts": "3" }, "fix it");
+    git("checkout", "-q", "dev");
+    const r = spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--force", "-m", "fix(web): c"],
+      { cwd: repo, encoding: "utf8" },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(files()).toHaveLength(1);
+    expect(files()[0]).toMatch(/-throwaway-y\.md$/);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    expect(text).toContain("# Landed: throwaway-y");
+    expect(text).toContain("landed locally: no PR and no Codex review");
+    expect(text).toContain(`as \`${git("rev-parse", "--short", "dev")}\``);
+    expect(text).toContain("- fix it (`");
   });
 
   it("writes none when the merge fails", () => {
