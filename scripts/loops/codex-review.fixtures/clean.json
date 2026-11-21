@@ -1,0 +1,38 @@
+{
+  "number": 6,
+  "url": "https://github.com/caretook/caretook.com/pull/6",
+  "state": "MERGED",
+  "headRefName": "dev",
+  "headRefOid": "fceef731f66e852c9aabcb608e607de7df91090e",
+  "reviews": {
+    "nodes": []
+  },
+  "reviewThreads": {
+    "nodes": []
+  },
+  "comments": {
+    "nodes": [
+      {
+        "id": "IC_kwDOVx-WLM8AAAABpJVwvw",
+        "author": {
+          "login": "chatgpt-codex-connector"
+        },
+        "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"fceef731f66e852c9aabcb608e607de7df91090e\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n<summary><strong>Codex Review Summary</strong>: ✅ Completed</summary>\n\n…",
+        "createdAt": "2026-11-21T02:52:51Z",
+        "updatedAt": "2026-11-21T02:54:27Z",
+        "url": "https://github.com/caretook/caretook.com/pull/6#issuecomment-7056224447"
+      }
+    ]
+  },
+  "reactions": {
+    "nodes": [
+      {
+        "content": "THUMBS_UP",
+        "createdAt": "2026-11-21T02:54:30Z",
+        "user": {
+          "login": "chatgpt-codex-connector[bot]"
+        }
+      }
+    ]
+  }
+}

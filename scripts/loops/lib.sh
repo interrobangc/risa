@@ -239,3 +239,40 @@ disk_line() {
   if [[ ! $free =~ ^[0-9]+$ ]]; then echo "disk: free space unknown (df failed)"; return 0; fi
   echo "disk: $free GB free (line $min GB)$( ((free < min)) && echo " · LOW: new stacks and check builds are refused: pnpm prd reclaim")"
 }
+
+# GitHub pull requests (review.sh; land and ready reuse these). Every call goes
+# through `gh`, against origin's repository.
+
+# pr_branch WHAT → the branch a command means: prd/, plan/ and hotfix/ branches
+# (or any other with a slash) as given, else a topic's prd/<topic>.
+pr_branch() { case $1 in */*) echo "$1" ;; *) echo "prd/$1" ;; esac; }
+
+# gh_repo → origin's owner/name (cached per shell).
+gh_repo() {
+  [[ -n ${_gh_repo:-} ]] || _gh_repo=$(cd "$main" && gh repo view --json nameWithOwner -q .nameWithOwner) || return 1
+  echo "$_gh_repo"
+}
+
+# pr_for BRANCH → the number of BRANCH's open PR into dev, or nothing.
+pr_for() {
+  local repo
+  repo=$(gh_repo) || return 1
+  gh pr list -R "$repo" --head "$1" --base "$trunk" --state open --json number -q '.[0].number // empty'
+}
+
+# pr_state NUMBER → the PR's state as GraphQL JSON (codex-review.mjs's PR_QUERY):
+# head, reviews, review threads, comments and reactions.
+pr_state() {
+  local repo query
+  repo=$(gh_repo) || return 1
+  query=$(node --input-type=module -e "import { PR_QUERY } from '$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs'; process.stdout.write(PR_QUERY)")
+  gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
+}
+
+# pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,
+# one line, or the line and the findings).
+pr_verdict() {
+  local state
+  state=$(pr_state "$1") || return 1
+  node "$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs" ${2:+"$2"} <<< "$state"
+}

@@ -60,6 +60,10 @@ pnpm prd <command>
 
   Land
     land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
+    review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
+                              Codex's verdict on the branch's open PR into dev (clean, findings, waiting,
+                              stale) and its findings; --again asks Codex again, --resolve closes a declined
+                              thread, --wait polls until Codex answers on the head (exit 0/1/2, 75 timed out)
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
@@ -98,6 +102,7 @@ case $cmd in
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
+  review) exec "$bin/review.sh" "$@" ;;
   plan)
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
