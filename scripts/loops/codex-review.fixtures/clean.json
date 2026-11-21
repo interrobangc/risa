@@ -1,0 +1,165 @@
+{
+  "number": 7,
+  "url": "https://github.com/caretook/caretook.com/pull/7",
+  "state": "OPEN",
+  "headRefName": "throwaway/codex-fixtures",
+  "headRefOid": "27837955ea07d283b98e0cc3828f12e8fc4b27f5",
+  "reviews": {
+    "nodes": [
+      {
+        "id": "PRR_kwDOVx-WLM8AAAABZcsIHA",
+        "author": {
+          "login": "chatgpt-codex-connector"
+        },
+        "state": "COMMENTED",
+        "body": "<!-- codex-review-receipt:v1 -->\n\n\n### 💡 Codex Review\n\nHere are some automated review suggestions for this pull request.\n\n**Reviewed commit:** `b131ab720e`\n…",
+        "submittedAt": "2026-11-21T04:17:46Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#pullrequestreview-6002771996",
+        "commit": {
+          "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+        }
+      },
+      {
+        "id": "PRR_kwDOVx-WLM8AAAABZcsc1g",
+        "author": {
+          "login": "a-human"
+        },
+        "state": "COMMENTED",
+        "body": "",
+        "submittedAt": "2026-11-21T04:19:11Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#pullrequestreview-6002777302",
+        "commit": {
+          "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+        }
+      }
+    ]
+  },
+  "reviewThreads": {
+    "nodes": [
+      {
+        "id": "PRRT_kwDOVx-WLM66Riu3",
+        "isResolved": true,
+        "isOutdated": true,
+        "path": "scripts/codex-fixture-scratch.mjs",
+        "line": null,
+        "originalLine": 5,
+        "comments": {
+          "nodes": [
+            {
+              "id": "PRRC_kwDOVx-WLM8AAAABFTDPJA",
+              "author": {
+                "login": "chatgpt-codex-connector"
+              },
+              "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Slice from the end when selecting the last items**\n\nFor a positive `n` smaller than the list length, this returns the first `n` items rather than the documented last `n` items. For example, `lastItems([1, 2, 3], 2)` returns `[1, 2]` instead of `[2, 3]`. Calculate the slice start relative to the end of the list.\n…",
+              "url": "https://github.com/caretook/caretook.com/pull/7#discussion_r4650487588",
+              "createdAt": "2026-11-21T04:17:47Z",
+              "commit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              },
+              "originalCommit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              }
+            },
+            {
+              "id": "PRRC_kwDOVx-WLM8AAAABFTDjzA",
+              "author": {
+                "login": "a-human"
+              },
+              "body": "Declined for the fixture: this throwaway PR keeps this finding as a resolved, replied-to thread.",
+              "url": "https://github.com/caretook/caretook.com/pull/7#discussion_r4650492876",
+              "createdAt": "2026-11-21T04:19:11Z",
+              "commit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              },
+              "originalCommit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "PRRT_kwDOVx-WLM66Riu7",
+        "isResolved": true,
+        "isOutdated": true,
+        "path": "scripts/codex-fixture-scratch.mjs",
+        "line": null,
+        "originalLine": 12,
+        "comments": {
+          "nodes": [
+            {
+              "id": "PRRC_kwDOVx-WLM8AAAABFTDPKg",
+              "author": {
+                "login": "chatgpt-codex-connector"
+              },
+              "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Stop summing before reaching the array length**\n\nFor any ordinary numeric array, the final iteration reads `values[values.length]`, which is `undefined`, and turns `sum` into `NaN`. Consequently, even `average([1, 2, 3])` returns `NaN` instead of `2`. Use a strict upper bound for the loop and explicitly return `0` for an empty array to satisfy the documented contract without dividing by zero.\n…",
+              "url": "https://github.com/caretook/caretook.com/pull/7#discussion_r4650487594",
+              "createdAt": "2026-11-21T04:17:47Z",
+              "commit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              },
+              "originalCommit": {
+                "oid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "comments": {
+    "nodes": [
+      {
+        "id": "IC_kwDOVx-WLM8AAAABpKOENw",
+        "author": {
+          "login": "chatgpt-codex-connector"
+        },
+        "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"27837955ea07d283b98e0cc3828f12e8fc4b27f5\",\"has_any_findings\":false,\"has_unresolved_findings\":false,\"status\":\"completed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n…",
+        "createdAt": "2026-11-21T04:16:30Z",
+        "updatedAt": "2026-11-21T04:22:27Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#issuecomment-7057146935"
+      },
+      {
+        "id": "IC_kwDOVx-WLM8AAAABpKO_bA",
+        "author": {
+          "login": "a-human"
+        },
+        "body": "Fixture note: a human comment on this throwaway PR. It must not affect Codex's verdict.",
+        "createdAt": "2026-11-21T04:17:52Z",
+        "updatedAt": "2026-11-21T04:17:52Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#issuecomment-7057162092"
+      },
+      {
+        "id": "IC_kwDOVx-WLM8AAAABpKRfeg",
+        "author": {
+          "login": "a-human"
+        },
+        "body": "@codex review",
+        "createdAt": "2026-11-21T04:21:35Z",
+        "updatedAt": "2026-11-21T04:21:35Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#issuecomment-7057203066"
+      },
+      {
+        "id": "IC_kwDOVx-WLM8AAAABpKSC_A",
+        "author": {
+          "login": "chatgpt-codex-connector"
+        },
+        "body": "<!-- codex-review-receipt:v1 -->\n\nCodex Review: Didn't find any major issues. What shall we delve into next?\n…",
+        "createdAt": "2026-11-21T04:22:26Z",
+        "updatedAt": "2026-11-21T04:22:26Z",
+        "url": "https://github.com/caretook/caretook.com/pull/7#issuecomment-7057212156"
+      }
+    ]
+  },
+  "reactions": {
+    "nodes": [
+      {
+        "content": "THUMBS_UP",
+        "createdAt": "2026-11-21T04:22:29Z",
+        "user": {
+          "login": "chatgpt-codex-connector[bot]"
+        }
+      }
+    ]
+  }
+}
