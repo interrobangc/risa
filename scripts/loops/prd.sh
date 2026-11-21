@@ -59,11 +59,21 @@ pnpm prd <command>
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
 
   Land
-    land <topic> [-m subject] merge prd/<topic> into dev (only when the dev keeper says so)
+    land <topic> [-m subject] [--no-review] [--local]   merge prd/<topic> into dev (only when the dev keeper
+                              says so) through its PR: merged on GitHub once its head is the local tip and
+                              Codex's verdict is clean, then dev-sync (--no-review: skip the verdict, on the
+                              user's word only; --local: a local merge, the fallback, on their word)
+    land hotfix/<name> --pr|--local [-m subject]   a hotfix: ask the user "PR or local?" each time
+    land plan/<topic>         a plan branch: always a local merge
     review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
                               Codex's verdict on the branch's open PR into dev (clean, findings, waiting,
                               stale) and its findings; --again asks Codex again, --resolve closes a declined
                               thread, --wait polls until Codex answers on the head (exit 0/1/2, 75 timed out)
+    pr <topic|hotfix/name> [-m subject]   push dev (fast-forward only) and the branch, then open its PR into
+                              dev, or update the open one (title: the landing subject; body: backlog items,
+                              the check pass); plan/ branches are refused
+    dev-sync [branch]         bring the main checkout's dev up to origin/dev after a GitHub merge (land runs
+                              it): fast-forward, rebase backlog-only commits, or merge
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
@@ -103,6 +113,8 @@ case $cmd in
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   review) exec "$bin/review.sh" "$@" ;;
+  pr) exec "$bin/pr.sh" "$@" ;;
+  dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;
   plan)
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
