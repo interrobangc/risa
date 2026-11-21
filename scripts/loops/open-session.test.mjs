@@ -16,11 +16,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { chooseCommand, projectFolder, runThrough } from "./open-session.mjs";
 
-const W = "cd /w/.loops/t && scripts/loops/session.sh prd-t";
+const SESSION_SH = "/o/scripts/loops/session.sh";
+const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -68,7 +70,7 @@ const tabCommand = () => tabArgs()[1];
 const tabScript = () => readFileSync(join(state, "osascript-script"), "utf8");
 /** The line a tab runs for worktree NAME: cd, then exec session.sh SESSION, then claude's args. */
 const tabLine = (name, session, rest) =>
-  `cd ${join(loops, name)} && exec scripts/loops/session.sh ${session} -- ${rest}`;
+  `cd ${join(loops, name)} && exec ${join(main, "scripts/loops/session.sh")} ${session} -- ${rest}`;
 const writeRecord = (session, record) => {
   mkdirSync(join(loops, ".sessions"), { recursive: true });
   writeFileSync(join(loops, ".sessions", `${session}.json`), JSON.stringify(record));
@@ -143,7 +145,13 @@ beforeEach(() => {
 describe("choosing the command", () => {
   it("continues a saved conversation, keeping the Remote Control name", () => {
     expect(
-      chooseCommand({ dir: "/w/.loops/t", branch: "prd/t", conversation: true, runThrough: true }),
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: true,
+        runThrough: true,
+        wrapper: SESSION_SH,
+      }),
     ).toEqual({
       session: "prd-t",
       kind: "prd",
@@ -156,7 +164,13 @@ describe("choosing the command", () => {
 
   it("starts a fresh orchestrator with the resume prompt, --auto only for run-through", () => {
     const fresh = (auto) =>
-      chooseCommand({ dir: "/w/.loops/t", branch: "prd/t", conversation: false, runThrough: auto }).command;
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: false,
+        runThrough: auto,
+        wrapper: SESSION_SH,
+      }).command;
     expect(fresh(false)).toBe(
       `${W} -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume)"`,
     );
@@ -167,7 +181,14 @@ describe("choosing the command", () => {
 
   it("carries a record's run-through over to the new session", () => {
     const choose = (record) =>
-      chooseCommand({ dir: "/w/.loops/t", branch: "prd/t", conversation: false, runThrough: false, record });
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: false,
+        runThrough: false,
+        record,
+        wrapper: SESSION_SH,
+      });
     expect(choose({ auto: true })).toMatchObject({
       auto: true,
       command: `${W} --auto -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"`,
@@ -184,6 +205,7 @@ describe("choosing the command", () => {
         conversation: true,
         runThrough: false,
         record: { rotating: true, auto: true },
+        wrapper: SESSION_SH,
       }),
     ).toMatchObject({
       mode: "fresh",
@@ -193,18 +215,46 @@ describe("choosing the command", () => {
 
   it("gives a planner the plan prompt", () => {
     expect(
-      chooseCommand({ dir: "/w/.loops/plan-u", branch: "plan/u", conversation: false, runThrough: false }),
+      chooseCommand({
+        dir: "/w/.loops/plan-u",
+        branch: "plan/u",
+        conversation: false,
+        runThrough: false,
+        wrapper: SESSION_SH,
+      }),
     ).toMatchObject({
       session: "plan-u",
       mode: "fresh",
-      command:
-        'cd /w/.loops/plan-u && scripts/loops/session.sh plan-u -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"',
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"`,
     });
+  });
+
+  it("names an absolute session.sh outside the worktree, the opener's own by default", () => {
+    const dir = "/w/.loops/old";
+    const { command } = chooseCommand({ dir, branch: "prd/old", conversation: true, runThrough: false });
+    const wrapper = /&& (\S+\/session\.sh) prd-old/.exec(command)?.[1];
+    expect(wrapper).toBe(fileURLToPath(new URL("./session.sh", import.meta.url)));
+    expect(wrapper.startsWith("/")).toBe(true);
+    expect(wrapper.startsWith(dir)).toBe(false);
+    const quoted = chooseCommand({
+      dir,
+      branch: "prd/old",
+      conversation: true,
+      runThrough: false,
+      wrapper: "/my repo/scripts/loops/session.sh",
+    });
+    expect(quoted.command).toContain("&& '/my repo/scripts/loops/session.sh' prd-old");
   });
 
   it("refuses a worktree that isn't a PRD or a planner", () => {
     expect(() =>
-      chooseCommand({ dir: "/w/.loops/t-1", branch: "slice/t/1", conversation: false, runThrough: false }),
+      chooseCommand({
+        dir: "/w/.loops/t-1",
+        branch: "slice/t/1",
+        conversation: false,
+        runThrough: false,
+        wrapper: SESSION_SH,
+      }),
     ).toThrow(/only prd\/ and plan\/ worktrees/);
   });
 
@@ -322,11 +372,11 @@ describe("pnpm prd open", () => {
     const out = ok(["auto"], { CARETOOK_ITERM_APP: join(root, "no-such-app") });
     expect(out).toMatch(/iTerm2 isn't here/);
     expect(out).toContain(
-      `  cd ${join(loops, "auto")} && scripts/loops/session.sh prd-auto --auto -- --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,
+      `  cd ${join(loops, "auto")} && ${join(main, "scripts/loops/session.sh")} prd-auto --auto -- --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,
     );
     saveConversation("auto");
     expect(ok(["auto", "--print"])).toContain(
-      `  cd ${join(loops, "auto")} && scripts/loops/session.sh prd-auto --auto -- --continue --remote-control prd-auto`,
+      `  cd ${join(loops, "auto")} && ${join(main, "scripts/loops/session.sh")} prd-auto --auto -- --continue --remote-control prd-auto`,
     );
     expect(calls()).not.toMatch(/osascript/);
   });

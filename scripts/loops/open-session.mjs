@@ -4,7 +4,7 @@
 //
 //   - a saved Claude conversation for that path (a *.jsonl transcript in
 //     ~/.claude/projects/<path with every non-alphanumeric as ->):
-//       cd <dir> && scripts/loops/session.sh <session> [--auto] -- --continue --remote-control <session>
+//       cd <dir> && <this checkout>/scripts/loops/session.sh <session> [--auto] -- --continue --remote-control <session>
 //   - otherwise a fresh session with the resume prompt:
 //       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] -- --remote-control prd-<topic> \
 //               "$(scripts/loops/prompt.sh orchestrator <topic> --resume [--auto])"
@@ -16,6 +16,9 @@
 // marked `rotating` (a rotation cut short) always gets a fresh session, never
 // --continue, so the long conversation it was replacing doesn't come back.
 //
+// session.sh is named by absolute path from the checkout running the opener, so
+// a worktree older than the wrapper (not yet synced with dev) still reopens.
+//
 // The session names stay prd-<topic> and plan-<topic>, so Remote Control still
 // reaches them.
 //
@@ -26,7 +29,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { readRecord } from "./sessions.mjs";
 
 /** Claude Code's projects folder name for a working directory. */
@@ -50,12 +53,22 @@ export function runThrough(/** @type {string} */ planText) {
 const sh = (/** @type {string} */ s) =>
   /^[A-Za-z0-9_./:=@%+-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
 
+/** The wrapper beside this file: the opener's own checkout, which every worktree may not have yet. */
+const ownSessionSh = fileURLToPath(new URL("./session.sh", import.meta.url));
+
 /**
  * @param {{ dir: string, branch: string, conversation: boolean, runThrough: boolean,
- *   record?: { auto?: boolean, rotating?: boolean } | null }} w
+ *   record?: { auto?: boolean, rotating?: boolean } | null, wrapper?: string }} w
  * @returns {{ session: string, kind: "prd" | "plan", topic: string, mode: "continue" | "fresh", auto: boolean, command: string }}
  */
-export function chooseCommand({ dir, branch, conversation, runThrough: statusAuto, record = null }) {
+export function chooseCommand({
+  dir,
+  branch,
+  conversation,
+  runThrough: statusAuto,
+  record = null,
+  wrapper = ownSessionSh,
+}) {
   const m = /^(prd|plan)\/(.+)$/.exec(branch);
   if (!m)
     throw new Error(`${dir} is on ${branch || "no branch"}: only prd/ and plan/ worktrees have sessions`);
@@ -63,7 +76,7 @@ export function chooseCommand({ dir, branch, conversation, runThrough: statusAut
   const topic = m[2];
   const session = `${kind}-${topic}`;
   const auto = statusAuto || record?.auto === true;
-  const wrap = `cd ${sh(dir)} && scripts/loops/session.sh ${session}${auto ? " --auto" : ""} -- `;
+  const wrap = `cd ${sh(dir)} && ${sh(wrapper)} ${session}${auto ? " --auto" : ""} -- `;
   if (conversation && !record?.rotating)
     return {
       session,
