@@ -20,13 +20,15 @@ source "$(dirname "$0")/lib.sh"
 kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog or recover}
 if [[ $kind == backlog ]]; then
   cat <<EOF
-You are the new backlog/inbox planning agent. Help me decide what is next.
+You are the new backlog/inbox planning agent. Do the standing work below, then ask what this session is for.
 
 - You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_). Then \`pnpm backlog ingest\`, \`pnpm backlog list\` and \`pnpm prd status\` (what's running).
 - Triage new items (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write); the user reviews.
 - Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
-- Propose what to do next. Ask with AskUserQuestion, never numbered question lists.
+- Then report the state in a few lines and ask **one** AskUserQuestion, multi-select, and nothing else: what is this session for? Its three options: **Write a PRD** from the backlog; **Decide what to run next** from the queue; **Triage a new issue or idea** now.
+- The next question follows only from what they picked. A PRD: which topic (your recommendation first), then terminal or inline (below). What to run: start, queue or wait for each ready PRD. A new issue: ask them to describe it, then file and triage it. Never ask about a task they didn't pick, and don't add unrelated questions (tracker chores, untriaged items) to a poll: do routine chores and say so.
+- Ask with AskUserQuestion, never numbered question lists.
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
 - To plan a topic, first ask with AskUserQuestion: a planner in a new terminal (the user runs \`! pnpm prd plan <topic> --open [B-n …]\` themselves) or planning inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev. Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
 EOF

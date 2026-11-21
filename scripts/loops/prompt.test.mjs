@@ -186,6 +186,15 @@ describe("plan and backlog", () => {
     expect(plan).not.toContain(RESUME);
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
+
+  it("backlog asks one multi-select question first: a PRD, what to run, or a new issue", () => {
+    const text = ok("backlog");
+    expect(text).toMatch(/ask \*\*one\*\* AskUserQuestion, multi-select, and nothing else/);
+    expect(text).toContain("**Write a PRD**");
+    expect(text).toContain("**Decide what to run next**");
+    expect(text).toContain("**Triage a new issue or idea**");
+    expect(text).toContain("Never ask about a task they didn't pick");
+  });
 });
 
 describe("recover", () => {
