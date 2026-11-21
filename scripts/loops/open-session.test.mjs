@@ -1,8 +1,8 @@
 // The session opener (`pnpm prd open`: open-session.sh, open-session.mjs)
 // against a throwaway repo with these scripts copied in, real git worktrees, a
-// temporary Claude projects folder (CARETOOK_CLAUDE_PROJECTS) and a fake
-// osascript that records its script and arguments. Nothing here opens a real
-// iTerm2 tab or starts claude.
+// temporary Claude projects folder (CARETOOK_CLAUDE_PROJECTS), session records
+// in the repo's .loops/.sessions and a fake osascript that records its script
+// and arguments. Nothing here opens a real iTerm2 tab or starts claude.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -16,9 +16,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { chooseCommand, projectFolder, runThrough } from "./open-session.mjs";
+
+const SESSION_SH = "/o/scripts/loops/session.sh";
+const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -59,9 +63,18 @@ const ok = (args, extra) => {
   return r.stdout;
 };
 const calls = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
-// osascript - CMD SESSION: the script comes from stdin.
+// osascript - LINE SESSION BACKGROUND: the script comes from stdin. The tab's
+// line is the command with exec after its cd, so the tab closes with it.
 const tabArgs = () => readFileSync(join(state, "osascript-args"), "utf8").split("\n");
 const tabCommand = () => tabArgs()[1];
+const tabScript = () => readFileSync(join(state, "osascript-script"), "utf8");
+/** The line a tab runs for worktree NAME: cd, then exec session.sh SESSION, then claude's args. */
+const tabLine = (name, session, rest) =>
+  `cd ${join(loops, name)} && exec ${join(main, "scripts/loops/session.sh")} ${session} -- ${rest}`;
+const writeRecord = (session, record) => {
+  mkdirSync(join(loops, ".sessions"), { recursive: true });
+  writeFileSync(join(loops, ".sessions", `${session}.json`), JSON.stringify(record));
+};
 /** Saves a Claude conversation for worktree NAME, as Claude Code does. */
 const saveConversation = (name) => {
   const folder = join(projects, projectFolder(join(loops, name)));
@@ -102,7 +115,7 @@ beforeAll(() => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of ["prd.sh", "lib.sh", "open-session.sh", "open-session.mjs"])
+  for (const f of ["prd.sh", "lib.sh", "open-session.sh", "open-session.mjs", "sessions.mjs"])
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   git(main, "add", ".");
@@ -126,46 +139,122 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   rmSync(log, { force: true });
   rmSync(join(state, "osascript-args"), { force: true });
+  rmSync(join(loops, ".sessions"), { recursive: true, force: true });
 });
 
 describe("choosing the command", () => {
   it("continues a saved conversation, keeping the Remote Control name", () => {
     expect(
-      chooseCommand({ dir: "/w/.loops/t", branch: "prd/t", conversation: true, runThrough: true }),
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: true,
+        runThrough: true,
+        wrapper: SESSION_SH,
+      }),
     ).toEqual({
       session: "prd-t",
       kind: "prd",
       topic: "t",
       mode: "continue",
-      command: "cd /w/.loops/t && claude --continue --remote-control prd-t",
+      auto: true,
+      command: `${W} --auto -- --continue --remote-control prd-t`,
     });
   });
 
   it("starts a fresh orchestrator with the resume prompt, --auto only for run-through", () => {
     const fresh = (auto) =>
-      chooseCommand({ dir: "/w/.loops/t", branch: "prd/t", conversation: false, runThrough: auto }).command;
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: false,
+        runThrough: auto,
+        wrapper: SESSION_SH,
+      }).command;
     expect(fresh(false)).toBe(
-      'cd /w/.loops/t && claude --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume)"',
+      `${W} -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume)"`,
     );
     expect(fresh(true)).toBe(
-      'cd /w/.loops/t && claude --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"',
+      `${W} --auto -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"`,
     );
+  });
+
+  it("carries a record's run-through over to the new session", () => {
+    const choose = (record) =>
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: false,
+        runThrough: false,
+        record,
+        wrapper: SESSION_SH,
+      });
+    expect(choose({ auto: true })).toMatchObject({
+      auto: true,
+      command: `${W} --auto -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"`,
+    });
+    expect(choose({ auto: false }).auto).toBe(false);
+    expect(choose(null).auto).toBe(false);
+  });
+
+  it("starts fresh, never --continue, when the record says a rotation was under way", () => {
+    expect(
+      chooseCommand({
+        dir: "/w/.loops/t",
+        branch: "prd/t",
+        conversation: true,
+        runThrough: false,
+        record: { rotating: true, auto: true },
+        wrapper: SESSION_SH,
+      }),
+    ).toMatchObject({
+      mode: "fresh",
+      command: `${W} --auto -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"`,
+    });
   });
 
   it("gives a planner the plan prompt", () => {
     expect(
-      chooseCommand({ dir: "/w/.loops/plan-u", branch: "plan/u", conversation: false, runThrough: false }),
+      chooseCommand({
+        dir: "/w/.loops/plan-u",
+        branch: "plan/u",
+        conversation: false,
+        runThrough: false,
+        wrapper: SESSION_SH,
+      }),
     ).toMatchObject({
       session: "plan-u",
       mode: "fresh",
-      command:
-        'cd /w/.loops/plan-u && claude --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"',
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"`,
     });
+  });
+
+  it("names an absolute session.sh outside the worktree, the opener's own by default", () => {
+    const dir = "/w/.loops/old";
+    const { command } = chooseCommand({ dir, branch: "prd/old", conversation: true, runThrough: false });
+    const wrapper = /&& (\S+\/session\.sh) prd-old/.exec(command)?.[1];
+    expect(wrapper).toBe(fileURLToPath(new URL("./session.sh", import.meta.url)));
+    expect(wrapper.startsWith("/")).toBe(true);
+    expect(wrapper.startsWith(dir)).toBe(false);
+    const quoted = chooseCommand({
+      dir,
+      branch: "prd/old",
+      conversation: true,
+      runThrough: false,
+      wrapper: "/my repo/scripts/loops/session.sh",
+    });
+    expect(quoted.command).toContain("&& '/my repo/scripts/loops/session.sh' prd-old");
   });
 
   it("refuses a worktree that isn't a PRD or a planner", () => {
     expect(() =>
-      chooseCommand({ dir: "/w/.loops/t-1", branch: "slice/t/1", conversation: false, runThrough: false }),
+      chooseCommand({
+        dir: "/w/.loops/t-1",
+        branch: "slice/t/1",
+        conversation: false,
+        runThrough: false,
+        wrapper: SESSION_SH,
+      }),
     ).toThrow(/only prd\/ and plan\/ worktrees/);
   });
 
@@ -189,32 +278,93 @@ describe("pnpm prd open", () => {
     const out = ok(["auto"]);
     expect(out).toMatch(/Opened prd-auto in a new iTerm2 tab \(a fresh session with the resume prompt\)/);
     expect(tabCommand()).toBe(
-      `cd ${join(loops, "auto")} && claude --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,
+      tabLine(
+        "auto",
+        "prd-auto --auto",
+        '--remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"',
+      ),
     );
-    const script = readFileSync(join(state, "osascript-script"), "utf8");
+    const script = tabScript();
     expect(script).toMatch(/tell application "iTerm2"/);
-    expect(script).toMatch(/create tab with default profile/);
-    expect(script).toMatch(/write text cmd/);
-    expect(tabArgs().slice(0, 3)).toEqual(["-", tabCommand(), "prd-auto"]);
+    expect(script).toMatch(/if not quiet then activate/);
+    expect(script).toMatch(/set newTab to \(create tab with default profile\)/);
+    expect(script).toMatch(/tell newSession[\s\S]*write text cmd/);
+    expect(script).not.toMatch(/current session of current window/);
+    expect(tabArgs().slice(0, 4)).toEqual(["-", tabCommand(), "prd-auto", "0"]);
+  });
+
+  it("opens in the background: no activate, the earlier tab reselected, the command written to the new tab", () => {
+    const out = ok(["auto", "--background"]);
+    expect(out).toMatch(/Opened prd-auto in a new background iTerm2 tab/);
+    expect(tabArgs()[3]).toBe("1");
+    const script = tabScript();
+    // The only activate is behind the quiet flag the background sets.
+    expect(script.match(/activate/g)).toEqual(["activate"]);
+    expect(script).toMatch(/if not quiet then activate/);
+    expect(script).toMatch(/set previousTab to current tab of theWindow/);
+    expect(script).toMatch(/if quiet then tell previousTab to select/);
+    expect(script).toMatch(/set newSession to current session of newTab/);
+    expect(script).toMatch(/tell newSession\s+set name to title\s+write text cmd/);
+  });
+
+  it("opens any command line in a tab with --command, exec'd so the tab closes with it", () => {
+    ok(["--command", "cd /x && scripts/loops/rotate-into.sh prd-t 42", "--title", "prd-t", "--background"]);
+    expect(tabArgs().slice(1, 4)).toEqual([
+      "cd /x && exec scripts/loops/rotate-into.sh prd-t 42",
+      "prd-t",
+      "1",
+    ]);
+    ok(["--command", "echo hi", "--title", "x"]);
+    expect(tabCommand()).toBe("exec echo hi");
+    expect(open(["auto", "--command", "echo hi"]).stderr).toMatch(/a worktree or --command, not both/);
+    const printed = ok(["--command", "echo hi", "--print"]);
+    expect(printed).toContain("  echo hi");
+  });
+
+  it("reads the session's record: run-through carried over, a rotation reopened fresh", () => {
+    writeRecord("prd-asks", { pid: 1, auto: true, ended: "2026-11-21T00:00:00Z" });
+    ok(["asks"]);
+    expect(tabCommand()).toBe(
+      tabLine(
+        "asks",
+        "prd-asks --auto",
+        '--remote-control prd-asks "$(scripts/loops/prompt.sh orchestrator asks --resume --auto)"',
+      ),
+    );
+    saveConversation("plan-v");
+    writeRecord("plan-v", { pid: 1, rotating: true });
+    expect(ok(["plan-v"])).toMatch(/a fresh session with the resume prompt/);
+    expect(tabCommand()).toBe(
+      tabLine(
+        "plan-v",
+        "plan-v",
+        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"',
+      ),
+    );
+    rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
   });
 
   it("leaves --auto off when _Status_ doesn't record run-through", () => {
     ok(["asks"]);
-    expect(tabCommand()).toMatch(/prompt\.sh orchestrator asks --resume\)"$/);
+    expect(tabCommand()).toMatch(/session\.sh prd-asks -- .*prompt\.sh orchestrator asks --resume\)"$/);
   });
 
   it("continues the saved conversation when there is one, under the same name", () => {
     saveConversation("asks");
     const out = ok(["asks"]);
     expect(out).toMatch(/continuing its saved conversation/);
-    expect(tabCommand()).toBe(`cd ${join(loops, "asks")} && claude --continue --remote-control prd-asks`);
+    expect(tabCommand()).toBe(tabLine("asks", "prd-asks", "--continue --remote-control prd-asks"));
   });
 
   it("ignores a projects folder with no transcript in it", () => {
     mkdirSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true });
     ok(["plan-v"]);
     expect(tabCommand()).toBe(
-      `cd ${join(loops, "plan-v")} && claude --model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"`,
+      tabLine(
+        "plan-v",
+        "plan-v",
+        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"',
+      ),
     );
   });
 
@@ -222,11 +372,11 @@ describe("pnpm prd open", () => {
     const out = ok(["auto"], { CARETOOK_ITERM_APP: join(root, "no-such-app") });
     expect(out).toMatch(/iTerm2 isn't here/);
     expect(out).toContain(
-      `  cd ${join(loops, "auto")} && claude --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,
+      `  cd ${join(loops, "auto")} && ${join(main, "scripts/loops/session.sh")} prd-auto --auto -- --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,
     );
     saveConversation("auto");
     expect(ok(["auto", "--print"])).toContain(
-      `  cd ${join(loops, "auto")} && claude --continue --remote-control prd-auto`,
+      `  cd ${join(loops, "auto")} && ${join(main, "scripts/loops/session.sh")} prd-auto --auto -- --continue --remote-control prd-auto`,
     );
     expect(calls()).not.toMatch(/osascript/);
   });

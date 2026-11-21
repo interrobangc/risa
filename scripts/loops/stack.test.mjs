@@ -221,6 +221,16 @@ describe("rm.sh", () => {
     ok("rm.sh", ["t-5"]);
     expect(calls()).not.toMatch(/dropdb/);
   });
+
+  it("removes the worktree's session record and leaves the others", () => {
+    ok("new.sh", ["plan", "r"]);
+    const sessions = join(loops, ".sessions");
+    mkdirSync(sessions, { recursive: true });
+    for (const n of ["plan-r", "prd-other"]) writeFileSync(join(sessions, `${n}.json`), '{"pid":1}\n');
+    ok("rm.sh", ["plan-r"]);
+    expect(existsSync(join(sessions, "plan-r.json"))).toBe(false);
+    expect(existsSync(join(sessions, "prd-other.json"))).toBe(true);
+  });
 });
 
 describe("status and gc", () => {

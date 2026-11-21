@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tear down a worktree made by new.sh: stop and delete its Docker stacks and
 # data, drop its databases on the shared test Postgres (its own and its
-# integration workers' copies), remove the worktree and
-# release its slot. Then delete its branch if it's
+# integration workers' copies), remove the worktree, its session record
+# (.loops/.sessions/) and release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
 # plan/* and hotfix/* → dev); an unmerged branch is kept. A merged branch's
 # leftover branch on origin (a PR's head) is deleted too, when origin's tip is
@@ -42,6 +42,12 @@ stack_teardown "$dir"
 "$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
 git -C "$main" worktree remove ${force:+--force} "$dir"
 release_slot "$name"
+# Its session record (session.sh), if it had one: the session itself isn't
+# touched (a planner removes its worktree, then ends with pnpm prd end).
+case $branch in
+  prd/*) rm -f "$loops/.sessions/prd-${branch#prd/}.json" ;;
+  plan/*) rm -f "$loops/.sessions/plan-${branch#plan/}.json" ;;
+esac
 
 parent=$(parent_of "$branch")
 if [[ -n $keep || -z $branch ]]; then

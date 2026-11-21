@@ -46,6 +46,13 @@
 //   pnpm backlog archive                     move landed, staging, live and dropped items to the archive
 //   pnpm backlog path
 //
+// The PRD registry (the "## PRDs" table; row order is the priority; scripts/backlog/registry.mjs):
+//   pnpm backlog prd list [--json]           each topic with its worked-out state
+//   pnpm backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
+//   pnpm backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
+//   pnpm backlog prd move <topic> --first|--last|--before T|--after T
+//   pnpm backlog prd migrate                 once: today's prose table into the registry's columns
+//
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
 // BACKLOG_BRANCH (default dev), BACKLOG_REMOTE (default origin).
 import { execFileSync } from "node:child_process";
@@ -53,6 +60,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join, resolve } from "node:path";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
+import * as reg from "./registry.mjs";
 
 const TRUNK = process.env.BACKLOG_BRANCH ?? "dev";
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
@@ -111,7 +119,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "force", "no-fetch", "json", "fix"].includes(key);
+      const flag = ["all", "force", "no-fetch", "json", "fix", "first", "last"].includes(key);
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -637,7 +645,137 @@ function findings() {
       problem: `summary row${differ.length === 1 ? "" : "s"} out of date${differ.length > 1 ? ` (${differ.slice(0, 8).join(", ")}${differ.length > 8 ? ", …" : ""})` : ""}`,
       fixable: true,
     });
+
+  // The PRD registry, once migrated (before that, its prose is no one's to check).
+  const registry = reg.parseRegistry(b.preamble);
+  if (registry.format === "new") out.push(...reg.findings(registry.rows, b.items));
   return out;
+}
+
+// ---- the PRD registry ---------------------------------------------------
+
+/** What stateOf needs, from dev and the worktrees. @param {import("./format.mjs").Item[]} items @returns {reg.Facts} */
+function registryFacts(items) {
+  const plans = new Set(
+    (tryGit(mainCheckout, "ls-tree", "--name-only", TRUNK, "plans/") ?? "")
+      .split("\n")
+      .map((f) => /^plans\/(.+)-plan\.md$/.exec(f)?.[1])
+      .filter(Boolean),
+  );
+  const worktrees = new Set(
+    [
+      ...git(mainCheckout, "worktree", "list", "--porcelain").matchAll(/^branch refs\/heads\/prd\/(.+)$/gm),
+    ].map((m) => m[1]),
+  );
+  const waiting = new Map();
+  for (const i of items)
+    if (i.prd && i.status === "triaged") waiting.set(i.prd, (waiting.get(i.prd) ?? 0) + 1);
+  return { plans, worktrees, waiting };
+}
+
+/** "--first", "--last", "--before T", "--after T" → a position (or `fallback`). */
+function position(opts, fallback) {
+  const given = [
+    opts.first && { first: true },
+    opts.last && { last: true },
+    opts.before !== undefined && { before: opts.before },
+    opts.after !== undefined && { after: opts.after },
+  ].filter(Boolean);
+  if (given.length > 1) throw new fmt.BacklogError("give one of --first, --last, --before, --after");
+  if (!given.length && !fallback)
+    throw new fmt.BacklogError("where to? --first, --last, --before T or --after T");
+  return given[0] ?? fallback;
+}
+
+/** One locked write of the registry: `edit` gets the rows and returns the new ones. */
+function writeRegistry(tool, text, edit) {
+  write(tool, { ids: [], text }, (b) => {
+    b.preamble = reg.withRows(b.preamble, edit(reg.rowsOf(b.preamble)));
+  });
+}
+
+function prd(pos, opts) {
+  const [sub, topic, ...pairs] = pos;
+  switch (sub) {
+    case "list":
+    case undefined: {
+      const b = read();
+      const rows = reg.rowsOf(b.preamble);
+      const facts = registryFacts(b.items);
+      const out = rows.map((r) => ({
+        ...r,
+        state: reg.stateOf(r, facts),
+        waiting: facts.waiting.get(r.topic) ?? 0,
+      }));
+      if (opts.json) return console.log(JSON.stringify(out));
+      const show = out.map((r) => ({
+        prd: r.topic,
+        state: r.state,
+        flags: r.flags.join(",") || "—",
+        after: r.after.join(",") || "—",
+        waiting: String(r.waiting),
+        hot: r.hot.join(", ") || "—",
+      }));
+      const head = {
+        prd: "PRD",
+        state: "STATE",
+        flags: "FLAGS",
+        after: "AFTER",
+        waiting: "WAITING",
+        hot: "HOT FILES",
+      };
+      const keys = /** @type {(keyof typeof head)[]} */ (Object.keys(head));
+      const w = Object.fromEntries(
+        keys.map((k) => [k, Math.max(head[k].length, ...show.map((r) => r[k].length))]),
+      );
+      const line = (r) => keys.map((k, i) => (i === keys.length - 1 ? r[k] : r[k].padEnd(w[k]))).join("  ");
+      console.log(line(head));
+      for (const r of show) console.log(line(r));
+      if (!show.length) console.log("(no PRDs)");
+      return;
+    }
+    case "add": {
+      const p = position(opts, { last: true });
+      writeRegistry("prd add", `prd add ${topic}`, (rows) => reg.addRow(rows, topic, pairs, p));
+      return console.log(`added ${topic}`);
+    }
+    case "set":
+      if (!topic) throw new fmt.BacklogError("usage: prd set <topic> key=value…");
+      writeRegistry("prd set", `prd set ${topic}: ${pairs.join(", ")}`, (rows) =>
+        reg.updateRow(rows, topic, pairs),
+      );
+      return console.log(`updated ${topic}`);
+    case "move": {
+      if (!topic) throw new fmt.BacklogError("usage: prd move <topic> --first|--last|--before T|--after T");
+      const p = position(opts, null);
+      const where =
+        "first" in p
+          ? "first"
+          : "last" in p
+            ? "last"
+            : "before" in p
+              ? `before ${p.before}`
+              : `after ${p.after}`;
+      writeRegistry("prd move", `prd move ${topic} ${where}`, (rows) => reg.moveRow(rows, topic, p));
+      return console.log(`moved ${topic} ${where}`);
+    }
+    case "migrate": {
+      const { count } = write(
+        "prd migrate",
+        { ids: [], text: "prd migrate: the PRD table into the registry" },
+        (b) => {
+          const m = reg.migrate(b.preamble);
+          b.preamble = m.preamble;
+          return m;
+        },
+      );
+      return console.log(
+        `migrated ${count} PRD rows (same order); set After, Hot files and flags with pnpm backlog prd set`,
+      );
+    }
+    default:
+      throw new fmt.BacklogError(`unknown prd command "${sub}" (list, add, set, move, migrate)`);
+  }
 }
 
 function doctor(fix) {
@@ -795,6 +933,8 @@ function main() {
       return console.log("committed");
     case "doctor":
       return doctor(!!opts.fix);
+    case "prd":
+      return prd(pos, opts);
     case "archive": {
       const moved = write(
         "archive",

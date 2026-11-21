@@ -49,6 +49,19 @@ pnpm prd <command>
     down                      before a planned restart: record what's up, stop servers, stacks, the test Postgres
     open <name> [--print]     reopen a PRD's or planner's session in a new iTerm2 tab: claude --continue when the
                               worktree has a saved conversation, else a fresh one with the resume prompt
+                              (--background: iTerm2 stays where it is and the selected tab stays selected)
+    end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
+                              orchestrator or planner, after pnpm prd rm); its tab closes
+
+  Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
+    ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question; prints its id
+                              and the PushNotification line to send; a macOS notification, and
+                              \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set (failures ignored)
+    ask --topic <t> --report <text>   file a report (a landed wave, what to try); the same notifications
+    ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout)
+    asks [--json]             the open asks: topic, age, options numbered, the recommended one marked
+    asks --done <id>          dismiss one (a read report, a question no longer needed)
+    answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait)
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
@@ -122,6 +135,7 @@ case $cmd in
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
+  end) exec "$bin/end-session.sh" "$@" ;;
   review) exec "$bin/review.sh" "$@" ;;
   pr) exec "$bin/pr.sh" "$@" ;;
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;
@@ -149,9 +163,10 @@ case $cmd in
     done
     dir=$loops/plan-$topic
     [[ -d $dir ]] || "$bin/new.sh" plan "$topic"
-    cmd_line="cd $dir && claude --model $(printf %q "$model") --remote-control plan-$topic \"\$(scripts/loops/prompt.sh plan $topic ${items[*]:-})\""
+    cmd_line="cd $dir && scripts/loops/session.sh plan-$topic -- --model $(printf %q "$model") --remote-control plan-$topic \"\$(scripts/loops/prompt.sh plan $topic ${items[*]:-})\""
     if ((open)); then
-      cd "$dir" && exec claude ${model_args[@]+"${model_args[@]}"} --remote-control "plan-$topic" "$("$bin/prompt.sh" plan "$topic" ${items[@]+"${items[@]}"})"
+      cd "$dir" && exec "$bin/session.sh" "plan-$topic" --kind plan --topic "$topic" -- \
+        ${model_args[@]+"${model_args[@]}"} --remote-control "plan-$topic" "$("$bin/prompt.sh" plan "$topic" ${items[@]+"${items[@]}"})"
     fi
     echo
     echo "Start its planning session in a new terminal (or rerun with --open):"
@@ -185,7 +200,7 @@ case $cmd in
       echo "Worktree $topic already exists at $loops/$topic."
       echo
       echo "Open its orchestrator in a new terminal:"
-      echo "  cd $loops/$topic && claude --remote-control prd-$topic \"\$(scripts/loops/prompt.sh orchestrator $topic)\""
+      echo "  cd $loops/$topic && scripts/loops/session.sh prd-$topic -- --remote-control prd-$topic \"\$(scripts/loops/prompt.sh orchestrator $topic)\""
     else
       exec "$bin/new.sh" prd "$@"
     fi
@@ -259,6 +274,16 @@ case $cmd in
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"
       echo "Merged $trunk into $branch. If seeds or migrations changed: pnpm datastore:reset. Then: pnpm prd check"
     fi
+    ;;
+  ask | asks | answer)
+    # The asking session and topic default to the worktree's: plan-<t> → plan-<t>, else prd-<topic>.
+    export CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks}
+    here=$(here_name) here_args=()
+    if [[ $cmd == ask && -n $here ]]; then
+      if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
+      else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
+    fi
+    exec node "$bin/ask.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
   help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
