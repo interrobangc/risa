@@ -33,6 +33,12 @@
 # whose whole diff is Markdown (lib.sh, docs_only) needs no verdict: it still
 # goes through its open PR, and land says it skipped the verdict.
 #
+# After a merge of a prd/ or hotfix/ branch whose diff isn't Markdown only, land
+# writes to-test/<date>-<time>-<topic>.md in the main checkout (gitignored): what
+# landed, how to try it, what wasn't checked, the follow-ups. Land writes it
+# itself so it exists even if the session dies after merging; agents only add
+# files there. No file for a plan/ branch, a docs-only landing or a failed merge.
+#
 # Test seam: CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) measures the sync against origin/dev instead of dev, and stops the PR
 # path after its refusals, printing the merge it would run: nothing is pushed
@@ -92,11 +98,88 @@ if [[ ($branch == prd/* || $branch == hotfix/*) && -z $force ]]; then
   gate=$dir; [[ -d $dir ]] || gate=$main
   checked_ok "$gate" "$branch" ||
     die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only docs and tooling changed since): run \`pnpm prd check\` (or \`--quick \"<why>\"\`) in $dir (or pass --force)"
-  echo "check: $(checked_how "$gate" "$branch")"
+  checkline=$(checked_how "$gate" "$branch")
+  echo "check: $checkline"
 fi
 
 [[ -n $msg ]] || msg=$(land_subject "$branch")
+# Decided before the merge, while the diff against dev still exists.
+want_to_test=""
+if [[ $branch != plan/* ]] && ! docs_only "$drift_ref" "$branch"; then want_to_test=1; fi
 changed=$(git -C "$main" diff --name-only "$drift_ref...$branch")
+commits=$(git -C "$main" log --first-parent --format='- %s (`%h`)' "$drift_ref..$branch" | grep -vE "\): merge (origin/)?$trunk( |\$)" | head -30 || true)
+checkline=${checkline:-}
+# write_to_test PR_URL → to-test/<date>-<time>-<topic>.md in the main checkout.
+write_to_test() {
+  [[ -n $want_to_test ]] || return 0
+  local dir_t="$main/to-test" slug file n=1 items open_items commit title unchecked=()
+  slug=${topic//\//-}
+  mkdir -p "$dir_t"
+  file="$dir_t/$(date +%Y-%m-%d-%H%M)-$slug.md"
+  while [[ -e $file ]]; do n=$((n + 1)); file="$dir_t/$(date +%Y-%m-%d-%H%M)-$slug-$n.md"; done
+  if [[ $path == pr ]]; then
+    git -C "$main" fetch -q origin "$trunk" 2>/dev/null || true
+    commit=$(git -C "$main" rev-parse --short "origin/$trunk" 2>/dev/null || git -C "$main" rev-parse --short "$trunk")
+  else
+    commit=$(git -C "$main" rev-parse --short "$trunk")
+  fi
+  [[ -z $force ]] || unchecked+=("the check was skipped (--force)")
+  [[ $checkline != quick* ]] || unchecked+=("only a quick check ran: $checkline")
+  [[ -z $noreview ]] || unchecked+=("merged without a clean Codex verdict (--no-review)")
+  [[ $path != local ]] || unchecked+=("landed locally: no PR and no Codex review")
+  [[ $checkline != "none needed"* ]] || unchecked+=("no check ran: $checkline")
+  unchecked+=("browser checks: land can't see which ran; the landing report says")
+  # The topic's plain title: its PRD's (or plan's) first heading, on the branch.
+  title=$(git -C "$main" show "$branch:plans/$topic-prd.md" 2>/dev/null ||
+    git -C "$main" show "$branch:plans/$topic-plan.md" 2>/dev/null || true)
+  title=$(head -1 <<< "$title")
+  title=${title#\# }; title=${title#PRD: }; title=${title#Plan: }
+  items=$(node "$(dirname "$0")/../backlog/backlog.mjs" list --all --prd "$topic" --json 2>/dev/null | node -e '
+    let items = []; try { items = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch {}
+    const rows = (st) => items.filter((i) => st.includes(i.status)).map((i) => `- ${i.id} ${i.title}`);
+    console.log("ITEMS"); console.log(rows(["ready"]).join("\n") || "- (none marked done)");
+    console.log("OPEN"); console.log(rows(["in-progress", "triaged", "inbox"]).join("\n") || "- (none)");
+  ' 2>/dev/null || true)
+  open_items=$(sed -n '/^OPEN$/,$p' <<< "$items" | sed 1d)
+  items=$(sed -n '/^ITEMS$/,/^OPEN$/p' <<< "$items" | sed '1d;$d')
+  {
+    echo "# Landed: ${title:-$topic}"
+    echo
+    echo "$msg (topic \`$topic\`)"
+    echo
+    echo "- Branch: \`$branch\`, landed in \`$trunk\` as \`$commit\` on $(date '+%Y-%m-%d %H:%M')"
+    [[ -z ${1:-} ]] || echo "- Pull request: $1"
+    echo
+    echo "## What landed"
+    echo
+    echo "${items:-- (none marked done)}"
+    echo
+    echo "## What changed"
+    echo
+    echo "${commits:-- (none)}"
+    echo
+    echo "## What to try, and where"
+    echo
+    echo "- Run \`pnpm dev\` in $main (after \`pnpm install\`, or \`pnpm datastore:reset\` if the notes below say so) and open http://localhost:5173."
+    echo "- Sign in as \`member@example.com\`, \`caretaker@example.com\` or \`viewer@example.com\` (the password is \`SEED_USER_PASSWORD\` in \`packages/data/.env\`)."
+    echo "- Changed files, to find the screen or tool:"
+    sed 's/^/  - /' <<< "$(head -20 <<< "$changed")"
+    echo
+    echo "## What wasn't checked"
+    echo
+    [[ -z $checkline ]] || echo "- The check that ran: $checkline."
+    printf -- '- %s\n' "${unchecked[@]}"
+    echo
+    echo "## Follow-ups and still open"
+    echo
+    echo "${open_items:-- (none)}"
+    echo
+    echo "## After landing"
+    echo
+    next_steps | sed 's/^  /- /'
+  } > "$file" || { echo "couldn't write $file"; return 0; }
+  echo "to-test file: $file"
+}
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
   grep -qE '^packages/data/src/db/(migrations|seeds)/' <<< "$changed" &&
@@ -111,6 +194,7 @@ if [[ $path == local ]]; then
   git -C "$main" merge --no-ff -m "$msg" "$branch"
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
+  write_to_test || echo "couldn't write the to-test file"
   next_steps
   exit 0
 fi
@@ -147,6 +231,7 @@ push_trunk
 "${merge[@]}" || die "gh couldn't merge PR #$number ($url): nothing landed; see the PR"
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"
+write_to_test "$url" || echo "couldn't write the to-test file"
 (dev_sync "$branch") ||
   die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`pnpm prd dev-sync $branch\`"
 next_steps

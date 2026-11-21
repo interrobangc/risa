@@ -133,6 +133,8 @@ describe("orchestrator", () => {
       expect(out).toContain("`pnpm prd answer <id>");
       expect(out).toContain("`pnpm prd ask --topic T --report");
       expect(out).toContain("Push other reports only when something failed");
+      expect(out).toContain("`to-test/<date>-<time>-<topic>.md`");
+      expect(out).toContain("names the topic, what landed and that to-test file, and stands alone");
       expect(out).not.toContain("AskUserQuestion");
     }
     for (const flags of [[], ["--resume"]]) {

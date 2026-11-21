@@ -3,7 +3,18 @@
 // with these scripts copied in, a bare origin, and a stubbed `gh`; the
 // CARETOOK_PR_THROWAWAY seam stops land before the merge, so nothing is pushed.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -32,6 +43,7 @@ const GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "repo view") echo o/r ;;
   "pr list") echo 7 ;;
+  "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev ;;
   "api graphql") printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":[]},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
@@ -66,7 +78,20 @@ beforeEach(() => {
     recursive: true,
     filter: (src) => !src.endsWith(".test.mjs"),
   });
-  commit({ "apps/web/a.ts": "1", "README.md": "r" }, "base");
+  // A stubbed backlog: what `backlog list --prd throwaway-x --json` would print.
+  const items = [
+    { id: "B-1", type: "feature", status: "ready", title: "A throwaway feature" },
+    { id: "B-2", type: "bug", status: "triaged", title: "A follow-up bug" },
+    { id: "B-3", type: "feature", status: "landed", title: "An earlier wave" },
+  ];
+  commit(
+    {
+      "apps/web/a.ts": "1",
+      "README.md": "r",
+      "scripts/backlog/backlog.mjs": `process.stdout.write(${JSON.stringify(JSON.stringify(items))});\n`,
+    },
+    "base",
+  );
   git("push", "-q", "origin", "dev");
   git("checkout", "-qb", "feature");
   git("checkout", "-q", "dev");
@@ -131,5 +156,86 @@ describe("land.sh on the PR path", () => {
     });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("local tip");
+  });
+});
+
+// The real merge: the stubbed `gh pr merge` pushes the branch to origin/dev (or
+// fails), so land.sh runs its whole PR path in the temporary main checkout.
+describe("land.sh writes a to-test file", () => {
+  const landFor = (mergeFails = false) =>
+    spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review"],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${join(root, "bin")}:${process.env.PATH}`,
+          PR_HEAD: git("rev-parse", "prd/throwaway-x"),
+          GH_MERGE_FAIL: mergeFails ? "1" : "",
+        },
+      },
+    );
+  const files = () => (existsSync(join(repo, "to-test")) ? readdirSync(join(repo, "to-test")) : []);
+
+  it("writes one file with its parts after a code landing", () => {
+    branch({ "apps/web/b.ts": "2", "plans/throwaway-x-prd.md": "# PRD: Throwaway (a test topic)\n" });
+    const r = landFor();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(files()).toHaveLength(1);
+    expect(files()[0]).toMatch(/^\d{4}-\d{2}-\d{2}-\d{4}-throwaway-x\.md$/);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    for (const part of [
+      "# Landed: Throwaway (a test topic)",
+      "feat(throwaway-x): t (B-1)",
+      "- B-1 A throwaway feature",
+      "- work (`",
+      "https://example.test/pr/7",
+      "## What landed",
+      "## What to try, and where",
+      "http://localhost:5173",
+      "apps/web/b.ts",
+      "the check was skipped (--force)",
+      "merged without a clean Codex verdict (--no-review)",
+      "## Follow-ups and still open",
+      "- B-2 A follow-up bug",
+    ])
+      expect(text).toContain(part);
+    expect(text).not.toContain("An earlier wave");
+    expect(text).toContain(git("rev-parse", "--short", "dev"));
+  });
+
+  it("writes none after a docs-only landing", () => {
+    branch({ "docs/x.md": "d" });
+    const r = landFor();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(files()).toEqual([]);
+  });
+
+  it("writes one after a local hotfix landing too, naming the local merge", () => {
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/c.ts": "3" }, "fix it");
+    git("checkout", "-q", "dev");
+    const r = spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--force", "-m", "fix(web): c"],
+      { cwd: repo, encoding: "utf8" },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(files()).toHaveLength(1);
+    expect(files()[0]).toMatch(/-throwaway-y\.md$/);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    expect(text).toContain("# Landed: throwaway-y");
+    expect(text).toContain("landed locally: no PR and no Codex review");
+    expect(text).toContain(`as \`${git("rev-parse", "--short", "dev")}\``);
+    expect(text).toContain("- fix it (`");
+  });
+
+  it("writes none when the merge fails", () => {
+    branch({ "apps/web/b.ts": "2" });
+    const r = landFor(true);
+    expect(r.status).not.toBe(0);
+    expect(files()).toEqual([]);
   });
 });
