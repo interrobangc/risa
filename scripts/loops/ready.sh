@@ -6,6 +6,10 @@
 #
 #   ready.sh [topic]      topic defaults to the worktree you're in
 #
+# The "Pull request" section names the open PR from prd/<topic> into dev and
+# Codex's verdict on it (codex-review.mjs). READY_PR_BRANCH=<branch> looks for
+# the PR from that branch instead (a test hook: a throwaway PR's head).
+#
 # Exits 0 when the branch can land, 1 when something still blocks it.
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -52,6 +56,21 @@ else
   echo "- http://localhost:$port (not running: \`pnpm prd serve $topic\`)"
 fi
 echo "- Sign in as \`member@example.com\` (owner, two groups), \`caretaker@example.com\` or \`viewer@example.com\`; the password is \`SEED_USER_PASSWORD\` in \`packages/data/.env\`."
+
+echo
+echo "## Pull request"
+echo
+pr_head=${READY_PR_BRANCH:-$branch}
+if ! command -v gh >/dev/null 2>&1; then
+  echo "- No PR check: \`gh\` isn't installed."
+elif ! pr=$(pr_for "$pr_head" 2>/dev/null); then
+  echo "- Couldn't ask GitHub for the PR (\`gh auth status\`)."
+elif [[ -z $pr ]]; then
+  echo "- no PR yet: \`pnpm prd pr $topic\`"
+else
+  echo "- https://github.com/$(gh_repo)/pull/$pr"
+  echo "- $(pr_verdict "$pr" --line 2>/dev/null || echo "codex: couldn't read the review state")"
+fi
 
 echo
 echo "## What it addresses"

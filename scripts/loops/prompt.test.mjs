@@ -81,6 +81,20 @@ describe("orchestrator", () => {
     expect(out.trimEnd()).toMatch(/Record the answers in the plan's _Status_ and follow them\..*$/);
   });
 
+  it("carries the PR flow in every variant", () => {
+    for (const flags of [[], ["--auto"], ["--resume"], ["--resume", "--auto"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).toContain("**Code lands through a GitHub PR into dev, reviewed by Codex.**");
+      expect(out).toContain("`pnpm prd pr T`");
+      expect(out).toContain("`pnpm prd review T --wait` in the background");
+      expect(out).toContain("a reply on its thread with the reason");
+      expect(out).toContain("resolve fixed and declined threads");
+      expect(out).toContain("`review --again` until clean");
+      expect(out).toContain("After about three rounds, ask the user");
+      expect(out).toContain("`--no-review` only when they say so");
+    }
+  });
+
   it("--auto: the run-through mode, starting the first ready wave", () => {
     const out = ok("orchestrator", "T", "--auto");
     expect(out).toContain(EVERY_STEP);
@@ -204,7 +218,9 @@ describe("hotfix", () => {
     expect(text).toContain("**Ask the user before every step that takes time or changes shared state**");
     expect(text).toContain("Background agents are allowed");
     expect(text).toContain("docs/agents/hotfix.md");
-    expect(text).toContain('`pnpm prd land hotfix/trim -m "fix(<area>): …"`');
+    expect(text).toContain('**"PR or local?"**');
+    expect(text).toContain("`pnpm prd land hotfix/trim --pr` or `--local`");
+    expect(text).toContain("`pnpm prd pr hotfix/trim`");
     expect(text).toContain("The fix: Trim the day summary");
     expect(text).not.toContain(RESUME);
   });
