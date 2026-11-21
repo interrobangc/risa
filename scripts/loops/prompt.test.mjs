@@ -104,7 +104,9 @@ describe("orchestrator", () => {
       );
       expect(out).toContain("`pnpm prd rotate --mid-wave`");
       expect(out).toContain("only on the user's word");
-      expect(out).toContain("When the last wave has landed, run `pnpm prd rm T`, then `pnpm prd end`");
+      expect(out).toMatch(
+        /When the last wave has landed, run `pnpm prd rm T`, then `cd \S+ && pnpm prd end`/,
+      );
     }
   });
 
@@ -235,7 +237,9 @@ describe("plan and backlog", () => {
     const plan = ok("plan", "T");
     expect(plan).toContain("`pnpm backlog prd add T`");
     expect(plan).toContain("`pnpm backlog prd set T after=<topic> hot=<path prefixes>`");
-    expect(plan.indexOf("`pnpm prd rm plan-T`")).toBeLessThan(plan.indexOf("`pnpm prd end`"));
+    expect(plan.indexOf("`pnpm prd rm plan-T`")).toBeLessThan(plan.indexOf("&& pnpm prd end`"));
+    // rm deleted the worktree: end runs from the main checkout
+    expect(plan).toMatch(/`cd \S+ && pnpm prd end`/);
     expect(plan.trimEnd()).toMatch(/Start by summarising[^]*$/);
   });
 
