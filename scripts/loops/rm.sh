@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tear down a worktree made by new.sh: stop and delete its Docker stacks and
-# data, drop its database on the shared test Postgres, remove the worktree and
+# data, drop its databases on the shared test Postgres (its own and its
+# integration workers' copies), remove the worktree and
 # release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
 # plan/* and hotfix/* → dev); an unmerged branch is kept. A merged branch's
@@ -37,7 +38,7 @@ if [[ -z $force && $branch == prd/* ]]; then
 fi
 
 stack_teardown "$dir"
-# Its database on the shared test Postgres (nothing when that isn't running).
+# Its databases on the shared test Postgres, worker copies too (nothing when that isn't running).
 "$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
 git -C "$main" worktree remove ${force:+--force} "$dir"
 release_slot "$name"
