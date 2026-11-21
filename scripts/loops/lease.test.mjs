@@ -177,11 +177,11 @@ describe("releasing", SLOW, () => {
 describe("pnpm prd check's check lease", SLOW, () => {
   it("wraps pnpm check (then the bundle budget) in `lease.sh run check`", () => {
     expect(readFileSync(PRD_SH, "utf8")).toMatch(
-      /lease\.sh" run check --label "pnpm check" -- sh -c 'pnpm check && pnpm build:budget'/,
+      /lease\.sh" run check --label "pnpm check" -- \\\n\s*"\$bin\/check-run\.sh" full "" -- sh -c 'pnpm check && pnpm build:budget'/,
     );
   });
 
-  it("makes two runs beyond the limit of three wait, and holders shows who holds what", async () => {
+  it("makes the runs beyond the default limit of two wait, and holders shows who holds what", async () => {
     const log = join(root, "check-log");
     writeFileSync(log, "");
     // A fake pnpm check: note its start and end, run for 2 s.
@@ -192,22 +192,22 @@ describe("pnpm prd check's check lease", SLOW, () => {
       () =>
         readFileSync(log, "utf8")
           .split("\n")
-          .filter((l) => l === "start").length === 3,
+          .filter((l) => l === "start").length === 2,
     );
     const { out } = cli(["holders"]);
-    expect(out).toMatch(/^check leases: 3 of 3 held$/m);
-    expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(3);
+    expect(out).toMatch(/^check leases: 2 of 2 held$/m);
+    expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(2);
     expect(out).toMatch(/^browser leases: 0 of 3 held$/m);
 
     expect(await Promise.all(runs.map((r) => r.exit))).toEqual([0, 0, 0, 0, 0]);
-    expect(runs.filter((r) => r.err.includes("All 3 check leases are taken; waiting"))).toHaveLength(2);
+    expect(runs.filter((r) => r.err.includes("All 2 check leases are taken; waiting"))).toHaveLength(3);
     let running = 0;
     let most = 0;
     for (const line of readFileSync(log, "utf8").split("\n").filter(Boolean)) {
       running += line === "start" ? 1 : -1;
       most = Math.max(most, running);
     }
-    expect(most).toBe(3);
+    expect(most).toBe(2);
   });
 });
 

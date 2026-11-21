@@ -181,7 +181,7 @@ EOF
     if [[ $stack == yes ]]; then
       stack_line="- Your stack's slot and ports are in \`.env.loop\` and \`apps/web/.env\` (\`WEB_PORT\`). \`pnpm prd serve\` runs your dev server in the background."
     else
-      stack_line="- Your worktree has no Docker stack. \`pnpm check\` still runs everything: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`pnpm prd stack up\` adds one and \`pnpm prd stack down\` removes it when you're done (tell your orchestrator)."
+      stack_line="- Your worktree has no Docker stack. \`pnpm prd check\` (the full check, through the check lease; never a bare \`pnpm check\`) still runs everything: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`pnpm prd stack up\` adds one and \`pnpm prd stack down\` removes it when you're done (tell your orchestrator)."
     fi
     cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.
@@ -200,6 +200,7 @@ EOF
 - Build only slice $n. Leave other slices' regions and files alone.
 - Read your handbook, docs/agents/loop.md, and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
 $stack_line Delete any scratch scripts before you commit.
+- Check with \`pnpm prd check\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`pnpm check\`.
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`pnpm backlog note B-<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
 EOF
@@ -209,7 +210,7 @@ EOF
 **You're continuing slice $n, not starting it.** An earlier agent worked in this worktree and was interrupted (a restart, a crash or a usage limit), and its hand-off was lost. Before writing any code:
 - Read what it did: \`pnpm log --oneline prd/$topic..HEAD\`, \`git status\`, \`git diff prd/$topic...HEAD\` (what's committed) and \`git diff\` (what isn't). Uncommitted changes are its work too: keep them unless they're broken.
 - Check that against the slice's acceptance criteria and finish what's missing from there. Don't start over, and don't redo committed work.
-- If everything is committed and \`pnpm check\` passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
+- If everything is committed and \`pnpm prd check\` passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
 EOF
     fi
     ;;

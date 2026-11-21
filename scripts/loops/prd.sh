@@ -52,10 +52,13 @@ pnpm prd <command>
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
-    check [--quick "<why>"]   pnpm check (at most three at once machine-wide), and record that
+    check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
+                              .loops/.check-times.log, and record that
                               this commit passed; --quick: typecheck, lint, format and only the tests
                               related to the diff since the last full pass, recorded with its reason
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
+    check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
+                              by mode and by PRD); runs no check, works from any checkout
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
@@ -185,12 +188,24 @@ case $cmd in
     fi
     ;;
   check)
+    if [[ " $* " == *" --times "* ]]; then  # the summary runs no check, from any checkout
+      since=""
+      while (($#)); do
+        case $1 in
+          --times) ;;
+          --since) since=${2:-}; [[ -n $since ]] || die "check --since needs a date"; shift ;;
+          *) die "check --times takes only --since <date>" ;;
+        esac
+        shift
+      done
+      exec node "$bin/check-times.mjs" --log "${CARETOOK_CHECK_LOG:-$loops/.check-times.log}" ${since:+--since "$since"}
+    fi
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd check inside a .loops worktree"
     dir=$loops/$name; quick=0 why=""
     while (($#)); do
       case $1 in
         --quick) quick=1; why=${2:-}; [[ -n $why && $why != -* ]] || die "check --quick needs a reason: --quick \"<why>\""; shift ;;
-        *) die "check: unknown argument $1 (--quick \"<why>\")" ;;
+        *) die "check: unknown argument $1 (--quick \"<why>\"; --times [--since <date>])" ;;
       esac
       shift
     done
@@ -205,16 +220,17 @@ case $cmd in
       else base=$(git -C "$dir" merge-base "$trunk" HEAD); fi
     fi
     rm -f "$record"
-    # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 3) around it, so a
+    # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
     if ((quick)); then
       echo "Quick check against ${base:0:7}: typecheck, lint, format, and the tests related to the diff ($why)"
       (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check --quick" -- \
-        sh -c 'pnpm typecheck && pnpm lint && pnpm format:check && pnpm exec vitest run --changed "$1" --passWithNoTests' _ "$base")
+        "$bin/check-run.sh" quick "$why" -- sh -c 'pnpm typecheck && pnpm lint && pnpm format:check && pnpm exec vitest run --changed "$1" --passWithNoTests' _ "$base")
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
-      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- sh -c 'pnpm check && pnpm build:budget')
+      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- \
+        "$bin/check-run.sh" full "" -- sh -c 'pnpm check && pnpm build:budget')
       echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
       echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     fi
