@@ -187,6 +187,12 @@ describe("plan and backlog", () => {
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
 
+  it("backlog reads the queue on startup", () => {
+    const text = ok("backlog");
+    expect(text).toMatch(/and the queue: `ls \S+\/\.queue`/);
+    expect(text).toContain("never propose starting or queueing a topic that is already queued");
+  });
+
   it("backlog asks one multi-select question first: a PRD, what to run, or a new issue", () => {
     const text = ok("backlog");
     expect(text).toMatch(/ask \*\*one\*\* AskUserQuestion, multi-select, and nothing else/);

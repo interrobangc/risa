@@ -7,7 +7,7 @@
 //   - otherwise a fresh session with the resume prompt:
 //       prd:  claude --remote-control prd-<topic> "$(scripts/loops/prompt.sh orchestrator <topic> --resume [--auto])"
 //             (--auto when the plan's _Status_ records run-through)
-//       plan: claude --remote-control plan-<topic> "$(scripts/loops/prompt.sh plan <topic>)"
+//       plan: claude --model fable --remote-control plan-<topic> "$(scripts/loops/prompt.sh plan <topic>)"
 //
 // The session names stay prd-<topic> and plan-<topic>, so Remote Control still
 // reaches them.
@@ -70,7 +70,8 @@ export function chooseCommand({ dir, branch, conversation, runThrough: auto }) {
     kind,
     topic,
     mode: "fresh",
-    command: `${cd}claude --remote-control ${session} "$(${prompt})"`,
+    // A fresh planner runs on fable, as `pnpm prd plan` starts it (prd.sh's agent_model).
+    command: `${cd}claude ${kind === "plan" ? "--model fable " : ""}--remote-control ${session} "$(${prompt})"`,
   };
 }
 

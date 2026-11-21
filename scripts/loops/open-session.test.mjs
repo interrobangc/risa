@@ -158,7 +158,8 @@ describe("choosing the command", () => {
     ).toMatchObject({
       session: "plan-u",
       mode: "fresh",
-      command: 'cd /w/.loops/plan-u && claude --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"',
+      command:
+        'cd /w/.loops/plan-u && claude --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"',
     });
   });
 
@@ -213,7 +214,7 @@ describe("pnpm prd open", () => {
     mkdirSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true });
     ok(["plan-v"]);
     expect(tabCommand()).toBe(
-      `cd ${join(loops, "plan-v")} && claude --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"`,
+      `cd ${join(loops, "plan-v")} && claude --model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"`,
     );
   });
 

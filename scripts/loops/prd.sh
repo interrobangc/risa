@@ -6,6 +6,8 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
+# The model plan, backlog and hotfix sessions run on unless --model names another.
+agent_model=fable
 # Every command runs on .nvmrc's Node, whatever shell called it.
 use_node || true
 
@@ -25,11 +27,12 @@ pnpm prd <command>
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it interviews you, writes both, lands them)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
-                              (either form: --model <m> runs that session on model m, e.g. fable; once only)
+                              (either form runs on fable; --model <m> runs that one session on model m)
                               (it reads the backlog and helps you decide what's next)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
-    hotfix <name> [--open] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
+    hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
+                              (on fable; --model <m> for another model)
                               (prompt hotfix <name> ["<the fix>"] is that session's first prompt)
                               (pnpm prd check there, then pnpm prd land hotfix/<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
@@ -117,19 +120,19 @@ case $cmd in
   pr) exec "$bin/pr.sh" "$@" ;;
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;
   plan)
-    # --model <m> (or --model=<m>), anywhere: this one session's model, passed to claude --model.
-    model="" rest=()
+    # --model <m> (or --model=<m>), anywhere: this one session's model, passed to claude --model
+    # (default: $agent_model, fable).
+    model=$agent_model rest=()
     while (($#)); do
       case $1 in
-        --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "plan: --model needs a model name (e.g. fable)"; model=$2; shift ;;
-        --model=*) model=${1#--model=}; [[ -n $model ]] || die "plan: --model needs a model name (e.g. fable)" ;;
+        --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "plan: --model needs a model name (e.g. opus)"; model=$2; shift ;;
+        --model=*) model=${1#--model=}; [[ -n $model ]] || die "plan: --model needs a model name (e.g. opus)" ;;
         *) rest+=("$1") ;;
       esac
       shift
     done
     set -- ${rest[@]+"${rest[@]}"}
-    model_args=()
-    [[ -z $model ]] || model_args=(--model "$model")
+    model_args=(--model "$model")
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
       cd "$main" && exec claude ${model_args[@]+"${model_args[@]}"} --remote-control backlog "$("$bin/prompt.sh" backlog)"
@@ -140,7 +143,7 @@ case $cmd in
     done
     dir=$loops/plan-$topic
     [[ -d $dir ]] || "$bin/new.sh" plan "$topic"
-    cmd_line="cd $dir && claude ${model:+--model $(printf %q "$model") }--remote-control plan-$topic \"\$(scripts/loops/prompt.sh plan $topic ${items[*]:-})\""
+    cmd_line="cd $dir && claude --model $(printf %q "$model") --remote-control plan-$topic \"\$(scripts/loops/prompt.sh plan $topic ${items[*]:-})\""
     if ((open)); then
       cd "$dir" && exec claude ${model_args[@]+"${model_args[@]}"} --remote-control "plan-$topic" "$("$bin/prompt.sh" plan "$topic" ${items[@]+"${items[@]}"})"
     fi
@@ -150,22 +153,25 @@ case $cmd in
     ;;
   slice) exec "$bin/new.sh" slice "$@" ;;
   hotfix)
-    name=${1:?"usage: pnpm prd hotfix <name> [--open] [\"<the fix>\"]"}; shift; open=0 fix=""
-    for a in "$@"; do
-      case $a in
+    name=${1:?"usage: pnpm prd hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
+    while (($#)); do
+      case $1 in
         --open) open=1 ;;
-        -*) die "hotfix: unknown option $a (--open)" ;;
-        *) [[ -z $fix ]] || die "hotfix: give the fix as one quoted argument"; fix=$a ;;
+        --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "hotfix: --model needs a model name (e.g. opus)"; model=$2; shift ;;
+        --model=*) model=${1#--model=}; [[ -n $model ]] || die "hotfix: --model needs a model name (e.g. opus)" ;;
+        -*) die "hotfix: unknown option $1 (--open, --model <m>)" ;;
+        *) [[ -z $fix ]] || die "hotfix: give the fix as one quoted argument"; fix=$1 ;;
       esac
+      shift
     done
     dir=$loops/hotfix-$name
     if [[ -d $dir ]]; then echo "Worktree hotfix-$name already exists at $dir."; else "$bin/new.sh" hotfix "$name"; fi
     if ((open)); then
-      cd "$dir" && exec claude --remote-control "hotfix-$name" "$("$bin/prompt.sh" hotfix "$name" ${fix:+"$fix"})"
+      cd "$dir" && exec claude --model "$model" --remote-control "hotfix-$name" "$("$bin/prompt.sh" hotfix "$name" ${fix:+"$fix"})"
     fi
     echo
     echo "Start its session in a new terminal (or rerun with --open; or carry on in the one that asked for it):"
-    echo "  cd $dir && claude --remote-control hotfix-$name \"\$(scripts/loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
+    echo "  cd $dir && claude --model $(printf %q "$model") --remote-control hotfix-$name \"\$(scripts/loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
     ;;
   start)
     topic=${1:?topic}
