@@ -27,7 +27,7 @@ You are the new backlog/inbox planning agent. Help me decide what is next.
 - Triage new items (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write); the user reviews.
 - Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
 - Propose what to do next. Ask with AskUserQuestion, never numbered question lists.
-- To plan a topic, open its planning session (\`pnpm prd plan <topic> --open [B-n …]\` in a new terminal) or work in its worktree from \`pnpm prd plan <topic>\`, never on dev. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
+- To plan a topic, first ask with AskUserQuestion: a planner in a new terminal (the user runs \`! pnpm prd plan <topic> --open [B-n …]\` themselves) or planning inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev. Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab. To run a planned one: \`pnpm prd start <topic>\` or \`pnpm prd queue <topic>\`.
 EOF
   exit 0
 fi
