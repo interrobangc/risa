@@ -118,6 +118,24 @@ describe("orchestrator", () => {
     expect(out).toContain("record the landing mode in the plan's _Status_, then start the first ready wave.");
   });
 
+  it("--auto: questions and reports go through pnpm prd ask with a push, never AskUserQuestion", () => {
+    for (const flags of [["--auto"], ["--resume", "--auto"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).toContain("`pnpm prd ask --topic T --question");
+      expect(out).toContain("PushNotification tool yourself");
+      expect(out).toContain("`pnpm prd ask --wait <id>` in the background");
+      expect(out).toContain("`pnpm prd answer <id>");
+      expect(out).toContain("`pnpm prd ask --topic T --report");
+      expect(out).toContain("Push other reports only when something failed");
+      expect(out).not.toContain("AskUserQuestion");
+    }
+    for (const flags of [[], ["--resume"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).not.toContain("pnpm prd ask");
+      expect(out).toContain("AskUserQuestion");
+    }
+  });
+
   it("--resume: reconcile _Status_ with git first, respawn with --continue, review handed-off slices", () => {
     const out = ok("orchestrator", "T", "--resume");
     expect(out).toContain(EVERY_STEP);
@@ -211,6 +229,21 @@ describe("plan and backlog", () => {
     const text = ok("backlog");
     expect(text).toMatch(/and the queue: `ls \S+\/\.queue`/);
     expect(text).toContain("never propose starting or queueing a topic that is already queued");
+  });
+
+  it("plan adds its registry row through pnpm backlog prd and ends with pnpm prd end", () => {
+    const plan = ok("plan", "T");
+    expect(plan).toContain("`pnpm backlog prd add T`");
+    expect(plan).toContain("`pnpm backlog prd set T after=<topic> hot=<path prefixes>`");
+    expect(plan.indexOf("`pnpm prd rm plan-T`")).toBeLessThan(plan.indexOf("`pnpm prd end`"));
+    expect(plan.trimEnd()).toMatch(/Start by summarising[^]*$/);
+  });
+
+  it("backlog reads the open asks and the PRD registry, and leads with what waits on the user", () => {
+    const text = ok("backlog");
+    expect(text).toContain("`pnpm prd asks`");
+    expect(text).toContain("`pnpm backlog prd list`");
+    expect(text).toContain("what waits on the user");
   });
 
   it("backlog asks one multi-select question first: a PRD, what to run, or a new issue", () => {
