@@ -2,17 +2,21 @@
 // Codex's verdict on a pull request's current head, from the PR's state as
 // GitHub's GraphQL API returns it (review.sh fetches it; PR_QUERY below):
 //
-//   waiting   no answer from Codex yet on any head, or a review is running (👀)
-//   stale     Codex last reviewed an older head (push a fix → ask again)
+//   waiting   no answer from Codex yet, or a review is running
+//   stale     Codex last reviewed an older head (it reviews pushes by itself;
+//             `@codex review` asks again)
 //   findings  Codex reviewed the head and threads of its own are unresolved
 //   clean     Codex reviewed the head and none of its threads is unresolved
 //
 // Codex keeps one summary comment per PR up to date, with a machine-readable
-// line `<!-- codex-review-state:v1 {"code_review":{"commit_sha":…,"status":…}} -->`:
-// that names the commit it last reviewed. Its findings are inline review
-// threads, each opening with a priority badge (`![P1 Badge](…)`). Only Codex's
-// own threads count: a human's comment never blocks. A declined finding is
-// replied to, then resolved; resolved threads don't block, replies alone do.
+// line `<!-- codex-review-state:v1 {"code_review":{"commit_sha":…,"status":…}} -->`
+// naming the commit it is reviewing ("running") or last reviewed ("completed").
+// That line is the signal: its 👍 on the PR carries no commit and outlives the
+// review it was for. Findings are inline review threads opening with a
+// priority badge (`![P2 Badge](…)`). Only Codex's own threads count: a human's
+// comment never blocks. Codex doesn't resolve its threads when a fix lands
+// (they turn outdated), so every finding, fixed or declined (reply first), is
+// resolved before the verdict is clean; replies alone don't clear it.
 //
 //   node codex-review.mjs [file] [--line|--text]   the PR's JSON on stdin when
 //     no file; prints the verdict as JSON (--line: one line; --text: the line
@@ -68,7 +72,10 @@ export function findingTitle(body) {
     .trim();
 }
 
-/** Codex's latest code-review state from its summary comment, or null. */
+/**
+ * Codex's latest code-review state from its summary comment, or null:
+ * { commit_sha, status, has_unresolved_findings, …, updatedAt }.
+ */
 export function summaryState(pr) {
   const summaries = nodes(pr.comments).filter((c) => isCodex(c.author?.login) && STATE_LINE.test(c.body));
   summaries.sort((a, b) =>
@@ -77,21 +84,25 @@ export function summaryState(pr) {
   const last = summaries.at(-1);
   if (!last) return null;
   try {
-    return JSON.parse(STATE_LINE.exec(last.body)[1]).code_review ?? null;
+    const code = JSON.parse(STATE_LINE.exec(last.body)[1]).code_review;
+    return code ? { ...code, updatedAt: last.updatedAt ?? last.createdAt ?? null } : null;
   } catch {
     return null;
   }
 }
 
-/** The commit Codex last finished reviewing: the summary's, else its latest review's. */
+/**
+ * The commit Codex last finished reviewing: the summary's when complete; with
+ * no summary, its latest review's (a review with findings is a PR review).
+ */
 function reviewedCommit(pr, summary) {
-  if (summary?.status === "completed" && summary.commit_sha) return summary.commit_sha;
+  if (summary) return summary.status === "completed" ? (summary.commit_sha ?? null) : null;
   const reviews = nodes(pr.reviews).filter((r) => isCodex(r.author?.login) && r.commit?.oid);
   reviews.sort((a, b) => String(a.submittedAt).localeCompare(String(b.submittedAt)));
   return reviews.at(-1)?.commit.oid ?? null;
 }
 
-/** Is a Codex review running now (its 👀 on the PR, or the summary says so)? */
+/** Is a Codex review running now (the summary says so, or its 👀 is on the PR)? */
 function running(pr, summary) {
   if (summary?.status && summary.status !== "completed") return true;
   return nodes(pr.reactions).some((r) => r.content === "EYES" && isCodex(r.user?.login));
@@ -117,7 +128,9 @@ export function openFindings(pr) {
 
 /**
  * The verdict on the PR's current head:
- * { state, findings, reviewedSha, headSha, number, url }.
+ * { state, findings, headSha, reviewedSha, reviewingSha, summaryAt, number, url }.
+ * reviewingSha is the commit a running review is on; summaryAt is when Codex
+ * last updated its summary (review.sh --again waits for it to change).
  * findings are listed for "findings" and "stale" (still open from the older
  * review); for "clean" and "waiting" they're empty.
  */
@@ -126,8 +139,16 @@ export function verdict(json) {
   const headSha = pr.headRefOid;
   const summary = summaryState(pr);
   const reviewedSha = reviewedCommit(pr, summary);
-  const base = { headSha, reviewedSha, number: pr.number ?? null, url: pr.url ?? null };
-  if (running(pr, summary) || !reviewedSha) return { state: "waiting", findings: [], ...base };
+  const isRunning = running(pr, summary);
+  const base = {
+    headSha,
+    reviewedSha,
+    reviewingSha: isRunning ? (summary?.commit_sha ?? null) : null,
+    summaryAt: summary?.updatedAt ?? null,
+    number: pr.number ?? null,
+    url: pr.url ?? null,
+  };
+  if (isRunning || !reviewedSha) return { state: "waiting", findings: [], ...base };
   const findings = openFindings(pr);
   if (reviewedSha !== headSha) return { state: "stale", findings, ...base };
   return { state: findings.length ? "findings" : "clean", findings, ...base };
@@ -143,10 +164,10 @@ export function verdictLine(v) {
     case "findings":
       return `codex: ${v.findings.length} open finding${v.findings.length === 1 ? "" : "s"} on ${short(v.headSha)}`;
     case "stale":
-      return `codex: stale (last reviewed ${short(v.reviewedSha)}, head ${short(v.headSha)}): ask again`;
+      return `codex: stale (last reviewed ${short(v.reviewedSha)}, head ${short(v.headSha)}): ask again with --again`;
     default:
-      return v.reviewedSha && v.reviewedSha !== v.headSha
-        ? `codex: reviewing ${short(v.headSha)} (last reviewed ${short(v.reviewedSha)})`
+      return v.reviewingSha
+        ? `codex: reviewing ${short(v.reviewingSha)}${v.reviewingSha === v.headSha ? "" : ` (head ${short(v.headSha)})`}`
         : `codex: waiting for a review of ${short(v.headSha)}`;
   }
 }

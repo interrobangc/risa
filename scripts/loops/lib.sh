@@ -265,7 +265,7 @@ pr_for() {
 pr_state() {
   local repo query
   repo=$(gh_repo) || return 1
-  query=$(node --input-type=module -e "import { PR_QUERY } from '$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs'; process.stdout.write(PR_QUERY)")
+  query=$(node --input-type=module -e "import { PR_QUERY } from '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codex-review.mjs'; process.stdout.write(PR_QUERY)")
   gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
 }
 

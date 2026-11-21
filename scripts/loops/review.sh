@@ -7,9 +7,12 @@
 #   (no option)        print the verdict and the findings (priority, file:line,
 #                      title, thread link and id)
 #   --json             print the verdict as JSON instead
-#   --again            comment "@codex review" on the PR first (after a fix)
-#   --resolve <id>     resolve a thread first (a declined finding: reply on the
-#                      thread with the reason, then resolve it); repeatable
+#   --again            comment "@codex review" on the PR first (Codex reviews a
+#                      push by itself; this asks again on the same head); with
+#                      --wait, it first waits (up to 5 min) for Codex to take it up
+#   --resolve <id>     resolve a thread first: a fixed finding (Codex leaves its
+#                      threads open, outdated) or a declined one (reply on the
+#                      thread with the reason first); repeatable
 #   --wait [min]       poll every 60 s (CARETOOK_REVIEW_POLL) until Codex has
 #                      answered on the head (clean or findings), for up to min
 #                      minutes (default 20); a waiting or stale verdict keeps it
@@ -53,17 +56,27 @@ for id in ${resolve[@]+"${resolve[@]}"}; do
   gh api graphql -f id="$id" -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }' \
     -q '.data.resolveReviewThread.thread | "resolved \(.id)"' || fail "couldn't resolve thread $id"
 done
-if ((again)); then
-  gh pr comment -R "$(gh_repo)" "$number" --body "@codex review" >/dev/null || fail "couldn't comment on PR #$number"
-  echo "asked Codex to review PR #$number again"
-fi
+# field NAME → a field of the verdict's JSON ($v), or nothing.
+field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
 
 # verdict → sets raw (the PR's state), v (the verdict's JSON) and state.
 verdict() {
   raw=$(pr_state "$number") || fail "gh couldn't read PR #$number"
   v=$(node "$(dirname "$0")/codex-review.mjs" <<< "$raw")
-  state=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).state)' <<< "$v")
+  state=$(field state)
 }
+
+if ((again)); then
+  [[ -n $wait ]] && { verdict; before=$(field summaryAt); }
+  gh pr comment -R "$(gh_repo)" "$number" --body "@codex review" >/dev/null || fail "couldn't comment on PR #$number"
+  echo "asked Codex to review PR #$number again"
+  if [[ -n $wait ]]; then
+    # Until Codex takes it up, the last verdict still stands: wait for its
+    # summary to change (it turns "running" within seconds).
+    taken=$(($(date +%s) + 300))
+    while verdict && [[ $(field summaryAt) == "$before" ]] && (($(date +%s) < taken)); do sleep 10; done
+  fi
+fi
 
 verdict
 if [[ -n $wait ]]; then
@@ -83,7 +96,7 @@ fi
 if ((json)); then
   echo "$v"
 else
-  echo "PR #$number $(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).url ?? "")' <<< "$v")"
+  echo "PR #$number $(field url)"
   node "$(dirname "$0")/codex-review.mjs" --text <<< "$raw"
 fi
 case $state in clean) exit 0 ;; findings) exit 1 ;; *) exit 2 ;; esac
