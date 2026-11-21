@@ -1,0 +1,358 @@
+// Session records (sessions.mjs), the wrapper that writes them (session.sh) and
+// `pnpm prd end` (end-session.sh), against a throwaway repo with these scripts
+// copied in and a stub claude (CARETOOK_CLAUDE_BIN). The stub is named
+// claude-stub, never claude, so no walk up from a test can find the real
+// claude session the tests may be running under.
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  ancestorClaude,
+  isLive,
+  parseEtime,
+  parseFields,
+  readRecord,
+  readRecords,
+  runs,
+  START_SLACK_MS,
+  writeRecord,
+} from "./sessions.mjs";
+
+const HERE = new URL(".", import.meta.url).pathname;
+const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
+
+describe("the pure part", () => {
+  it("parses ps's elapsed times", () => {
+    expect(parseEtime("00:07")).toBe(7);
+    expect(parseEtime("  12:34")).toBe(754);
+    expect(parseEtime("01:00:00")).toBe(3600);
+    expect(parseEtime("2-03:04:05")).toBe(2 * 86400 + 3 * 3600 + 4 * 60 + 5);
+    expect(parseEtime("soon")).toBeNull();
+  });
+
+  it("calls a record live only while it hasn't ended and its pid is the process it started", () => {
+    const now = Date.parse("2026-11-21T12:00:00Z");
+    const record = { pid: 42, started: "2026-11-21T11:00:00Z" };
+    const startedAt = (iso) => ({ startedMs: Date.parse(iso) });
+    expect(isLive(record, startedAt("2026-11-21T11:00:01Z"), now)).toBe(true);
+    // Ended: the record says so, whatever holds the pid now.
+    expect(isLive({ ...record, ended: "2026-11-21T11:30:00Z" }, startedAt("2026-11-21T11:00:01Z"), now)).toBe(
+      false,
+    );
+    // No such process.
+    expect(isLive(record, null, now)).toBe(false);
+    // The pid reused by a process that started later (or earlier).
+    expect(isLive(record, { startedMs: Date.parse(record.started) + START_SLACK_MS + 1000 }, now)).toBe(
+      false,
+    );
+    expect(isLive(record, startedAt("2026-11-20T11:00:00Z"), now)).toBe(false);
+    expect(isLive({ started: record.started }, startedAt(record.started), now)).toBe(false);
+  });
+
+  it("finds the nearest ancestor running claude, as a command or an interpreter's script", () => {
+    expect(runs("/Users/x/.local/bin/claude --remote-control prd-t", "claude")).toBe(true);
+    expect(runs("bash /tmp/bin/claude-stub --remote-control prd-t", "claude-stub")).toBe(true);
+    expect(runs("node /x/vitest.mjs claude", "claude")).toBe(false);
+    const table = new Map([
+      [100, { ppid: 1, args: "/sbin/launchd-ish" }],
+      [200, { ppid: 100, args: "/usr/local/bin/claude --continue" }],
+      [300, { ppid: 200, args: "/bin/zsh -c pnpm prd end" }],
+      [400, { ppid: 300, args: "bash scripts/loops/end-session.sh" }],
+      [500, { ppid: 400, args: "node sessions.mjs self" }],
+    ]);
+    expect(ancestorClaude(500, table, "claude")).toBe(200);
+    // The starting process itself isn't a candidate; nothing above 200 runs claude.
+    expect(ancestorClaude(200, table, "claude")).toBeNull();
+    expect(ancestorClaude(500, table, "claude-stub")).toBeNull();
+    // A loop in the table ends the walk.
+    expect(
+      ancestorClaude(
+        2,
+        new Map([
+          [2, { ppid: 3, args: "a" }],
+          [3, { ppid: 2, args: "b" }],
+        ]),
+        "c",
+      ),
+    ).toBeNull();
+  });
+
+  it("merges fields into a record and removes empty ones", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-unit-"));
+    try {
+      expect(parseFields(["pid=12", "auto=true", "rotating=", "topic=t", "command=a=b c"])).toEqual({
+        pid: 12,
+        auto: true,
+        rotating: undefined,
+        topic: "t",
+        command: "a=b c",
+      });
+      writeRecord(dir, "prd-t", { pid: 1, rotating: true, auto: false });
+      writeRecord(dir, "prd-t", { pid: 2, rotating: undefined });
+      expect(readRecord(dir, "prd-t")).toEqual({ pid: 2, auto: false });
+      expect(readRecords(dir).map((r) => r.name)).toEqual(["prd-t"]);
+      expect(readRecord(dir, "plan-none")).toBeNull();
+      expect(() => readRecord(dir, "../x")).toThrow(/not a session name/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// The stub: records its pid, args and the record it sees, then behaves as
+// STUB_MODE says.
+const STUB = `#!/usr/bin/env bash
+mkdir -p "$STUB_STATE"
+echo "$$" > "$STUB_STATE/pid"
+printf '%s\\n' "$@" > "$STUB_STATE/args"
+[[ -z \${STUB_NAME:-} ]] || cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
+case \${STUB_MODE:-exit} in
+  exit) exit "\${STUB_EXIT:-0}" ;;
+  ancestor) bash -c 'node "$SESSIONS_MJS" ancestor; echo "exit $?"' > "$STUB_STATE/ancestor" ;;
+  end) bash "$PRD_SH" end > "$STUB_STATE/end.out" 2>&1; sleep 5 ;;
+  wait) touch "$STUB_STATE/ready"; for i in $(seq 100); do sleep 0.1; done ;;
+  stubborn) trap '' TERM; touch "$STUB_STATE/ready"; for i in $(seq 100); do sleep 0.1; done ;;
+esac
+`;
+
+let root, main, loops, sessions, state, stub, env;
+const scripts = (f) => join(main, "scripts/loops", f);
+const record = (name) => JSON.parse(readFileSync(join(sessions, `${name}.json`), "utf8"));
+const stubPid = () => Number(readFileSync(join(state, "pid"), "utf8").trim());
+const run = (script, args, extra = {}, cwd = main) =>
+  spawnSync("bash", [scripts(script), ...args], { cwd, encoding: "utf8", env: { ...env, ...extra } });
+
+/** Starts a command in the background; resolves {code, signal, stdout, stderr} when it exits. */
+function start(cmd, args, extra = {}, cwd = main) {
+  const child = spawn(cmd, args, { cwd, env: { ...env, ...extra }, stdio: ["ignore", "pipe", "pipe"] });
+  let stdout = "",
+    stderr = "";
+  child.stdout.on("data", (d) => (stdout += d));
+  child.stderr.on("data", (d) => (stderr += d));
+  const done = new Promise((resolve) =>
+    child.on("close", (code, signal) => resolve({ code, signal, stdout, stderr })),
+  );
+  return { child, done };
+}
+const until = async (what, ms = 10_000) => {
+  const end = Date.now() + ms;
+  while (!what()) {
+    if (Date.now() > end) throw new Error("timed out waiting");
+    await new Promise((r) => setTimeout(r, 50));
+  }
+};
+
+beforeAll(() => {
+  root = realpathSync(mkdtempSync(join(tmpdir(), "sessions-test-")));
+  main = join(root, "repo");
+  loops = join(main, ".loops");
+  sessions = join(loops, ".sessions");
+  state = join(root, "state");
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  stub = join(bin, "claude-stub");
+  writeFileSync(stub, STUB);
+  chmodSync(stub, 0o755);
+  execFileSync("git", ["init", "-q", "-b", "dev", main]);
+  for (const [k, v] of [
+    ["user.email", "test@example.com"],
+    ["user.name", "Test"],
+    ["commit.gpgsign", "false"],
+  ])
+    git(main, "config", k, v);
+  mkdirSync(join(main, "scripts/loops"), { recursive: true });
+  for (const f of [
+    "prd.sh",
+    "lib.sh",
+    "session.sh",
+    "sessions.mjs",
+    "end-session.sh",
+    "queue.sh",
+    "prompt.sh",
+  ])
+    copyFileSync(join(HERE, f), scripts(f));
+  writeFileSync(join(main, ".gitignore"), ".loops/\n");
+  mkdirSync(join(main, "plans"));
+  writeFileSync(join(main, "plans/w-plan.md"), "# Plan: W\n\n## Status\n\nNot started.\n");
+  git(main, "add", ".");
+  git(main, "commit", "-q", "-m", "chore: init");
+  git(main, "worktree", "add", "-q", "-b", "prd/w", join(loops, "w"), "dev");
+  git(main, "worktree", "add", "-q", "-b", "plan/v", join(loops, "plan-v"), "dev");
+  env = {
+    ...process.env,
+    TRUNK: "dev",
+    CARETOOK_CLAUDE_BIN: stub,
+    CARETOOK_SESSIONS_DIR: "",
+    CARETOOK_END_WAIT: "",
+    STUB_STATE: state,
+    SESSIONS_MJS: scripts("sessions.mjs"),
+    PRD_SH: scripts("prd.sh"),
+  };
+}, 60_000);
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+beforeEach(() => {
+  rmSync(state, { recursive: true, force: true });
+  rmSync(sessions, { recursive: true, force: true });
+});
+
+describe("session.sh", () => {
+  it("records the session at start and after it exits, passing its exit code on", () => {
+    // A rotation's leftovers in the record are cleared at start.
+    mkdirSync(sessions, { recursive: true });
+    writeFileSync(
+      join(sessions, "prd-t.json"),
+      JSON.stringify({ pid: 1, rotating: true, ended: "2026-11-20T00:00:00Z", exit: 0 }),
+    );
+    const r = run("session.sh", ["prd-t", "--auto", "--", "--remote-control", "prd-t", "a prompt"], {
+      STUB_NAME: "prd-t",
+      STUB_EXIT: "3",
+    });
+    expect(r.status).toBe(3);
+    const atStart = JSON.parse(readFileSync(join(state, "record-at-start"), "utf8"));
+    expect(atStart).toMatchObject({ pid: stubPid(), kind: "prd", topic: "t", auto: true });
+    expect(atStart.started).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+    expect(atStart.command).toBe(`${stub} --remote-control prd-t a\\ prompt`);
+    expect(atStart).not.toHaveProperty("rotating");
+    expect(atStart).not.toHaveProperty("ended");
+    expect(readFileSync(join(state, "args"), "utf8")).toBe("--remote-control\nprd-t\na prompt\n");
+    const after = record("prd-t");
+    expect(after).toMatchObject({ pid: stubPid(), exit: 3, auto: true });
+    expect(Date.parse(after.ended)).toBeGreaterThanOrEqual(Date.parse(after.started));
+  });
+
+  it("takes the kind and topic from a planner's name, and refuses a name it can't type", () => {
+    expect(run("session.sh", ["plan-u", "--", "x"], { STUB_NAME: "plan-u" }).status).toBe(0);
+    expect(record("plan-u")).toMatchObject({ kind: "plan", topic: "u", auto: false, exit: 0 });
+    const r = run("session.sh", ["backlog", "--", "x"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/--kind prd\|plan/);
+  });
+});
+
+describe("liveness", () => {
+  it("is live while the session runs, ended after, and never for a reused pid", async () => {
+    const s = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "wait" });
+    await until(() => existsSync(join(state, "ready")));
+    const node = (args) => spawnSync("node", [scripts("sessions.mjs"), ...args], { encoding: "utf8", env });
+    expect(node(["live", "prd-t"]).stdout.trim()).toBe(String(stubPid()));
+    process.kill(stubPid(), "SIGTERM");
+    await s.done;
+    expect(node(["live", "prd-t"]).status).toBe(1);
+    // This test's own pid is live, but it isn't the process the record started.
+    writeFileSync(
+      join(sessions, "prd-old.json"),
+      JSON.stringify({ pid: process.pid, kind: "prd", started: "2026-01-01T00:00:00Z" }),
+    );
+    expect(node(["live", "prd-old"]).status).toBe(1);
+    const list = JSON.parse(node(["list", "--json"]).stdout);
+    expect(list.map((r) => [r.name, r.live])).toEqual([
+      ["prd-old", false],
+      ["prd-t", false],
+    ]);
+  });
+
+  it("finds the ancestor claude from a shell under the stub, and none from one that isn't", () => {
+    expect(spawnSync(stub, [], { encoding: "utf8", env: { ...env, STUB_MODE: "ancestor" } }).status).toBe(0);
+    expect(readFileSync(join(state, "ancestor"), "utf8")).toBe(`${stubPid()}\nexit 0\n`);
+    const r = spawnSync("node", [scripts("sessions.mjs"), "ancestor"], { encoding: "utf8", env });
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("");
+  });
+});
+
+describe("pnpm prd end", () => {
+  it("ends a named session through its record, and its wrapper records the end", async () => {
+    const s = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "wait" });
+    await until(() => existsSync(join(state, "ready")));
+    const r = run("prd.sh", ["end", "prd-t"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(new RegExp(`Ending prd-t \\(pid ${stubPid()}, from its record\\)`));
+    const { code } = await s.done;
+    expect(code).toBe(143);
+    expect(record("prd-t")).toMatchObject({ exit: 143 });
+    // Again: it has ended.
+    expect(run("prd.sh", ["end", "prd-t"]).stdout).toMatch(/prd-t isn't running/);
+  });
+
+  it("with no name, ends the calling shell's own session: its worktree's record", async () => {
+    const s = start(
+      "bash",
+      [scripts("session.sh"), "prd-w", "--", "x"],
+      { STUB_MODE: "end" },
+      join(loops, "w"),
+    );
+    const { code } = await s.done;
+    expect(code).toBe(143);
+    expect(readFileSync(join(state, "end.out"), "utf8")).toMatch(
+      new RegExp(`Ending prd-w \\(pid ${stubPid()}, from its record\\)`),
+    );
+  });
+
+  it("with no name and no record, ends the shell's ancestor claude", async () => {
+    const s = start(stub, [], { STUB_MODE: "end" });
+    const { signal } = await s.done;
+    expect(signal).toBe("SIGTERM");
+    expect(readFileSync(join(state, "end.out"), "utf8")).toMatch(
+      new RegExp(`Ending this shell's claude \\(pid ${stubPid()}, from the calling shell's ancestor\\)`),
+    );
+  });
+
+  it("kills a session that ignores TERM after the wait", async () => {
+    const s = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "stubborn" });
+    await until(() => existsSync(join(state, "ready")));
+    const r = run("prd.sh", ["end", "prd-t"], { CARETOOK_END_WAIT: "1" });
+    expect(r.stdout).toMatch(/ignored TERM for 1s: killed it/);
+    expect((await s.done).code).toBe(137);
+  });
+
+  it("refuses with neither a record nor a claude above it, and an unknown name", () => {
+    const r = run("prd.sh", ["end"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/no session to end/);
+    const named = run("prd.sh", ["end", "prd-nope"]);
+    expect(named.status).toBe(1);
+    expect(named.stderr).toMatch(/no session record prd-nope/);
+  });
+});
+
+describe("sessions start through the wrapper", () => {
+  it("pnpm prd start prints a command through session.sh", () => {
+    const r = run("prd.sh", ["start", "w"]);
+    expect(r.stdout).toContain(
+      `cd ${join(loops, "w")} && scripts/loops/session.sh prd-w -- --remote-control prd-w "$(scripts/loops/prompt.sh orchestrator w)"`,
+    );
+  });
+
+  it("pnpm prd queue opens a recorded run-through session (or not, with --manual)", () => {
+    expect(run("queue.sh", ["w"], { STUB_NAME: "prd-w" }).status).toBe(0);
+    expect(record("prd-w")).toMatchObject({ pid: stubPid(), kind: "prd", topic: "w", auto: true, exit: 0 });
+    const args = readFileSync(join(state, "args"), "utf8").split("\n");
+    expect(args.slice(0, 2)).toEqual(["--remote-control", "prd-w"]);
+    expect(args.join("\n")).toMatch(/orchestrator/);
+    expect(run("queue.sh", ["w", "--manual"]).status).toBe(0);
+    expect(record("prd-w").auto).toBe(false);
+  });
+
+  it("pnpm prd plan --open records a planner; without --open it prints the wrapped command", () => {
+    const printed = run("prd.sh", ["plan", "v"]);
+    expect(printed.stdout).toContain(
+      `cd ${join(loops, "plan-v")} && scripts/loops/session.sh plan-v -- --model fable --remote-control plan-v`,
+    );
+    expect(run("prd.sh", ["plan", "v", "--open", "--model", "opus"]).status).toBe(0);
+    expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });
+    const args = readFileSync(join(state, "args"), "utf8").split("\n");
+    expect(args.slice(0, 4)).toEqual(["--model", "opus", "--remote-control", "plan-v"]);
+  });
+});
