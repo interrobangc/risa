@@ -46,7 +46,7 @@ case $1 in
     if [[ "$*" == *caretook-shared-test* ]]; then [[ -z \${FAKE_SHARED_ID:-} ]] || echo "$FAKE_SHARED_ID"
     elif [[ "$*" == *-aq* ]]; then [[ -z \${FAKE_STACK_IDS:-} ]] || echo "$FAKE_STACK_IDS"; fi ;;
   inspect) [[ -z \${FAKE_INSPECT:-} ]] || echo "$FAKE_INSPECT" ;;
-  exec) [[ "$*" != *psql* ]] || echo 0 ;;
+  exec) [[ "$*" != *psql* ]] || printf '%s\n' "\${FAKE_PSQL:-0}" ;;
 esac
 exit 0
 `;
@@ -197,6 +197,24 @@ describe("rm.sh", () => {
     expect(existsSync(join(loops, "t-5"))).toBe(false);
   });
 
+  it("drops its integration workers' databases too", () => {
+    ok("new.sh", ["slice", "t", "6"]);
+    rmSync(log, { force: true });
+    // What the shared server answers for t-6: its database and three worker copies.
+    const psql = [
+      "caretook_test_t_6",
+      "caretook_test_t_6_w1",
+      "caretook_test_t_6_w2",
+      "caretook_test_t_6_w3",
+    ];
+    const out = ok("rm.sh", ["t-6"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql.join("\n") } });
+    expect(out).toMatch(/dropped test database caretook_test_t_6 and 3 worker copies/);
+    const drops = calls().match(/dropdb .*/g) ?? [];
+    expect(drops.map((d) => d.split(" ").at(-1)).sort()).toEqual(psql);
+    expect(calls()).toMatch(/datname ~ '\^caretook_test_t_6_w/);
+    expect(existsSync(join(loops, "t-6"))).toBe(false);
+  });
+
   it("skips the drop when the shared server isn't running", () => {
     ok("new.sh", ["slice", "t", "5"]);
     rmSync(log, { force: true });
@@ -279,6 +297,20 @@ describe("test-db.sh", () => {
     writeFileSync(f, 'DATABASE_URL="postgresql://caretook:password@localhost:1/caretook"\nPG_TEST_PORT=1\n');
     expect(ok("test-db.sh", ["use"], { cwd: join(loops, "t-1") })).toMatch(/caretook_test_t_1/);
     expect(read(f)).toMatch(/localhost:5436\/caretook_test_t_1"/);
+  });
+
+  it("lists each worktree database with its worker copies, and orphaned copies", () => {
+    const psql = [
+      "caretook_test_a_1",
+      "caretook_test_a_1_w1",
+      "caretook_test_a_1_w2",
+      "caretook_test_a_10",
+      "caretook_test_gone_w1",
+    ].join("\n");
+    expect(ok("test-db.sh", ["list"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql } })).toBe(
+      "caretook_test_a_1 (+2 worker copies)\ncaretook_test_a_10\n" +
+        "caretook_test_gone_w1 (worker copy, its database is gone)\n",
+    );
   });
 
   it("down stops only the shared project", () => {

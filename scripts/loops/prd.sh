@@ -68,7 +68,10 @@ pnpm prd <command>
     check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
                               .loops/.check-times.log, and record that
                               this commit passed; --quick: typecheck, lint, format and only the tests
-                              related to the diff since the last full pass, recorded with its reason
+                              related to the diff since the last full pass (plus the tests that read files by
+                              path), recorded with its reason; a diff touching a migration, seeds, the sync
+                              config, a lockfile, a package.json or the Vitest config makes it a full check;
+                              the tooling tests join when the diff touches the tooling
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode and by PRD); runs no check, works from any checkout
@@ -234,18 +237,29 @@ case $cmd in
       if [[ -n ${prev:-} ]] && git -C "$dir" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then base=$prev
       else base=$(git -C "$dir" merge-base "$trunk" HEAD); fi
     fi
+    # The mode comes from the plan (check-plan.mjs): a quick check on a diff that
+    # touches a migration, seeds, the sync config, a lockfile, a package.json or
+    # the Vitest config is a full one, and the tooling tests join when it touches
+    # the tooling.
+    [[ -n ${base:-} ]] || base=$(git -C "$dir" merge-base "$trunk" HEAD)
+    { read -r pmode; read -r preason; read -r ptooling; read -r palways; } < <(
+      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$( ((quick)) && echo quick || echo full)")
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
-    if ((quick)); then
+    if [[ $pmode == quick ]]; then
       echo "Quick check against ${base:0:7}: typecheck, lint, format, and the tests related to the diff ($why)"
-      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check --quick" -- \
-        "$bin/check-run.sh" quick "$why" -- sh -c 'pnpm typecheck && pnpm lint && pnpm format:check && pnpm exec vitest run --changed "$1" --passWithNoTests' _ "$base")
+    elif ((quick)); then
+      echo "$preason"; why=""
+    fi
+    [[ $ptooling == 1 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
+    # shellcheck disable=SC2086
+    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
+      "$bin/check-run.sh" "$pmode" "${why:-$preason}" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $palways)
+    if [[ $pmode == quick ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
-      (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check" -- \
-        "$bin/check-run.sh" full "" -- sh -c 'pnpm check && pnpm build:budget')
       echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
       echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     fi
