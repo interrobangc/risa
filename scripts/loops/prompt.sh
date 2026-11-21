@@ -151,11 +151,13 @@ You are the planning agent for "$topic".
 
 - Your worktree is $loops/plan-$topic, on branch plan/$topic (from dev), with no Docker stack. Work only there; never in the main checkout ($main).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read your handbook, docs/agents/planner.md, and docs/agents/backlog.md, then the area docs the topic touches (_Area index_). Then \`pnpm backlog list\` and \`pnpm backlog show B-<n>\` for the items behind "$topic"${items:+ ($items)}.
-- Write the PRD with the \`write-a-prd\` skill, saved as plans/$topic-prd.md: explore the code, then interview the user with AskUserQuestion (a few questions at a time, never numbered lists), and check the module sketch and test choices with them. Then cut it into slices with \`prd-to-plan\`, saved as plans/$topic-plan.md, in the handbook's _The plan's shape_, with each slice's fields line (_Slice fields_) and acceptance criteria that name the tests (_The test budget_). Ask the user to approve the slice breakdown before writing it.
+- **Decide, then report: no interview.** Read docs/agents/preferences.md and explore the code. Ask the user only what the handbook's _What to ask_ names (scope, who can see or change what, existing data, compliance, a new dependency, product direction you can't pick with confidence), in one AskUserQuestion round of at most four questions, your recommendation first; with nothing to ask, say so and carry on. Decide everything else yourself: the module sketch, the test choices and the slice breakdown need no approval.
+- Write the PRD with the \`write-a-prd\` skill (its exploration and template, not its interview), saved as plans/$topic-prd.md, opening with the handbook's _Decisions_ table. Then cut it into slices with \`prd-to-plan\`, saved as plans/$topic-plan.md, in the handbook's _The plan's shape_, with each slice's fields line (_Slice fields_) and acceptance criteria that name the tests (_The test budget_).
+- Run the handbook's _The skeptic pass_ with one fresh agent before landing, and act on what it finds.
 - Don't file GitHub issues.
-- Commit both files on plan/$topic (\`docs($topic): …\`), triage the items and update the PRD table (\`pnpm backlog commit\` after editing it in the main checkout), then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic --force -m "docs($topic): PRD and plan for … (B-<n>, …)"\`, \`pnpm prd rm plan-$topic\`, and tell the user how to start it.
+- Commit both files on plan/$topic (\`docs($topic): …\`), triage the items and update the PRD table (\`pnpm backlog commit\` after editing it in the main checkout), then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic --force -m "docs($topic): PRD and plan for … (B-<n>, …)"\`, \`pnpm prd rm plan-$topic\`, then report the decisions you assumed (the costliest to change first) and how to start it.
 
-Start by summarising what the backlog says about "$topic", then begin the interview.
+Start by summarising what the backlog says about "$topic", then explore.
 EOF
     ;;
   slice)

@@ -183,6 +183,8 @@ describe("plan and backlog", () => {
     const plan = ok("plan", "T", "B-1", "B-2");
     expect(plan).toContain('You are the planning agent for "T".');
     expect(plan).toContain("(B-1 B-2)");
+    expect(plan).toContain("**Decide, then report: no interview.**");
+    expect(plan).not.toContain("begin the interview");
     expect(plan).not.toContain(RESUME);
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
