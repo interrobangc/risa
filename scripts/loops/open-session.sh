@@ -67,7 +67,7 @@ if ((print == 0)) && [[ -d $iterm ]] && command -v osascript >/dev/null 2>&1; th
   osascript - "$(tab_line "$command")" "$session" "$background" >/dev/null <<'APPLESCRIPT'
 on run argv
   set cmd to item 1 of argv
-  set title to item 2 of argv
+  set tabTitle to item 2 of argv
   set quiet to (item 3 of argv is "1")
   tell application "iTerm2"
     if not quiet then activate
@@ -84,7 +84,7 @@ on run argv
       if quiet then tell previousTab to select
     end if
     tell newSession
-      set name to title
+      set name to tabTitle
       write text cmd
     end tell
   end tell
