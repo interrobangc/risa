@@ -87,8 +87,9 @@ describe("orchestrator", () => {
       expect(out).toContain("**Code lands through a GitHub PR into dev, reviewed by Codex.**");
       expect(out).toContain("`pnpm prd pr T`");
       expect(out).toContain("`pnpm prd review T --wait` in the background");
-      expect(out).toContain("a reply on its thread with the reason");
-      expect(out).toContain("resolve fixed and declined threads");
+      expect(out).toContain("push a real one off to the backlog");
+      expect(out).toContain("Reply on every thread before resolving it");
+      expect(out).toContain("resolve each answered thread");
       expect(out).toContain("`review --again` until clean");
       expect(out).toContain("After about three rounds, ask the user");
       expect(out).toContain("`--no-review` only when they say so");
