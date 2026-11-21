@@ -6,8 +6,9 @@
 #
 # Fields: start (UTC), worktree, branch, mode, reason, seconds, 5-minute load
 # at start, load at end, exit code, test files run, test files in all (the last
-# two stay empty until a quick check reports them: CARETOOK_CHECK_FILES_RUN and
-# CARETOOK_CHECK_FILES_ALL, read after the command).
+# two stay empty until a quick check reports them: the command writes
+# "<run> <all>" to the file named by CARETOOK_CHECK_COUNTS, which check-run.sh
+# sets; CARETOOK_CHECK_FILES_RUN and CARETOOK_CHECK_FILES_ALL override it).
 # Env: CARETOOK_CHECK_LOG (default: .loops/.check-times.log in the main checkout).
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
@@ -20,12 +21,15 @@ log=${CARETOOK_CHECK_LOG:-$loops/.check-times.log}
 
 load5() { load_avg | awk '{print $2}'; }
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ); t0=$(date +%s); l0=$(load5)
+counts=$(mktemp); export CARETOOK_CHECK_COUNTS=$counts
 "$@"
 code=$?
+read -r crun call < "$counts" 2>/dev/null || true; rm -f "$counts"
+files_run=${CARETOOK_CHECK_FILES_RUN:-${crun:-}}; files_all=${CARETOOK_CHECK_FILES_ALL:-${call:-}}
 secs=$(($(date +%s) - t0)); l1=$(load5)
 clean() { printf '%s' "$1" | tr '\t\n' '  '; }
 top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
   "$start" "$(basename "$top")" "$(clean "$(git branch --show-current 2>/dev/null)")" "$mode" "$(clean "$why")" \
-  "$secs" "$l0" "$l1" "$code" "${CARETOOK_CHECK_FILES_RUN:-}" "${CARETOOK_CHECK_FILES_ALL:-}" >> "$log"
+  "$secs" "$l0" "$l1" "$code" "$files_run" "$files_all" >> "$log"
 exit "$code"

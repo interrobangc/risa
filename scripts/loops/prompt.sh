@@ -98,7 +98,7 @@ You are the PRD orchestrator for "$topic".
 - At every wave boundary, starting now: \`pnpm backlog ingest\`, then \`pnpm backlog list\`. Propose new items that belong to "$topic" (\`pnpm backlog set B-<n> … prd=$topic status=triaged\` plus a \`note\`); the user reviews. Claim items before you work them (\`pnpm backlog claim B-<n> …\`).
 - Run a wave: \`pnpm prd slice $topic <n>\` for each slice in it, and spawn one background agent per slice with the prompt from \`pnpm prd prompt slice $topic <n>\`, on the model the handbook's _Models_ gives (note it in _Status_). Hand light work to a haiku helper with a tight brief.
 - Merge finished slices into prd/$topic in plan order (\`git merge --no-ff -m "feat($topic): <what it adds> (slice <n>, B-<n>)" slice/$topic/<n>\`), with no checks between merges (they run once, before landing), mark their items \`pnpm backlog done\`, and tear down.
-- When the wave is green: \`pnpm prd sync\`, \`pnpm prd check\` (or \`pnpm prd check --quick "<why>"\` when the handbook's _The check gate_ allows it; docs and tooling-only changes need neither), \`pnpm prd serve --restart\`, then show the user the output of \`pnpm prd ready\` (the link to try it, and what it addresses) with the browser checks you ran and anything worth trying by hand. Land with \`pnpm prd land $topic -m "<subject>"\` (never \`--force\`) as the landing mode allows.
+- When the wave is green: \`pnpm prd sync\`, then the check: a wave gate is \`pnpm prd check --quick "<why>"\` (the tooling makes it a full check itself when the diff touches a migration, seeds, the sync config, a lockfile, a package.json or the Vitest config); the full \`pnpm prd check\` runs once, on the wave's tip before its PR, and where the handbook's _The check gate_ calls for it (a conflict resolved in code, both sides changing a hot file, or when unsure); docs and tooling-only changes need neither. Then \`pnpm prd serve --restart\`, then show the user the output of \`pnpm prd ready\` (the link to try it, and what it addresses) with the browser checks you ran and anything worth trying by hand. Land with \`pnpm prd land $topic -m "<subject>"\` (never \`--force\`) as the landing mode allows.
 - **Code lands through a GitHub PR into dev, reviewed by Codex.** As soon as a wave is green, open it with \`pnpm prd pr $topic\` (rerun after every push) and run \`pnpm prd review $topic --wait\` in the background. Triage each finding: a real one goes to a fix agent on prd/$topic, one you decline gets a reply on its thread with the reason; resolve fixed and declined threads (\`review --resolve <threadId>\`; Codex doesn't resolve its own), push, then \`review --again\` until clean. After about three rounds, ask the user. Land on the user's word through the PR; \`--no-review\` only when they say so (and after a timeout, exit 75, ask them: merge without review or keep waiting).
 - When a slice is blocked by another PRD's work (another orchestrator's slice, or a backlog item landing in dev), don't stall: find that orchestrator with ListAgents and ask it with SendMessage to message you when the work lands in dev, and set a background check (a Bash loop with run_in_background that exits once \`pnpm log dev\` or \`pnpm backlog list\` shows it), so you're woken whichever comes first. Then \`pnpm prd sync\` and carry on.
 - At each landing, fold that wave's decisions into the docs as the handbook's _Docs at landing_ says (area doc, role doc, or the core; trim at least what you fold in). When the last wave has landed, run \`pnpm prd rm $topic\`.
@@ -184,7 +184,7 @@ EOF
     if [[ $stack == yes ]]; then
       stack_line="- Your stack's slot and ports are in \`.env.loop\` and \`apps/web/.env\` (\`WEB_PORT\`). \`pnpm prd serve\` runs your dev server in the background."
     else
-      stack_line="- Your worktree has no Docker stack. \`pnpm prd check\` (the full check, through the check lease; never a bare \`pnpm check\`) still runs everything: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`pnpm prd stack up\` adds one and \`pnpm prd stack down\` removes it when you're done (tell your orchestrator)."
+      stack_line="- Your worktree has no Docker stack. \`pnpm prd check\` (through the check lease; never a bare \`pnpm check\`) still runs everything it needs: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`pnpm prd stack up\` adds one and \`pnpm prd stack down\` removes it when you're done (tell your orchestrator)."
     fi
     cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.
@@ -203,7 +203,7 @@ EOF
 - Build only slice $n. Leave other slices' regions and files alone.
 - Read your handbook, docs/agents/loop.md, and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
 $stack_line Delete any scratch scripts before you commit.
-- Check with \`pnpm prd check\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`pnpm check\`.
+- Check with \`pnpm prd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`pnpm check\`. It runs typecheck, lint, format and the tests related to your diff; it becomes a full check by itself when the diff touches a migration, seeds, the sync config, a lockfile, a package.json or the Vitest config, and adds the tooling tests when you change the tooling.
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`pnpm backlog note B-<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
 EOF
@@ -213,7 +213,7 @@ EOF
 **You're continuing slice $n, not starting it.** An earlier agent worked in this worktree and was interrupted (a restart, a crash or a usage limit), and its hand-off was lost. Before writing any code:
 - Read what it did: \`pnpm log --oneline prd/$topic..HEAD\`, \`git status\`, \`git diff prd/$topic...HEAD\` (what's committed) and \`git diff\` (what isn't). Uncommitted changes are its work too: keep them unless they're broken.
 - Check that against the slice's acceptance criteria and finish what's missing from there. Don't start over, and don't redo committed work.
-- If everything is committed and \`pnpm prd check\` passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
+- If everything is committed and \`pnpm prd check\` (or \`--quick\`) passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
 EOF
     fi
     ;;

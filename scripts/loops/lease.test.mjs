@@ -175,9 +175,9 @@ describe("releasing", SLOW, () => {
 });
 
 describe("pnpm prd check's check lease", SLOW, () => {
-  it("wraps pnpm check (then the bundle budget) in `lease.sh run check`", () => {
+  it("wraps the check body (quick or full) in `lease.sh run check`", () => {
     expect(readFileSync(PRD_SH, "utf8")).toMatch(
-      /lease\.sh" run check --label "pnpm check" -- \\\n\s*"\$bin\/check-run\.sh" full "" -- sh -c 'pnpm check && pnpm build:budget'/,
+      /lease\.sh" run check --label "pnpm check[^"]*" -- \\\n\s*"\$bin\/check-run\.sh" "\$pmode" [^\n]* -- "\$bin\/check-body\.sh"/,
     );
   });
 
