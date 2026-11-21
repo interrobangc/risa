@@ -25,7 +25,7 @@ pnpm prd <command>
     queue <topic> [--manual]  wait for a free PRD slot (in queue order), then create the worktree and open a
                               fully autonomous orchestrator in this terminal (--manual: it asks how to land)
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
-                              planning session here (it interviews you, writes both, lands them)
+                              planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (either form runs on fable; --model <m> runs that one session on model m)
                               (it reads the backlog and helps you decide what's next)
