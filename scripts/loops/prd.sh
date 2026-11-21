@@ -52,6 +52,9 @@ pnpm prd <command>
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
     end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
                               orchestrator or planner, after pnpm prd rm); its tab closes
+    rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
+                              (resume prompt, same name) from a background tab; refuses an uncommitted plan or
+                              slice worktrees (--mid-wave: on the user's word); prints the command without iTerm2
 
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
     ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question; prints its id
@@ -136,6 +139,7 @@ case $cmd in
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   end) exec "$bin/end-session.sh" "$@" ;;
+  rotate) exec "$bin/rotate.sh" "$@" ;;
   review) exec "$bin/review.sh" "$@" ;;
   pr) exec "$bin/pr.sh" "$@" ;;
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;

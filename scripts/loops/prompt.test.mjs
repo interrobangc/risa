@@ -95,6 +95,19 @@ describe("orchestrator", () => {
     }
   });
 
+  it("drains, then rotates after a landing, and ends with rm then end, with and without --auto", () => {
+    for (const flags of [[], ["--auto"], ["--resume"], ["--resume", "--auto"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).toContain("**One session per wave: drain, then rotate.**");
+      expect(out).toContain(
+        "After a landing and its docs (not the last one), start no new slice; once the slices in flight are merged, commit _Status_ and run `pnpm prd rotate`; with none in flight, rotate at once.",
+      );
+      expect(out).toContain("`pnpm prd rotate --mid-wave`");
+      expect(out).toContain("only on the user's word");
+      expect(out).toContain("When the last wave has landed, run `pnpm prd rm T`, then `pnpm prd end`");
+    }
+  });
+
   it("--auto: the run-through mode, starting the first ready wave", () => {
     const out = ok("orchestrator", "T", "--auto");
     expect(out).toContain(EVERY_STEP);
