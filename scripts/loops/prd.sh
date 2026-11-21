@@ -50,6 +50,16 @@ pnpm prd <command>
     open <name> [--print]     reopen a PRD's or planner's session in a new iTerm2 tab: claude --continue when the
                               worktree has a saved conversation, else a fresh one with the resume prompt
 
+  Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
+    ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question; prints its id
+                              and the PushNotification line to send; a macOS notification, and
+                              \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set (failures ignored)
+    ask --topic <t> --report <text>   file a report (a landed wave, what to try); the same notifications
+    ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout)
+    asks [--json]             the open asks: topic, age, options numbered, the recommended one marked
+    asks --done <id>          dismiss one (a read report, a question no longer needed)
+    answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait)
+
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
     check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
@@ -245,6 +255,16 @@ case $cmd in
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"
       echo "Merged $trunk into $branch. If seeds or migrations changed: pnpm datastore:reset. Then: pnpm prd check"
     fi
+    ;;
+  ask | asks | answer)
+    # The asking session and topic default to the worktree's: plan-<t> → plan-<t>, else prd-<topic>.
+    export CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks}
+    here=$(here_name) here_args=()
+    if [[ $cmd == ask && -n $here ]]; then
+      if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
+      else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
+    fi
+    exec node "$bin/ask.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
   help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
