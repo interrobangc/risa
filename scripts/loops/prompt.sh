@@ -24,7 +24,7 @@ You are the new backlog/inbox planning agent. Do the standing work below, then a
 
 - You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_). Then \`pnpm backlog ingest\`, \`pnpm backlog list\`, \`pnpm prd status\` (what's running) and the queue: \`ls $loops/.queue\` (one ticket per topic waiting in \`pnpm prd queue\`, named \`<time>-<pid>-<topic>\`, oldest first; empty or missing means nothing is queued). Name what's queued in your report, and never propose starting or queueing a topic that is already queued. Also read \`pnpm prd asks\` (the open questions and reports that run-through sessions filed for the user) and \`pnpm backlog prd list\` (the PRD registry: order, after, hot files, flags).
-- Triage new items (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write); the user reviews.
+- Triage new items (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write); the user reviews. A small fix is \`prd=fixes-<cat>\` (never \`quick-fixes\`): \`fixes-bug\` (wrong behaviour or data), \`fixes-perf\` (speed and load), \`fixes-ui\` (look, layout, wording, flow), \`fixes-tooling\` (scripts, checks, tests, flakes) or \`fixes-nit\` (a small tidy users won't notice); one that fits two takes the first that applies in that order, a tie-break for triage only (plans/fixes-rules.md).
 - Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
 - Then, **always, before the first question**, print an overview from what you've already collected (no new commands for it), as three short parts. Start it with what waits on the user: open asks (oldest first, each with its age) and any PRD on hold in the registry. **Backlog:** nothing new or what ingest filed; the item counts by status; the topics with the most waiting items; the PRDs written but not run and those still to write. **Orchestrators:** each running PRD by what it does, how far ahead of dev it is and its slices in flight; planning worktrees; the slots used of three; what's queued; the load if it's high. **To triage:** each item you triaged just now with the topic you proposed and why, any item still untriaged, and anything waiting on the user's review; say "nothing" when there is nothing.
 - After the overview ask **one** AskUserQuestion, multi-select, and nothing else: what is this session for? Its three options: **Write a PRD** from the backlog; **Decide what to run next** from the queue; **Triage a new issue or idea** now.
@@ -72,13 +72,18 @@ EOF
   exit 0
 fi
 
-# A topic may have no PRD (quick-fixes): then its plan is the whole spec.
+# A topic may have no PRD (the fixes-ui, fixes-tooling, fixes-perf, fixes-bug and fixes-nit topics): then its plan is the whole spec.
 here=$(git rev-parse --show-toplevel 2>/dev/null || echo "$main")
 if [[ -f $here/plans/$topic-prd.md ]]; then
   prd_read="plans/$topic-prd.md and "
 else
   prd_read=""
   no_prd=" (there's no plans/$topic-prd.md: the plan is the whole spec)"
+fi
+fix_line=""
+if [[ $topic == fixes-* ]]; then
+  bt='`'
+  fix_line=" **This is a fixes topic:** before your first wave, append one slice per waiting item (${bt}pnpm backlog list${bt}, status triaged, prd=$topic) to plans/$topic-plan.md, each with ${bt}Reads: plans/fixes-rules.md${bt}; the plan is the whole spec."
 fi
 case $kind in
   orchestrator)
@@ -95,7 +100,7 @@ You are the PRD orchestrator for "$topic".
 
 - Your integration worktree is $loops/$topic, on branch prd/$topic. Work only there; never in the main checkout ($main, which stays on dev and belongs to the user, the dev keeper).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read your handbook, docs/agents/orchestrator.md (it links the loop and backlog docs). Then read ${prd_read}plans/$topic-plan.md${no_prd:-} (its _Status_ section is where the last orchestrator left off, including the landing mode the user chose).
-- At every wave boundary, starting now: \`pnpm backlog ingest\`, then \`pnpm backlog list\`. Propose new items that belong to "$topic" (\`pnpm backlog set B-<n> … prd=$topic status=triaged\` plus a \`note\`); the user reviews. Claim items before you work them (\`pnpm backlog claim B-<n> …\`).
+- At every wave boundary, starting now: \`pnpm backlog ingest\`, then \`pnpm backlog list\`. Propose new items that belong to "$topic" (\`pnpm backlog set B-<n> … prd=$topic status=triaged\` plus a \`note\`); the user reviews. A small fix is \`prd=fixes-<cat>\` (never \`quick-fixes\`): \`fixes-bug\` (wrong behaviour or data), \`fixes-perf\` (speed and load), \`fixes-ui\` (look, layout, wording, flow), \`fixes-tooling\` (scripts, checks, tests, flakes) or \`fixes-nit\` (a small tidy users won't notice); one that fits two takes the first that applies in that order, a tie-break for triage only (plans/fixes-rules.md).${fix_line} Claim items before you work them (\`pnpm backlog claim B-<n> …\`).
 - Run a wave: \`pnpm prd slice $topic <n>\` for each slice in it, and spawn one background agent per slice with the prompt from \`pnpm prd prompt slice $topic <n>\`, on the model the handbook's _Models_ gives (note it in _Status_): opus or stronger for any coding with real logic, sonnet only for a slice with no logic to work out. Hand light reading and chores, never coding, to a haiku helper with a tight brief.
 - Merge finished slices into prd/$topic in plan order (\`git merge --no-ff -m "feat($topic): <what it adds> (slice <n>, B-<n>)" slice/$topic/<n>\`), with no checks between merges (they run once, before landing), mark their items \`pnpm backlog done\`, and tear down.
 - When the wave is green: \`pnpm prd sync\`, then the check: a wave gate is \`pnpm prd check --quick "<why>"\` (the tooling makes it a full check itself when the diff touches a migration, seeds, the sync config, a lockfile, a package.json or the Vitest config); the full \`pnpm prd check\` runs once, on the wave's tip before its PR, and where the handbook's _The check gate_ calls for it (a conflict resolved in code, both sides changing a hot file, or when unsure); docs and tooling-only changes need neither. Then \`pnpm prd serve --restart\`, then show the user the output of \`pnpm prd ready\` (the link to try it, and what it addresses) with the browser checks you ran and anything worth trying by hand. Land with \`pnpm prd land $topic -m "<subject>"\` (never \`--force\`) as the landing mode allows.

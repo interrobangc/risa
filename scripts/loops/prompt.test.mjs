@@ -303,3 +303,24 @@ describe("hotfix", () => {
     expect(prompt("hotfix").code).not.toBe(0);
   });
 });
+
+describe("fix categories", () => {
+  const TOPICS = ["fixes-ui", "fixes-tooling", "fixes-perf", "fixes-bug", "fixes-nit"];
+
+  it("the backlog and orchestrator prompts name the five topics, never prd=quick-fixes", () => {
+    for (const text of [ok("backlog"), ok("orchestrator", "T")]) {
+      for (const t of TOPICS) expect(text).toContain(`\`${t}\``);
+      expect(text).toContain("`prd=fixes-<cat>` (never `quick-fixes`)");
+      expect(text).toContain("a tie-break for triage only");
+      expect(text).not.toContain("prd=quick-fixes");
+    }
+  });
+
+  it("a fixes orchestrator is told to append a slice per waiting item, and its plan is the whole spec", () => {
+    const text = ok("orchestrator", "fixes-bug");
+    expect(text).toContain("append one slice per waiting item");
+    expect(text).toContain("plans/fixes-rules.md");
+    expect(text).toContain("there's no plans/fixes-bug-prd.md: the plan is the whole spec");
+    expect(ok("orchestrator", "T")).not.toContain("append one slice per waiting item");
+  });
+});
