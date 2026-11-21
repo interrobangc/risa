@@ -105,6 +105,8 @@ beforeAll(() => {
     TRUNK: "dev",
     CARETOOK_CLAUDE_PROJECTS: projects,
     CARETOOK_ITERM_APP: iterm,
+    // A recorded session's own sessions dir would leak in and win over the test repo's.
+    CARETOOK_SESSIONS_DIR: "",
   };
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
