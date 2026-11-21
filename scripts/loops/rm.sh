@@ -3,7 +3,9 @@
 # data, drop its database on the shared test Postgres, remove the worktree and
 # release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
-# plan/* and hotfix/* → dev); an unmerged branch is kept. Refuses uncommitted changes, and a
+# plan/* and hotfix/* → dev); an unmerged branch is kept. A merged branch's
+# leftover branch on origin (a PR's head) is deleted too, when origin's tip is
+# in the parent as well; an unmerged one stays. Refuses uncommitted changes, and a
 # PRD worktree whose slices still have worktrees, unless --force.
 #
 #   scripts/loops/rm.sh <name> [--force] [--keep-branch]
@@ -46,6 +48,17 @@ if [[ -n $keep || -z $branch ]]; then
 elif git -C "$main" merge-base --is-ancestor "$branch" "$parent" 2>/dev/null; then
   git -C "$main" branch -D "$branch" >/dev/null
   echo "Removed $name and its branch $branch (merged into $parent)"
+  # A leftover remote branch: gone only when origin's tip is merged into the
+  # parent too (a later push to it would be lost). Offline or no origin: skip.
+  if remote_tip=$(git -C "$main" ls-remote --heads origin "refs/heads/$branch" 2>/dev/null | cut -f1) && [[ -n $remote_tip ]]; then
+    if git -C "$main" merge-base --is-ancestor "$remote_tip" "$parent" 2>/dev/null; then
+      git -C "$main" push --quiet origin --delete "$branch" 2>/dev/null &&
+        echo "Deleted origin/$branch (merged into $parent)" ||
+        echo "couldn't delete origin/$branch (git push origin --delete $branch)" >&2
+    else
+      echo "Kept origin/$branch: its tip isn't merged into $parent (or isn't fetched yet)"
+    fi
+  fi
 else
   echo "Removed $name; kept $branch: it isn't merged into $parent yet"
 fi
