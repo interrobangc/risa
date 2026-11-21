@@ -19,7 +19,9 @@ mode=${1:?mode}; why=${2:-}; shift 2
 [[ ${1:-} == -- ]] && shift
 log=${CARETOOK_CHECK_LOG:-$loops/.check-times.log}
 
-load5() { load_avg | awk '{print $2}'; }
+# One number whatever load_avg prints: drop the commas uptime puts after each
+# value and any blank line (a failed sysctl under pipefail), keep the 5-minute field.
+load5() { load_avg | tr -d ',' | awk 'NF >= 2 && $2 ~ /^[0-9.]+$/ { print $2; found = 1; exit } END { if (!found) print 0 }'; }
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ); t0=$(date +%s); l0=$(load5)
 counts=$(mktemp); export CARETOOK_CHECK_COUNTS=$counts
 "$@"

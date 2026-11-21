@@ -1,7 +1,15 @@
 // check-run.sh (what prd.sh check runs inside the lease): one log line per run,
 // pass or fail, with a stub command. And the lease's default of two check slots.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -54,6 +62,31 @@ describe("check-run.sh test-file counts", () => {
     expect(run("quick", "counts", 'echo "7 31" > "$CARETOOK_CHECK_COUNTS"').status).toBe(0);
     const { runs } = parseLog(readFileSync(logFile, "utf8"));
     expect(runs.at(-1)).toMatchObject({ mode: "quick", reason: "counts", filesRun: 7, filesAll: 31 });
+  });
+});
+
+describe("check-run.sh load reading", () => {
+  it("logs one numeric load when sysctl fails and uptime prints a Linux line", () => {
+    const bin = join(root, "stubs");
+    mkdirSync(bin, { recursive: true });
+    const stub = (name, body) => {
+      writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`);
+      chmodSync(join(bin, name), 0o755);
+    };
+    stub("sysctl", "exit 1");
+    stub("uptime", 'echo " 10:00:00 up 3 days,  2:11,  1 user,  load average: 0.52, 0.58, 0.59"');
+    const before = readFileSync(logFile, "utf8").split("\n").length - 1;
+    expect(run("quick", "linux", "exit 0", { PATH: `${bin}:${process.env.PATH}` }).status).toBe(0);
+    // Not lines(): its trimEnd would eat the empty trailing fields.
+    const added = readFileSync(logFile, "utf8").split("\n").slice(before, -1);
+    expect(added).toHaveLength(1);
+    const fields = added[0].split("\t");
+    expect(fields).toHaveLength(11);
+    expect(fields[6]).toBe("0.58");
+    expect(fields[7]).toBe("0.58");
+    const { runs, skipped } = parseLog(readFileSync(logFile, "utf8"));
+    expect(skipped).toBe(0);
+    expect(runs.at(-1)).toMatchObject({ reason: "linux", exit: 0 });
   });
 });
 
