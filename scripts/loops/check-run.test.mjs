@@ -49,6 +49,14 @@ describe("check-run.sh", () => {
   });
 });
 
+describe("check-run.sh test-file counts", () => {
+  it("logs the counts a command writes to CARETOOK_CHECK_COUNTS", () => {
+    expect(run("quick", "counts", 'echo "7 31" > "$CARETOOK_CHECK_COUNTS"').status).toBe(0);
+    const { runs } = parseLog(readFileSync(logFile, "utf8"));
+    expect(runs.at(-1)).toMatchObject({ mode: "quick", reason: "counts", filesRun: 7, filesAll: 31 });
+  });
+});
+
 describe("check lease slots", () => {
   const holders = (extra = {}) => {
     const env = { ...process.env, CARETOOK_LEASE_ROOT: join(root, "leases"), ...extra };
