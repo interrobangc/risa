@@ -131,7 +131,7 @@ wait_for_pg() {
   local c deadline limit=${CARETOOK_RECOVER_PG_SECS:-60}
   c=$(env_get "$1/.env.loop" PG_CONTAINER); c=${c:-$2-postgres-1}
   deadline=$(($(now_secs) + limit))
-  until docker exec "$c" pg_isready -q -U caretook -d caretook >/dev/null 2>&1; do
+  until docker exec "$c" pg_isready -q -h 127.0.0.1 -U caretook -d caretook >/dev/null 2>&1; do
     (($(now_secs) < deadline)) || { echo "  $c didn't accept connections within ${limit}s" >&2; return 1; }
     sleep 1
   done
