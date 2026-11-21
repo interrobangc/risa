@@ -40,6 +40,11 @@ pnpm prd <command>
     gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
     reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
                               Vite caches, with sizes; frees them after a yes
+    tidy [--yes] [--json]     leftovers sorted into safe (merged slice and landed plan worktrees, dead tickets,
+                              orphan test databases, stale remote refs, dangling caretook volumes, old hang
+                              logs, ended records) and ask (finished-looking live sessions, branches without a
+                              worktree, items to archive, registry rows that look done); --yes removes the safe
+                              ones and files the ask list as one report (prompt tidy: the haiku brief)
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover [--at HH:MM] [--wait] [--no-agent]   after a restart, crash or usage limit: Docker, stale locks,
                               the test Postgres, stacks one at a time, servers; then the recovery agent here
@@ -103,6 +108,7 @@ pnpm prd <command>
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
+                     tidy: the cleanup brief for a cheap session (haiku), repeated with /loop
                      orchestrator <topic> --resume [--auto]: take over after an interruption
                      slice <topic> <n> --continue: pick up an interrupted slice
 USAGE
@@ -132,6 +138,7 @@ case $cmd in
   stack) exec "$bin/stack.sh" "$@" ;;
   gc) exec "$bin/gc.sh" "$@" ;;
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
+  tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;

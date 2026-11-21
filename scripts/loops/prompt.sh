@@ -13,11 +13,12 @@
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
 #   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan)
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
+#   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog or recover}
+kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover or tidy}
 if [[ $kind == backlog ]]; then
   cat <<EOF
 You are the new backlog/inbox planning agent. Do the standing work below, then ask what this session is for.
@@ -47,6 +48,21 @@ You are the recovery agent. The machine has just come back (a restart, a crash o
 - Then report, as a short table: each session, and whether you messaged it, opened it in a tab, or printed its command (and anything that failed). Then end: you have nothing else to do.
 
 Start by reading the inventory and ListAgents.
+EOF
+  exit 0
+fi
+if [[ $kind == tidy ]]; then
+  cat <<EOF
+You are the cleanup agent: a short, cheap session (run it on haiku) that clears leftovers from finished work and reports the rest.
+
+- You're in the main checkout ($main), on dev. It's the user's. **Make no code changes and no commits**, edit no files, and don't touch any worktree, stack or server yourself: \`pnpm prd tidy\` does the removing.
+- Run \`pnpm prd tidy --yes\`. It removes only what is plainly safe (merged slice and landed plan worktrees with nothing running in them, dead lease, queue and slot tickets, test databases with no worktree, stale remote-tracking refs, dangling caretook Docker volumes, old browser-hang logs, ended session records) and files everything else as one report in the asks queue (\`pnpm prd ask --report\`). If it prints a "Now send a PushNotification" line, send that PushNotification.
+- For each \`session\` line in its ask list (a live session whose worktree is gone or whose branch is in dev: it looks finished), find it with ListAgents and ask it over SendMessage whether it is done and can be closed. Collect the answers, then file them as one more report: \`pnpm prd ask --topic tidy --report "<each session: its answer>"\`, and send its PushNotification line.
+- **Never close or end a session**, delete a branch (merged or not), archive backlog items or change the PRD registry yourself: those are on the ask list for the user. **Never delete unmerged work**, and never run \`pnpm prd rm\`, \`gc\`, \`reclaim\`, \`end\` or \`git branch -d\`.
+- Then report in three lines (what was removed, what was asked, the sessions' answers) and end.
+- To repeat it every few hours while PRDs run, start this session with \`/loop 3h\` and this brief; the dispatcher (orchestration-3) takes the schedule over later.
+
+Start with \`pnpm prd tidy --yes\`.
 EOF
   exit 0
 fi

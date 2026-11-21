@@ -282,6 +282,21 @@ describe("recover", () => {
   });
 });
 
+describe("tidy", () => {
+  it("is the cleanup brief: tidy --yes, SendMessage for finished sessions, /loop, never close or delete", () => {
+    const text = ok("tidy");
+    expect(text).toMatch(/^You are the cleanup agent: .*\(run it on haiku\)/);
+    expect(text).toContain(`You're in the main checkout (${main}), on dev.`);
+    expect(text).toContain("Run `pnpm prd tidy --yes`.");
+    expect(text).toContain("SendMessage");
+    expect(text).toContain("`/loop 3h`");
+    expect(text).toContain("**Never close or end a session**");
+    expect(text).toContain("**Never delete unmerged work**");
+    expect(text).toContain("send that PushNotification");
+    expect(text).not.toContain(RESUME);
+  });
+});
+
 describe("hotfix", () => {
   it("is the hotfix agent: its worktree, ask before long steps, background agents, document the pattern", () => {
     const text = ok("hotfix", "trim", "Trim the day summary");
