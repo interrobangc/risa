@@ -161,6 +161,168 @@ describe("land.sh on the PR path", () => {
 
 // The real merge: the stubbed `gh pr merge` pushes the branch to origin/dev (or
 // fails), so land.sh runs its whole PR path in the temporary main checkout.
+// --recheck: the branch's worktree in .loops, a check record written by hand
+// (as `pnpm prd check` writes it), and a stub `pnpm` (CARETOOK_PNPM_BIN) that
+// logs its arguments and records a pass, or fails: no real check runs.
+describe("land.sh --recheck", () => {
+  const PNPM = `#!/usr/bin/env bash
+echo "$PWD $*" >> "$PNPM_LOG"
+[[ -z "$RECHECK_FAIL" ]] || { echo "check failed" >&2; exit 1; }
+if [[ " $* " == *" --quick "* ]]; then mode="quick $(git merge-base dev HEAD) x"; else mode=full; fi
+echo "$(git rev-parse HEAD) $mode" > "$(git rev-parse --absolute-git-dir)/caretook-checked"
+`;
+  const log = () => (existsSync(join(root, "pnpm.log")) ? readFileSync(join(root, "pnpm.log"), "utf8") : "");
+  const wt = () => join(repo, ".loops", "throwaway-x");
+  const record = (dir, line) =>
+    writeFileSync(
+      join(
+        execFileSync("git", ["-C", dir, "rev-parse", "--absolute-git-dir"], { encoding: "utf8" }).trim(),
+        "caretook-checked",
+      ),
+      `${line}\n`,
+    );
+  // A prd/ branch whose last check passed on an earlier commit, then a code
+  // commit on top: a stale tip.
+  const stale = (files = { "apps/web/b.ts": "3" }) => {
+    git("checkout", "-qb", "prd/throwaway-x");
+    commit({ "apps/web/b.ts": "2" }, "work");
+    const checked = git("rev-parse", "HEAD");
+    commit(files, "more work");
+    git("checkout", "-q", "dev");
+    git("worktree", "add", "-q", wt(), "prd/throwaway-x");
+    record(wt(), `${checked} full`);
+  };
+  const env = (extra = {}) => ({
+    ...process.env,
+    PATH: `${join(root, "bin")}:${process.env.PATH}`,
+    CARETOOK_PNPM_BIN: join(root, "bin", "stub-pnpm"),
+    PNPM_LOG: join(root, "pnpm.log"),
+    ...extra,
+  });
+  // The PR path stops at the throwaway seam; "It would push" means every
+  // refusal passed and it reached the merge.
+  const landPr = (args, extra = {}) =>
+    spawnSync("bash", ["scripts/loops/land.sh", "throwaway-x", "-m", "feat(throwaway-x): t", ...args], {
+      cwd: repo,
+      encoding: "utf8",
+      env: env({ CARETOOK_PR_THROWAWAY: "1", PR_HEAD: git("rev-parse", "prd/throwaway-x"), ...extra }),
+    });
+  beforeEach(() => {
+    writeFileSync(join(root, "bin", "stub-pnpm"), PNPM);
+    chmodSync(join(root, "bin", "stub-pnpm"), 0o755);
+    writeFileSync(join(repo, ".git", "info", "exclude"), ".loops/\nto-test/\n");
+  });
+
+  it("refuses a stale tip without it, naming --recheck and not --force", () => {
+    stale();
+    const r = landPr([]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('--recheck "<why>"');
+    expect(r.stderr).not.toContain("--force");
+    expect(log()).toBe("");
+  });
+
+  it("rechecks a stale tip in the worktree (quick) and reaches the merge, but stops at Codex first", () => {
+    stale();
+    let r = landPr(["--recheck", "tip moved after the sync"]);
+    // Codex hasn't spoken: that refusal stands, before any check runs.
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/Codex's verdict on PR #7 isn't clean/);
+    expect(log()).toBe("");
+    r = landPr(["--recheck", "tip moved after the sync", "--no-review"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("tip moved after the sync");
+    expect(r.stdout).toContain("It would push");
+    expect(log().trim()).toBe(`${wt()} prd check --quick recheck at landing: tip moved after the sync`);
+    expect(r.stdout).toMatch(/check: quick on \w+ \(x\), rechecked at landing: tip moved after the sync/);
+  });
+
+  it("runs the full check when the plan says full (a migration)", () => {
+    stale({ "packages/data/src/db/migrations/0001_x.sql": "select 1;" });
+    const r = landPr(["--recheck", "stale", "--no-review"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("a migration changed");
+    expect(log().trim()).toBe(`${wt()} prd check`);
+    expect(r.stdout).toContain("check: full on");
+  });
+
+  it("refuses and merges nothing when the recheck fails", () => {
+    stale();
+    const r = landPr(["--recheck", "stale", "--no-review"], { RECHECK_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("the recheck failed");
+    expect(r.stdout).not.toContain("It would push");
+    expect(log()).not.toBe("");
+  });
+
+  it("runs no check when the gate already accepts the tip", () => {
+    stale();
+    record(wt(), `${git("rev-parse", "prd/throwaway-x")} full`);
+    const r = landPr(["--recheck", "stale", "--no-review"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("the gate already accepts the tip");
+    expect(log()).toBe("");
+  });
+
+  it("needs a reason", () => {
+    stale();
+    for (const args of [["--recheck"], ["--recheck", "--no-review"]]) {
+      const r = landPr(args);
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("--recheck needs a reason");
+    }
+    expect(log()).toBe("");
+  });
+
+  it("still refuses a branch that isn't synced with dev", () => {
+    stale();
+    commit({ "apps/web/a.ts": "dev moved" }, "dev work");
+    git("push", "-q", "origin", "dev");
+    const r = landPr(["--recheck", "stale", "--no-review"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("pnpm prd sync");
+    expect(log()).toBe("");
+  });
+
+  it("refuses a hotfix with no worktree", () => {
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/c.ts": "3" }, "fix it");
+    git("checkout", "-q", "dev");
+    const r = spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--recheck", "stale", "-m", "fix(web): c"],
+      { cwd: repo, encoding: "utf8", env: env() },
+    );
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("it has none");
+    expect(log()).toBe("");
+    expect(git("log", "-1", "--format=%s", "dev")).toBe("base");
+  });
+
+  it("says in the landing report that the tip was rechecked, and why", () => {
+    stale();
+    const r = spawnSync(
+      "bash",
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "-m",
+        "feat(throwaway-x): t",
+        "--recheck",
+        "the tip moved",
+        "--no-review",
+      ],
+      { cwd: repo, encoding: "utf8", env: env({ PR_HEAD: git("rev-parse", "prd/throwaway-x") }) },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    const files = readdirSync(join(repo, "to-test"));
+    expect(files).toHaveLength(1);
+    const text = readFileSync(join(repo, "to-test", files[0]), "utf8");
+    expect(text).toContain("the last check was stale; the tip was rechecked at landing (the tip moved)");
+    expect(text).toContain("rechecked at landing: the tip moved");
+  });
+});
+
 describe("land.sh writes a to-test file", () => {
   const landFor = (mergeFails = false) =>
     spawnSync(

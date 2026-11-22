@@ -90,10 +90,13 @@ pnpm prd <command>
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
 
   Land
-    land <topic> [-m subject] [--no-review] [--local]   merge prd/<topic> into dev (only when the dev keeper
-                              says so) through its PR: merged on GitHub once its head is the local tip and
-                              Codex's verdict is clean, then dev-sync (--no-review: skip the verdict, on the
-                              user's word only; --local: a local merge, the fallback, on their word)
+    land <topic> [-m subject] [--recheck "<why>"] [--no-review] [--local]
+                              merge prd/<topic> into dev (only when the dev keeper says so) through its
+                              PR: merged on GitHub once its head is the local tip and Codex's verdict is
+                              clean, then dev-sync (--recheck: when the last check is stale, run it on the
+                              tip in the branch's worktree and land on a pass; --no-review: skip the
+                              verdict, on the user's word only; --local: a local merge, the fallback, on
+                              their word)
     land hotfix/<name> --pr|--local [-m subject]   a hotfix: ask the user "PR or local?" each time
     land plan/<topic>         a plan branch: always a local merge
     review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
