@@ -21,6 +21,8 @@
 //                                             rm.sh clears the row's hot files
 //   node rotate.mjs run-through <plan file>   exit 0 when _Status_ records the
 //                                             run-through landing mode
+//   node rotate.mjs brief-check <file>        exit 0 when the file can lead a new
+//                                             prompt; else prints why (exit 1)
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { runThrough } from "./open-session.mjs";
@@ -57,6 +59,22 @@ export function slicesLeft(/** @type {string} */ planText) {
   const rows = sliceStates(planText);
   if (!rows) return null;
   return rows.filter((r) => !FINISHED.test(r.state)).map((r) => r.slice);
+}
+
+/** The most a brief may be: it travels as one argument, and a failed start would come after the old session ended. */
+export const BRIEF_MAX_BYTES = 64 * 1024;
+
+/** Why this brief file can't lead a prompt, or null when it can. */
+export function briefProblem(/** @type {string} */ file) {
+  let text;
+  try {
+    text = readFileSync(file);
+  } catch {
+    return `can't read the brief ${file}`;
+  }
+  if (text.length > BRIEF_MAX_BYTES) return `the brief ${file} is over ${BRIEF_MAX_BYTES / 1024} KB`;
+  if (!text.toString("utf8").trim()) return `the brief ${file} is empty`;
+  return null;
 }
 
 /**
@@ -112,9 +130,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     case "run-through":
       process.exit(runThrough(read(arg ?? "")) ? 0 : 1);
       break;
+    case "brief-check": {
+      const why = briefProblem(arg ?? "");
+      if (why) {
+        console.log(why);
+        process.exit(1);
+      }
+      break;
+    }
     default:
       console.error(
-        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan>",
+        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan> | brief-check <file>",
       );
       process.exit(2);
   }

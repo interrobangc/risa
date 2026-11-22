@@ -187,6 +187,9 @@ beforeAll(() => {
   for (const f of [
     "dispatch.mjs",
     "dispatch-pick.mjs",
+    "dispatch-context.mjs",
+    "context.mjs",
+    "keep-alive.mjs",
     "asks.mjs",
     "ask.mjs",
     "sessions.mjs",
@@ -216,6 +219,9 @@ beforeAll(() => {
     CARETOOK_MAX_PLANNERS: "",
     CARETOOK_FIXES_MIN: "",
     CARETOOK_CLOCK_FILE: clock,
+    // Off unless a test turns it on, and never the machine's real processes.
+    CARETOOK_KEEP_SESSIONS: "off",
+    CARETOOK_PROCESS_FILE: join(root, "processes"),
     STUB_STATE: state,
     STUB_ROWS: rowsFile,
   };
@@ -232,6 +238,7 @@ beforeEach(() => {
   mkdirSync(state, { recursive: true });
   setClock(T0);
   setRows([]);
+  writeFileSync(join(root, "processes"), "");
 });
 
 describe("one tick per action", () => {
@@ -585,5 +592,125 @@ describe("tidy", () => {
     ok();
     expect(calls("tidy")).toEqual(["--yes"]);
     expect(dstate().lastTidy).toBe((T0 + TIDY_EVERY_MS / 1000) * 1000);
+  });
+});
+
+describe("the keep-alive tick", () => {
+  const on = { CARETOOK_KEEP_SESSIONS: "on" };
+  const keptOpens = () => openCalls().filter((c) => c[0] === "backlog");
+  const dieAndTick = (at) => {
+    setClock(at);
+    return ok(["--once"], on);
+  };
+
+  it("opens a managed backlog session through the opener, with no record to start from", () => {
+    expect(ok(["--once"], on)).toContain("keep-alive backlog: open (no live backlog session)");
+    expect(keptOpens()).toEqual([["backlog", "--background"]]);
+    expect(JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"))).toEqual({
+      kind: "backlog",
+      managed: true,
+    });
+  });
+
+  it("clears an ended record's end and keeps its model", () => {
+    deadRecord("backlog", { kind: "backlog", managed: false, model: "opus", exit: 1 });
+    ok(["--once"], on);
+    const r = JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"));
+    expect(r).toEqual({ kind: "backlog", managed: true, model: "opus" });
+  });
+
+  it("takes no slot: a start the slots allow happens on the same tick", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { ...on, CARETOOK_MAX_PRDS: "1" });
+    expect(out).toContain("start a:");
+    expect(keptOpens()).toHaveLength(1);
+    expect(calls("new")).toEqual(["prd a"]);
+  });
+
+  it("counts an unrecorded --remote-control backlog process as live", () => {
+    writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control backlog You are\n");
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+  });
+
+  it("doesn't reopen inside the start grace, and asks at the third quick death", () => {
+    ok(["--once"], on);
+    dieAndTick(T0 + 30);
+    expect(keptOpens()).toHaveLength(1);
+    dieAndTick(T0 + 180);
+    dieAndTick(T0 + 360);
+    expect(keptOpens()).toHaveLength(3);
+    const out = dieAndTick(T0 + 540);
+    expect(out).toContain("keep-alive backlog: ask");
+    expect(keptOpens()).toHaveLength(3);
+    const { id } = dstate().keepAlive.backlog.asked;
+    expect(askFile(id)).toMatchObject({ session: "dispatch-keep", defaults: false });
+    expect(openCalls().some((c) => c[3] === HELPER_SESSION)).toBe(true);
+    dieAndTick(T0 + 720);
+    expect(keptOpens()).toHaveLength(3);
+  });
+
+  const toQuestion = () => {
+    ok(["--once"], on);
+    dieAndTick(T0 + 180);
+    dieAndTick(T0 + 360);
+    dieAndTick(T0 + 540);
+    return dstate().keepAlive.backlog.asked.id;
+  };
+
+  it('"open again" opens on the next tick with the count cleared', () => {
+    answer(toQuestion(), "open again");
+    expect(dieAndTick(T0 + 600)).toContain("may be opened again");
+    expect(keptOpens()).toHaveLength(4);
+    expect(dstate().keepAlive.backlog.deaths).toBe(0);
+  });
+
+  it('"stop keeping it alive" holds across ticks', () => {
+    answer(toQuestion(), "stop keeping it alive");
+    dieAndTick(T0 + 600);
+    dieAndTick(T0 + 4000);
+    expect(keptOpens()).toHaveLength(3);
+    expect(dstate().keepAlive.backlog).toEqual({ stopped: true });
+  });
+
+  it("a dismissed question is asked again, never read as an open", () => {
+    const id = toQuestion();
+    execFileSync("node", [scripts("ask.mjs"), "asks", "--done", id], {
+      env: { ...env, CARETOOK_ASKS_DIR: asks },
+      encoding: "utf8",
+    });
+    expect(dieAndTick(T0 + 600)).toContain("asking again");
+    expect(keptOpens()).toHaveLength(3);
+    expect(dstate().keepAlive.backlog.asked.id).not.toBe(id);
+  });
+
+  it("a dispatcher start clears a stop", async () => {
+    answer(toQuestion(), "stop keeping it alive");
+    dieAndTick(T0 + 600);
+    expect(dstate().keepAlive.backlog).toEqual({ stopped: true });
+    const child = spawn("node", [scripts("dispatch.mjs"), "--every", "60"], {
+      cwd: main,
+      env: { ...env, ...on },
+      stdio: "ignore",
+    });
+    try {
+      await until(() => keptOpens().length === 4);
+      expect(dstate().keepAlive.backlog.stopped).toBeUndefined();
+    } finally {
+      child.kill("SIGTERM");
+      await until(() => !existsSync(join(loops, ".dispatch.lock")));
+    }
+  });
+
+  it("paused or switched off opens nothing; --dry-run says what it would do and writes nothing", () => {
+    ok(["--once"]);
+    expect(keptOpens()).toEqual([]);
+    ok(["--pause", "t"]);
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+    ok(["--resume"]);
+    expect(ok(["--dry-run"], on)).toContain("keep-alive backlog: open");
+    expect(keptOpens()).toEqual([]);
+    expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
   });
 });

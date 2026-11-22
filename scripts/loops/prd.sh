@@ -69,6 +69,7 @@ pnpm prd <command>
     context [--keep "<why>" | --all [--json]]   this session's context size and the limit; --keep leaves it
                               alone for 30 minutes; --all lists every live session
     rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
+    rotate --self [--brief <file>]    replace the calling backlog session (or orchestrator) with a fresh one
                               (resume prompt, same name) from a background tab; refuses an uncommitted plan or
                               slice worktrees (--mid-wave: on the user's word); prints the command without iTerm2
 
