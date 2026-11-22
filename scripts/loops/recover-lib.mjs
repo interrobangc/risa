@@ -5,7 +5,8 @@
 //   node recover-lib.mjs record <path> [--at ISO]   stdin: the inventory (JSON).
 //       Writes the down record to <path> (merged with one already there, so a
 //       second `down` never forgets what the first stopped), then prints what is
-//       up now, one "<kind>\t<name>" line each: server, stack, test-db.
+//       up now, one "<kind>\t<name>" line each: server, stack, test-db,
+//       dispatcher (its pid).
 //   node recover-lib.mjs actions                     stdin: the inventory (JSON).
 //       Prints its actions, one "<step>\t<target>" line each.
 //   node recover-lib.mjs until HH:MM <now-epoch-secs>
@@ -16,7 +17,7 @@ import { pathToFileURL } from "node:url";
 
 /**
  * What a `down` stops now: stacks with a running container, dev servers that
- * answer, and the shared test Postgres.
+ * answer, the shared test Postgres, and the dispatcher.
  * @param {ReturnType<typeof import("./inventory.mjs").inventory>} inv
  */
 export function upNow(inv) {
@@ -24,14 +25,15 @@ export function upNow(inv) {
     stacks: inv.worktrees.filter((w) => w.stack && w.containersUp > 0).map((w) => w.name),
     servers: inv.worktrees.filter((w) => w.webPort && w.serverRunning).map((w) => w.name),
     testDb: !!inv.testDb?.running,
+    dispatcher: !!inv.dispatcher?.running,
   };
 }
 
 /**
  * The down record: what is up now, merged with a record already there (a
  * second `down`, or one cut off halfway, sees things already stopped).
- * @param {{ stacks: string[], servers: string[], testDb: boolean }} now
- * @param {{ stacks?: string[], servers?: string[], testDb?: boolean } | null} previous
+ * @param {{ stacks: string[], servers: string[], testDb: boolean, dispatcher?: boolean }} now
+ * @param {{ stacks?: string[], servers?: string[], testDb?: boolean, dispatcher?: boolean } | null} previous
  * @param {string} at ISO time
  */
 export function mergeRecord(now, previous, at) {
@@ -43,6 +45,7 @@ export function mergeRecord(now, previous, at) {
     stacks: union(now.stacks, previous?.stacks),
     servers: union(now.servers, previous?.servers),
     testDb: now.testDb || previous?.testDb === true,
+    dispatcher: now.dispatcher === true || previous?.dispatcher === true,
   };
 }
 
@@ -91,6 +94,7 @@ function main() {
     for (const n of now.servers) console.log(`server\t${n}`);
     for (const n of now.stacks) console.log(`stack\t${n}`);
     if (now.testDb) console.log("test-db\t");
+    if (now.dispatcher) console.log(`dispatcher\t${inv.dispatcher.pid ?? ""}`);
   } else {
     console.error(`recover-lib: unknown command ${cmd} (record, actions, until)`);
     process.exit(2);

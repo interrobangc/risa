@@ -442,12 +442,12 @@ Intro.
   const flagsOf = (topic) =>
     JSON.parse(backlog("prd", "list", "--json")).find((r) => r.topic === topic).flags;
 
-  it("skips it before the table is migrated", () => {
+  it("skips it with the old prose table", () => {
     commitOnDev({ "plans/backlog.md": OLD, "plans/pre-plan.md": plan(MERGED) });
     prdWorktree("pre");
     const r = run("rm.sh", ["pre"]);
     expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/Not marking pre done: .*isn't migrated yet/);
+    expect(r.stdout).toMatch(/Not marking pre done: .*old prose form/);
     expect(r.stdout).toMatch(/Removed pre and its branch prd\/pre/);
   });
 

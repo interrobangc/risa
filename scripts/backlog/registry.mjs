@@ -10,8 +10,9 @@
 // which may name files not made yet) and notes. Whether a topic is to write,
 // planned, running or idle is worked out by stateOf, never stored.
 //
-// Today's table (PRD, Doc, Depends on, Hot files: prose) is "old": migrate()
-// reshapes it once, mechanically, keeping every row in its order.
+// The table before the registry (PRD, Doc, Depends on, Hot files: prose) is
+// "old": it is recognised and refused, never read as rows (it was converted
+// once, by hand-run tooling since removed).
 
 import { BacklogError } from "./format.mjs";
 
@@ -25,13 +26,6 @@ export const WAITING = ["inbox", "triaged", "in-progress"];
 export const SECTION = "## PRDs";
 const HEADER = ["PRD", "Flags", "After", "Hot files", "Doc and notes"];
 const NONE = "—";
-
-/** What the section says above a migrated table. */
-export const INTRO = [
-  "The PRD registry: **row order is the priority**. Edit it only with `pnpm backlog prd` (`add`, `set`, `move`); `pnpm backlog prd list` shows each topic's state (to-write, planned, running, idle, hold, done), worked out from git and the items. At most three PRD orchestrators run at once.",
-  "",
-  "`Flags`: `hold` (waits on the user), `done`, `standing` (never finishes; runs while it has waiting items), `alone` (nothing else runs beside it). `After`: the topics it comes after. `Hot files`: repo path prefixes it shares.",
-].join("\n");
 
 /**
  * @typedef {{ topic: string, flags: string[], after: string[], hot: string[], notes: string }} Row
@@ -144,49 +138,15 @@ export function withRows(preamble, rows, opts = {}) {
   return [...before, ...renderTable(rows), ...lines.slice(at.tableEnd)].join("\n");
 }
 
-/** The new-format rows, or an error that says to migrate. @param {string} preamble */
+/** The registry's rows, or an error for the old prose table or none. @param {string} preamble */
 export function rowsOf(preamble) {
   const reg = parseRegistry(preamble);
   if (reg.format === "new") return reg.rows;
   if (reg.format === "old")
-    throw new BacklogError("the PRD table isn't migrated yet: run pnpm backlog prd migrate");
+    throw new BacklogError(
+      `the PRD table is in the old prose form (PRD | Doc | Depends on | Hot files); the tooling reads only the registry's columns (${HEADER.join(" | ")})`,
+    );
   throw new BacklogError(`plans/backlog.md has no "${SECTION}" table`);
-}
-
-// ---- the migration -------------------------------------------------------------
-
-/** Prose that says nothing: "—", "(none)", "none now". */
-const empty = (s) => /^(—|-|\(none\)|none|none now)?$/i.test(s.trim());
-
-/**
- * `done` only when the doc cell says **done** and nothing more than a
- * parenthesis (a commit, a PR) after it: "**done** except …", "**done**;
- * B-40 waits on the user" and "**Done 2026-11-20**" stay —.
- * @param {string} doc
- */
-export const saysDone = (doc) => {
-  const m = /\*\*done\*\*/.exec(doc);
-  return !!m && /^\s*(\([^)]*\))?\s*\.?\s*$/.test(doc.slice(m.index + m[0].length));
-};
-
-/** One old row as a registry row: the doc cell, then the old prose, in the notes. @param {OldRow} o @returns {Row} */
-export function migrateRow(o) {
-  const notes = [
-    o.doc.trim(),
-    ...(empty(o.depends) ? [] : [`Depends on: ${o.depends.trim()}`]),
-    ...(empty(o.hot) ? [] : [`Hot files: ${o.hot.trim()}`]),
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  return { topic: o.topic, flags: saysDone(o.doc) ? ["done"] : [], after: [], hot: [], notes };
-}
-
-/** Today's table reshaped: the same rows in the same order. @param {string} preamble */
-export function migrate(preamble) {
-  const reg = parseRegistry(preamble);
-  if (reg.format === "new") throw new BacklogError("the PRD table is already migrated");
-  if (reg.format === "none") throw new BacklogError(`plans/backlog.md has no "${SECTION}" table`);
-  return { preamble: withRows(preamble, reg.rows.map(migrateRow), { intro: INTRO }), count: reg.rows.length };
 }
 
 // ---- the worked-out state --------------------------------------------------------

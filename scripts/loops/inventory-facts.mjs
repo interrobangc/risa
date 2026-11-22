@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Collects the facts inventory.mjs classifies: every .loops worktree (git), its
 // stack and containers (docker), its dev server (lsof), the locks and their
-// holders, the down record and free disk. Read-only: it runs only git, `docker
-// info|ps|inspect`, `lsof` and `df`, and writes nothing (git runs with
-// --no-optional-locks, so not even the index is refreshed).
+// holders, the dispatcher, which sessions it manages, the down record and
+// free disk. Read-only: it runs only git, `docker info|ps|inspect`, `lsof` and
+// `df`, and writes nothing (git runs with --no-optional-locks, so not even the
+// index is refreshed).
 //
 //   node inventory-facts.mjs [--main DIR] [--facts|--json|--text]
 //     --text (default)  the inventory as a table and an action list
@@ -12,7 +13,8 @@
 //
 // DIR defaults to the main checkout of the repo this file is in. Env: TRUNK
 // (dev), CARETOOK_LEASE_ROOT (DIR/.loops/.lease), CARETOOK_MIN_FREE_GB (10),
-// CARETOOK_FREE_GB (overrides the df reading, for tests).
+// CARETOOK_FREE_GB (overrides the df reading, for tests), CARETOOK_SESSIONS_DIR
+// (DIR/.loops/.sessions).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -196,40 +198,23 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       why: alive ? "its worktree exists" : `slot ${n}: no worktree ${holder || "named"}`,
     });
   }
-  // Queue tickets: a file holding the waiting queue.sh's pid.
-  const queue = join(loops, ".queue");
-  let liveTicket = false;
-  let tickets = [];
-  try {
-    tickets = readdirSync(queue).sort();
-  } catch {
-    /* no queue */
-  }
-  for (const t of tickets) {
-    const pid = Number(readOr(join(queue, t)).trim()) || null;
+  // The dispatcher's lock (dispatch.mjs): its pid. Stale when that pid is gone
+  // (a crash, or a restart with it running): recover clears it and reopens it.
+  const dispatchLock = join(loops, ".dispatch.lock");
+  let dispatcher = { running: false, pid: /** @type {number|null} */ (null), lock: dispatchLock };
+  if (existsSync(dispatchLock)) {
+    const pid = Number(readOr(dispatchLock).trim()) || null;
     const alive = pidAlive(pid);
-    liveTicket ||= alive;
+    dispatcher = { running: alive, pid, lock: dispatchLock };
     locks.push({
-      kind: "ticket",
-      path: join(queue, t),
-      holder: t.replace(/^\d+-\d+-/, ""),
+      kind: "dispatch",
+      path: dispatchLock,
+      holder: "pnpm prd dispatch",
       pid,
       alive,
-      why: alive ? `queue.sh pid ${pid} is running` : `queue.sh pid ${pid ?? "?"} is gone`,
+      why: alive ? `the dispatcher, pid ${pid}, is running` : `the dispatcher's pid ${pid ?? "?"} is gone`,
     });
   }
-  // The PRD-start lock: only a waiting queue.sh takes it (around "count, then
-  // create"), so it's live while any queue ticket's process is.
-  const startLock = join(loops, ".prd-start.lock");
-  if (existsSync(startLock))
-    locks.push({
-      kind: "start",
-      path: startLock,
-      holder: "queue.sh",
-      pid: null,
-      alive: liveTicket,
-      why: liveTicket ? "a queue.sh is running" : "no queue.sh is running",
-    });
   // The backlog lock: no pid; backlog.mjs takes over one older than 30 s.
   const common = git(main, ["rev-parse", "--git-common-dir"], env);
   if (common.ok) {
@@ -296,10 +281,31 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       env,
     ).out !== "";
 
+  // Which session records the dispatcher manages (session.sh --managed).
+  const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");
+  /** @type {string[]} */
+  const managed = [];
+  let records = [];
+  try {
+    records = readdirSync(sessionsDir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
+  } catch {
+    /* no records */
+  }
+  for (const f of records)
+    try {
+      if (JSON.parse(readOr(join(sessionsDir, f), "{}")).managed === true) managed.push(f.slice(0, -5));
+    } catch {
+      /* a record being written */
+    }
+
   const min = Number(env.CARETOOK_MIN_FREE_GB);
   return {
     worktrees,
     locks,
+    dispatcher,
+    managed,
     docker: { running: dockerUp },
     testDb: { running: testDbRunning },
     downRecord,

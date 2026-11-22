@@ -136,9 +136,7 @@ describe("locks", () => {
   f.locks = [
     { kind: "slot", path: "/l/.slots/7", holder: "gone-1", alive: false },
     { kind: "slot", path: "/l/.slots/1", holder: "t", alive: true },
-    { kind: "ticket", path: "/l/.queue/1-99-x", pid: 99, alive: false },
-    { kind: "ticket", path: "/l/.queue/2-42-y", pid: 42, alive: true },
-    { kind: "start", path: "/l/.prd-start.lock", alive: false },
+    { kind: "dispatch", path: "/l/.dispatch.lock", pid: 99, alive: false },
     { kind: "backlog", path: "/g/caretook-backlog.lock", alive: true },
     { kind: "lease", path: "/l/.lease/browser/1", pid: 5, alive: false },
     { kind: "lease", path: "/l/.lease/check/1", pid: 6, alive: true },
@@ -148,15 +146,13 @@ describe("locks", () => {
   it("clears stale locks and only those", () => {
     expect(inv.actions.filter((a) => a.step === "clear-lock").map((a) => a.target)).toEqual([
       "/l/.slots/7",
-      "/l/.queue/1-99-x",
-      "/l/.prd-start.lock",
+      "/l/.dispatch.lock",
     ]);
   });
 
   it("lists live locks to leave alone", () => {
     expect(inv.locks.live.map((l) => l.path)).toEqual([
       "/l/.slots/1",
-      "/l/.queue/2-42-y",
       "/g/caretook-backlog.lock",
       "/l/.lease/check/1",
     ]);
@@ -172,6 +168,61 @@ describe("locks", () => {
     const g = clone(COLD);
     g.locks = [{ kind: "backlog", path: "/g/caretook-backlog.lock", alive: false }];
     expect(lines(inventory(g))).toContain("clear-lock /g/caretook-backlog.lock");
+  });
+});
+
+describe("the dispatcher", () => {
+  const reopen = (f) => lines(inventory(f)).filter((l) => l === "dispatch");
+
+  it("does nothing about a dispatcher that never ran, or one still running", () => {
+    expect(reopen(COLD)).toEqual([]);
+    expect(inventory(COLD).dispatcher).toEqual({ running: false, pid: null, reopen: false });
+    const f = clone(COLD);
+    f.dispatcher = { running: true, pid: 42 };
+    f.locks = [{ kind: "dispatch", path: "/l/.dispatch.lock", pid: 42, alive: true }];
+    f.downRecord = { stacks: [], servers: [], dispatcher: true };
+    const inv = inventory(f);
+    expect(reopen(f)).toEqual([]);
+    expect(lines(inv)).not.toContain("clear-lock /l/.dispatch.lock");
+    expect(inv.locks.live.map((l) => l.path)).toEqual(["/l/.dispatch.lock"]);
+    expect(inv.dispatcher).toEqual({ running: true, pid: 42, reopen: false });
+  });
+
+  it("clears a stale lock (its pid is gone: a crash) and reopens it, after the servers", () => {
+    const f = clone(COLD);
+    f.dispatcher = { running: false, pid: 99 };
+    f.locks = [{ kind: "dispatch", path: "/l/.dispatch.lock", pid: 99, alive: false }];
+    const inv = inventory(f);
+    const l = lines(inv);
+    expect(l[0]).toBe("clear-lock /l/.dispatch.lock");
+    expect(l.indexOf("dispatch")).toBe(l.indexOf("serve a") + 2);
+    expect(l[l.indexOf("dispatch") + 1]).toBe("offer-gc t-1");
+    expect(inv.actions.find((a) => a.step === "dispatch")?.why).toMatch(/stale \(pid 99 is gone\)/);
+    expect(inv.dispatcher).toEqual({ running: false, pid: null, reopen: true });
+  });
+
+  it("reopens it when the down record had it running, and not when it hadn't", () => {
+    const f = clone(COLD);
+    f.downRecord = { stacks: [], servers: [], testDb: false, dispatcher: true };
+    expect(reopen(f)).toEqual(["dispatch"]);
+    expect(inventory(f).actions.find((a) => a.step === "dispatch")?.why).toMatch(/down record had/);
+    f.downRecord.dispatcher = false;
+    expect(reopen(f)).toEqual([]);
+  });
+
+  it("marks the sessions it manages, and says so in the text", () => {
+    const f = clone(COLD);
+    f.managed = ["prd-a", "plan-x"];
+    f.dispatcher = { running: true, pid: 7 };
+    const inv = inventory(f);
+    const opens = inv.actions.filter((a) => a.step === "open-session");
+    expect(opens.map((a) => [a.session, a.managed ?? false])).toEqual([
+      ["prd-a", true],
+      ["prd-t", false],
+      ["plan-u", false],
+    ]);
+    expect(formatInventory(inv)).toMatch(/^dispatcher: running \(pid 7\)$/m);
+    expect(formatInventory(inventory(COLD))).toMatch(/^dispatcher: not running$/m);
   });
 });
 
@@ -220,7 +271,7 @@ describe("order and disk", () => {
     const f = clone(COLD);
     f.docker.running = false;
     f.locks = [{ kind: "slot", path: "/l/.slots/7", alive: false }];
-    f.downRecord = { stacks: ["t"], servers: ["t"] };
+    f.downRecord = { stacks: ["t"], servers: ["t"], dispatcher: true };
     f.downRecordPath = "/l/.down.json";
     const steps = inventory(f).actions.map((a) => a.step);
     const ranks = steps.map((s) => STEPS.indexOf(s));

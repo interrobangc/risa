@@ -138,21 +138,20 @@ describe("branches", () => {
 describe("leftovers", () => {
   const old = TICKET_GRACE_SECS + 1;
 
-  it("dead lease, queue and slot tickets are safe; live ones aren't listed; just-taken ones are kept", () => {
+  it("dead lease and slot tickets are safe; live ones aren't listed; just-taken ones are kept; recover's locks aren't tidy's", () => {
     const { safe, kept } = one({
       locks: [
         { kind: "lease", path: "/l/check/1", alive: false, pid: 11, ageSecs: old },
-        { kind: "ticket", path: "/q/1-11-t", alive: false, pid: 12, holder: "t", ageSecs: old },
         { kind: "slot", path: "/s/3", alive: false, holder: "t-9", ageSecs: old },
         { kind: "lease", path: "/l/check/2", alive: true, pid: 13, ageSecs: old },
         { kind: "lease", path: "/l/browser/1", alive: false, pid: null, ageSecs: 5 },
         { kind: "backlog", path: "/g/caretook-backlog.lock", alive: false, ageSecs: old },
-        { kind: "start", path: "/s/.prd-start.lock", alive: false, ageSecs: old },
+        { kind: "dispatch", path: "/l/.dispatch.lock", alive: false, pid: 12, ageSecs: old },
       ],
     });
-    expect(targets(safe)).toEqual(["/l/check/1", "/q/1-11-t", "/s/3"]);
+    expect(targets(safe)).toEqual(["/l/check/1", "/s/3"]);
     expect(safe[0].why).toBe("lease: pid 11 is gone");
-    expect(safe[2].why).toBe("slot t-9: its worktree is gone");
+    expect(safe[1].why).toBe("slot t-9: its worktree is gone");
     expect(kept.map((k) => [k.target, k.why])).toEqual([
       ["/l/browser/1", "lease: pid ? is gone, but it was just taken"],
     ]);
