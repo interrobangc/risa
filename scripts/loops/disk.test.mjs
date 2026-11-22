@@ -106,7 +106,7 @@ beforeAll(() => {
     join(main, "scripts/loops/serve.sh"),
     '#!/usr/bin/env bash\necho "serve $*" >> "$FAKE_LOG"\n',
   );
-  writeFileSync(join(main, "scripts/loops/checks"), "# check usual cap never-exits e2e\nclean 1 20 no yes\n");
+  writeFileSync(join(main, "scripts/loops/checks"), "# check cap never-exits e2e\nclean 20 no yes\n");
   mkdirSync(join(main, "scripts/browser-checks"), { recursive: true });
   writeFileSync(
     join(main, "scripts/browser-checks/clean.spec.mjs"),

@@ -60,6 +60,14 @@ const SPECS = {
     `  if (!existsSync(f)) { writeFileSync(f, "1"); throw new Error("timed out waiting for x"); }`,
     `});`,
   ].join("\n"),
+  // Prints its last line and then never exits: browser.sh stops it (never-exits yes).
+  spechang: [
+    `import { test } from "./fixtures.mjs";`,
+    `test("hang", async () => {`,
+    `  console.log("1/1 passed");`,
+    `  await new Promise((r) => setTimeout(r, 60_000));`,
+    `});`,
+  ].join("\n"),
   specslow: [
     `import { test } from "./fixtures.mjs";`,
     `test("slow", async () => {`,
@@ -68,14 +76,15 @@ const SPECS = {
   ].join("\n"),
 };
 
-// check, usual, cap, never-exits, e2e
-const MANIFEST = `# check usual cap never-exits e2e
-specpass   1  30  no   yes
-specfail   1  30  no   yes
-specbusy   1   4  no   no
-specsilent 1  90  no   no
-specflaky  1  30  no   no
-specslow   1  60  no   no
+// check, cap, never-exits, e2e
+const MANIFEST = `# check cap never-exits e2e
+specpass   30  no   yes
+specfail   30  no   yes
+specbusy    4  no   no
+specsilent 90  no   no
+specflaky  30  no   no
+spechang   30  yes  no
+specslow   60  no   no
 `;
 
 let root, repo, env;
@@ -135,6 +144,16 @@ describe("a check's run", SLOW, () => {
     expect(status).toBe(0);
     expect(out).toMatch(/^PASS core /m);
     expect(out).toMatch(/Released browser lease/);
+  });
+
+  // The manifest's columns: the cap (2) is "kills a spec at its cap", e2e (4) is
+  // "a suite"; never-exits (3) is this one.
+  it("stops a never-exiting check after its last line, as the manifest says", () => {
+    // Read wrong, the spec would sit silent until a TIMEOUT.
+    const { out, status } = run(["--no-retry", "--verbose", "spechang"]);
+    expect(status).toBe(0);
+    expect(out).toMatch(/stopped 2s after its last line, as expected for spechang\.spec\.mjs: 1\/1 passed/);
+    expect(out).toMatch(/^■ spechang\.spec\.mjs: pass/m);
   });
 
   it("lets --timeout override the manifest's cap", () => {
@@ -253,7 +272,7 @@ describe("--changed with the real map", SLOW, () => {
       .split("\n")
       .filter((l) => l.trim() && !l.startsWith("#"))
       .map((l) => l.split(/\s+/))
-      .filter((f) => f[4] === "yes")
+      .filter((f) => f[3] === "yes")
       .map((f) => f[0]);
   const changed = (files) => {
     execFileSync("git", ["-C", real, "clean", "-qfd", "apps", "packages"]);
