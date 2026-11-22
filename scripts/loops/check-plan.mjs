@@ -44,6 +44,20 @@ export function planCheck(changed, asked) {
   return { mode: "quick", reason: "", alwaysRun: [...ALWAYS_RUN], tooling };
 }
 
+/**
+ * The lint step `pnpm test:tooling` runs first (tooling-lint.mjs): eslint and
+ * prettier on the changed tooling files, since a docs-and-tooling-only diff
+ * passes the gate with no check ("none needed") and would otherwise reach dev
+ * unlinted. Markdown is left to `prettier --check`, so a Markdown-only diff
+ * gets no step (both lists empty).
+ * @param {string[]} changed files changed against the trunk
+ * @returns {{ eslint: string[], prettier: string[] }}
+ */
+export function planToolingLint(changed) {
+  const files = changed.filter((f) => TOOLING.test(f) && !f.endsWith(".md"));
+  return { eslint: files.filter((f) => /\.[cm]?[jt]sx?$/.test(f)), prettier: files };
+}
+
 /** True when a quick check ran more than half of all test files. */
 export const tooBroad = (run, all) => all > 0 && run * 2 > all;
 

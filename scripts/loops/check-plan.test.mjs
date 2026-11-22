@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ALWAYS_RUN, planCheck, tooBroad } from "./check-plan.mjs";
+import { ALWAYS_RUN, planCheck, planToolingLint, tooBroad } from "./check-plan.mjs";
 
 const ROOT = join(import.meta.dirname, "../..");
 
@@ -59,6 +59,36 @@ describe("planCheck", () => {
 
   it("every always-run path exists", () => {
     for (const path of ALWAYS_RUN) expect(existsSync(join(ROOT, path)), path).toBe(true);
+  });
+});
+
+describe("planToolingLint", () => {
+  it("lints and formats the changed tooling files of a tooling-only diff", () => {
+    const plan = planToolingLint([
+      "scripts/loops/prd.sh",
+      "scripts/backlog/b.mjs",
+      ".githooks/commit-msg",
+      "scripts/hooks.test.mjs",
+      "scripts/loops/README.md",
+    ]);
+    expect(plan.eslint).toEqual(["scripts/backlog/b.mjs", "scripts/hooks.test.mjs"]);
+    expect(plan.prettier).toEqual([
+      "scripts/loops/prd.sh",
+      "scripts/backlog/b.mjs",
+      ".githooks/commit-msg",
+      "scripts/hooks.test.mjs",
+    ]);
+  });
+
+  it("puts no lint step on a Markdown-only diff", () => {
+    expect(planToolingLint(["docs/agents/loop.md", "scripts/loops/notes.md", "AGENTS.md"])).toEqual({
+      eslint: [],
+      prettier: [],
+    });
+  });
+
+  it("leaves app files to pnpm check", () => {
+    expect(planToolingLint(["apps/web/app/a.ts", "scripts/deploy/x.mjs"]).prettier).toEqual([]);
   });
 });
 
