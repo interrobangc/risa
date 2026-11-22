@@ -182,7 +182,9 @@ export function find(b, id) {
   const norm = normId(id);
   const it = b.items.find((i) => i.id === norm);
   if (!it && b.archived?.includes(norm))
-    throw new BacklogError(`${norm} is archived (plans/backlog-archive.md); it can't be changed here`);
+    throw new BacklogError(
+      `${norm} is archived (plans/backlog-archive.md); pass --archived to change it there`,
+    );
   if (!it) throw new BacklogError(`no item ${norm}`);
   return it;
 }

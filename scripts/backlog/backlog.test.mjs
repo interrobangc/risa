@@ -300,6 +300,23 @@ describe("backlog CLI: safety, doctor and archive", () => {
     expect(cli(m2, "archive")).toBe("nothing to archive");
     expect(doctor().out).toBe("backlog ok\n");
   });
+
+  it("set and note --archived change an archived item in place; without the flag they refuse, naming it", () => {
+    expect(cliFails(m2, "set", "B-4", "title=Fixed")).toMatch(/B-4 is archived.*pass --archived/);
+    expect(cliFails(m2, "note", "B-4", "x")).toMatch(/B-4 is archived.*pass --archived/);
+    const backlogBefore = committed("plans/backlog.md");
+
+    expect(cli(m2, "set", "B-4", "title=Hygiene fix", "prd=fixes-nit", "--archived")).toBe("updated B-4");
+    expect(cli(m2, "note", "B-4", "archived", "tidy", "--archived")).toBe("noted B-4");
+    const archive = committed("plans/backlog-archive.md");
+    expect(archive).toMatch(/### B-4 · bug · Hygiene fix\n\n- status: dropped\n- prd: fixes-nit/);
+    expect(archive).toMatch(/- \d{4}-\d\d-\d\d \([^)]*\): archived tidy/);
+    expect(archive).toMatch(/\| B-4 \| bug \| dropped \| fixes-nit \|/);
+    expect(committed("plans/backlog.md")).toBe(backlogBefore); // still archived: not back in backlog.md
+    expect(cli(m2, "show", "B-4")).toMatch(/B-4 · bug · Hygiene fix \(archived/);
+    expect(cliFails(m2, "set", "B-4", "status=nope", "--archived")).toMatch(/status must be one of/);
+    expect(doctor().out).toBe("backlog ok\n");
+  });
 });
 
 // Multi-id writes and amending, in a repo of their own.

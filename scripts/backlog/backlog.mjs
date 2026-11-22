@@ -35,8 +35,9 @@
 //   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   pnpm backlog show B-n                    finds archived items too (list --all lists them)
 //   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT]
-//   pnpm backlog set B-n… key=value…         keys: status type title prd owner commit
-//   pnpm backlog note B-n [B-n…] <text…>     ids after the first need the B- prefix
+//   pnpm backlog set B-n… key=value… [--archived]   keys: status type title prd owner commit
+//   pnpm backlog note B-n [B-n…] <text…> [--archived]   ids after the first need the B- prefix
+//                                            --archived: change archived items in place (they stay archived)
 //   pnpm backlog claim B-n… [--as OWNER] [--force]   owner defaults to your branch
 //   pnpm backlog release B-n…
 //   pnpm backlog done B-n… [--commit SHA]    work merged into its PRD branch (default: your HEAD)
@@ -118,7 +119,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "force", "no-fetch", "json", "fix", "first", "last"].includes(key);
+      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last"].includes(key);
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -787,6 +788,15 @@ const ids = (pos) => {
   return [...new Set(pos.map(fmt.normId))];
 };
 /** "B-1: …", "B-1, B-2, B-3 +2: …" */
+/**
+ * The item to change: in backlog.md, or with --archived in the archive too
+ * (changed in place there; it stays archived). Without the flag an archived
+ * id is refused, naming the flag.
+ * @param {import("./format.mjs").Backlog} b @param {WriteContext} ctx @param {string} id @param {boolean} archived
+ */
+const target = (b, ctx, id, archived) =>
+  archived && b.archived?.includes(fmt.normId(id)) ? fmt.find(ctx.archive(), id) : fmt.find(b, id);
+
 const about = (list, what) => ({ ids: list, text: `${amend.idList(list)}: ${what}` });
 
 function main() {
@@ -843,9 +853,9 @@ function main() {
       const list = ids(at < 0 ? pos : pos.slice(0, at));
       const pairs = at < 0 ? [] : pos.slice(at);
       if (!pairs.length) throw new fmt.BacklogError("usage: set B-n… key=value…");
-      write("set", about(list, `set ${pairs.join(", ")}`), (b) => {
+      write("set", about(list, `set ${pairs.join(", ")}`), (b, c) => {
         for (const id of list) {
-          const it = fmt.find(b, id);
+          const it = target(b, c, id, opts.archived);
           for (const p of pairs) {
             const eq = p.indexOf("=");
             if (eq < 1) throw new fmt.BacklogError(`"${p}" isn't key=value`);
@@ -862,8 +872,8 @@ function main() {
       const list = ids(pos.slice(0, n));
       const text = pos.slice(n).join(" ");
       if (!text.trim()) throw new fmt.BacklogError("usage: note B-n [B-n…] <text…>");
-      write("note", about(list, "note"), (b) => {
-        for (const id of list) fmt.addNote(fmt.find(b, id), { text, ...ctx() });
+      write("note", about(list, "note"), (b, c) => {
+        for (const id of list) fmt.addNote(target(b, c, id, opts.archived), { text, ...ctx() });
       });
       return console.log(`noted ${list.join(", ")}`);
     }
