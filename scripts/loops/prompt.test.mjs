@@ -247,6 +247,15 @@ describe("slice", () => {
   });
 });
 
+describe("waiting on a check", () => {
+  it("orchestrator and slice prompts wait with pnpm prd wait check, never pgrep -f", () => {
+    for (const out of [ok("orchestrator", "T"), ok("slice", "T", "1")]) {
+      expect(out).toContain("`pnpm prd wait check`");
+      expect(out).toContain("never `pgrep -f`");
+    }
+  });
+});
+
 describe("plan and backlog", () => {
   it("are unchanged by the resume work", () => {
     const plan = ok("plan", "T", "B-1", "B-2");

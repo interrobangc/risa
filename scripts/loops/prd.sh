@@ -105,6 +105,9 @@ pnpm prd <command>
                               config, a lockfile, a package.json or the Vitest config makes it a full check;
                               the tooling tests join when the diff touches the tooling
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
+    wait [check|browser|<kind>] [--timeout <s>]   block until this worktree's check (or that lease kind's
+                              holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
+                              naming it. Wait on a background check with this, never \`pgrep -f\` (it matches itself)
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode and by PRD); runs no check, works from any checkout
     sync                      merge dev into this PRD branch
@@ -183,6 +186,11 @@ case $cmd in
   gc) exec "$bin/gc.sh" "$@" ;;
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
+  wait)
+    kind=check
+    [[ ${1:-} == "" || ${1:-} == -* ]] || { kind=$1; shift; }
+    exec "$bin/lease.sh" wait "$kind" "$@"
+    ;;
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec node "$bin/queue.mjs" "$@" ;;

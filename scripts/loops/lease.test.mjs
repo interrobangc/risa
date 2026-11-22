@@ -126,6 +126,85 @@ describe("taking and waiting", SLOW, () => {
   });
 });
 
+describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", SLOW, () => {
+  const wt = { lease_worktree: "wt-a" };
+  // pnpm prd wait names the worktree it runs in: outside git, its directory's name.
+  const prdWait = (args, extra = {}) => {
+    const cwd = join(root, "wt-a");
+    mkdirSync(cwd, { recursive: true });
+    const child = spawn("bash", [PRD_SH, "wait", ...args], {
+      cwd,
+      env: { ...env, ...extra },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    children.push(child);
+    const p = { child, out: "", err: "" };
+    child.stdout.on("data", (d) => (p.out += d));
+    child.stderr.on("data", (d) => (p.err += d));
+    p.exit = new Promise((r) => child.once("exit", (code, signal) => r(code ?? signal)));
+    return p;
+  };
+
+  it("returns once the worktree's check lease is released", async () => {
+    const h = await hold("check", "pnpm check (quick)", wt);
+    const w = start(["wait", "check", "--worktree", "wt-a", "--timeout", "30"]);
+    await until(() => w.out.includes("Waiting (up to 0m30s) for wt-a's check:"));
+    expect(w.out).toMatch(/wt-a: pnpm check \(quick\) \(pid \d+/);
+    await sleep(1500);
+    expect(w.child.exitCode).toBeNull();
+    h.child.stdin.end();
+    await h.exit;
+    expect(await w.exit).toBe(0);
+    expect(w.out).toMatch(/wt-a's check is done \(waited/);
+  });
+
+  it("exits 75 at its timeout while the lease is held, and ignores other worktrees' holders", async () => {
+    const h = await hold("check", "held by a", wt);
+    const w = prdWait(["--timeout", "1"]);
+    expect(await w.exit).toBe(75);
+    expect(w.err).toMatch(/Gave up after 0m0[12]s: wt-a's check is still running/);
+    expect(w.err).toMatch(/wt-a: held by a/);
+    const other = cli(["wait", "check", "--worktree", "wt-b", "--timeout", "1"]);
+    expect(other.status).toBe(0);
+    expect(other.out).toMatch(/wt-b holds no check lease/);
+    h.child.stdin.end();
+    await h.exit;
+    expect(cli(["wait", "check", "--worktree", "wt-a", "--timeout", "1"]).status).toBe(0);
+  });
+
+  it("counts a check still queued for a lease, and forgets it once it takes one or is killed", async () => {
+    const extra = { CARETOOK_QUEUE_SLOTS: "1" };
+    const first = await hold("queue", "first", { ...extra, lease_worktree: "wt-other" });
+    const queued = start(["hold", "queue", "--label", "queued"], { ...extra, ...wt });
+    await until(() => queued.err.includes("All 1 queue leases are taken; waiting"));
+    const w = cli(["wait", "queue", "--worktree", "wt-a", "--timeout", "1"], extra);
+    expect(w.status).toBe(75);
+    expect(w.err).toMatch(/wt-a: queued \(waiting for a lease\)/);
+
+    first.child.stdin.end();
+    await until(() => holdLine(queued), 8000);
+    const waiting = join(env.CARETOOK_LEASE_ROOT, "queue", ".waiting");
+    expect(existsSync(join(waiting, String(queued.child.pid)))).toBe(false);
+    queued.child.stdin.end();
+    await Promise.all([first.exit, queued.exit]);
+
+    const blocker = await hold("queue", "blocker", { ...extra, lease_worktree: "wt-other" });
+    const doomed = start(["hold", "queue", "--label", "doomed"], { ...extra, ...wt });
+    await until(() => doomed.err.includes("waiting"));
+    doomed.child.kill("SIGKILL");
+    await doomed.exit;
+    expect(cli(["wait", "queue", "--worktree", "wt-a", "--timeout", "1"], extra).status).toBe(0);
+    blocker.child.stdin.end();
+    await blocker.exit;
+  });
+
+  it("is in pnpm prd help, defaulting to the check kind", () => {
+    const help = spawnSync("bash", [PRD_SH, "help"], { env, encoding: "utf8" }).stdout;
+    expect(help).toMatch(/^ {4}wait \[check\|browser\|<kind>\] \[--timeout <s>\]/m);
+    expect(help).toContain("never `pgrep -f`");
+  });
+});
+
 describe("releasing", SLOW, () => {
   it("releases a hold on SIGTERM", async () => {
     const h = await hold("term", "held");
