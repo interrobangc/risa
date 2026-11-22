@@ -245,7 +245,7 @@ describe("session.sh", () => {
     });
     expect(readFileSync(join(state, "args"), "utf8")).toBe("x\n");
     expect(record("plan-m")).toMatchObject({ managed: true, exit: 0 });
-    r = run("session.sh", ["plan-m", "--", "x"], { STUB_NAME: "plan-m" });
+    expect(run("session.sh", ["plan-m", "--", "x"], { STUB_NAME: "plan-m" }).status).toBe(0);
     expect(record("plan-m")).toMatchObject({ managed: false, auto: false });
   });
 
