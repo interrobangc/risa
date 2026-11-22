@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Reopen a PRD's or planner's session in a new iTerm2 tab. (pnpm prd open)
+# Reopen a recorded session in a new iTerm2 tab. (pnpm prd open)
 #
 #   open-session.sh <name> [--print] [--background]   <name> is a .loops worktree
-#                                      on a prd/ or plan/ branch (a topic, or plan-<topic>)
+#                                      on a prd/, plan/ or hotfix/ branch (a topic,
+#                                      plan-<topic>, hotfix-<name>), else a recorded
+#                                      backlog or recovery session (main checkout)
 #   open-session.sh --command <line> --title <title> [--print] [--background]
 #                                      any command line in a new tab (rotation's)
 #
@@ -12,8 +14,10 @@
 # fresh session with the resume prompt (prompt.sh orchestrator <topic> --resume,
 # plus --auto when the plan's _Status_ or the last record says run-through;
 # prompt.sh plan for a planner, with --auto for a run-through one). The record's
-# managed (the dispatcher's) is carried over. Sessions keep their names,
-# prd-<topic> and plan-<topic>.
+# managed (the dispatcher's) is carried over. Sessions keep their names. A
+# hotfix continues in its worktree; backlog and recovery sessions always start
+# fresh in the main checkout, whose saved conversations may be anyone's. These
+# three kinds are refused while their record is live.
 #
 # It opens the command in a new iTerm2 tab (osascript) and writes it to that
 # tab as `exec`, so the tab closes when the session ends. --background leaves
@@ -36,7 +40,7 @@ while (($#)); do
     --background) background=1 ;;
     --command) command=${2:?--command <line>}; shift ;;
     --title) title=${2:?--title <title>}; shift ;;
-    -h | --help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "open: unknown option $1 (--print, --background)" ;;
     *) [[ -z $name ]] || die "open: one worktree at a time"; name=$1 ;;
   esac
@@ -48,8 +52,11 @@ if [[ -n $command ]]; then
 else
   [[ -n $name ]] || die "usage: pnpm prd open <name> [--print] [--background]"
   dir=$loops/$name
-  [[ -d $dir ]] || die "open: no worktree $name in $loops"
-  choice=$(node "$bin/open-session.mjs" "$dir") || exit 1
+  if [[ -d $dir ]]; then
+    choice=$(node "$bin/open-session.mjs" "$dir") || exit 1
+  else
+    choice=$(node "$bin/open-session.mjs" --main "$name" "$main") || exit 1
+  fi
   field() { node -e 'process.stdout.write(String(JSON.parse(process.argv[1])[process.argv[2]]))' "$choice" "$1"; }
   session=$(field session) mode=$(field mode) command=$(field command)
   if [[ $mode == continue ]]; then how="continuing its saved conversation"; else how="a fresh session with the resume prompt"; fi

@@ -314,9 +314,36 @@ describe("session.sh", () => {
       managed: false,
       exit: 0,
     });
-    const r = run("session.sh", ["backlog", "--", "x"]);
+    const r = run("session.sh", ["other", "--", "x"]);
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/--kind prd\|plan/);
+    expect(r.stderr).toMatch(/--kind prd\|plan\|backlog\|hotfix\|recovery/);
+    const bad = run("session.sh", ["other", "--kind", "nope", "--", "x"]);
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toMatch(/--kind prd\|plan\|backlog\|hotfix\|recovery \(nope\)/);
+  });
+
+  it.each([
+    ["backlog", "backlog", undefined],
+    ["backlog-triage", "backlog", undefined],
+    ["hotfix-trim", "hotfix", "trim"],
+    ["recover", "recovery", undefined],
+  ])("records %s as kind %s, with its model", (name, kind, topic) => {
+    const r = run("session.sh", [name, "--", "--model", "sonnet", "--remote-control", name, "a prompt"], {
+      STUB_NAME: name,
+    });
+    expect(r.status).toBe(0);
+    const rec = record(name);
+    expect(rec).toMatchObject({ kind, model: "sonnet", exit: 0 });
+    expect(rec.topic).toBe(topic);
+  });
+
+  it("reads --model=<m>, and a later session with no model clears the old one", () => {
+    expect(run("session.sh", ["backlog", "--", "--model=haiku", "x"], { STUB_NAME: "backlog" }).status).toBe(
+      0,
+    );
+    expect(record("backlog").model).toBe("haiku");
+    expect(run("session.sh", ["backlog", "--", "x"], { STUB_NAME: "backlog" }).status).toBe(0);
+    expect(record("backlog").model).toBeUndefined();
   });
 });
 
@@ -423,5 +450,30 @@ describe("sessions start through the wrapper", () => {
     expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
     expect(args.slice(0, 4)).toEqual(["--model", "opus", "--remote-control", "plan-v"]);
+  });
+
+  it("pnpm prd plan with no topic is a recorded backlog session in the main checkout", () => {
+    expect(run("prd.sh", ["plan", "--model", "sonnet"]).status).toBe(0);
+    expect(record("backlog")).toMatchObject({ pid: stubPid(), kind: "backlog", model: "sonnet", exit: 0 });
+    const args = readFileSync(join(state, "args"), "utf8").split("\n");
+    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
+  });
+
+  it("pnpm prd hotfix --open records the session; without --open it prints the wrapped command", () => {
+    git(main, "worktree", "add", "-q", "-b", "hotfix/trim", join(loops, "hotfix-trim"), "dev");
+    const printed = run("prd.sh", ["hotfix", "trim"]);
+    expect(printed.stdout).toContain(
+      `cd ${join(loops, "hotfix-trim")} && scripts/loops/session.sh hotfix-trim -- --model opus --remote-control hotfix-trim`,
+    );
+    expect(run("prd.sh", ["hotfix", "trim", "--open", "--model", "sonnet"]).status).toBe(0);
+    expect(record("hotfix-trim")).toMatchObject({
+      pid: stubPid(),
+      kind: "hotfix",
+      topic: "trim",
+      model: "sonnet",
+      exit: 0,
+    });
+    const args = readFileSync(join(state, "args"), "utf8").split("\n");
+    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "hotfix-trim"]);
   });
 });

@@ -506,6 +506,9 @@ describe("down and recover", () => {
     expect(args.slice(0, 2)).toEqual(["--remote-control", "recover"]);
     expect(args[2]).toMatch(/^You are the recovery agent\./);
     expect(args.join("\n")).toMatch(/ListAgents/);
+    // Through the wrapper: recorded as a recovery session.
+    const rec = JSON.parse(readFileSync(join(loops, ".sessions/recover.json"), "utf8"));
+    expect(rec).toMatchObject({ kind: "recovery", exit: 0 });
   });
 
   it("a second recover does nothing (with --no-agent, launches nothing)", () => {

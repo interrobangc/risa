@@ -1,6 +1,6 @@
 // The parts `pnpm prd status` prints after the worktree table: the dispatcher
 // (running, paused and why, or stopped, and its log's last entry), the recorded
-// sessions (.loops/.sessions: name, live or ended, age, run-through or not,
+// sessions (.loops/.sessions: name, kind, live or ended, age, run-through or not,
 // managed by the dispatcher or opened by hand) and the open asks (the count,
 // split into questions awaiting an answer, reports and those decided for you;
 // the oldest awaiting one, else the oldest, and its age). The sessions and asks parts print nothing, heading
@@ -76,6 +76,7 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
     if (!up && !Number.isNaN(ended) && now - ended > DAY_MS) continue;
     rows.push([
       name,
+      record.kind ?? "?",
       up ? (record.rotating ? "live, rotating" : "live") : "ended",
       Number.isNaN(since) ? "?" : age(record.started, now),
       record.auto ? "run-through" : "asks first",
@@ -83,14 +84,14 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
     ]);
   }
   if (rows.length) {
-    const w = [0, 1, 2, 3].map((i) => Math.max(...rows.map((r) => r[i].length)));
+    const w = [0, 1, 2, 3, 4].map((i) => Math.max(...rows.map((r) => r[i].length)));
     out.push("SESSIONS (ended over a day ago left out)");
     for (const r of rows)
       out.push(
         `${r
-          .slice(0, 4)
+          .slice(0, 5)
           .map((c, i) => c.padEnd(w[i]))
-          .join("  ")}  ${r[4]}`,
+          .join("  ")}  ${r[5]}`,
       );
     out.push("");
   }

@@ -90,10 +90,11 @@ export function testDbOwner(db, worktrees) {
  * @property {string} [busy]            what is running in it (a process, a server, a lease), if anything
  *
  * @typedef {object} TidySession
- * @property {string} name              prd-<topic> or plan-<topic>
+ * @property {string} name              prd-<topic>, plan-<topic>, hotfix-<name>, backlog, recover
  * @property {boolean} live
  * @property {boolean} [rotating]
  * @property {string|null} [worktree]   the worktree it belongs to, null when unknown
+ * @property {boolean} [worktreeless]  a backlog or recovery session: it runs in the main checkout
  * @property {boolean} [worktreeExists]
  * @property {string} [branch]          its worktree's branch, when that exists
  * @property {boolean} [landed]         that branch's tip landed in dev
@@ -176,6 +177,14 @@ export function tidy(facts) {
         kind: "record",
         target: s.name,
         why: `ended, and its worktree ${s.worktree} is gone`,
+        how: "delete the record",
+        ...(s.path ? { path: s.path } : {}),
+      });
+    else if (s.worktreeless && !s.rotating)
+      safe.push({
+        kind: "record",
+        target: s.name,
+        why: "ended, and it has no worktree",
         how: "delete the record",
         ...(s.path ? { path: s.path } : {}),
       });

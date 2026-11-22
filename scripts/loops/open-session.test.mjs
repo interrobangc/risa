@@ -3,7 +3,7 @@
 // temporary Claude projects folder (CARETOOK_CLAUDE_PROJECTS), session records
 // in the repo's .loops/.sessions and a fake osascript that records its script
 // and arguments. Nothing here opens a real iTerm2 tab or starts claude.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { chooseCommand, projectFolder, runThrough } from "./open-session.mjs";
+import { chooseCommand, chooseMainCommand, projectFolder, runThrough } from "./open-session.mjs";
 
 const SESSION_SH = "/o/scripts/loops/session.sh";
 const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
@@ -136,12 +136,96 @@ beforeAll(() => {
   }
   git(main, "worktree", "add", "-q", "-b", "plan/v", join(loops, "plan-v"), "dev");
   git(main, "worktree", "add", "-q", "-b", "slice/auto/1", join(loops, "auto-1"), "prd/auto");
+  git(main, "worktree", "add", "-q", "-b", "hotfix/trim", join(loops, "hotfix-trim"), "dev");
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   rmSync(log, { force: true });
   rmSync(join(state, "osascript-args"), { force: true });
   rmSync(join(loops, ".sessions"), { recursive: true, force: true });
+});
+
+describe("backlog, recovery and hotfix sessions", () => {
+  const wrapper = join("/o", "session.sh");
+
+  it("a backlog session opens fresh in the main checkout on its recorded model and stays managed", () => {
+    expect(
+      chooseMainCommand({
+        name: "backlog",
+        main: "/m",
+        wrapper,
+        record: { kind: "backlog", model: "sonnet", managed: true },
+      }),
+    ).toMatchObject({
+      session: "backlog",
+      mode: "fresh",
+      managed: true,
+      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control backlog "$(scripts/loops/prompt.sh backlog)"`,
+    });
+  });
+
+  it("a recovery session opens fresh with its prompt and no model unless one was recorded", () => {
+    expect(
+      chooseMainCommand({ name: "recover", main: "/m", wrapper, record: { kind: "recovery" } }).command,
+    ).toBe(
+      `cd /m && ${wrapper} recover --kind recovery -- --remote-control recover "$(scripts/loops/prompt.sh recover)"`,
+    );
+  });
+
+  it("refuses any other kind of record", () => {
+    expect(() => chooseMainCommand({ name: "x", main: "/m", wrapper, record: { kind: "prd" } })).toThrow(
+      /not a backlog or recovery/,
+    );
+  });
+
+  it("a hotfix continues in its worktree on its recorded model, and is fresh after a rotation", () => {
+    const base = { dir: "/w/hotfix-t", branch: "hotfix/t", conversation: true, runThrough: false, wrapper };
+    expect(chooseCommand({ ...base, record: { model: "sonnet" } }).command).toBe(
+      `cd /w/hotfix-t && ${wrapper} hotfix-t -- --model sonnet --continue --remote-control hotfix-t`,
+    );
+    const fresh = chooseCommand({ ...base, record: { model: "sonnet", rotating: true } });
+    expect(fresh.mode).toBe("fresh");
+    expect(fresh.command).toBe(
+      `cd /w/hotfix-t && ${wrapper} hotfix-t -- --model sonnet --remote-control hotfix-t "$(scripts/loops/prompt.sh hotfix t)"`,
+    );
+  });
+
+  it("pnpm prd open reopens a recorded backlog session fresh, even with conversations in the main checkout", () => {
+    const folder = join(projects, projectFolder(main));
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "someone-else.jsonl"), '{"type":"user"}\n');
+    writeRecord("backlog", { kind: "backlog", model: "sonnet", ended: "2026-01-01T00:00:00Z" });
+    const out = ok(["backlog", "--print"]);
+    expect(out).toContain(`cd ${main} && `);
+    expect(out).toContain('--model sonnet --remote-control backlog "$(scripts/loops/prompt.sh backlog)"');
+    expect(out).not.toContain("--continue");
+    rmSync(folder, { recursive: true });
+  });
+
+  it("pnpm prd open continues a hotfix in its worktree", () => {
+    saveConversation("hotfix-trim");
+    writeRecord("hotfix-trim", { kind: "hotfix", model: "sonnet", ended: "2026-01-01T00:00:00Z" });
+    const out = ok(["hotfix-trim", "--print"]);
+    expect(out).toContain(`cd ${join(loops, "hotfix-trim")} && `);
+    expect(out).toContain("--model sonnet --continue --remote-control hotfix-trim");
+    rmSync(join(projects, projectFolder(join(loops, "hotfix-trim"))), { recursive: true });
+  });
+
+  it("refuses a live backlog or hotfix session, and a name with no worktree or record", () => {
+    const live = spawn("sleep", ["30"], { stdio: "ignore" });
+    try {
+      const rec = { pid: live.pid, started: new Date().toISOString() };
+      writeRecord("backlog", { ...rec, kind: "backlog" });
+      writeRecord("hotfix-trim", { ...rec, kind: "hotfix" });
+      expect(open(["backlog", "--print"]).stderr).toMatch(/backlog is already live/);
+      expect(open(["hotfix-trim", "--print"]).stderr).toMatch(/hotfix-trim is already live/);
+    } finally {
+      live.kill("SIGKILL");
+    }
+    const none = open(["nope", "--print"]);
+    expect(none.status).not.toBe(0);
+    expect(none.stderr).toMatch(/no worktree nope/);
+  });
 });
 
 describe("choosing the command", () => {
@@ -282,7 +366,7 @@ describe("choosing the command", () => {
         runThrough: false,
         wrapper: SESSION_SH,
       }),
-    ).toThrow(/only prd\/ and plan\/ worktrees/);
+    ).toThrow(/only prd\/, plan\/ and hotfix\/ worktrees/);
   });
 
   it("reads run-through from _Status_ only", () => {
@@ -415,7 +499,7 @@ describe("pnpm prd open", () => {
   });
 
   it("refuses a slice, a missing worktree and unknown options", () => {
-    expect(open(["auto-1"]).stderr).toMatch(/only prd\/ and plan\/ worktrees have sessions/);
+    expect(open(["auto-1"]).stderr).toMatch(/only prd\/, plan\/ and hotfix\/ worktrees have sessions/);
     expect(open(["nope"]).stderr).toMatch(/no worktree nope/);
     expect(open(["auto", "--bogus"]).stderr).toMatch(/unknown option --bogus/);
     expect(open([]).stderr).toMatch(/usage: pnpm prd open/);

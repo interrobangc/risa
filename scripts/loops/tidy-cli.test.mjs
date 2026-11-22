@@ -168,6 +168,16 @@ beforeAll(() => {
       ended: "2026-01-01T01:00:00Z",
     }),
   );
+  // An ended backlog session, which never had a worktree.
+  writeFileSync(
+    join(sessions, "backlog.json"),
+    JSON.stringify({
+      pid: 999997,
+      kind: "backlog",
+      started: "2026-01-01T00:00:00Z",
+      ended: "2026-01-01T01:00:00Z",
+    }),
+  );
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -268,6 +278,7 @@ describe("tidy --yes", () => {
     expect(git(main, "branch", "--list", "slice/t/1")).toBe("");
     expect(existsSync(lease())).toBe(false);
     expect(existsSync(join(sessions, "prd-gone.json"))).toBe(false);
+    expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
 
     // The dirty worktree, the active one and the unmerged branch stay.
     expect(readFileSync(join(loops, "t-2", "work-2.txt"), "utf8")).toMatch(/not committed/);
