@@ -51,7 +51,6 @@
 //   pnpm backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
 //   pnpm backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
 //   pnpm backlog prd move <topic> --first|--last|--before T|--after T
-//   pnpm backlog prd migrate                 once: today's prose table into the registry's columns
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
 // BACKLOG_BRANCH (default dev), BACKLOG_REMOTE (default origin).
@@ -646,7 +645,7 @@ function findings() {
       fixable: true,
     });
 
-  // The PRD registry, once migrated (before that, its prose is no one's to check).
+  // The PRD registry (an old prose table is no one's to check).
   const registry = reg.parseRegistry(b.preamble);
   if (registry.format === "new") out.push(...reg.findings(registry.rows, b.items));
   return out;
@@ -759,22 +758,8 @@ function prd(pos, opts) {
       writeRegistry("prd move", `prd move ${topic} ${where}`, (rows) => reg.moveRow(rows, topic, p));
       return console.log(`moved ${topic} ${where}`);
     }
-    case "migrate": {
-      const { count } = write(
-        "prd migrate",
-        { ids: [], text: "prd migrate: the PRD table into the registry" },
-        (b) => {
-          const m = reg.migrate(b.preamble);
-          b.preamble = m.preamble;
-          return m;
-        },
-      );
-      return console.log(
-        `migrated ${count} PRD rows (same order); set After, Hot files and flags with pnpm backlog prd set`,
-      );
-    }
     default:
-      throw new fmt.BacklogError(`unknown prd command "${sub}" (list, add, set, move, migrate)`);
+      throw new fmt.BacklogError(`unknown prd command "${sub}" (list, add, set, move)`);
   }
 }
 

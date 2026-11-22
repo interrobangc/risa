@@ -1,12 +1,12 @@
-// The sessions and asks parts of `pnpm prd status` (status-extra.mjs), from
-// temporary folders: no real claude, tab or .loops.
+// The dispatcher, sessions and asks parts of `pnpm prd status` (status-extra.mjs),
+// from temporary folders: no real claude, tab, dispatcher or .loops.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAsk } from "./asks.mjs";
-import { statusParts } from "./status-extra.mjs";
+import { dispatcherPart, lastEntry, statusParts } from "./status-extra.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const NOW = Date.parse("2026-11-21T12:00:00Z");
@@ -68,8 +68,72 @@ describe("statusParts", () => {
     expect(r.stdout).toContain("OPEN ASKS: 2");
     const none = spawnSync("node", [join(HERE, "status-extra.mjs")], {
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_SESSIONS_DIR: empty, CARETOOK_ASKS_DIR: empty },
+      env: {
+        ...process.env,
+        CARETOOK_SESSIONS_DIR: empty,
+        CARETOOK_ASKS_DIR: empty,
+        CARETOOK_DISPATCH_MAIN: empty,
+      },
     });
-    expect(none.stdout).toBe("");
+    expect(none.stdout).toBe("DISPATCHER: stopped: start it in a tab of its own with pnpm prd dispatch\n\n");
+  });
+});
+
+describe("the dispatcher's part", () => {
+  let main, loops;
+  beforeAll(() => {
+    main = join(root, "main");
+    loops = join(main, ".loops");
+    mkdirSync(loops, { recursive: true });
+  });
+  const files = () => ({
+    lock: join(loops, ".dispatch.lock"),
+    state: join(loops, ".dispatch.json"),
+    log: join(loops, ".dispatch.log"),
+  });
+  /** `pnpm prd status`'s CLI against this main checkout's .loops. */
+  const cli = () =>
+    spawnSync("node", [join(HERE, "status-extra.mjs")], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CARETOOK_SESSIONS_DIR: empty,
+        CARETOOK_ASKS_DIR: empty,
+        CARETOOK_DISPATCH_MAIN: main,
+      },
+    }).stdout;
+
+  it("prints its three states: stopped, running, paused and why", () => {
+    expect(cli()).toBe("DISPATCHER: stopped: start it in a tab of its own with pnpm prd dispatch\n\n");
+    // A lock whose pid is gone is stopped too.
+    writeFileSync(files().lock, "999999\n");
+    expect(cli()).toMatch(/^DISPATCHER: stopped:/);
+    writeFileSync(files().lock, `${process.pid}\n`);
+    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
+    writeFileSync(files().state, JSON.stringify({ paused: { at: ago(2 * H), why: "usage limit" } }));
+    expect(dispatcherPart(files(), { now: NOW })).toBe(
+      `DISPATCHER: running (pid ${process.pid}), paused, 2h ago: usage limit (pnpm prd dispatch --resume)\n\n`,
+    );
+    expect(dispatcherPart(files(), { now: NOW, holder: () => null })).toBe(
+      "DISPATCHER: stopped (and paused, 2h ago: usage limit): start it in a tab of its own with pnpm prd dispatch\n\n",
+    );
+    writeFileSync(files().state, JSON.stringify({ paused: null }));
+    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
+  });
+
+  it("adds its log's last entry, without the entry's indented reasons", () => {
+    writeFileSync(
+      files().log,
+      [
+        "2026-11-21T10:00:00Z started (pid 4, every 60s)",
+        "2026-11-21T10:01:00Z start alpha",
+        "  beta: waits for alpha",
+        "  gamma: shares scripts/loops/ with alpha",
+        "",
+      ].join("\n"),
+    );
+    expect(lastEntry(files().log)).toBe("2026-11-21T10:01:00Z start alpha");
+    expect(cli()).toContain("\nlast: 2026-11-21T10:01:00Z start alpha\n");
+    expect(lastEntry(join(loops, "missing.log"))).toBeNull();
   });
 });

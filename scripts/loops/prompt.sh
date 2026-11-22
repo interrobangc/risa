@@ -4,7 +4,7 @@
 #   prompt.sh orchestrator <topic>     paste into a new session in .loops/<topic>:
 #     cd .loops/<topic> && claude --remote-control prd-<topic> "$(scripts/loops/prompt.sh orchestrator <topic>)"
 #     (pnpm prd start <topic> prints this)
-#   prompt.sh orchestrator <topic> --auto   the same, landing every wave without asking (pnpm prd queue uses it)
+#   prompt.sh orchestrator <topic> --auto   the same, landing every wave without asking (the dispatcher uses it)
 #   prompt.sh orchestrator <topic> --resume [--auto]   take over after an interruption: reconcile
 #     the plan's _Status_ with git, respawn in-flight slices with --continue
 #   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (pnpm prd plan <topic> --open)
@@ -13,7 +13,8 @@
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
-#   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan)
+#   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan);
+#     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 set -euo pipefail
@@ -22,19 +23,31 @@ source "$(dirname "$0")/lib.sh"
 
 kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover or tidy}
 if [[ $kind == backlog ]]; then
+  if dpid=$(dispatch_pid); then
+    dispatch_read="the dispatcher: it is running (pid $dpid), so it plans and starts topics itself, one at a time, in the registry's row order (\`pnpm prd status\` shows whether it is paused and its last line; \`pnpm prd dispatch --dry-run\` shows what it would do next and why it passes each topic over). Name it in your report"
+    run_what="move up, hold or leave each topic"
+    plan_line="- To plan a topic, first ask with AskUserQuestion: leave it to the dispatcher (move it first; its planner runs unattended and files its questions and report as asks) or plan inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev."
+    run_line="- **The dispatcher is running, so deciding what runs next is moving and holding rows**, not starting anything: on the user's pick, \`pnpm backlog prd move <topic> --first|--before <t>|--after <t>\` (\`pnpm prd queue <topic>\` is the same as \`--first\`), \`pnpm backlog prd set <topic> flags=hold\` to keep it back (set its flags without \`hold\` to release it), and \`pnpm prd dispatch --pause\`/\`--resume\` for everything. You may run these yourself (they are backlog writes). **Print no start commands**: no \`pnpm prd start\`, \`pnpm prd queue\` or \`pnpm prd plan <topic> --open\` for the user to run; a topic still to write gets its planner from the dispatcher once it comes first."
+  else
+    dispatch_read="the dispatcher: none is running, so nothing starts a topic unless the user does"
+    run_what="start, queue or wait for each ready PRD"
+    plan_line="- To plan a topic, first ask with AskUserQuestion: a planner in a new terminal (the user runs \`! pnpm prd plan <topic> --open [B-n …]\` themselves) or planning inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev."
+    run_line="- No dispatcher is running. To run a planned one, never run \`pnpm prd start\` or \`pnpm prd queue\` from your own shell: print the commands as options for the user to run themselves (\`pnpm prd start <topic>\`, then its orchestrator; or \`pnpm prd queue <topic>\`, which puts it first in the registry, and \`pnpm prd dispatch\` in a tab of its own to have it started)."
+  fi
   cat <<EOF
 You are the new backlog/inbox planning agent. Do the standing work below, then ask what this session is for.
 
 - You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
-- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_). Then \`pnpm backlog ingest\`, \`pnpm backlog list\`, \`pnpm prd status\` (what's running) and the queue: \`ls $loops/.queue\` (one ticket per topic waiting in \`pnpm prd queue\`, named \`<time>-<pid>-<topic>\`, oldest first; empty or missing means nothing is queued). Name what's queued in your report, and never propose starting or queueing a topic that is already queued. Also read \`pnpm prd asks\` (the open questions and reports that run-through sessions filed for the user) and \`pnpm backlog prd list\` (the PRD registry: order, after, hot files, flags).
+- AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_). Then \`pnpm backlog ingest\`, \`pnpm backlog list\`, \`pnpm prd status\` (what's running) and $dispatch_read. Also read \`pnpm prd asks\` (the open questions and reports that run-through sessions filed for the user) and \`pnpm backlog prd list\` (the PRD registry: order, after, hot files, flags).
 - Triage new items (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write); the user reviews. A small fix is \`prd=fixes-<cat>\` (never \`quick-fixes\`): \`fixes-bug\` (wrong behaviour or data), \`fixes-perf\` (speed and load), \`fixes-ui\` (look, layout, wording, flow), \`fixes-tooling\` (scripts, checks, tests, flakes) or \`fixes-nit\` (a small tidy users won't notice); one that fits two takes the first that applies in that order, a tie-break for triage only (plans/fixes-rules.md).
 - Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
-- Then, **always, before the first question**, print an overview from what you've already collected (no new commands for it), as three short parts. Start it with what waits on the user: open asks (oldest first, each with its age) and any PRD on hold in the registry. **Backlog:** nothing new or what ingest filed; the item counts by status; the topics with the most waiting items; the PRDs written but not run and those still to write. **Orchestrators:** each running PRD by what it does, how far ahead of dev it is and its slices in flight; planning worktrees; the slots used of three; what's queued; the load if it's high. **To triage:** each item you triaged just now with the topic you proposed and why, any item still untriaged, and anything waiting on the user's review; say "nothing" when there is nothing.
-- After the overview ask **one** AskUserQuestion, multi-select, and nothing else: what is this session for? Its three options: **Write a PRD** from the backlog; **Decide what to run next** from the queue; **Triage a new issue or idea** now.
-- The next question follows only from what they picked. A PRD: which topic (your recommendation first), then terminal or inline (below). What to run: start, queue or wait for each ready PRD. A new issue: ask them to describe it, then file and triage it. Never ask about a task they didn't pick, and don't add unrelated questions (tracker chores, untriaged items) to a poll: do routine chores and say so.
+- Then, **always, before the first question**, print an overview from what you've already collected (no new commands for it), as three short parts. Start it with what waits on the user: open asks (oldest first, each with its age) and any PRD on hold in the registry. **Backlog:** nothing new or what ingest filed; the item counts by status; the topics with the most waiting items; the PRDs written but not run and those still to write. **Orchestrators:** each running PRD by what it does, how far ahead of dev it is and its slices in flight; planning worktrees; the slots used of three; the dispatcher (running, paused or stopped) and the topics first in the registry's order; the load if it's high. **To triage:** each item you triaged just now with the topic you proposed and why, any item still untriaged, and anything waiting on the user's review; say "nothing" when there is nothing.
+- After the overview ask **one** AskUserQuestion, multi-select, and nothing else: what is this session for? Its three options: **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
+- The next question follows only from what they picked. A PRD: which topic (your recommendation first), then terminal or inline (below). What to run: $run_what. A new issue: ask them to describe it, then file and triage it. Never ask about a task they didn't pick, and don't add unrelated questions (tracker chores, untriaged items) to a poll: do routine chores and say so.
 - Ask with AskUserQuestion, never numbered question lists.
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
-- To plan a topic, first ask with AskUserQuestion: a planner in a new terminal (the user runs \`! pnpm prd plan <topic> --open [B-n …]\` themselves) or planning inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev. Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab. To run a planned one, never run \`pnpm prd start\` or \`pnpm prd queue\` from your own shell: print the commands as options for the user to run themselves (\`pnpm prd start <topic>\`, then its orchestrator; or \`pnpm prd queue <topic>\`).
+$plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
+$run_line
 EOF
   exit 0
 fi
@@ -46,8 +59,9 @@ You are the recovery agent. The machine has just come back (a restart, a crash o
 - docs/agents/recovery.md describes the machinery. Read the inventory: \`pnpm prd recover --dry-run --json\`. Each \`open-session\` action names a PRD or plan worktree (\`target\`, in $loops) and its Remote Control session (\`session\`: \`prd-<topic>\` or \`plan-<topic>\`).
 - Find the live sessions with ListAgents. For each \`open-session\` whose \`session\` is live, send it this carry-on message with SendMessage:
   > The machine recovered (a restart, a crash or a usage limit); its stacks and servers are back. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of your branch, merges already in), correct it where git disagrees, respawn any slice agents that stopped (\`pnpm prd prompt slice <topic> <n> --continue\`), and carry on in your recorded landing mode.
-- For each \`open-session\` with no live session, open it with the opener: \`pnpm prd open <target>\`. It opens a new iTerm2 tab that continues the worktree's saved conversation (\`claude --continue --remote-control <session>\`) or starts a fresh one with the resume prompt, keeping the session's name. Without iTerm2 it prints the command instead: pass that on to the user. Open each one once; never open a session that ListAgents shows as live.
-- Then report, as a short table: each session, and whether you messaged it, opened it in a tab, or printed its command (and anything that failed). Then end: you have nothing else to do.
+- **Managed sessions belong to the dispatcher while it runs.** When the inventory's \`dispatcher.running\` is true (recover reopened it, or it never stopped), leave every \`open-session\` marked \`managed\` to it: never open one, since the dispatcher reopens a dead managed session itself (a live one still gets the carry-on message). With no dispatcher running, treat managed sessions like the rest.
+- For each other \`open-session\` with no live session, open it with the opener: \`pnpm prd open <target>\`. It opens a new iTerm2 tab that continues the worktree's saved conversation (\`claude --continue --remote-control <session>\`) or starts a fresh one with the resume prompt, keeping the session's name. Without iTerm2 it prints the command instead: pass that on to the user. Open each one once; never open a session that ListAgents shows as live.
+- Then report, as a short table: each session, and whether you messaged it, opened it in a tab, printed its command or left it to the dispatcher (and anything that failed). Then end: you have nothing else to do.
 
 Start by reading the inventory and ListAgents.
 EOF
@@ -58,11 +72,11 @@ if [[ $kind == tidy ]]; then
 You are the cleanup agent: a short, cheap session (run it on haiku) that clears leftovers from finished work and reports the rest.
 
 - You're in the main checkout ($main), on dev. It's the user's. **Make no code changes and no commits**, edit no files, and don't touch any worktree, stack or server yourself: \`pnpm prd tidy\` does the removing.
-- Run \`pnpm prd tidy --yes\`. It removes only what is plainly safe (merged slice and landed plan worktrees with nothing running in them, dead lease, queue and slot tickets, test databases with no worktree, stale remote-tracking refs, dangling caretook Docker volumes, old browser-hang logs, ended session records) and files everything else as one report in the asks queue (\`pnpm prd ask --report\`). If it prints a "Now send a PushNotification" line, send that PushNotification.
+- Run \`pnpm prd tidy --yes\`. It removes only what is plainly safe (merged slice and landed plan worktrees with nothing running in them, dead lease and slot tickets, test databases with no worktree, stale remote-tracking refs, dangling caretook Docker volumes, old browser-hang logs, ended session records) and files everything else as one report in the asks queue (\`pnpm prd ask --report\`). If it prints a "Now send a PushNotification" line, send that PushNotification.
 - For each \`session\` line in its ask list (a live session whose worktree is gone or whose branch is in dev: it looks finished), find it with ListAgents and ask it over SendMessage whether it is done and can be closed. Collect the answers, then file them as one more report: \`pnpm prd ask --topic tidy --report "<each session: its answer>"\`, and send its PushNotification line.
 - **Never close or end a session**, delete a branch (merged or not), archive backlog items or change the PRD registry yourself: those are on the ask list for the user. **Never delete unmerged work**, and never run \`pnpm prd rm\`, \`gc\`, \`reclaim\`, \`end\` or \`git branch -d\`.
 - Then report in three lines (what was removed, what was asked, the sessions' answers) and end.
-- To repeat it every few hours while PRDs run, start this session with \`/loop 3h\` and this brief; the dispatcher (orchestration-3) takes the schedule over later.
+- The dispatcher runs \`pnpm prd tidy --yes\` every six hours by itself; this brief is for when it isn't running (start this session with \`/loop 3h\` and this brief to repeat it).
 
 Start with \`pnpm prd tidy --yes\`.
 EOF
@@ -150,7 +164,7 @@ EOF
     if [[ -n $auto ]]; then
       cat <<EOF
 
-**Landing mode: run everything through.** The user queued you with \`pnpm prd queue $topic\` and asked for the whole plan to run without prompting. Start every ready slice (every slice it's blocked by is merged into prd/$topic), as many at once as the plan allows; land each green wave yourself; clean up. Ask the user only real questions: a product decision the PRD doesn't settle, a failure you can't fix, or anything that would touch another PRD's branch.
+**Landing mode: run everything through.** You were started run-through (by the dispatcher, in the registry's order, or by hand), and the user asked for the whole plan to run without prompting. Start every ready slice (every slice it's blocked by is merged into prd/$topic), as many at once as the plan allows; land each green wave yourself; clean up. Ask the user only real questions: a product decision the PRD doesn't settle, a failure you can't fix, or anything that would touch another PRD's branch.
 
 **Asking and reporting, run-through.** The user isn't watching this terminal, so never ask in it. A real question goes through \`pnpm prd ask --topic $topic --question "<text>" --option "<a>" --option "<b>" --recommend <a>\`, which prints its id. Right after it, call the PushNotification tool yourself (a tool you call, not a command) with the line \`pnpm prd ask\` printed, so the question reaches the user's phone. Then run \`pnpm prd ask --wait <id>\` in the background and carry on with whatever doesn't depend on the answer; you're woken when it prints. When the user answers in this session instead, record it with \`pnpm prd answer <id> "<reply>"\`. Each landing files a report with \`pnpm prd ask --topic $topic --report "<text>"\` (the \`pnpm prd ready\` summary, the link to try it, and what to try by hand) and pushes it with PushNotification. A code landing also leaves \`to-test/<date>-<time>-<topic>.md\` in the main checkout (land writes it; never edit or delete files there). The report text names the topic, what landed and that to-test file, and stands alone: tapping the push may open a session that has ended or rotated, so nothing the user needs may live only in this conversation. Push other reports only when something failed.
 

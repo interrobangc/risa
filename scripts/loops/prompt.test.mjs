@@ -118,7 +118,10 @@ describe("orchestrator", () => {
     const out = ok("orchestrator", "T", "--auto");
     expect(out).toContain(EVERY_STEP);
     expect(out).toContain(RUN_THROUGH);
-    expect(out).toContain("`pnpm prd queue T`");
+    expect(out).toContain(
+      "You were started run-through (by the dispatcher, in the registry's order, or by hand)",
+    );
+    expect(out).not.toContain("pnpm prd queue");
     expect(out).not.toContain(ASK_FIRST);
     expect(out).not.toContain(RESUME);
     expect(out).toContain("record the landing mode in the plan's _Status_, then start the first ready wave.");
@@ -241,10 +244,44 @@ describe("plan and backlog", () => {
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
 
-  it("backlog reads the queue on startup", () => {
+  it("backlog without a dispatcher: as before, it prints start commands for the user", () => {
     const text = ok("backlog");
-    expect(text).toMatch(/and the queue: `ls \S+\/\.queue`/);
-    expect(text).toContain("never propose starting or queueing a topic that is already queued");
+    expect(text).not.toContain(".queue");
+    expect(text).toContain("the dispatcher: none is running, so nothing starts a topic unless the user does");
+    expect(text).toContain("What to run: start, queue or wait for each ready PRD.");
+    expect(text).toContain("- No dispatcher is running. To run a planned one, never run `pnpm prd start`");
+    expect(text).toContain("print the commands as options for the user to run themselves");
+    expect(text).toContain("(the user runs `! pnpm prd plan <topic> --open [B-n …]` themselves)");
+    expect(text).not.toContain("moving and holding rows");
+  });
+
+  it("backlog with the dispatcher running: deciding is moving and holding rows, and no start commands", () => {
+    const lock = join(loops, ".dispatch.lock");
+    mkdirSync(loops, { recursive: true });
+    writeFileSync(lock, `${process.pid}\n`);
+    try {
+      const text = ok("backlog");
+      expect(text).toContain(`the dispatcher: it is running (pid ${process.pid})`);
+      expect(text).toContain(
+        "**The dispatcher is running, so deciding what runs next is moving and holding rows**",
+      );
+      expect(text).toContain("`pnpm backlog prd move <topic> --first|--before <t>|--after <t>`");
+      expect(text).toContain("`pnpm backlog prd set <topic> flags=hold`");
+      expect(text).toContain("**Print no start commands**");
+      expect(text).toContain("What to run: move up, hold or leave each topic.");
+      expect(text).toContain("leave it to the dispatcher (move it first;");
+      expect(text).not.toContain("(the user runs `! pnpm prd plan <topic> --open");
+      expect(text).not.toContain("No dispatcher is running");
+    } finally {
+      rmSync(lock);
+    }
+    // A lock whose pid is gone is no running dispatcher.
+    writeFileSync(lock, "999999\n");
+    try {
+      expect(ok("backlog")).toContain("No dispatcher is running");
+    } finally {
+      rmSync(lock);
+    }
   });
 
   it("plan adds its registry row through pnpm backlog prd and ends with pnpm prd end", () => {
@@ -336,6 +373,16 @@ describe("recover", () => {
     expect(text).not.toContain(RESUME);
   });
 
+  it("leaves managed sessions to a running dispatcher", () => {
+    const text = ok("recover");
+    expect(text).toContain("**Managed sessions belong to the dispatcher while it runs.**");
+    expect(text).toContain(
+      "When the inventory's `dispatcher.running` is true (recover reopened it, or it never stopped), leave every `open-session` marked `managed` to it: never open one",
+    );
+    expect(text).toContain("With no dispatcher running, treat managed sessions like the rest.");
+    expect(text).toContain("or left it to the dispatcher");
+  });
+
   it("takes no topic", () => {
     expect(ok("recover", "ignored")).toMatch(/^You are the recovery agent\./);
   });
@@ -349,6 +396,8 @@ describe("tidy", () => {
     expect(text).toContain("Run `pnpm prd tidy --yes`.");
     expect(text).toContain("SendMessage");
     expect(text).toContain("`/loop 3h`");
+    expect(text).toContain("The dispatcher runs `pnpm prd tidy --yes` every six hours by itself");
+    expect(text).toContain("dead lease and slot tickets");
     expect(text).toContain("**Never close or end a session**");
     expect(text).toContain("**Never delete unmerged work**");
     expect(text).toContain("send that PushNotification");

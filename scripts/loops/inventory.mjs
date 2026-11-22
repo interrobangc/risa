@@ -19,16 +19,21 @@
 //                         worktrees whose stack isn't up; with one, its stacks
 //   serve <name>          without a record, prd worktrees whose server is down;
 //                         with one, its servers
+//   dispatch              the dispatcher isn't running but was: the down record
+//                         says so, or its lock's pid is gone (a crash); recover
+//                         reopens it in a background tab
 //   offer-gc <name>       merged slices (a dirty one is offered, and gc keeps it)
 //   open-session <name>   every prd and plan worktree (the recovery agent skips
-//                         the ones with a live session)
+//                         the ones with a live session, and managed ones while
+//                         the dispatcher runs: it reopens those itself)
 //   delete-down-record    last, when a down record was used
 //
 // Every step is skipped when it's already true (a stack up, a server running),
 // so a second `recover` only has sessions and gc offers left.
 //
 // The down record (.loops/.down.json, written by `pnpm prd down`):
-//   { "at": "<ISO time>", "stacks": ["<name>", …], "servers": ["<name>", …], "testDb": true }
+//   { "at": "<ISO time>", "stacks": ["<name>", …], "servers": ["<name>", …], "testDb": true,
+//     "dispatcher": true }
 // Names that no longer have a worktree are skipped, with a warning.
 
 export const CLASSES = ["prd", "plan", "active", "merged", "stackless"];
@@ -38,6 +43,7 @@ export const STEPS = [
   "test-db up",
   "stack up",
   "serve",
+  "dispatch",
   "offer-gc",
   "open-session",
   "delete-down-record",
@@ -59,8 +65,8 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @property {boolean} [serverRunning]
  *
  * @typedef {object} LockFacts
- * @property {"slot"|"ticket"|"start"|"backlog"|"lease"} kind
- *   slot: .loops/.slots/<N>; ticket: .loops/.queue/<t>; start: .loops/.prd-start.lock;
+ * @property {"slot"|"dispatch"|"backlog"|"lease"} kind
+ *   slot: .loops/.slots/<N>; dispatch: .loops/.dispatch.lock (the dispatcher's pid);
  *   backlog: the backlog lock; lease: a machine-wide lease (reported, never cleared:
  *   lease.sh takes over a dead holder by itself)
  * @property {string} path
@@ -72,14 +78,16 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @typedef {object} Facts
  * @property {WorktreeFacts[]} worktrees
  * @property {LockFacts[]} [locks]
+ * @property {{ running: boolean, pid?: number|null }} [dispatcher]
+ * @property {string[]} [managed]   session names whose record the dispatcher manages
  * @property {{ running: boolean }} [docker]
  * @property {{ running: boolean }} [testDb]
- * @property {{ at?: string, stacks?: string[], servers?: string[], testDb?: boolean } | null} [downRecord]
+ * @property {{ at?: string, stacks?: string[], servers?: string[], testDb?: boolean, dispatcher?: boolean } | null} [downRecord]
  * @property {string} [downRecordPath]
  * @property {string} [downRecordError]   it exists but can't be read
  * @property {{ freeGb: number|null, minGb?: number }} [disk]
  *
- * @typedef {{ step: string, target?: string, why: string, dirty?: boolean, session?: string }} Action
+ * @typedef {{ step: string, target?: string, why: string, dirty?: boolean, session?: string, managed?: boolean }} Action
  */
 
 /** The class of one worktree and why. @param {WorktreeFacts} w */
@@ -205,6 +213,17 @@ export function inventory(facts) {
       why: record ? `the down record had :${w.webPort} running` : `prd: nothing listens on :${w.webPort}`,
     });
   }
+  const dispatcherUp = facts.dispatcher?.running === true;
+  const lockGone = stale.some((l) => l.kind === "dispatch");
+  if (!dispatcherUp && (record?.dispatcher === true || lockGone))
+    add({
+      step: "dispatch",
+      why:
+        record?.dispatcher === true
+          ? "the down record had the dispatcher running"
+          : `the dispatcher's lock is stale (pid ${facts.dispatcher?.pid ?? "?"} is gone): it was running`,
+    });
+  const managed = new Set(facts.managed ?? []);
   for (const w of worktrees.filter((w) => w.class === "merged"))
     add({
       step: "offer-gc",
@@ -218,6 +237,7 @@ export function inventory(facts) {
       target: w.name,
       why: `session ${sessionName(w)}: tell it to carry on, or reopen it when none is live`,
       session: sessionName(w),
+      ...(managed.has(sessionName(w)) ? { managed: true } : {}),
     });
   if (record)
     add({ step: "delete-down-record", target: facts.downRecordPath, why: "used once, then deleted" });
@@ -241,6 +261,11 @@ export function inventory(facts) {
     docker: { running: dockerUp },
     testDb: { running: dockerUp && !!facts.testDb?.running },
     downRecord: record,
+    dispatcher: {
+      running: dispatcherUp,
+      pid: dispatcherUp ? (facts.dispatcher?.pid ?? null) : null,
+      reopen: actions.some((a) => a.step === "dispatch"),
+    },
     disk,
     warnings,
     actions,
@@ -283,6 +308,9 @@ export function formatInventory(inv) {
     `disk: ${inv.disk.freeGb == null ? "unknown" : `${inv.disk.freeGb} GB free`} (line: ${inv.disk.minGb} GB)${inv.disk.low ? " · LOW" : ""}`,
   );
   out.push(`down record: ${inv.downRecord ? `from ${inv.downRecord.at ?? "an unknown time"}` : "none"}`);
+  out.push(
+    `dispatcher: ${inv.dispatcher.running ? `running (pid ${inv.dispatcher.pid})` : inv.dispatcher.reopen ? "not running (recover reopens it)" : "not running"}`,
+  );
 
   const lockLine = (/** @type {LockFacts} */ l) =>
     `  ${l.kind.padEnd(7)} ${l.path}${l.holder ? ` (${l.holder})` : ""}${l.why ? `: ${l.why}` : ""}`;
