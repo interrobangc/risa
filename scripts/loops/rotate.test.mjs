@@ -316,7 +316,9 @@ describe("rotate-into.sh", () => {
     expect(atStart).not.toHaveProperty("ended");
     expect(atStart).toMatchObject({ kind: "prd", topic: "w", auto: false });
     // Fresh, the same name, the resume prompt; not run-through.
-    const args = stateFile("args").split("\n");
+    const [settingsFlag, settingsFile, ...args] = stateFile("args").split("\n");
+    expect(settingsFlag).toBe("--settings");
+    expect(settingsFile).toMatch(/context-settings\.json$/);
     expect(args.slice(0, 2)).toEqual(["--remote-control", "prd-w"]);
     const prompt = args.slice(2).join("\n");
     expect(prompt).toContain('You are the PRD orchestrator for "w".');
