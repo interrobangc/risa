@@ -314,6 +314,7 @@ describe("the tick", () => {
       "dispatch-context.mjs",
       "dispatch-pick.mjs",
       "context.mjs",
+      "keep-alive.mjs",
       "asks.mjs",
       "ask.mjs",
       "sessions.mjs",
@@ -338,6 +339,7 @@ describe("the tick", () => {
       CARETOOK_CONTEXT_LIMIT: "",
       CARETOOK_CONTEXT_NUDGE_MIN: "",
       CARETOOK_CONTEXT_WATCH: "",
+      CARETOOK_KEEP_SESSIONS: "off",
       CARETOOK_CLOCK_FILE: clock,
       STUB_STATE: stubs,
     };
