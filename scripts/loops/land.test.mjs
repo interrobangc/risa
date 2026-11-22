@@ -38,18 +38,19 @@ const docsOnly = () =>
   }).status === 0;
 
 // A `gh` that answers the three calls land.sh makes; the PR's head is $PR_HEAD
-// and Codex has said nothing ("waiting").
+// and Codex has said nothing ("waiting"), unless $PR_COMMENTS holds its
+// summary comment (a JSON array of comment nodes).
 const GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "repo view") echo o/r ;;
   "pr list") echo 7 ;;
   "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev ;;
-  "api graphql") printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":[]},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" ;;
+  "api graphql") printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":%s},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" "\${PR_COMMENTS:-[]}" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
 `;
 
-const land = (...args) =>
+const landWith = (extra, ...args) =>
   spawnSync("bash", ["scripts/loops/land.sh", "throwaway-x", "-m", "docs(throwaway-x): t", ...args], {
     cwd: repo,
     encoding: "utf8",
@@ -58,8 +59,10 @@ const land = (...args) =>
       PATH: `${join(root, "bin")}:${process.env.PATH}`,
       CARETOOK_PR_THROWAWAY: "1",
       PR_HEAD: git("rev-parse", "prd/throwaway-x"),
+      ...extra,
     },
   });
+const land = (...args) => landWith({}, ...args);
 
 beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "land-")));
@@ -156,6 +159,50 @@ describe("land.sh on the PR path", () => {
     });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("local tip");
+  });
+
+  // Codex finished clean on `sha`: its summary comment, as PR_COMMENTS.
+  const reviewedClean = (sha) => ({
+    PR_COMMENTS: JSON.stringify([
+      {
+        author: { login: "chatgpt-codex-connector" },
+        body: `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: sha, status: "completed" } })} -->`,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  });
+  // A code branch Codex reviewed clean, then dev moved (another file) and the branch merged it.
+  const reviewedThenSynced = () => {
+    branch({ "apps/web/b.ts": "2" });
+    const reviewed = git("rev-parse", "prd/throwaway-x");
+    commit({ "apps/web/dev.ts": "dev moved" }, "dev work");
+    git("push", "-q", "origin", "dev");
+    git("checkout", "-q", "prd/throwaway-x");
+    git("merge", "-q", "--no-ff", "-m", "chore(throwaway-x): merge dev", "dev");
+    git("checkout", "-q", "dev");
+    return reviewed;
+  };
+
+  it("lands on a clean verdict carried over a dev merge, pinned to the merged tip", () => {
+    const reviewed = reviewedThenSynced();
+    const tip = git("rev-parse", "prd/throwaway-x");
+    const r = landWith(reviewedClean(reviewed), "--force");
+    expect(r.stdout).toContain(`codex: clean on ${tip.slice(0, 7)} (carried from ${reviewed.slice(0, 7)}`);
+    expect(r.stdout).toContain(`--match-head-commit ${tip}`);
+    expect(r.status).toBe(0);
+  });
+
+  it("refuses a stale verdict when the branch added work after the dev merge", () => {
+    const reviewed = reviewedThenSynced();
+    git("checkout", "-q", "prd/throwaway-x");
+    commit({ "apps/web/b.ts": "3" }, "more work");
+    git("checkout", "-q", "dev");
+    const r = landWith(reviewedClean(reviewed), "--force");
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(
+      /Codex's verdict on PR #7 isn't clean \(codex: stale .*not carried: .* isn't a merge of/,
+    );
   });
 });
 

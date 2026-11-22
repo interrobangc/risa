@@ -90,4 +90,4 @@ else
     die "couldn't open a PR from $branch into $trunk"
   echo "opened $url"
 fi
-echo "Codex reviews each push by itself; then: pnpm prd review ${branch#prd/} --wait (in the background)"
+echo "Codex reviews each push by itself (a clean verdict carries over a plain dev merge); then: pnpm prd review ${branch#prd/} --wait (in the background)"
