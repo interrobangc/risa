@@ -236,7 +236,7 @@ describe("session.sh", () => {
   });
 
   it("records --managed (the dispatcher's), and by hand without it", () => {
-    let r = run("session.sh", ["plan-m", "--auto", "--managed", "--", "x"], { STUB_NAME: "plan-m" });
+    const r = run("session.sh", ["plan-m", "--auto", "--managed", "--", "x"], { STUB_NAME: "plan-m" });
     expect(r.status).toBe(0);
     expect(JSON.parse(readFileSync(join(state, "record-at-start"), "utf8"))).toMatchObject({
       kind: "plan",

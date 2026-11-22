@@ -118,6 +118,15 @@ describe("rule 2: dead sessions", () => {
     expect(p.action).toBe("ask");
   });
 
+  it("never reopens or asks about a held topic's dead session", () => {
+    const held = { ...dead, rows: [row("a", "running", { flags: ["hold"] }), row("b", "planned")] };
+    for (const reopens of [{}, { "prd-a": MAX_REOPENS }]) {
+      const p = go({ ...held, sessions: [session("prd-a", { live: false })], reopens });
+      expect(p.action).toBe("start");
+      expect(whyOf(p, "a")).toBe("on hold; its orchestrator isn't live (not reopened)");
+    }
+  });
+
   it("a record marked rotating in the last five minutes isn't reopened; an older one is", () => {
     const rot = (ago) => [session("prd-a", { live: false, rotating: true, rotatingAt: NOW - ago })];
     const fresh = go({ ...dead, sessions: rot(ROTATING_GRACE_MS - 1000) });
