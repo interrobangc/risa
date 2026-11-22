@@ -78,6 +78,52 @@ describe("check-run.sh test-file counts", () => {
   });
 });
 
+describe("check-run.sh failure fields", () => {
+  it("logs the failed step and files, and the flakes of a run that passed", () => {
+    const failing =
+      'echo integration > "$CARETOOK_CHECK_STATE/step"; printf "b.int.test.ts\\na.int.test.ts\\n" > "$CARETOOK_CHECK_STATE/failed"; exit 1';
+    expect(run("slice", "fails", failing).status).toBe(1);
+    expect(parseLog(readFileSync(logFile, "utf8")).runs.at(-1)).toMatchObject({
+      failedStep: "integration",
+      failedFiles: ["a.int.test.ts", "b.int.test.ts"],
+      flakyFiles: [],
+    });
+    const flaky = 'echo unit > "$CARETOOK_CHECK_STATE/step"; echo c.test.ts > "$CARETOOK_CHECK_STATE/flaky"';
+    expect(run("slice", "flaky", flaky).status).toBe(0);
+    expect(parseLog(readFileSync(logFile, "utf8")).runs.at(-1)).toMatchObject({
+      exit: 0,
+      failedStep: "",
+      failedFiles: [],
+      flakyFiles: ["c.test.ts"],
+    });
+  });
+
+  it("still parses a line from before the fields", () => {
+    const old = ["2026-11-21T12:00:00Z", "wt", "prd/x", "full", "why", "60", "1", "1", "1", "", "", "0"];
+    const { runs, skipped } = parseLog(old.join("\t"));
+    expect(skipped).toBe(0);
+    expect(runs[0]).toMatchObject({ exit: 1, failedStep: "", failedFiles: [], flakyFiles: [] });
+  });
+});
+
+describe("check-run.sh time limit", () => {
+  const alive = (pid) => spawnSync("kill", ["-0", pid]).status === 0;
+
+  it("stops past its limit, exits non-zero, leaves no child and logs the step", () => {
+    const pidFile = join(root, "grandchild");
+    const cmd = `echo unit > "$CARETOOK_CHECK_STATE/step"; sh -c 'trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 1; done' & wait`;
+    const r = run("quick", "hangs", cmd, { CARETOOK_CHECK_LIMIT: "1", CARETOOK_CHECK_KILL_GRACE: "1" });
+    expect(r.status).toBe(124);
+    expect(r.stderr).toMatch(/limit of 1s in the unit step/);
+    expect(alive(readFileSync(pidFile, "utf8").trim())).toBe(false);
+    expect(parseLog(readFileSync(logFile, "utf8")).runs.at(-1)).toMatchObject({
+      reason: "hangs",
+      exit: 124,
+      failedStep: "unit",
+    });
+  });
+});
+
 describe("check-run.sh load reading", () => {
   it("logs one numeric load when sysctl fails and uptime prints a Linux line", () => {
     const bin = join(root, "stubs");
@@ -94,7 +140,7 @@ describe("check-run.sh load reading", () => {
     const added = readFileSync(logFile, "utf8").split("\n").slice(before, -1);
     expect(added).toHaveLength(1);
     const fields = added[0].split("\t");
-    expect(fields).toHaveLength(12);
+    expect(fields).toHaveLength(15);
     expect(fields[11]).toBe("0");
     expect(fields[6]).toBe("0.58");
     expect(fields[7]).toBe("0.58");

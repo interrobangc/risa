@@ -295,29 +295,17 @@ case $cmd in
     done
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
     record=$(checked_file "$dir")
-    if ((quick)); then
-      # The base is the last full pass (or a quick pass's own base) when it's
-      # an ancestor of HEAD, else where the branch left dev.
-      read -r prev mode qbase _ 2>/dev/null < "$record" || true
-      [[ ${mode:-} == quick ]] && prev=$qbase
-      if [[ -n ${prev:-} ]] && git -C "$dir" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then base=$prev
-      else base=$(git -C "$dir" merge-base "$trunk" HEAD); fi
-    fi
     # The mode comes from the plan (check-plan.mjs): a quick check on a diff that
     # touches a migration, seeds, the sync config, a lockfile, a package.json or
     # the Vitest config is a full one, and the tooling tests join when it touches
-    # the tooling.
-    [[ -n ${base:-} ]] || base=$(git -C "$dir" merge-base "$trunk" HEAD)
-    # A slice's --quick is the slice check: its own test files only, never forced to full.
+    # the tooling. A slice's --quick is the slice check: its own test files only,
+    # never forced to full.
     asked=full
     if ((quick)); then
-      asked=quick; cur=$(git -C "$dir" branch --show-current)
-      if [[ $cur == slice/* ]]; then
-        asked=slice; parent=${cur#slice/}; parent=prd/${parent%/*}
-        # A slice's own files are those since it left its PRD branch, not dev.
-        if git -C "$dir" rev-parse -q --verify "$parent" > /dev/null; then base=$(git -C "$dir" merge-base "$parent" HEAD); fi
-      fi
+      asked=quick
+      [[ $(git -C "$dir" branch --show-current) == slice/* ]] && asked=slice
     fi
+    base=$(check_base "$dir" "$asked")
     { read -r pmode; read -r preason; read -r ptooling; read -r pown; } < <(
       git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked")
     rm -f "$record"

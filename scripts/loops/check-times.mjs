@@ -2,16 +2,18 @@
 // summary: `pnpm prd check --times [--since <date>]`. Pure functions, plus a
 // small CLI at the bottom.
 //
-// A line has twelve tab-separated fields: start, worktree, branch, mode,
+// A line has fifteen tab-separated fields: start, worktree, branch, mode,
 // reason, seconds, load at start, load at end, exit code, test files run, test
-// files in all, and the seconds the check waited for the load (the load gate;
-// lines written before it have eleven, and no wait).
+// files in all, the seconds the check waited for the load (the load gate), the
+// step that failed, the failed test files and the flaky ones (comma-separated).
+// Older lines have nine to twelve, and none of what they lack.
 import { existsSync, readFileSync } from "node:fs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
  *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
- *   loadWaited: number | null }} Run */
+ *   loadWaited: number | null, failedStep: string, failedFiles: string[], flakyFiles: string[] }} Run */
 
+const names = (s) => (s ? s.split(",").filter(Boolean) : []);
 const num = (s) => (s !== undefined && s !== "" && Number.isFinite(Number(s)) ? Number(s) : null);
 
 /** @param {string} text @returns {{ runs: Run[], skipped: number }} */
@@ -47,6 +49,9 @@ export function parseLog(text) {
       filesRun: num(f[9]),
       filesAll: num(f[10]),
       loadWaited: num(f[11]),
+      failedStep: f[12] ?? "",
+      failedFiles: names(f[13]),
+      flakyFiles: names(f[14]),
     });
   }
   return { runs, skipped };
@@ -87,7 +92,40 @@ export function summarize(text, { since } = {}) {
     if (Number.isNaN(cutoff)) throw new Error(`--since: can't read the date "${since}"`);
   }
   const runs = cutoff === null ? all : all.filter((r) => Date.parse(r.start) >= cutoff);
-  return { ...group(runs), skipped, byMode: by(runs, (r) => r.mode), byPrd: by(runs, prdOf) };
+  return {
+    ...group(runs),
+    skipped,
+    byMode: by(runs, (r) => r.mode),
+    byPrd: by(runs, prdOf),
+    failuresByStep: failuresByStep(runs),
+    topFailedFiles: topFailedFiles(runs),
+  };
+}
+
+/** Failed runs per step, most first; a line from before the field counts as "(not recorded)". */
+function failuresByStep(runs) {
+  const counts = new Map();
+  for (const r of runs) {
+    if (r.exit === 0) continue;
+    const step = r.failedStep || "(not recorded)";
+    counts.set(step, (counts.get(step) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
+    .map(([step, failures]) => ({ step, failures }));
+}
+
+/** The ten test files in the most failed runs. */
+function topFailedFiles(runs) {
+  const counts = new Map();
+  for (const r of runs) {
+    if (r.exit === 0) continue;
+    for (const f of new Set(r.failedFiles)) counts.set(f, (counts.get(f) ?? 0) + 1);
+  }
+  return [...counts]
+    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
+    .slice(0, 10)
+    .map(([file, failures]) => ({ file, failures }));
 }
 
 const fmtMin = (m) => `${m.toFixed(1)}`;
@@ -108,6 +146,13 @@ export function formatSummary(s, { since } = {}) {
       "By PRD:",
       ...Object.entries(s.byPrd).map(([k, g]) => row(k, g)),
     );
+    if (s.failuresByStep.length)
+      lines.push("Failures by step:", ...s.failuresByStep.map((x) => `  ${x.step.padEnd(24)} ${x.failures}`));
+    if (s.topFailedFiles.length)
+      lines.push(
+        "Most-failed test files:",
+        ...s.topFailedFiles.map((x) => `  ${String(x.failures).padStart(4)}  ${x.file}`),
+      );
   }
   if (s.skipped) lines.push(`${s.skipped} malformed line${s.skipped === 1 ? "" : "s"} skipped`);
   return lines.join("\n");

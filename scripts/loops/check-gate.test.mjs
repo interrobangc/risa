@@ -103,3 +103,35 @@ describe("the check gate", () => {
     expect(ok()).toBe(false);
   });
 });
+
+describe("check_base", () => {
+  const base = (asked) =>
+    spawnSync("bash", ["-c", `source scripts/loops/lib.sh && check_base "$PWD" ${asked}`], {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...process.env, TRUNK: "dev" },
+    }).stdout.trim();
+
+  it("a quick check with no pass recorded starts where the branch left dev", () => {
+    const left = git("rev-parse", "dev");
+    commit({ "apps/web/b.ts": "1" }, "work");
+    expect(base("quick")).toBe(left);
+  });
+
+  it("a quick check starts from a recorded full pass", () => {
+    const passed = commit({ "apps/web/b.ts": "1" }, "work");
+    record(`${passed} full`);
+    commit({ "apps/web/c.ts": "1" }, "more");
+    expect(base("quick")).toBe(passed);
+  });
+
+  it("a slice starts where it left its PRD branch, whatever is recorded", () => {
+    git("checkout", "-qb", "prd/topic");
+    const left = commit({ "apps/web/p.ts": "1" }, "prd work");
+    git("checkout", "-qb", "slice/topic/1");
+    const mine = commit({ "apps/web/s.ts": "1" }, "slice work");
+    record(`${mine} full`);
+    commit({ "apps/web/t.ts": "1" }, "more");
+    expect(base("slice")).toBe(left);
+  });
+});
