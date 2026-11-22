@@ -33,6 +33,10 @@
 //   node sessions.mjs self [<name>]           the calling session: "<pid> record"
 //                                             when NAME's record is live, else
 //                                             "<pid> ancestor" (exit 1: neither)
+//   node sessions.mjs caller                  the live record of the calling shell's
+//                                             ancestor claude: "<name>\t<kind>\t<pid>\t<topic>"
+//                                             (exit 1, saying why: no ancestor, or
+//                                             it has no live record)
 // The claude name is basename($CARETOOK_CLAUDE_BIN), default claude.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -272,8 +276,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         }
         break;
       }
+      case "caller": {
+        const p = ancestor(process.pid);
+        if (!p) fail("this shell isn't under a claude process");
+        const proc = processOf(p ?? 0);
+        const hit = readRecords(dir).find(({ record }) => record?.pid === p && isLive(record, proc));
+        if (!hit) fail(`its claude (pid ${p}) has no live session record`);
+        else console.log([hit.name, hit.record?.kind || "unknown", p, hit.record?.topic ?? ""].join("\t"));
+        break;
+      }
       default:
-        fail("usage: sessions.mjs set|get|list|live|ancestor|self …", 2);
+        fail("usage: sessions.mjs set|get|list|live|ancestor|self|caller …", 2);
     }
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));

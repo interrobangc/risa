@@ -39,6 +39,8 @@ export const MAX_REOPENS = 2;
 export const ROTATING_GRACE_MS = 5 * 60_000;
 /** The `session` of the asks the dispatcher files itself. */
 export const DISPATCH_SESSION = "dispatch";
+/** The `session` of the keep-alive's own question (keep-alive.mjs): no topic's question, never a reopen one. */
+export const KEEP_SESSION = "dispatch-keep";
 /** The answers a reopen ask offers. */
 export const REOPEN_OPTIONS = ["reopen again", "hold the topic"];
 /** The caps when the caller gives none: CARETOOK_MAX_PRDS, CARETOOK_MAX_PLANNERS, CARETOOK_FIXES_MIN. */
@@ -101,7 +103,7 @@ export function pick(facts) {
   const flags = (/** @type {PickRow | undefined} */ r) => r?.flags ?? [];
 
   // An open question is one that awaits an answer: a defaulted one has its answer.
-  const asks = (facts.asks ?? []).filter(awaitsAnswer);
+  const asks = (facts.asks ?? []).filter((a) => awaitsAnswer(a) && a.session !== KEEP_SESSION);
   const questionOf = (/** @type {string} */ topic) => asks.find((a) => a.topic === topic);
   const reopenAskOf = (/** @type {string} */ topic) =>
     asks.find((a) => a.topic === topic && a.session === DISPATCH_SESSION);

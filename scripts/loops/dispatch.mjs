@@ -19,6 +19,12 @@
 //     (session.sh plan-<t> --auto --managed, --model opus, prompt.sh plan <t>
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
 //   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
+//   - keep-alive (keep-alive.mjs), beside the pick and outside the PRD slots:
+//     a fresh managed backlog session through the opener when none is live, or
+//     its own question after three quick deaths. CARETOOK_KEEP_SESSIONS=off;
+//   - session requests (session-requests.mjs), after the keep-alive and before
+//     starts: the oldest pending one opens backlog-<name>, or is refused, with a
+//     notice either way. CARETOOK_MAX_BACKLOG_SESSIONS (4);
 //   - ask: a reopen question filed with `pnpm prd ask` (session "dispatch"),
 //     then a one-shot helper session (haiku, Remote Control, in a background
 //     tab) whose prompt is "send this PushNotification, then pnpm prd end"; a
@@ -28,6 +34,10 @@
 // The session record (managed, auto) is written before a new session's tab
 // opens, so a tab that never starts is reopened like a dead session.
 //
+// Each tick also follows up on managed orchestrators and backlog sessions that
+// stay over the context limit (dispatch-context.mjs): a nudge, a defaulting
+// question, the rotation. CARETOOK_CONTEXT_NUDGE_MIN (15); CARETOOK_CONTEXT_WATCH=off stops it.
+//
 // Every TIDY_EVERY_MS (six hours), on a tick that does nothing else (and isn't
 // paused), it runs `pnpm prd tidy --yes`. A usage limit isn't detected: the
 // user pauses and resumes. Without iTerm2 it refuses to run (it couldn't open
@@ -35,7 +45,8 @@
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
-// state: paused and why, reopen counts, the open reopen asks, the last tidy),
+// state: paused and why, reopen counts, the open reopen asks, the last tidy,
+// keepAlive: each kept kind's quick deaths, last open, open ask and stop),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
 // Env: CARETOOK_MAX_PRDS (3), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
@@ -58,10 +69,23 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getAsk, listAsks, settleDue } from "./asks.mjs";
-import { DISPATCH_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
+import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
+import { contextDirOf, limitOf, sizeRecord, updateRecord } from "./context.mjs";
+import { CONTEXT_OPTIONS, CONTEXT_SESSION, commandUnder, contextDecision } from "./dispatch-context.mjs";
+import { DISPATCH_SESSION, KEEP_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
+import { briefProblem } from "./rotate.mjs";
+import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
-import { isLive, processOf, readRecords, writeRecord } from "./sessions.mjs";
+import { createNotice } from "./notices.mjs";
+import {
+  DEFAULT_MAX_BACKLOG_SESSIONS,
+  readRequests,
+  requestDecision,
+  requestLine,
+  requestNotice,
+  settleRequest,
+} from "./session-requests.mjs";
+import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -138,11 +162,15 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
     log: join(loops, ".dispatch.log"),
     sessions: env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions"),
     asks: env.CARETOOK_ASKS_DIR || join(loops, ".asks"),
+    requests: env.CARETOOK_REQUESTS_DIR || join(loops, ".requests"),
+    notices: env.CARETOOK_NOTICES_DIR || join(loops, ".notices"),
   };
 }
 
 /** @typedef {{ paused?: { at: string, why: string } | null, reopens?: Record<string, number>,
- *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number }} DispatchState */
+ *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number,
+ *   context?: Record<string, import("./dispatch-context.mjs").ContextEntry>,
+ *   keepAlive?: import("./keep-alive.mjs").KeepState }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -299,6 +327,300 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
   };
 }
 
+// ---- the context follow-up -------------------------------------------------------
+
+/** Gathers the context facts and applies the decision. Returns whether it did anything. */
+function contextStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {ReturnType<typeof gather>} */ g,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+) {
+  if (env.CARETOOK_CONTEXT_WATCH === "off") return false;
+  const now = g.facts.now;
+  const dir = contextDirOf(p.sessions);
+  const limit = limitOf(env);
+  const waitMs = positive(env.CARETOOK_CONTEXT_NUDGE_MIN, 15) * 60_000;
+  const entries = readState(p.state).context ?? {};
+  const sessions = g.records.map((r) => ({
+    name: r.name,
+    pid: r.record.pid ?? 0,
+    kind: r.record.kind,
+    topic: r.record.topic,
+    managed: r.record.managed === true,
+    live: r.live,
+    rotating: r.record.rotating === true,
+  }));
+  /** @type {Record<string, any>} */
+  const sizes = {};
+  for (const s of sessions) if (s.live) sizes[s.name] = sizeRecord(dir, s.name, s.pid);
+  /** @type {Record<string, any>} */
+  const asks = {};
+  for (const e of Object.values(entries)) if (e.askId) asks[e.askId] = getAsk(p.asks, e.askId);
+  // The process table only when a rotation could follow; unreadable holds every rotation.
+  const running = new Set();
+  if (Object.values(entries).some((e) => e.askId)) {
+    let table = null;
+    try {
+      table = processTable();
+    } catch {
+      /* held below */
+    }
+    for (const s of sessions) if (s.live && (!table || commandUnder(s.pid, table))) running.add(s.name);
+  }
+  // A backlog session's brief, when it could be used: a bad one is no brief, never a failed rotation.
+  const briefFile = (/** @type {string} */ name) => join(dirname(p.sessions), ".briefs", `${name}.md`);
+  /** @type {Record<string, number>} */
+  const briefs = {};
+  for (const s of sessions) {
+    if (!s.live || s.kind !== "backlog" || !entries[s.name]?.askId) continue;
+    const file = briefFile(s.name);
+    if (!briefProblem(file)) briefs[s.name] = statSync(file).mtimeMs;
+  }
+  const actions = contextDecision({
+    sessions,
+    sizes,
+    entries,
+    asks,
+    running,
+    briefs,
+    paused: g.facts.paused,
+    limit,
+    waitMs,
+    now,
+  });
+
+  const setEntry = (/** @type {string} */ name, /** @type {Record<string, unknown>} */ fields) =>
+    updateState(p.state, (s) => {
+      s.context = {
+        ...s.context,
+        [name]: { .../** @type {any} */ (s.context?.[name]), .../** @type {any} */ (fields) },
+      };
+    });
+  const askTool = (/** @type {string[]} */ args) =>
+    run("node", [join(HERE, "ask.mjs"), ...args], {
+      cwd: p.main,
+      env: { ...env, CARETOOK_ASKS_DIR: p.asks },
+    });
+  const lastLine = (/** @type {{ out: string, err: string }} */ r) =>
+    (r.err || r.out).split("\n").pop() ?? "";
+
+  let acted = false;
+  for (const a of actions) {
+    if (a.type === "hold") {
+      out(`context: ${a.session} waits to rotate: a pnpm prd or pnpm backlog command is running under it`);
+      continue;
+    }
+    if (dryRun) {
+      if (a.type !== "answered") out(`context: would ${a.type} ${a.session}`);
+      continue;
+    }
+    acted = true;
+    if (a.type === "clear") {
+      if (a.askId) dismissAsk(p.asks, a.askId, { now });
+      updateState(p.state, (s) => void delete s.context?.[a.session]);
+      out(`context: ${a.session} cleared`);
+    } else if (a.type === "nudge") {
+      updateRecord(join(dir, `${a.session}.json`), (r) =>
+        r?.pid === a.pid && r.size > limit && !r.nudgeAt ? { ...r, nudgeAt: new Date(now).toISOString() } : r,
+      );
+      out(`context: ${a.session} nudged`);
+    } else if (a.type === "answered") {
+      setEntry(a.session, { answer: a.answer });
+      out(`context: ask ${a.askId} means ${a.answer} for ${a.session}`);
+    } else if (a.type === "ask") {
+      const r = askTool([
+        "ask",
+        "--topic",
+        a.topic,
+        "--question",
+        a.text,
+        "--session",
+        CONTEXT_SESSION,
+        ...CONTEXT_OPTIONS.flatMap((o) => ["--option", o]),
+        "--recommend",
+        CONTEXT_OPTIONS[0],
+        "--defaults",
+      ]);
+      const id = r.ok ? r.out.split("\n")[0].trim() : "";
+      if (!/^a\d+$/.test(id)) {
+        out(`context: filing the question for ${a.session} failed: ${lastLine(r)}`);
+        continue;
+      }
+      updateState(p.state, (s) => {
+        s.context = { ...s.context, [a.session]: { pid: a.pid, askId: id } };
+      });
+      out(`context: ${a.session} asked (${id})`);
+      const push =
+        r.out
+          .split("\n")
+          .find((l) => l.startsWith("Now send a PushNotification: "))
+          ?.slice("Now send a PushNotification: ".length) ?? `${a.topic}: ${a.text}`;
+      const helper = run(
+        "bash",
+        [
+          join(HERE, "open-session.sh"),
+          "--command",
+          helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+          "--title",
+          HELPER_SESSION,
+          "--background",
+        ],
+        { cwd: p.main },
+      );
+      if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${lastLine(helper)}`);
+    } else if (a.type === "rotate" || a.type === "rotate-backlog") {
+      // A backlog session: `rotate --self` finds its caller by ancestry, so the tick opens its line.
+      const r =
+        a.type === "rotate"
+          ? run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
+              cwd: p.main,
+            })
+          : run(
+              "bash",
+              [
+                join(HERE, "open-session.sh"),
+                "--command",
+                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context ${
+                  a.brief ? `--brief ${sh(briefFile(a.session))}` : "--no-brief"
+                }`,
+                "--title",
+                a.session,
+                "--background",
+              ],
+              { cwd: p.main },
+            );
+      const reported = entries[a.session]?.reported === true;
+      setEntry(a.session, { triedAt: now, ...(r.ok ? {} : { reported: true }) });
+      if (r.ok) out(`context: ${a.session} rotating`);
+      else {
+        out(`context: rotating ${a.session} was refused: ${lastLine(r)}`);
+        if (!reported)
+          askTool([
+            "ask",
+            "--topic",
+            a.topic,
+            "--report",
+            `${a.session} is over the context limit, and its rotation was refused: ${lastLine(r)}`,
+            "--session",
+            CONTEXT_SESSION,
+          ]);
+      }
+    }
+  }
+  return acted;
+}
+
+/** Every process's command line, or null when they can't be read. CARETOOK_PROCESS_FILE stands in (tests). */
+export function processLines(env = process.env) {
+  try {
+    if (env.CARETOOK_PROCESS_FILE)
+      return readFileSync(env.CARETOOK_PROCESS_FILE, "utf8").split("\n").filter(Boolean);
+    return [...processTable().values()].map((r) => r.args);
+  } catch {
+    return null;
+  }
+}
+
+/** Applies the answers to the keep-alive's own questions. */
+function settleKeepAnswers(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {(l: string) => void} */ out,
+) {
+  for (const [kind, entry] of Object.entries(readState(p.state).keepAlive ?? {})) {
+    if (!entry.asked) continue;
+    const { id } = entry.asked;
+    const a = getAsk(p.asks, id);
+    if (a && !a.answeredAt && !a.doneAt) continue;
+    const what = a?.answeredAt ? keepAnswerAction(a.answer) : null;
+    updateState(p.state, (s) => {
+      const keep = (s.keepAlive ??= {});
+      if (what === "open") delete keep[kind];
+      else if (what === "stop") keep[kind] = { stopped: true };
+      else if (keep[kind]) delete keep[kind].asked;
+    });
+    out(
+      what === "open"
+        ? `ask ${id} answered "${a?.answer}": ${kind} may be opened again`
+        : what === "stop"
+          ? `ask ${id} answered "${a?.answer}": ${kind} isn't kept alive until the dispatcher next starts`
+          : `ask ${id} ${a?.answeredAt ? `answered "${a.answer}" (unclear)` : a ? "dismissed" : "is gone"}: asking again`,
+    );
+  }
+}
+
+/** The oldest pending session request: opened or refused, with a notice either way. Returns whether it acted. */
+function requestStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {ReturnType<typeof gather>} */ g,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void, starting: string[] }} */ {
+    dryRun,
+    env,
+    out,
+    starting,
+  },
+) {
+  const now = g.facts.now;
+  const state = readState(p.state);
+  // A kept session opened moments ago counts until it is up.
+  const opening = Object.entries(state.keepAlive ?? {})
+    .filter(([, e]) => typeof e.openedAt === "number" && now - e.openedAt < START_GRACE_MS)
+    .map(([kind]) => kind);
+  const d = requestDecision({
+    requests: readRequests(p.requests),
+    sessions: g.records.map((r) => ({
+      name: r.name,
+      kind: r.record.kind,
+      live: r.live,
+      rotating: r.record.rotating === true,
+      rotatingAt: r.rotatingAt,
+    })),
+    processes: processLines(env),
+    starting: [...starting, ...opening],
+    paused: Boolean(state.paused),
+    max: positive(env.CARETOOK_MAX_BACKLOG_SESSIONS, DEFAULT_MAX_BACKLOG_SESSIONS),
+    now,
+    claude: basename(env.CARETOOK_CLAUDE_BIN || "claude"),
+  });
+  if (d.action === "none") {
+    if (dryRun && d.why !== "no pending request") out(`session request: waits (${d.why})`);
+    return false;
+  }
+  const { request } = d;
+  if (dryRun) {
+    out(`session request ${request.id}: would ${d.action} ${request.session} (${d.why})`);
+    return false;
+  }
+  let opened = false;
+  let why = d.why;
+  if (d.action === "open") {
+    const line = requestLine({ request, main: p.main, wrapper: join(HERE, "session.sh"), sh });
+    const r = run(
+      "bash",
+      [join(HERE, "open-session.sh"), "--command", line, "--title", request.session, "--background"],
+      { cwd: p.main },
+    );
+    opened = r.ok;
+    if (!r.ok) why = `its tab didn't open (${(r.err || r.out).split("\n").pop()})`;
+  }
+  settleRequest(p.requests, request.id, {
+    state: opened ? "opened" : "refused",
+    ...(opened ? {} : { why }),
+    now,
+  });
+  out(`session request ${request.id}: ${opened ? `opened ${request.session}` : `refused (${why})`}`);
+  try {
+    createNotice(p.notices, {
+      text: requestNotice(request, { opened, why }),
+      session: DISPATCH_SESSION,
+      minutes: 360,
+      now,
+    });
+  } catch (e) {
+    out(`  its notice failed (ignored): ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return true;
+}
+
 // ---- one tick --------------------------------------------------------------------
 
 /**
@@ -375,6 +697,7 @@ export function tick(
       });
       for (const n of stale) delete facts.reopens[n];
     }
+    settleKeepAnswers(p, out);
     if (g.state.lastTidy === undefined) updateState(p.state, (s) => void (s.lastTidy ??= now));
   }
 
@@ -388,7 +711,41 @@ export function tick(
     );
   lines.push(...head);
 
+  // The context follow-up: apart from the pick, and never in the way of its action.
+  let watched = false;
+  try {
+    watched = contextStep(p, g, { dryRun, env, out });
+  } catch (e) {
+    out(`context: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // The keep-alive, beside the pick: it takes no slot, so the pick's action still happens.
+  const keepDecisions = keepAliveDecision({
+    sessions: facts.sessions,
+    processes: processLines(env),
+    keep: readState(p.state).keepAlive ?? {},
+    paused: facts.paused,
+    off: env.CARETOOK_KEEP_SESSIONS === "off",
+    now,
+    claude: basename(env.CARETOOK_CLAUDE_BIN || "claude"),
+  });
+  for (const d of keepDecisions)
+    if (dryRun || d.action !== "none")
+      out(`keep-alive ${d.kind}: ${d.action === "none" ? d.why : `${d.action} (${d.why})`}`);
+
+  // Session requests: after the keep-alive (a kept session it opens counts), before starts.
+  const requested = (/** @type {boolean} */ dry) => {
+    try {
+      const starting = keepDecisions.filter((d) => d.action === "open").map((d) => d.kind);
+      return requestStep(p, g, { dryRun: dry, env, out, starting });
+    } catch (e) {
+      out(`session request: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  };
+
   if (dryRun) {
+    requested(true);
     out("(dry run: nothing written, nothing opened)");
     for (const l of lines) say(l);
     return { lines, action: choice.action, acted: false };
@@ -401,6 +758,79 @@ export function tick(
     });
   const result = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
     r.ok ? r.out.split("\n").pop() || "ok" : `failed (exit ${r.code}): ${(r.err || r.out).split("\n").pop()}`;
+
+  let keptActed = false;
+  for (const d of keepDecisions) {
+    if (d.reset)
+      updateState(p.state, (s) => {
+        delete s.keepAlive?.[d.kind];
+      });
+    if (d.action === "open") {
+      // A session that came up since the facts were read keeps its record.
+      const current = readRecord(p.sessions, d.kind);
+      if (current && isLive(current, processOf(current.pid ?? 0))) {
+        out(`  ${d.kind}: came up meanwhile, nothing opened`);
+        continue;
+      }
+      keptActed = true;
+      writeRecord(p.sessions, d.kind, {
+        kind: d.kind,
+        managed: true,
+        pid: undefined,
+        started: undefined,
+        ended: undefined,
+        exit: undefined,
+        rotating: undefined,
+      });
+      updateState(p.state, (s) => {
+        s.keepAlive = { ...s.keepAlive, [d.kind]: { deaths: d.deaths ?? 0, openedAt: now } };
+      });
+      const r = run("bash", [join(bin, "open-session.sh"), d.kind, "--background"], { cwd: p.main });
+      out(`  ${d.kind}: ${result(r)}`);
+    } else if (d.action === "ask") {
+      keptActed = true;
+      // It waits, like the reopen question: an open burns usage, so it never defaults.
+      const args = [
+        "ask",
+        "--topic",
+        d.kind,
+        "--question",
+        d.text ?? "",
+        "--session",
+        KEEP_SESSION,
+        "--waits",
+      ];
+      for (const o of d.options ?? []) args.push("--option", o);
+      const r = run("node", [join(bin, "ask.mjs"), ...args], {
+        cwd: p.main,
+        env: { ...env, CARETOOK_ASKS_DIR: p.asks },
+      });
+      const id = r.ok ? r.out.split("\n")[0].trim() : "";
+      if (!/^a\d+$/.test(id)) {
+        out(`  filing the keep-alive ask failed: ${result(r)}`);
+        continue;
+      }
+      updateState(p.state, (s) => {
+        s.keepAlive = {
+          ...s.keepAlive,
+          [d.kind]: { ...s.keepAlive?.[d.kind], deaths: d.deaths, asked: { id } },
+        };
+      });
+      out(`  filed ask ${id}`);
+      const push =
+        r.out
+          .split("\n")
+          .find((l) => l.startsWith("Now send a PushNotification: "))
+          ?.slice("Now send a PushNotification: ".length) ?? `${d.kind}: ${d.text}`;
+      const helper = openTab(
+        helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+        HELPER_SESSION,
+      );
+      if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${result(helper)}`);
+    }
+  }
+
+  if (requested(false)) keptActed = true;
 
   switch (choice.action) {
     case "start":
@@ -480,7 +910,7 @@ export function tick(
       break;
     }
     default:
-      if (tidyDue(readState(p.state), now, { action: choice.action, paused: facts.paused })) {
+      if (!keptActed && tidyDue(readState(p.state), now, { action: choice.action, paused: facts.paused })) {
         const r = run("node", [join(bin, "tidy-cli.mjs"), "--yes"], { cwd: p.main });
         updateState(p.state, (s) => void (s.lastTidy = now));
         out(`tidy --yes: ${result(r)}`);
@@ -489,7 +919,7 @@ export function tick(
       }
   }
   for (const l of lines) say(l);
-  return { lines, action: choice.action, acted: choice.action !== "none" };
+  return { lines, action: choice.action, acted: choice.action !== "none" || watched || keptActed };
 }
 
 // ---- the command line ------------------------------------------------------------
@@ -622,6 +1052,10 @@ async function main() {
   process.on("exit", () => releaseLock(p.lock));
 
   if (!o.once) {
+    // A start begins again after "stop keeping it alive".
+    updateState(p.state, (s) => {
+      if (s.keepAlive) s.keepAlive = clearKeepStops(s.keepAlive);
+    });
     log([`started (pid ${process.pid}, every ${o.every}s)`], nowOf());
     console.log(
       `Dispatcher running (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,

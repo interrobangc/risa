@@ -164,6 +164,19 @@ describe("backlog, recovery and hotfix sessions", () => {
     });
   });
 
+  it("a named backlog session reopens under its recorded Remote Control name", () => {
+    expect(
+      chooseMainCommand({
+        name: "backlog-x",
+        main: "/m",
+        wrapper,
+        record: { kind: "backlog", model: "sonnet", managed: true, remote: "backlog - x" },
+      }).command,
+    ).toBe(
+      `cd /m && ${wrapper} backlog-x --kind backlog --managed -- --model sonnet --remote-control 'backlog - x' "$(scripts/loops/prompt.sh backlog)"`,
+    );
+  });
+
   it("a recovery session opens fresh with its prompt and no model unless one was recorded", () => {
     expect(
       chooseMainCommand({ name: "recover", main: "/m", wrapper, record: { kind: "recovery" } }).command,

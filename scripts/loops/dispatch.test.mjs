@@ -32,6 +32,7 @@ import {
   sessionLine,
   tidyDue,
 } from "./dispatch.mjs";
+import { createRequest } from "./session-requests.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -187,10 +188,17 @@ beforeAll(() => {
   for (const f of [
     "dispatch.mjs",
     "dispatch-pick.mjs",
+    "dispatch-context.mjs",
+    "context.mjs",
+    "keep-alive.mjs",
+    "session-requests.mjs",
+    "notices.mjs",
     "asks.mjs",
     "ask.mjs",
     "sessions.mjs",
     "load-gate.mjs",
+    "rotate.mjs",
+    "open-session.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
@@ -209,6 +217,9 @@ beforeAll(() => {
     CARETOOK_SESSIONS_DIR: "",
     CARETOOK_ASKS_DIR: "",
     CARETOOK_ASK_NOTIFY: "",
+    CARETOOK_REQUESTS_DIR: "",
+    CARETOOK_NOTICES_DIR: "",
+    CARETOOK_MAX_BACKLOG_SESSIONS: "",
     CARETOOK_LOAD_FILE: join(root, "load"),
     CARETOOK_LOAD_BUSY: "8",
     CARETOOK_LOAD_GATE: "",
@@ -216,13 +227,17 @@ beforeAll(() => {
     CARETOOK_MAX_PLANNERS: "",
     CARETOOK_FIXES_MIN: "",
     CARETOOK_CLOCK_FILE: clock,
+    // Off unless a test turns it on, and never the machine's real processes.
+    CARETOOK_KEEP_SESSIONS: "off",
+    CARETOOK_PROCESS_FILE: join(root, "processes"),
     STUB_STATE: state,
     STUB_ROWS: rowsFile,
   };
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
-  for (const d of [state, sessions, asks]) rmSync(d, { recursive: true, force: true });
+  for (const d of [state, sessions, asks, join(loops, ".requests"), join(loops, ".notices")])
+    rmSync(d, { recursive: true, force: true });
   for (const f of [".dispatch.json", ".dispatch.log", ".dispatch.lock"])
     rmSync(join(loops, f), { force: true });
   for (const w of existsSync(loops) ? readdirSync(loops) : [])
@@ -232,6 +247,7 @@ beforeEach(() => {
   mkdirSync(state, { recursive: true });
   setClock(T0);
   setRows([]);
+  writeFileSync(join(root, "processes"), "");
 });
 
 describe("one tick per action", () => {
@@ -585,5 +601,241 @@ describe("tidy", () => {
     ok();
     expect(calls("tidy")).toEqual(["--yes"]);
     expect(dstate().lastTidy).toBe((T0 + TIDY_EVERY_MS / 1000) * 1000);
+  });
+});
+
+describe("the session-request tick", () => {
+  const requests = () => join(loops, ".requests");
+  const file = (name, opts = {}) => createRequest(requests(), { name, now: T0 * 1000, ...opts });
+  const stored = (id) => JSON.parse(readFileSync(join(requests(), `${id}.json`), "utf8"));
+  const notices = () =>
+    existsSync(join(loops, ".notices"))
+      ? readdirSync(join(loops, ".notices"))
+          .filter((f) => f.endsWith(".json"))
+          .map((f) => JSON.parse(readFileSync(join(loops, ".notices", f), "utf8")).text)
+      : [];
+  const opensOf = (name) => openCalls().filter((c) => c[3] === `backlog-${name}`);
+
+  it("opens backlog-<name> through session.sh, with the brief on top, and posts the opened notice", () => {
+    const brief = join(root, "a-brief.md");
+    writeFileSync(brief, "Fictional task: sort the reminders.\n");
+    const r = file("reminders", { brief, model: "sonnet", from: "backlog" });
+    expect(ok()).toContain(`session request ${r.id}: opened backlog-reminders`);
+    const [open] = opensOf("reminders");
+    expect(open).toEqual([
+      "--command",
+      `cd ${main} && ${scripts("session.sh")} backlog-reminders --kind backlog --managed -- --model sonnet --remote-control 'backlog - reminders' "$(scripts/loops/prompt.sh backlog --brief ${r.brief} || scripts/loops/prompt.sh backlog)"`,
+      "--title",
+      "backlog-reminders",
+      "--background",
+    ]);
+    expect(stored(r.id).state).toBe("opened");
+    expect(notices()).toEqual([`request ${r.id} (for backlog): opened \`backlog - reminders\``]);
+    ok();
+    expect(opensOf("reminders")).toHaveLength(1);
+  });
+
+  it("the opened line really starts a recorded session with the brief at the top", () => {
+    for (const f of ["session.sh", "prompt.sh", "lib.sh"]) copyFileSync(join(HERE, f), scripts(f));
+    const seen = join(root, "claude-args");
+    const stub = join(root, "bin", "claude-args");
+    writeFileSync(stub, `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > ${seen}\n`);
+    chmodSync(stub, 0o755);
+    const brief = join(root, "b-brief.md");
+    writeFileSync(brief, "Fictional task: tidy the labels.\n");
+    file("labels", { brief });
+    ok();
+    const [open] = opensOf("labels");
+    const r = spawnSync("bash", ["-c", open[1]], {
+      env: { ...env, CARETOOK_CLAUDE_BIN: stub },
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+    const args = readFileSync(seen, "utf8");
+    expect(args).toContain("--remote-control\nbacklog - labels\n");
+    expect(args).toMatch(/## Brief from the session before[\s\S]*Fictional task: tidy the labels/);
+    expect(args.indexOf("Fictional task")).toBeLessThan(args.indexOf("You are the new backlog"));
+    expect(JSON.parse(readFileSync(join(sessions, "backlog-labels.json"), "utf8"))).toMatchObject({
+      kind: "backlog",
+      managed: true,
+      model: "opus",
+      remote: "backlog - labels",
+    });
+  });
+
+  it("refuses a live name with a notice, and never takes it again", () => {
+    writeFileSync(join(root, "processes"), "claude-stub --remote-control backlog - busy You are\n");
+    const r = file("busy");
+    expect(ok()).toContain("refused (`backlog - busy` is already live)");
+    expect(opensOf("busy")).toEqual([]);
+    expect(stored(r.id)).toMatchObject({ state: "refused", why: "`backlog - busy` is already live" });
+    expect(notices()[0]).toContain("not opened");
+    ok();
+    expect(notices()).toHaveLength(1);
+  });
+
+  it("a tab that can't open is a refusal with a notice", () => {
+    const r = file("notab");
+    expect(ok(["--once"], { STUB_OPEN_FAIL: "backlog-notab" })).toContain("refused (its tab didn't open");
+    expect(stored(r.id).state).toBe("refused");
+    expect(notices()).toHaveLength(1);
+  });
+
+  it("a paused dispatcher leaves it pending; --dry-run says what it would do and writes nothing", () => {
+    const r = file("later");
+    ok(["--pause", "t"]);
+    ok();
+    expect(stored(r.id).state).toBe("pending");
+    ok(["--resume"]);
+    expect(ok(["--dry-run"])).toContain(`session request ${r.id}: would open backlog-later`);
+    expect(stored(r.id).state).toBe("pending");
+    expect(opensOf("later")).toEqual([]);
+    expect(notices()).toEqual([]);
+  });
+
+  it("takes one a tick, oldest first, and counts the first as up on the next", () => {
+    const a = file("same");
+    const b = file("same");
+    ok();
+    expect(stored(a.id).state).toBe("opened");
+    expect(stored(b.id).state).toBe("pending");
+    ok();
+    expect(stored(b.id)).toMatchObject({ state: "refused", why: "`backlog - same` is already live" });
+    expect(opensOf("same")).toHaveLength(1);
+  });
+
+  it("the keep-alive never reopens a named session", () => {
+    deadRecord("backlog-gone", { kind: "backlog", remote: "backlog - gone" });
+    writeFileSync(join(root, "processes"), "claude-stub --remote-control backlog You are\n");
+    ok(["--once"], { CARETOOK_KEEP_SESSIONS: "on" });
+    expect(openCalls()).toEqual([]);
+  });
+
+  it("a kept session opened on this tick counts toward the limit", () => {
+    file("one");
+    expect(ok(["--once"], { CARETOOK_KEEP_SESSIONS: "on", CARETOOK_MAX_BACKLOG_SESSIONS: "1" })).toContain(
+      "1 backlog sessions are live, the limit is 1",
+    );
+    expect(opensOf("one")).toEqual([]);
+  });
+});
+
+describe("the keep-alive tick", () => {
+  const on = { CARETOOK_KEEP_SESSIONS: "on" };
+  const keptOpens = () => openCalls().filter((c) => c[0] === "backlog");
+  const dieAndTick = (at) => {
+    setClock(at);
+    return ok(["--once"], on);
+  };
+
+  it("opens a managed backlog session through the opener, with no record to start from", () => {
+    expect(ok(["--once"], on)).toContain("keep-alive backlog: open (no live backlog session)");
+    expect(keptOpens()).toEqual([["backlog", "--background"]]);
+    expect(JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"))).toEqual({
+      kind: "backlog",
+      managed: true,
+    });
+  });
+
+  it("clears an ended record's end and keeps its model", () => {
+    deadRecord("backlog", { kind: "backlog", managed: false, model: "opus", exit: 1 });
+    ok(["--once"], on);
+    const r = JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"));
+    expect(r).toEqual({ kind: "backlog", managed: true, model: "opus" });
+  });
+
+  it("takes no slot: a start the slots allow happens on the same tick", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { ...on, CARETOOK_MAX_PRDS: "1" });
+    expect(out).toContain("start a:");
+    expect(keptOpens()).toHaveLength(1);
+    expect(calls("new")).toEqual(["prd a"]);
+  });
+
+  it("counts an unrecorded --remote-control backlog process as live", () => {
+    writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control backlog You are\n");
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+  });
+
+  it("doesn't reopen inside the start grace, and asks at the third quick death", () => {
+    ok(["--once"], on);
+    dieAndTick(T0 + 30);
+    expect(keptOpens()).toHaveLength(1);
+    dieAndTick(T0 + 180);
+    dieAndTick(T0 + 360);
+    expect(keptOpens()).toHaveLength(3);
+    const out = dieAndTick(T0 + 540);
+    expect(out).toContain("keep-alive backlog: ask");
+    expect(keptOpens()).toHaveLength(3);
+    const { id } = dstate().keepAlive.backlog.asked;
+    expect(askFile(id)).toMatchObject({ session: "dispatch-keep", defaults: false });
+    expect(openCalls().some((c) => c[3] === HELPER_SESSION)).toBe(true);
+    dieAndTick(T0 + 720);
+    expect(keptOpens()).toHaveLength(3);
+  });
+
+  const toQuestion = () => {
+    ok(["--once"], on);
+    dieAndTick(T0 + 180);
+    dieAndTick(T0 + 360);
+    dieAndTick(T0 + 540);
+    return dstate().keepAlive.backlog.asked.id;
+  };
+
+  it('"open again" opens on the next tick with the count cleared', () => {
+    answer(toQuestion(), "open again");
+    expect(dieAndTick(T0 + 600)).toContain("may be opened again");
+    expect(keptOpens()).toHaveLength(4);
+    expect(dstate().keepAlive.backlog.deaths).toBe(0);
+  });
+
+  it('"stop keeping it alive" holds across ticks', () => {
+    answer(toQuestion(), "stop keeping it alive");
+    dieAndTick(T0 + 600);
+    dieAndTick(T0 + 4000);
+    expect(keptOpens()).toHaveLength(3);
+    expect(dstate().keepAlive.backlog).toEqual({ stopped: true });
+  });
+
+  it("a dismissed question is asked again, never read as an open", () => {
+    const id = toQuestion();
+    execFileSync("node", [scripts("ask.mjs"), "asks", "--done", id], {
+      env: { ...env, CARETOOK_ASKS_DIR: asks },
+      encoding: "utf8",
+    });
+    expect(dieAndTick(T0 + 600)).toContain("asking again");
+    expect(keptOpens()).toHaveLength(3);
+    expect(dstate().keepAlive.backlog.asked.id).not.toBe(id);
+  });
+
+  it("a dispatcher start clears a stop", async () => {
+    answer(toQuestion(), "stop keeping it alive");
+    dieAndTick(T0 + 600);
+    expect(dstate().keepAlive.backlog).toEqual({ stopped: true });
+    const child = spawn("node", [scripts("dispatch.mjs"), "--every", "60"], {
+      cwd: main,
+      env: { ...env, ...on },
+      stdio: "ignore",
+    });
+    try {
+      await until(() => keptOpens().length === 4);
+      expect(dstate().keepAlive.backlog.stopped).toBeUndefined();
+    } finally {
+      child.kill("SIGTERM");
+      await until(() => !existsSync(join(loops, ".dispatch.lock")));
+    }
+  });
+
+  it("paused or switched off opens nothing; --dry-run says what it would do and writes nothing", () => {
+    ok(["--once"]);
+    expect(keptOpens()).toEqual([]);
+    ok(["--pause", "t"]);
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+    ok(["--resume"]);
+    expect(ok(["--dry-run"], on)).toContain("keep-alive backlog: open");
+    expect(keptOpens()).toEqual([]);
+    expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
   });
 });

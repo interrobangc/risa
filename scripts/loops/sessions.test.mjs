@@ -392,6 +392,14 @@ describe("liveness", () => {
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe(`prd-t ${scripts("context.mjs")}`);
   });
 
+  it("gives a backlog session the context hook, a named one too", () => {
+    const argsOf = () => readFileSync(join(state, "args"), "utf8").trim().split("\n");
+    for (const name of ["backlog", "backlog-tax"]) {
+      expect(run("session.sh", [name, "--", "--model", "opus", "go"]).status).toBe(0);
+      expect(argsOf()).toEqual(["--settings", scripts("context-settings.json"), "--model", "opus", "go"]);
+    }
+  });
+
   it("finds the ancestor claude from a shell under the stub, and none from one that isn't", () => {
     expect(spawnSync(stub, [], { encoding: "utf8", env: { ...env, STUB_MODE: "ancestor" } }).status).toBe(0);
     expect(readFileSync(join(state, "ancestor"), "utf8")).toBe(`${stubPid()}\nexit 0\n`);
@@ -479,7 +487,7 @@ describe("sessions start through the wrapper", () => {
     expect(run("prd.sh", ["plan", "--model", "sonnet"]).status).toBe(0);
     expect(record("backlog")).toMatchObject({ pid: stubPid(), kind: "backlog", model: "sonnet", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
-    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
+    expect(args.slice(2, 6)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
   });
 
   it("pnpm prd hotfix --open records the session; without --open it prints the wrapped command", () => {

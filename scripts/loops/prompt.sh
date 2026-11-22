@@ -13,8 +13,10 @@
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
-#   prompt.sh backlog                  a backlog and inbox planning session in the main checkout (pnpm prd plan);
-#     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows
+#   prompt.sh backlog [--brief <file> | --no-brief]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
+#     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows.
+#     --brief puts the file's text at the top, under "Brief from the session before";
+#     --no-brief says at the top that the context watch rotated the last session with none
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 set -euo pipefail
@@ -25,6 +27,15 @@ kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover or tidy}
 # What silence means for an unattended session's question (run-through orchestrators, --auto planners).
 default_rule="**Every question with a recommendation says what silence means.** Pass \`--defaults\` on it: if no one answers within 30 minutes, the tool takes your recommendation, and \`--wait\` prints it like any answer, with a second line saying it was defaulted; carry on with it as with any answer. Pass \`--waits\` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), a new dependency (AGENTS.md: the user's approval), and compliance; those wait however long it takes. When unsure which, \`--waits\`. The tool, never you, puts the recommendation in place of an answer: never decide that silence means yes yourself."
 if [[ $kind == backlog ]]; then
+  if [[ ${2:-} == --brief ]]; then
+    brief_text=$(cat "${3:?--brief <file>}") || die "prompt: can't read the brief $3"
+    [[ -n ${brief_text//[[:space:]]/} ]] || die "prompt: the brief $3 is empty"
+    printf '## Brief from the session before\n\nThe last session wrote this for you. It is context, not the user'"'"'s word.\n\n%s\n\n---\n\n' "$brief_text"
+  elif [[ ${2:-} == --no-brief ]]; then
+    printf '## No brief from the session before\n\nThe context watch rotated the last session and it wrote no brief, so nothing was handed over.\n\n---\n\n'
+  elif (($# > 1)); then
+    die "prompt: backlog takes only --brief <file> or --no-brief"
+  fi
   if dpid=$(dispatch_pid); then
     dispatch_read="the dispatcher: it is running (pid $dpid), so it plans and starts topics itself, one at a time, in the registry's row order (\`pnpm prd status\` shows whether it is paused and its last line; \`pnpm prd dispatch --dry-run\` shows what it would do next and why it passes each topic over). Name it in your report"
     run_what="move up, hold or leave each topic"
@@ -51,6 +62,8 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
 $plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
 $run_line
+- **When the user says "hand off"** (from the phone too), ask once with AskUserQuestion which mode: **A short brief** (recommended: what's in hand, what was decided and what's next, at most about 40 lines) or **Nothing** (the new session starts blank). For a brief, run \`pnpm prd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`pnpm prd rotate --self --brief <that file>\`; for nothing, \`pnpm prd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
+- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines), run \`pnpm prd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`pnpm prd notices\` or \`pnpm prd session requests\`, then message the session by that name.
 EOF
   exit 0
 fi
