@@ -343,7 +343,7 @@ case $cmd in
     elif ((quick)); then
       echo "$preason"; why=""
     fi
-    [[ $ptooling == 1 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
+    [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
     # shellcheck disable=SC2086
     (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
       "$bin/check-run.sh" "$pmode" "${why:-$preason}" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)

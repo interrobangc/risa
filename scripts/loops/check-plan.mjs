@@ -2,7 +2,7 @@
 // adds or edits, and whether the tooling tests join. Pure: changed files and the
 // asked mode in, a plan out. The CLI at the bottom reads the changed files from stdin.
 //   node check-plan.mjs --mode slice|quick|full   → four lines: mode, reason,
-//   tooling (1 or 0), the diff's own integration and component test files
+//   tooling (2 with the browser harness test, 1 without, 0 for none), the diff's own integration and component test files
 //   (space-separated)
 // The three modes (check-body.sh runs them):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
@@ -25,6 +25,19 @@ const FORCED = [
 ];
 
 const TOOLING = /^(scripts\/loops\/|scripts\/backlog\/|\.githooks\/|scripts\/hooks\.test\.mjs$)/;
+
+// What the browser harness test (scripts/loops/browser.test.mjs, the
+// tooling:browser project) exercises: browser.sh, what it sources and starts, the
+// manifest, the area map, and the checks' own directory.
+const BROWSER_HARNESS =
+  /^scripts\/(loops\/(browser\.sh|browser\.test\.mjs|lib\.sh|lease\.sh|serve\.sh|checks|check-areas\.mjs|check-areas\.d\/.+)|browser-checks\/.+)$/;
+
+/**
+ * Whether a change needs the browser harness test.
+ * @param {string[]} changed files changed against the base
+ * @returns {boolean}
+ */
+export const needsBrowserHarness = (changed) => changed.some((f) => BROWSER_HARNESS.test(f));
 
 /**
  * @param {string[]} changed files changed against the base
@@ -63,6 +76,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const asked = ["slice", "quick"].includes(process.argv[i + 1]) ? process.argv[i + 1] : "full";
   let text = "";
   for await (const chunk of process.stdin) text += chunk;
-  const plan = planCheck(text.split("\n").filter(Boolean), asked);
-  console.log([plan.mode, plan.reason, plan.tooling ? 1 : 0, plan.ownTests.join(" ")].join("\n"));
+  const changed = text.split("\n").filter(Boolean);
+  const plan = planCheck(changed, asked);
+  const tooling = plan.tooling ? (needsBrowserHarness(changed) ? 2 : 1) : 0;
+  console.log([plan.mode, plan.reason, tooling, plan.ownTests.join(" ")].join("\n"));
 }

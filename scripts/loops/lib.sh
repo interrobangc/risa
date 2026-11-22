@@ -241,7 +241,23 @@ trunk_drift() {
 fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
 
 # load_avg → the 1, 5 and 15 minute load averages.
-load_avg() { sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs || uptime | sed 's/.*load average[s]*: //'; }
+# One clean line: sysctl on macOS, uptime on Linux (where sysctl prints nothing).
+load_avg() {
+  local l
+  l=$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs) || l=""
+  [[ -n $l ]] || l=$(uptime 2>/dev/null | sed 's/.*load average[s]*: //' | tr -d ',') || l=""
+  echo "$l"
+}
+
+# file_mtime PATH → its modification time (epoch seconds); false when it can't be
+# read. GNU's form first: on Linux, `stat -f %m` prints a `File:` block to stdout
+# before it fails, so only an all-digit answer counts.
+file_mtime() {
+  local t
+  t=$(stat -c %Y "$1" 2>/dev/null) && [[ $t =~ ^[0-9]+$ ]] && { echo "$t"; return 0; }
+  t=$(stat -f %m "$1" 2>/dev/null) && [[ $t =~ ^[0-9]+$ ]] && { echo "$t"; return 0; }
+  return 1
+}
 
 # The load gate (load-gate.mjs decides; busy is the 5-minute load over
 # CARETOOK_LOAD_BUSY, default twice the cores). load_gate → "<busy|ok|off|unread>
@@ -405,7 +421,7 @@ with_backlog_lock() {
   local lock deadline=$((SECONDS + 20)) age status
   lock="$(cd "$main" && cd "$(git rev-parse --git-common-dir)" && pwd)/caretook-backlog.lock"
   until mkdir "$lock" 2>/dev/null; do
-    age=$(($(date +%s) - $(stat -f %m "$lock" 2>/dev/null || stat -c %Y "$lock" 2>/dev/null || date +%s)))
+    age=$(($(date +%s) - $(file_mtime "$lock" || date +%s)))
     if ((age > 30)); then rm -rf "$lock"; continue; fi
     ((SECONDS < deadline)) || die "the backlog is locked ($lock); try again"
     sleep 0.2

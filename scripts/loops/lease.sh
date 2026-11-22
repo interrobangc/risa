@@ -131,7 +131,7 @@ lease_here() {
 lease_field() { env_get "$1/name" "$2"; }
 
 # lease_mtime PATH → its modification time (epoch seconds), or 0.
-lease_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+lease_mtime() { file_mtime "$1" || echo 0; }
 
 # lease_alive DIR [KIND] → true while the lease's holder is running. A lease
 # with no name file yet is being taken (alive) unless it's over a minute old.
@@ -439,7 +439,10 @@ lease_main() {
     take)
       lease_pid=${pid:-$PPID}
       # A string from the holder's command (its program), so a reused pid isn't it.
-      lease_cmd=$(basename "$(ps -p "$lease_pid" -o comm= 2>/dev/null || echo)")
+      # From `command`, which lease_alive reads: Linux's `comm` is the main thread's
+      # name, cut to 15 characters, and needn't appear in the command line.
+      lease_cmd=$(ps -p "$lease_pid" -o command= 2>/dev/null | awk '{ print $1; exit }' || true)
+      lease_cmd=${lease_cmd##*/}
       lease_take "$kind" "${label:-pid $lease_pid}" "$wait" || exit
       echo "$lease_path"
       ;;
