@@ -102,6 +102,8 @@ beforeAll(() => {
     CARETOOK_SESSIONS_DIR: sessions,
     CARETOOK_SESSION: "",
     CARETOOK_LEASE_ROOT: leases,
+    // new.sh's load gate reads the real machine: under a full run it waits past the hook timeout.
+    CARETOOK_LOAD_GATE: "off",
     CARETOOK_SHARED_TEST_PORT: "",
     CARETOOK_SHARED_TEST_PROJECT: "",
     FAKE_DBS: "caretook_test_t_3 caretook_test_gone",
@@ -168,8 +170,7 @@ beforeAll(() => {
       ended: "2026-01-01T01:00:00Z",
     }),
   );
-  // Three new.sh worktrees and their commits: past the 10 s default under a full run's load.
-}, 60_000);
+});
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe("tidy (no --yes)", () => {
