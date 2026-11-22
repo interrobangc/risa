@@ -187,6 +187,8 @@ beforeAll(() => {
   for (const f of [
     "dispatch.mjs",
     "dispatch-pick.mjs",
+    "dispatch-context.mjs",
+    "context.mjs",
     "asks.mjs",
     "ask.mjs",
     "sessions.mjs",

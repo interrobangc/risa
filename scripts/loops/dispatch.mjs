@@ -28,6 +28,10 @@
 // The session record (managed, auto) is written before a new session's tab
 // opens, so a tab that never starts is reopened like a dead session.
 //
+// Each tick also follows up on managed orchestrators that stay over the context
+// limit (dispatch-context.mjs): a nudge, a defaulting question, the mid-wave
+// rotation. CARETOOK_CONTEXT_NUDGE_MIN (15); CARETOOK_CONTEXT_WATCH=off stops it.
+//
 // Every TIDY_EVERY_MS (six hours), on a tick that does nothing else (and isn't
 // paused), it runs `pnpm prd tidy --yes`. A usage limit isn't detected: the
 // user pauses and resumes. Without iTerm2 it refuses to run (it couldn't open
@@ -58,10 +62,12 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getAsk, listAsks, settleDue } from "./asks.mjs";
+import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
+import { contextDirOf, limitOf, sizeRecord, updateRecord } from "./context.mjs";
+import { CONTEXT_OPTIONS, CONTEXT_SESSION, commandUnder, contextDecision } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
 import { readLoadGate } from "./load-gate.mjs";
-import { isLive, processOf, readRecords, writeRecord } from "./sessions.mjs";
+import { isLive, processOf, processTable, readRecords, writeRecord } from "./sessions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -142,7 +148,8 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
 }
 
 /** @typedef {{ paused?: { at: string, why: string } | null, reopens?: Record<string, number>,
- *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number }} DispatchState */
+ *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number,
+ *   context?: Record<string, import("./dispatch-context.mjs").ContextEntry> }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -299,6 +306,162 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
   };
 }
 
+// ---- the context follow-up -------------------------------------------------------
+
+/** Gathers the context facts and applies the decision. Returns whether it did anything. */
+function contextStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {ReturnType<typeof gather>} */ g,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+) {
+  if (env.CARETOOK_CONTEXT_WATCH === "off") return false;
+  const now = g.facts.now;
+  const dir = contextDirOf(p.sessions);
+  const limit = limitOf(env);
+  const waitMs = positive(env.CARETOOK_CONTEXT_NUDGE_MIN, 15) * 60_000;
+  const entries = readState(p.state).context ?? {};
+  const sessions = g.records.map((r) => ({
+    name: r.name,
+    pid: r.record.pid ?? 0,
+    kind: r.record.kind,
+    topic: r.record.topic,
+    managed: r.record.managed === true,
+    live: r.live,
+    rotating: r.record.rotating === true,
+  }));
+  /** @type {Record<string, any>} */
+  const sizes = {};
+  for (const s of sessions) if (s.live) sizes[s.name] = sizeRecord(dir, s.name, s.pid);
+  /** @type {Record<string, any>} */
+  const asks = {};
+  for (const e of Object.values(entries)) if (e.askId) asks[e.askId] = getAsk(p.asks, e.askId);
+  // The process table only when a rotation could follow; unreadable holds every rotation.
+  const running = new Set();
+  if (Object.values(entries).some((e) => e.askId)) {
+    let table = null;
+    try {
+      table = processTable();
+    } catch {
+      /* held below */
+    }
+    for (const s of sessions) if (s.live && (!table || commandUnder(s.pid, table))) running.add(s.name);
+  }
+  const actions = contextDecision({
+    sessions,
+    sizes,
+    entries,
+    asks,
+    running,
+    paused: g.facts.paused,
+    limit,
+    waitMs,
+    now,
+  });
+
+  const setEntry = (/** @type {string} */ name, /** @type {Record<string, unknown>} */ fields) =>
+    updateState(p.state, (s) => {
+      s.context = {
+        ...s.context,
+        [name]: { .../** @type {any} */ (s.context?.[name]), .../** @type {any} */ (fields) },
+      };
+    });
+  const askTool = (/** @type {string[]} */ args) =>
+    run("node", [join(HERE, "ask.mjs"), ...args], {
+      cwd: p.main,
+      env: { ...env, CARETOOK_ASKS_DIR: p.asks },
+    });
+  const lastLine = (/** @type {{ out: string, err: string }} */ r) =>
+    (r.err || r.out).split("\n").pop() ?? "";
+
+  let acted = false;
+  for (const a of actions) {
+    if (a.type === "hold") {
+      out(`context: ${a.session} waits to rotate: a pnpm prd command is running under it`);
+      continue;
+    }
+    if (dryRun) {
+      if (a.type !== "answered") out(`context: would ${a.type} ${a.session}`);
+      continue;
+    }
+    acted = true;
+    if (a.type === "clear") {
+      if (a.askId) dismissAsk(p.asks, a.askId, { now });
+      updateState(p.state, (s) => void delete s.context?.[a.session]);
+      out(`context: ${a.session} cleared`);
+    } else if (a.type === "nudge") {
+      updateRecord(join(dir, `${a.session}.json`), (r) =>
+        r?.pid === a.pid && r.size > limit && !r.nudgeAt ? { ...r, nudgeAt: new Date(now).toISOString() } : r,
+      );
+      out(`context: ${a.session} nudged`);
+    } else if (a.type === "answered") {
+      setEntry(a.session, { answer: a.answer });
+      out(`context: ask ${a.askId} means ${a.answer} for ${a.session}`);
+    } else if (a.type === "ask") {
+      const r = askTool([
+        "ask",
+        "--topic",
+        a.topic,
+        "--question",
+        a.text,
+        "--session",
+        CONTEXT_SESSION,
+        ...CONTEXT_OPTIONS.flatMap((o) => ["--option", o]),
+        "--recommend",
+        CONTEXT_OPTIONS[0],
+        "--defaults",
+      ]);
+      const id = r.ok ? r.out.split("\n")[0].trim() : "";
+      if (!/^a\d+$/.test(id)) {
+        out(`context: filing the question for ${a.session} failed: ${lastLine(r)}`);
+        continue;
+      }
+      updateState(p.state, (s) => {
+        s.context = { ...s.context, [a.session]: { pid: a.pid, askId: id } };
+      });
+      out(`context: ${a.session} asked (${id})`);
+      const push =
+        r.out
+          .split("\n")
+          .find((l) => l.startsWith("Now send a PushNotification: "))
+          ?.slice("Now send a PushNotification: ".length) ?? `${a.topic}: ${a.text}`;
+      const helper = run(
+        "bash",
+        [
+          join(HERE, "open-session.sh"),
+          "--command",
+          helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+          "--title",
+          HELPER_SESSION,
+          "--background",
+        ],
+        { cwd: p.main },
+      );
+      if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${lastLine(helper)}`);
+    } else if (a.type === "rotate") {
+      const r = run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
+        cwd: p.main,
+      });
+      const reported = entries[a.session]?.reported === true;
+      setEntry(a.session, { triedAt: now, ...(r.ok ? {} : { reported: true }) });
+      if (r.ok) out(`context: ${a.session} rotating`);
+      else {
+        out(`context: rotating ${a.session} was refused: ${lastLine(r)}`);
+        if (!reported)
+          askTool([
+            "ask",
+            "--topic",
+            a.topic,
+            "--report",
+            `${a.session} is over the context limit, and its rotation was refused: ${lastLine(r)}`,
+            "--session",
+            CONTEXT_SESSION,
+          ]);
+      }
+    }
+  }
+  return acted;
+}
+
 // ---- one tick --------------------------------------------------------------------
 
 /**
@@ -387,6 +550,14 @@ export function tick(
       `  (the 5-minute load ${Math.round((g.gate.load ?? 0) * 10) / 10} is over ${g.gate.threshold})`,
     );
   lines.push(...head);
+
+  // The context follow-up: apart from the pick, and never in the way of its action.
+  let watched = false;
+  try {
+    watched = contextStep(p, g, { dryRun, env, out });
+  } catch (e) {
+    out(`context: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   if (dryRun) {
     out("(dry run: nothing written, nothing opened)");
@@ -489,7 +660,7 @@ export function tick(
       }
   }
   for (const l of lines) say(l);
-  return { lines, action: choice.action, acted: choice.action !== "none" };
+  return { lines, action: choice.action, acted: choice.action !== "none" || watched };
 }
 
 // ---- the command line ------------------------------------------------------------
