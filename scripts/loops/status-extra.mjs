@@ -13,6 +13,7 @@
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten } from "./asks.mjs";
+import { contextDirOf, sizeNote, sizeRecord } from "./context.mjs";
 import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 
@@ -80,6 +81,7 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
       Number.isNaN(since) ? "?" : age(record.started, now),
       record.auto ? "run-through" : "asks first",
       record.managed ? "managed" : "by hand",
+      up ? sizeNote(sizeRecord(contextDirOf(sessionsDir), name, record.pid ?? 0), { now }) : "",
     ]);
   }
   if (rows.length) {
@@ -90,7 +92,7 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
         `${r
           .slice(0, 4)
           .map((c, i) => c.padEnd(w[i]))
-          .join("  ")}  ${r[4]}`,
+          .join("  ")}  ${r[4]}${r[5] ? `  ${r[5]}` : ""}`,
       );
     out.push("");
   }

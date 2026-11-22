@@ -126,7 +126,7 @@ export function processOf(/** @type {number} */ pid, now = Date.now()) {
 
 export const claudeName = () => basename(process.env.CARETOOK_CLAUDE_BIN || "claude");
 
-const defaultDir = () => {
+export const defaultDir = () => {
   if (process.env.CARETOOK_SESSIONS_DIR) return process.env.CARETOOK_SESSIONS_DIR;
   const here = dirname(fileURLToPath(import.meta.url));
   const first = execFileSync("git", ["-C", here, "worktree", "list", "--porcelain"], { encoding: "utf8" })

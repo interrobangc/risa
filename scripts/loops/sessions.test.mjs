@@ -264,7 +264,9 @@ describe("session.sh", () => {
     expect(atStart.command).toBe(`${stub} --remote-control prd-t a\\ prompt`);
     expect(atStart).not.toHaveProperty("rotating");
     expect(atStart).not.toHaveProperty("ended");
-    expect(readFileSync(join(state, "args"), "utf8")).toBe("--remote-control\nprd-t\na prompt\n");
+    expect(readFileSync(join(state, "args"), "utf8")).toBe(
+      `--settings\n${scripts("context-settings.json")}\n--remote-control\nprd-t\na prompt\n`,
+    );
     const after = record("prd-t");
     expect(after).toMatchObject({ pid: stubPid(), exit: 3, auto: true });
     expect(Date.parse(after.ended)).toBeGreaterThanOrEqual(Date.parse(after.started));
@@ -340,6 +342,27 @@ describe("liveness", () => {
       ["prd-old", false],
       ["prd-t", false],
     ]);
+  });
+
+  it("gives a prd session the context hook and a plan session none, whatever it inherited", () => {
+    const argsOf = () => readFileSync(join(state, "args"), "utf8").trim().split("\n");
+    expect(run("session.sh", ["prd-t", "--", "go"]).status).toBe(0);
+    expect(argsOf()).toEqual(["--settings", scripts("context-settings.json"), "go"]);
+    const inherited = { CARETOOK_SESSION_NAME: "prd-other", CARETOOK_CONTEXT_HOOK: "/elsewhere" };
+    expect(run("session.sh", ["plan-t", "--", "go"], inherited).status).toBe(0);
+    expect(argsOf()).toEqual(["go"]);
+    const shown = join(root, "env-stub");
+    writeFileSync(
+      shown,
+      `#!/usr/bin/env bash\necho "\${CARETOOK_SESSION_NAME:-none} \${CARETOOK_CONTEXT_HOOK:-none}" > "$STUB_STATE/env"\n`,
+    );
+    chmodSync(shown, 0o755);
+    expect(
+      run("session.sh", ["plan-t", "--", "go"], { ...inherited, CARETOOK_CLAUDE_BIN: shown }).status,
+    ).toBe(0);
+    expect(readFileSync(join(state, "env"), "utf8").trim()).toBe("none none");
+    expect(run("session.sh", ["prd-t", "--", "go"], { CARETOOK_CLAUDE_BIN: shown }).status).toBe(0);
+    expect(readFileSync(join(state, "env"), "utf8").trim()).toBe(`prd-t ${scripts("context.mjs")}`);
   });
 
   it("finds the ancestor claude from a shell under the stub, and none from one that isn't", () => {

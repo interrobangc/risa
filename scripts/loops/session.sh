@@ -49,6 +49,15 @@ done
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# The context watch (context.mjs): orchestrators get its hook through an extra
+# settings file, so the user's own sessions never run it. Any other kind clears
+# what it could inherit from a session that started it.
+unset CARETOOK_SESSION_NAME CARETOOK_SESSION_PID CARETOOK_CONTEXT_HOOK
+if [[ $kind == prd ]]; then
+  export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
+  set -- --settings "$bin/context-settings.json" "$@"
+fi
+
 # The child records its own pid, then becomes claude, so the recorded pid is
 # the session's. In the foreground, so claude keeps the terminal and its input.
 # It also leaves the pid in PIDFILE, so the end is recorded only against it.
@@ -56,7 +65,7 @@ pidfile=$(mktemp "${TMPDIR:-/tmp}/caretook-session.XXXXXX")
 trap 'rm -f "$pidfile"' EXIT
 code=0
 bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" rotating= ended= exit= &&
-  echo $$ > "$9" && shift 9 && exec "$@"' _ \
+  echo $$ > "$9" && shift 9 && export CARETOOK_SESSION_PID=$$ && exec "$@"' _ \
   "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$pidfile" "$claude_bin" "$@" || code=$?
 
 pid=$(cat "$pidfile" 2>/dev/null || true)

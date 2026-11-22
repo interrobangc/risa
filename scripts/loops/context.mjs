@@ -1,0 +1,331 @@
+// The context watch: how large a recorded session has grown, and the reminder
+// to hand off past the limit.
+//
+// session.sh gives `prd` sessions context-settings.json (claude --settings), a
+// PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
+// it is handed, writes the size record and stays silent under the limit. Over
+// it, it adds a reminder to the agent's context. It never blocks a tool call
+// and any error in it is swallowed (exit 0, no output).
+//
+// A subagent's call (the hook input has `agent_id`) is sized from that agent's
+// own transcript, and its state is kept apart, so it never counts as the
+// session's.
+//
+// Records, in .context beside the sessions folder (the main checkout's .loops):
+//   <name>.json            pid, size, readAt, firstOverAt, remindedAt, nudgeAt
+//                          (a nudge is waiting), nudgeDeliveredAt, keep
+//                          { reason, until }. One whose pid isn't the live
+//                          session's is stale and ignored.
+//   .agents/<name>/<id>.json   the same for one subagent of that session
+//
+//   pnpm prd context                the calling session's size and the limit
+//   pnpm prd context --keep "<why>" leave it alone for CARETOOK_CONTEXT_KEEP_MIN (30)
+//   pnpm prd context --all [--json] every live session
+//
+// CARETOOK_CONTEXT_LIMIT (160000 tokens), CARETOOK_CONTEXT_REMIND_MIN (10).
+import { execFileSync } from "node:child_process";
+import {
+  closeSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { defaultDir, isLive, processOf, readRecord, readRecords } from "./sessions.mjs";
+
+const MIN_MS = 60_000;
+/** How much of a transcript's end is read first; it doubles until a usage is found. */
+const TAIL_BYTES = 256 * 1024;
+const LOCK_WAIT_MS = 1000;
+const LOCK_STALE_MS = 5000;
+
+const positive = (/** @type {string | undefined} */ value, /** @type {number} */ fallback) => {
+  const n = Number(value);
+  return value && Number.isFinite(n) && n > 0 ? n : fallback;
+};
+export const limitOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_LIMIT, 160_000);
+const remindMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_REMIND_MIN, 10) * MIN_MS;
+const keepMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_KEEP_MIN, 30) * MIN_MS;
+
+export const contextDirOf = (/** @type {string} */ sessionsDir) => join(dirname(sessionsDir), ".context");
+export const kilo = (/** @type {number} */ n) => `${Math.round(n / 1000)}k`;
+
+/**
+ * The context size in transcript text: the last assistant message's input,
+ * cache read and cache creation tokens. Null when no line has a usage. A
+ * session's own size skips subagent lines; `agent` reads an agent's transcript,
+ * where every line is one.
+ * @param {string} text @param {{ agent?: boolean }} [opts]
+ * @returns {number | null}
+ */
+export function sizeFromTranscript(text, { agent = false } = {}) {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"usage"')) continue;
+    let row;
+    try {
+      row = JSON.parse(lines[i]);
+    } catch {
+      continue;
+    }
+    if (row?.type !== "assistant" || (!agent && row.isSidechain)) continue;
+    const u = row.message?.usage;
+    if (!u) continue;
+    const size =
+      (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    // A message the client made itself (an API error's) carries an all-zero usage.
+    if (size > 0) return size;
+  }
+  return null;
+}
+
+/** The size from a transcript file, reading only as much of its end as it takes. */
+export function readSize(/** @type {string} */ file, /** @type {{ agent?: boolean }} */ opts = {}) {
+  const fd = openSync(file, "r");
+  try {
+    const total = fstatSync(fd).size;
+    for (let want = TAIL_BYTES; ; want *= 2) {
+      const n = Math.min(want, total);
+      const buf = Buffer.alloc(n);
+      readSync(fd, buf, 0, n, total - n);
+      const size = sizeFromTranscript(buf.toString("utf8"), opts);
+      if (size !== null || n === total) return size;
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Where a subagent's own transcript is, or null when its id can't be part of a path. */
+export function agentTranscript(/** @type {any} */ input) {
+  const id = String(input.agent_id ?? "").replace(/^agent-/, "");
+  if (!/^[\w-]+$/.test(id)) return null;
+  if (typeof input.agent_transcript_path === "string") return input.agent_transcript_path;
+  if (typeof input.transcript_path !== "string") return null;
+  const file = `agent-${id}.jsonl`;
+  if (basename(input.transcript_path) === file) return input.transcript_path;
+  return join(input.transcript_path.replace(/\.jsonl$/, ""), "subagents", file);
+}
+
+export function orchestratorReminder(/** @type {number} */ size, /** @type {number} */ limit) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. Finish the step in hand, commit _Status_, then run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Only a step that can't resume from _Status_ may finish first: run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_.`;
+}
+
+export function orchestratorNudge(/** @type {number} */ size, /** @type {number} */ limit) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't rotated. Rotate now: commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). If the step in hand can't resume from _Status_, run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
+}
+
+export function loopReminder(/** @type {number} */ size, /** @type {number} */ limit) {
+  return `Context watch: this agent is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. Commit your work, write your hand-off so far as your final message and tell your orchestrator to continue this slice with a fresh \`--continue\` agent.`;
+}
+
+/**
+ * What the hook does with a new size. Pure.
+ * @param {any} current the record, or null
+ * @param {{ pid: number, size: number, now: number, limit: number, remindMs: number, loop?: boolean }} facts
+ * @returns {{ record: any, message: string | null }}
+ */
+export function hookDecision(current, { pid, size, now, limit, remindMs, loop = false }) {
+  const at = new Date(now).toISOString();
+  const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
+  if (record.keep && !(Date.parse(record.keep.until) > now)) delete record.keep;
+  if (size <= limit) {
+    for (const k of ["firstOverAt", "remindedAt", "nudgeAt", "nudgeDeliveredAt"]) delete record[k];
+    return { record, message: null };
+  }
+  record.firstOverAt ??= at;
+  if (record.keep) return { record, message: null };
+  if (!loop && record.nudgeAt && !record.nudgeDeliveredAt) {
+    record.nudgeDeliveredAt = at;
+    record.remindedAt = at;
+    return { record, message: orchestratorNudge(size, limit) };
+  }
+  if (record.remindedAt && now - Date.parse(record.remindedAt) < remindMs) return { record, message: null };
+  record.remindedAt = at;
+  return { record, message: (loop ? loopReminder : orchestratorReminder)(size, limit) };
+}
+
+const readJson = (/** @type {string} */ file) => {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+};
+
+/** Read, change and write FILE under a short lock: the hook, `--keep` and the dispatcher all write it. */
+export function updateRecord(/** @type {string} */ file, /** @type {(r: any) => any} */ change) {
+  mkdirSync(dirname(file), { recursive: true });
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch (e) {
+      if (/** @type {NodeJS.ErrnoException} */ (e).code !== "EEXIST") throw e;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmdirSync(lock);
+      } catch {
+        /* its holder just let go */
+      }
+      if (Date.now() > deadline) throw new Error(`${file} is locked`, { cause: e });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+  try {
+    const next = change(readJson(file));
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+    renameSync(tmp, file);
+    return next;
+  } finally {
+    rmdirSync(lock);
+  }
+}
+
+/** NAME's size record while it is the session PID's, else null (stale). */
+export function sizeRecord(/** @type {string} */ dir, /** @type {string} */ name, /** @type {number} */ pid) {
+  const record = readJson(join(dir, `${name}.json`));
+  return record?.pid === pid ? record : null;
+}
+
+/** A live session's size for its status line. */
+export function sizeNote(/** @type {any} */ record, { limit = limitOf(), now = Date.now() } = {}) {
+  if (typeof record?.size !== "number") return "no size yet";
+  const over = record.size > limit ? " OVER" : "";
+  const kept = record.keep && Date.parse(record.keep.until) > now ? `, kept: ${record.keep.reason}` : "";
+  return `${kilo(record.size)}${over}${kept}`;
+}
+
+/** The hook: its output for this input (the JSON for claude, or ""). Throws on anything unreadable. */
+export function runHook(/** @type {string} */ raw, env = process.env, now = Date.now()) {
+  const name = env.CARETOOK_SESSION_NAME;
+  const pid = Number(env.CARETOOK_SESSION_PID);
+  const sessions = env.CARETOOK_SESSIONS_DIR;
+  if (!name || !pid || !sessions || readRecord(sessions, name)?.pid !== pid) return "";
+  const input = JSON.parse(raw);
+  const dir = contextDirOf(sessions);
+  const loop = Boolean(input.agent_id);
+  const transcript = loop ? agentTranscript(input) : input.transcript_path;
+  if (typeof transcript !== "string") return "";
+  const size = readSize(transcript, { agent: loop });
+  if (size === null) return "";
+  const id = String(input.agent_id ?? "").replace(/^agent-/, "");
+  const file = loop ? join(dir, ".agents", name, `${id}.json`) : join(dir, `${name}.json`);
+  /** @type {string | null} */
+  let message = null;
+  updateRecord(file, (current) => {
+    // A new session under this name: its old agents' records go too.
+    if (!loop && current && current.pid !== pid)
+      rmSync(join(dir, ".agents", name), { recursive: true, force: true });
+    const d = hookDecision(current, { pid, size, now, limit: limitOf(env), remindMs: remindMsOf(env), loop });
+    message = d.message;
+    return d.record;
+  });
+  if (!message) return "";
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: message } });
+}
+
+/** Every live session with its size. */
+export function liveSizes(/** @type {string} */ sessions, { limit = limitOf(), now = Date.now() } = {}) {
+  const dir = contextDirOf(sessions);
+  return readRecords(sessions)
+    .filter(({ record }) => isLive(record, processOf(record.pid ?? 0, now), now))
+    .map(({ name, record }) => {
+      const size = sizeRecord(dir, name, record.pid ?? 0);
+      const keep = size?.keep && Date.parse(size.keep.until) > now ? size.keep : null;
+      return {
+        name,
+        pid: record.pid,
+        size: size?.size ?? null,
+        limit,
+        over: (size?.size ?? 0) > limit,
+        readAt: size?.readAt ?? null,
+        keep,
+        note: sizeNote(size, { limit, now }),
+      };
+    });
+}
+
+function cli(/** @type {string[]} */ args) {
+  const sessions = defaultDir();
+  const dir = contextDirOf(sessions);
+  const limit = limitOf();
+  if (args[0] === "--all") {
+    const rows = liveSizes(sessions, { limit });
+    if (args.includes("--json")) console.log(JSON.stringify(rows));
+    else for (const r of rows) console.log(`${r.name}  ${r.note}`);
+    return 0;
+  }
+  if (args.length && args[0] !== "--keep") {
+    console.error('usage: pnpm prd context [--keep "<why>" | --all [--json]]');
+    return 2;
+  }
+  const keeping = args[0] === "--keep";
+  const why = (args[1] ?? "").trim();
+  if (keeping && !why) {
+    console.error('context --keep needs the reason: pnpm prd context --keep "<why>"');
+    return 2;
+  }
+  const name = process.env.CARETOOK_SESSION_NAME;
+  const pid = Number(process.env.CARETOOK_SESSION_PID);
+  if (!name || !pid || readRecord(sessions, name)?.pid !== pid) {
+    console.error("context: this shell isn't in a session the wrapper started with the context watch");
+    return keeping ? 1 : 0;
+  }
+  if (keeping) {
+    // A loop's shell carries its orchestrator's session: its keep would silence the wrong one.
+    let branch = "";
+    try {
+      branch = execFileSync("git", ["branch", "--show-current"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      /* not in a repo: nothing to refuse on */
+    }
+    if (branch.startsWith("slice/")) {
+      console.error("context --keep is the orchestrator's: a loop hands off instead");
+      return 1;
+    }
+    const until = new Date(Date.now() + keepMsOf()).toISOString();
+    updateRecord(join(dir, `${name}.json`), (current) => ({
+      ...(current?.pid === pid ? current : { pid }),
+      keep: { reason: why, until },
+    }));
+    console.log(`${name}: left alone until ${until}: ${why}`);
+    return 0;
+  }
+  const record = sizeRecord(dir, name, pid);
+  console.log(`${name}: ${sizeNote(record, { limit })} (limit ${kilo(limit)})`);
+  return 0;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const args = process.argv.slice(2);
+  if (args[0] === "hook") {
+    // The hook can never hurt a session: no output and exit 0 on any error.
+    try {
+      const out = runHook(readFileSync(0, "utf8"));
+      if (out) process.stdout.write(out);
+    } catch {
+      /* swallowed */
+    }
+    process.exit(0);
+  }
+  try {
+    process.exit(cli(args));
+  } catch (e) {
+    console.error(`context: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+}

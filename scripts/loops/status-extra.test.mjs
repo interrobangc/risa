@@ -37,11 +37,36 @@ describe("statusParts", () => {
     record("old", { pid: 4, started: ago(60 * H), ended: ago(48 * H), exit: 0 });
     const out = statusParts(sessions, asks, { now: NOW, live: (r) => !r.ended });
     expect(out).toContain("SESSIONS");
-    expect(out).toMatch(/prd-a +live +3h +run-through +managed$/m);
-    expect(out).toMatch(/prd-b +live, rotating +2h +asks first +by hand$/m);
+    expect(out).toMatch(/prd-a +live +3h +run-through +managed +no size yet$/m);
+    expect(out).toMatch(/prd-b +live, rotating +2h +asks first +by hand +no size yet$/m);
     expect(out).toMatch(/plan-c +ended +5h +asks first +by hand$/m);
     expect(out).not.toContain("old ");
     expect(out).not.toContain("OPEN ASKS");
+  });
+
+  it("shows a live session's size, the over-limit mark and the keep; a stale record is no size", () => {
+    const dir = join(root, "sized", "sessions");
+    const context = join(root, "sized", ".context");
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(context);
+    const started = ago(H);
+    const sized = (name, pid, size) => {
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify({ pid, started }));
+      writeFileSync(join(context, `${name}.json`), JSON.stringify(size));
+    };
+    sized("prd-small", 11, { pid: 11, size: 90_000 });
+    sized("prd-large", 12, { pid: 12, size: 172_400 });
+    sized("prd-kept", 13, {
+      pid: 13,
+      size: 181_000,
+      keep: { reason: "landing under way", until: new Date(NOW + H).toISOString() },
+    });
+    sized("prd-stale", 14, { pid: 99, size: 200_000 });
+    const out = statusParts(dir, join(root, "missing"), { now: NOW, live: () => true });
+    expect(out).toMatch(/prd-small .*by hand +90k$/m);
+    expect(out).toMatch(/prd-large .*by hand +172k OVER$/m);
+    expect(out).toMatch(/prd-kept .*by hand +181k OVER, kept: landing under way$/m);
+    expect(out).toMatch(/prd-stale .*by hand +no size yet$/m);
   });
 
   it("prints the open asks: the count and the oldest with its age", () => {
