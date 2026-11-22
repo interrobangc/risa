@@ -43,21 +43,57 @@ const ageSecs = (/** @type {string} */ p, /** @type {number} */ now) => {
 export const testDbName = (/** @type {string} */ name) =>
   `caretook_test_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`.slice(0, 63);
 
-/** The working directory of every process, by pid (lsof -d cwd). */
-function processCwds() {
+/**
+ * The working directory of every process, by pid, from `lsof -d cwd -Fn`'s
+ * result R (spawnSync's), or null when the inspection failed: lsof missing or
+ * killed, an exit other than 0 or 1, or exit 1 with nothing printed but an
+ * error. A null means "unknown", never "nothing running".
+ */
+export function processCwds(
+  /** @type {{ error?: Error, status: number | null, stdout?: string, stderr?: string }} */ r,
+) {
+  const stdout = (r.stdout ?? "").trim();
+  // lsof exits 1 both when some processes can't be read (what it printed still
+  // counts) and when it finds nothing (none, if it said nothing else).
+  if (
+    r.error ||
+    (r.status !== 0 && r.status !== 1) ||
+    (r.status === 1 && !stdout && `${r.stderr ?? ""}`.trim())
+  )
+    return null;
   /** @type {{ pid: number, cwd: string }[]} */
   const out = [];
   let pid = 0;
-  // lsof exits 1 when some processes can't be read; what it printed still counts.
-  for (const l of lines(run("lsof", ["-nP", "-d", "cwd", "-Fn"]).out || "")) {
+  for (const l of lines(stdout)) {
     if (l.startsWith("p")) pid = Number(l.slice(1));
     else if (l.startsWith("n") && pid && pid !== process.pid) out.push({ pid, cwd: l.slice(1) });
   }
   return out;
 }
 
+/** Why a worktree counts as busy when processCwds' result R is null. */
+export const unknownProcesses = (
+  /** @type {{ error?: Error, status: number | null, signal?: string | null, stderr?: string }} */ r,
+) =>
+  `its processes are unknown (${
+    r.error
+      ? `lsof couldn't run: ${r.error.message}`
+      : r.status === null
+        ? `lsof was killed (${r.signal ?? "signal"})`
+        : `lsof failed, exit ${r.status}${`${r.stderr ?? ""}`.trim() ? `: ${`${r.stderr}`.trim().split("\n")[0]}` : ""}`
+  })`;
+
 /** The facts tidy() sorts, for the main checkout MAIN. */
-export function collectTidyFacts({ main = "", env = process.env, now = Date.now() } = {}) {
+export function collectTidyFacts({
+  main = "",
+  env = process.env,
+  now = Date.now(),
+  lsof = spawnSync("lsof", ["-nP", "-d", "cwd", "-Fn"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env,
+  }),
+} = {}) {
   const trunk = env.TRUNK || "dev";
   const loops = join(main, ".loops");
   const base = collectFacts({ main, env, now });
@@ -72,20 +108,24 @@ export function collectTidyFacts({ main = "", env = process.env, now = Date.now(
   const tipOf = (/** @type {string} */ ref) => git(main, ["rev-parse", "--verify", "--quiet", ref]).out;
   const inTrunk = (/** @type {string} */ ref) => git(main, ["merge-base", "--is-ancestor", ref, trunk]).ok;
 
-  const cwds = processCwds();
+  // An inspection that failed keeps every worktree as busy: unknown, not idle.
+  const cwds = processCwds(lsof);
+  const unknown = cwds ? undefined : unknownProcesses(lsof);
   const leases = (base.locks ?? []).filter((l) => l.kind === "lease" && l.alive);
   const worktrees = base.worktrees.map((w) => {
     const dir = join(loops, w.name);
     const t = w.branch ? tipOf(w.branch) : "";
-    const proc = cwds.find((c) => c.cwd === dir || c.cwd.startsWith(`${dir}/`));
+    const proc = cwds?.find((c) => c.cwd === dir || c.cwd.startsWith(`${dir}/`));
     const lease = leases.find((l) => l.holder === w.name || l.holder?.startsWith(`${w.name}: `));
-    const busy = proc
-      ? `a process is working in it (pid ${proc.pid})`
-      : w.serverRunning
-        ? "its dev server is running"
-        : lease
-          ? `it holds a lease (${lease.path})`
-          : undefined;
+    const busy = unknown
+      ? unknown
+      : proc
+        ? `a process is working in it (pid ${proc.pid})`
+        : w.serverRunning
+          ? "its dev server is running"
+          : lease
+            ? `it holds a lease (${lease.path})`
+            : undefined;
     return {
       name: w.name,
       branch: w.branch,
