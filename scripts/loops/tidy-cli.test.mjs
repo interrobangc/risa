@@ -19,6 +19,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { collectTidyFacts, processCwds } from "./tidy-cli.mjs";
+import { tidy as sortFacts } from "./tidy.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -100,6 +102,8 @@ beforeAll(() => {
     CARETOOK_SESSIONS_DIR: sessions,
     CARETOOK_SESSION: "",
     CARETOOK_LEASE_ROOT: leases,
+    // new.sh's load gate reads the real machine: under a full run it waits past the hook timeout.
+    CARETOOK_LOAD_GATE: "off",
     CARETOOK_SHARED_TEST_PORT: "",
     CARETOOK_SHARED_TEST_PROJECT: "",
     FAKE_DBS: "caretook_test_t_3 caretook_test_gone",
@@ -198,6 +202,63 @@ describe("tidy (no --yes)", () => {
     expect(safe.map((f) => f.kind)).toEqual(["worktree", "record", "lease", "test-db", "volume", "hang-log"]);
     expect(ask.map((f) => f.target)).toEqual(["slice/t/9"]);
     expect(kept.map((f) => f.target)).toEqual(["t-2"]);
+  });
+});
+
+describe("a failed process inspection", () => {
+  const facts = (lsof) => collectTidyFacts({ main, env, lsof });
+  const t1 = (lists) => [...lists.safe, ...lists.kept].find((f) => f.target === "t-1");
+
+  it("reads lsof's output, and its empty nothing-found exit as none", () => {
+    const out = "p11\nfcwd\nn/a/b\np12\nfcwd\nn/c\n";
+    expect(processCwds({ status: 0, stdout: out, stderr: "" })).toEqual([
+      { pid: 11, cwd: "/a/b" },
+      { pid: 12, cwd: "/c" },
+    ]);
+    // Exit 1 with output: some processes couldn't be read; the rest still count.
+    expect(processCwds({ status: 1, stdout: out, stderr: "lsof: WARNING: can't stat" })).toHaveLength(2);
+    expect(processCwds({ status: 1, stdout: "", stderr: "" })).toEqual([]);
+  });
+
+  it("is unknown: missing, killed, an odd exit, or an error with nothing printed", () => {
+    const enoent = Object.assign(new Error("spawnSync lsof ENOENT"), { code: "ENOENT" });
+    expect(processCwds({ error: enoent, status: null })).toBeNull();
+    expect(processCwds({ status: null, signal: "SIGKILL", stdout: "" })).toBeNull();
+    expect(processCwds({ status: 2, stdout: "p11\nn/a\n", stderr: "" })).toBeNull();
+    expect(processCwds({ status: 1, stdout: "", stderr: "lsof: illegal option" })).toBeNull();
+  });
+
+  it("keeps every worktree tidy would remove as idle, and says why", () => {
+    const enoent = Object.assign(new Error("spawnSync lsof ENOENT"), { code: "ENOENT" });
+    for (const [lsof, why] of [
+      [{ error: enoent, status: null, stdout: "", stderr: "" }, /lsof couldn't run: spawnSync lsof ENOENT/],
+      [{ status: 2, stdout: "", stderr: "lsof: boom\nmore" }, /lsof failed, exit 2: lsof: boom\)/],
+      [{ status: null, signal: "SIGTERM", stdout: "", stderr: "" }, /lsof was killed \(SIGTERM\)/],
+    ]) {
+      const lists = sortFacts(facts(lsof));
+      expect(lists.safe.some((f) => f.kind === "worktree")).toBe(false);
+      expect(t1(lists)?.why).toMatch(/^slice\/t\/1 is merged into prd\/t, but its processes are unknown \(/);
+      expect(t1(lists)?.why).toMatch(why);
+    }
+  });
+
+  it("an empty successful inspection still lets a merged worktree go", () => {
+    const lists = sortFacts(facts({ status: 1, stdout: "", stderr: "" }));
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "worktree", target: "t-1" }));
+  });
+
+  it("through the CLI: a failing lsof keeps t-1 and names why", () => {
+    const bin = join(root, "bin");
+    writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\necho 'lsof: kernel says no' >&2\nexit 3\n");
+    try {
+      const out = ok([]);
+      expect(out).toMatch(
+        /^ {2}worktree +t-1 \(slice\/t\/1 is merged .*, but its processes are unknown \(lsof failed, exit 3: lsof: kernel says no\)\)$/m,
+      );
+      expect(out).not.toMatch(/^ {2}worktree +t-1 \(slice\/t\/1 is merged into prd\/t\)$/m);
+    } finally {
+      writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
+    }
   });
 });
 
