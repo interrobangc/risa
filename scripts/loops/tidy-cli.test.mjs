@@ -207,7 +207,15 @@ describe("tidy (no --yes)", () => {
 
   it("--json gives the same lists", () => {
     const { safe, ask, kept } = JSON.parse(ok(["--json"]));
-    expect(safe.map((f) => f.kind)).toEqual(["worktree", "record", "lease", "test-db", "volume", "hang-log"]);
+    expect(safe.map((f) => f.kind)).toEqual([
+      "worktree",
+      "record",
+      "record",
+      "lease",
+      "test-db",
+      "volume",
+      "hang-log",
+    ]);
     expect(ask.map((f) => f.target)).toEqual(["slice/t/9"]);
     expect(kept.map((f) => f.target)).toEqual(["t-2"]);
   });
