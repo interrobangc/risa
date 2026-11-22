@@ -133,15 +133,16 @@ exempt_only() {
   local range=$2
   [[ -n ${3:-} ]] && range="$2 $3"
   # shellcheck disable=SC2086
-  [[ -z $(git -C "$1" diff --name-only $range | grep -Ev "$exempt_re") ]]
+  [[ -z $(git -C "$1" diff --name-only --no-renames $range | grep -Ev "$exempt_re") ]]
 }
 
 # docs_only BASE TIP → succeeds when BASE...TIP changes something and every
 # file it changes is Markdown (`*.md` anywhere). Tooling scripts are code: they
-# keep the Codex review. An empty diff is not docs only.
+# keep the Codex review. An empty diff is not docs only. --no-renames lists both
+# sides of a rename, so a code file renamed to .md isn't docs only.
 docs_only() {
   local files
-  files=$(git -C "$main" diff --name-only "$1...$2") || return 1
+  files=$(git -C "$main" diff --name-only --no-renames "$1...$2") || return 1
   [[ -n $files ]] && ! grep -qv '\.md$' <<< "$files"
 }
 

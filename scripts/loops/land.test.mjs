@@ -123,6 +123,16 @@ describe("docs_only", () => {
     onFeature({ "docs/x.md": "d", "scripts/loops/t.sh": "x" });
     expect(docsOnly()).toBe(false);
   });
+  it("is false when a code file is renamed to .md, true for a Markdown rename", () => {
+    git("checkout", "-q", "feature");
+    git("mv", "apps/web/a.ts", "apps/web/a.md");
+    git("commit", "-qm", "rename code");
+    expect(docsOnly()).toBe(false);
+    git("reset", "-q", "--hard", "dev");
+    git("mv", "README.md", "NOTES.md");
+    git("commit", "-qm", "rename docs");
+    expect(docsOnly()).toBe(true);
+  });
   it("is false for an empty diff", () => {
     git("checkout", "-q", "feature");
     expect(docsOnly()).toBe(false);
