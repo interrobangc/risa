@@ -141,7 +141,7 @@ export function collectTidyFacts({ main = "", env = process.env, now = Date.now(
     : [];
 
   const locks = (base.locks ?? [])
-    .filter((l) => ["slot", "ticket", "lease"].includes(l.kind))
+    .filter((l) => ["slot", "lease"].includes(l.kind))
     .map((l) => ({
       kind: l.kind,
       path: l.path,
@@ -253,7 +253,6 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
       case "record":
       case "hang-log":
       case "slot":
-      case "ticket":
       case "lease":
         step(label, () => {
           rmSync(f.path ?? f.target, { recursive: true, force: true });

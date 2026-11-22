@@ -176,15 +176,7 @@ beforeAll(() => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of [
-    "prd.sh",
-    "lib.sh",
-    "session.sh",
-    "sessions.mjs",
-    "end-session.sh",
-    "queue.sh",
-    "prompt.sh",
-  ])
+  for (const f of ["prd.sh", "lib.sh", "session.sh", "sessions.mjs", "end-session.sh", "prompt.sh"])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   mkdirSync(join(main, "plans"));
@@ -356,16 +348,6 @@ describe("sessions start through the wrapper", () => {
     expect(r.stdout).toContain(
       `cd ${join(loops, "w")} && scripts/loops/session.sh prd-w -- --remote-control prd-w "$(scripts/loops/prompt.sh orchestrator w)"`,
     );
-  });
-
-  it("pnpm prd queue opens a recorded run-through session (or not, with --manual)", () => {
-    expect(run("queue.sh", ["w"], { STUB_NAME: "prd-w" }).status).toBe(0);
-    expect(record("prd-w")).toMatchObject({ pid: stubPid(), kind: "prd", topic: "w", auto: true, exit: 0 });
-    const args = readFileSync(join(state, "args"), "utf8").split("\n");
-    expect(args.slice(0, 2)).toEqual(["--remote-control", "prd-w"]);
-    expect(args.join("\n")).toMatch(/orchestrator/);
-    expect(run("queue.sh", ["w", "--manual"]).status).toBe(0);
-    expect(record("prd-w").auto).toBe(false);
   });
 
   it("pnpm prd plan --open records a planner; without --open it prints the wrapped command", () => {

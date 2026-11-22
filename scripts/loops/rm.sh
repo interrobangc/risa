@@ -11,8 +11,8 @@
 #
 # A PRD worktree whose branch is merged into dev and whose plan's _Status_ has
 # no slice left to run marks its topic done in the PRD registry (pnpm backlog
-# prd set <topic> flags=…,done), except a standing topic; before the table is
-# migrated, or when _Status_ can't be read, it marks nothing and says so.
+# prd set <topic> flags=…,done), except a standing topic; with the old prose
+# table, or when _Status_ can't be read, it marks nothing and says so.
 # A standing topic's PRD worktree (a fixes wave) clears its row's hot files
 # instead (pnpm backlog prd set <topic> hot=—), merged or not; its flags stay.
 #

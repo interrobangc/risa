@@ -9,6 +9,14 @@ leases=$loops/.slots
 trunk=${TRUNK:-dev}
 max_prds=${CARETOOK_MAX_PRDS:-3}
 
+# dispatch_pid → the running dispatcher's pid (pnpm prd dispatch: its lock,
+# .loops/.dispatch.lock), or nothing and false when none runs.
+dispatch_pid() {
+  local p
+  p=$(cat "$loops/.dispatch.lock" 2>/dev/null) || return 1
+  [[ $p =~ ^[0-9]+$ ]] && kill -0 "$p" 2>/dev/null && echo "$p"
+}
+
 # parent_of BRANCH → the branch it merges into:
 #   slice/<topic>/<n> → prd/<topic>;  prd/*, plan/* and hotfix/* → trunk.
 parent_of() {

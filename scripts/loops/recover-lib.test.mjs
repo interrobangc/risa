@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mergeRecord, nextTime, upNow } from "./recover-lib.mjs";
 
 describe("upNow", () => {
-  it("lists stacks with a running container, servers that answer, and the test Postgres", () => {
+  it("lists stacks with a running container, servers that answer, the test Postgres and the dispatcher", () => {
     const inv = {
       worktrees: [
         { name: "a", stack: "caretook-loop1", containersUp: 2, webPort: 6173, serverRunning: true },
@@ -12,14 +12,21 @@ describe("upNow", () => {
       ],
       testDb: { running: true },
     };
-    expect(upNow(inv)).toEqual({ stacks: ["a"], servers: ["a"], testDb: true });
+    expect(upNow(inv)).toEqual({ stacks: ["a"], servers: ["a"], testDb: true, dispatcher: false });
+    expect(upNow({ ...inv, dispatcher: { running: true, pid: 4 } }).dispatcher).toBe(true);
   });
 });
 
 describe("mergeRecord", () => {
   const now = { stacks: ["a"], servers: [], testDb: false };
   it("is what's up now when there's no record", () => {
-    expect(mergeRecord(now, null, "T")).toEqual({ at: "T", stacks: ["a"], servers: [], testDb: false });
+    expect(mergeRecord(now, null, "T")).toEqual({
+      at: "T",
+      stacks: ["a"],
+      servers: [],
+      testDb: false,
+      dispatcher: false,
+    });
   });
   it("keeps what an earlier down recorded", () => {
     expect(mergeRecord(now, { stacks: ["b", "a"], servers: ["b"], testDb: true }, "T")).toEqual({
@@ -27,7 +34,12 @@ describe("mergeRecord", () => {
       stacks: ["b", "a"],
       servers: ["b"],
       testDb: true,
+      dispatcher: false,
     });
+  });
+  it("remembers a dispatcher an earlier down stopped", () => {
+    expect(mergeRecord(now, { dispatcher: true }, "T").dispatcher).toBe(true);
+    expect(mergeRecord({ ...now, dispatcher: true }, null, "T").dispatcher).toBe(true);
   });
 });
 

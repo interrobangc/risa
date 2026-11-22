@@ -7,8 +7,8 @@
 //           running in it (rm.sh);
 //         - a plan/<topic> worktree landed in dev and level with it, clean, with
 //           no live session and nothing running in it (rm.sh);
-//         - lease, queue and slot tickets whose holder is gone (older than a
-//           minute, so one being taken isn't), removed;
+//         - lease and slot tickets whose holder is gone (older than a minute,
+//           so one being taken isn't), removed;
 //         - test databases no worktree owns (test-db.sh drop-db);
 //         - stale remote-tracking refs (git fetch --prune);
 //         - dangling Docker volumes of a caretook-loopN project no worktree
@@ -65,7 +65,7 @@ export const PROTECTED_BRANCHES = ["dev", "main", "staging"];
  * @property {boolean} merged           merged into its parent
  *
  * @typedef {object} TidyLock
- * @property {"slot"|"ticket"|"lease"|string} kind
+ * @property {"slot"|"lease"|string} kind
  * @property {string} path
  * @property {boolean} alive
  * @property {string} [holder]
@@ -161,7 +161,7 @@ export function tidy(facts) {
     safe.push({ kind: "remote", target: r, why: "gone from the remote", how: "git fetch --prune" });
 
   for (const l of facts.locks ?? []) {
-    if (!["slot", "ticket", "lease"].includes(l.kind) || l.alive) continue;
+    if (!["slot", "lease"].includes(l.kind) || l.alive) continue;
     const who = l.holder ? `${l.kind} ${l.holder}` : l.kind;
     const why = l.kind === "slot" ? "its worktree is gone" : `pid ${l.pid ?? "?"} is gone`;
     if ((l.ageSecs ?? 0) < TICKET_GRACE_SECS)

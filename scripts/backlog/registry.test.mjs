@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BacklogError } from "./format.mjs";
 import * as reg from "./registry.mjs";
 
-// Today's shape (fictional rows): a done row, a "done except" row, a to-write row with prose.
+// The table before the registry (fictional rows), which the tooling refuses.
 const OLD = [
   "# Backlog tracker",
   "",
@@ -22,62 +22,36 @@ const OLD = [
   "After the table.",
 ].join("\n");
 
+// The registry's shape, with one row to be replaced.
+const NEW = [
+  "# Backlog tracker",
+  "",
+  "## PRDs",
+  "",
+  "| PRD | Flags | After | Hot files | Doc and notes |",
+  "| --- | ----- | ----- | --------- | ------------- |",
+  "| `x` | — | — | — | — |",
+  "",
+  "After the table.",
+].join("\n");
+
 const row = (topic, o = {}) => ({ topic, flags: [], after: [], hot: [], notes: "", ...o });
 const topics = (rows) => rows.map((r) => r.topic);
 
 describe("parseRegistry", () => {
-  it("reads today's table as old, and no table as none", () => {
+  it("reads the old prose table as old (and refuses its rows), and no table as none", () => {
     const r = reg.parseRegistry(OLD);
     expect(r.format).toBe("old");
     expect(r.format === "old" && r.rows.map((o) => o.topic)).toEqual(["alpha", "beta", "gamma", "delta"]);
     expect(r.format === "old" && r.rows[2].hot).toBe("`scripts/loops/`, the a|b form");
     expect(reg.parseRegistry("# Backlog\n\nNo table.").format).toBe("none");
-    expect(() => reg.rowsOf(OLD)).toThrow(/isn't migrated yet: run pnpm backlog prd migrate/);
+    expect(() => reg.rowsOf(OLD)).toThrow(
+      /old prose form \(PRD \| Doc \| Depends on \| Hot files\); the tooling reads only the registry's columns \(PRD \| Flags \| After \| Hot files \| Doc and notes\)/,
+    );
   });
 
   it("refuses a header it doesn't know", () => {
     expect(() => reg.parseRegistry("## PRDs\n\n| Name | What |\n| - | - |\n| a | b |")).toThrow(BacklogError);
-  });
-});
-
-describe("migrate", () => {
-  const { preamble, count } = reg.migrate(OLD);
-  const rows = reg.rowsOf(preamble);
-
-  it("keeps every row in its order, with only done from the doc cell", () => {
-    expect(count).toBe(4);
-    expect(topics(rows)).toEqual(["alpha", "beta", "gamma", "delta"]);
-    expect(rows.map((r) => r.flags)).toEqual([["done"], [], [], []]);
-    expect(rows.every((r) => !r.after.length && !r.hot.length)).toBe(true);
-  });
-
-  it("keeps the old prose at the end of the notes, unless it said nothing", () => {
-    expect(rows[0].notes).toBe("[PRD](alpha-prd.md), [plan](alpha-plan.md): **done** (`1234abcd`, PR #3)");
-    expect(rows[1].notes).toBe("[PRD](beta-prd.md): **done** except going live: slice 7 is the user's");
-    expect(rows[2].notes).toBe(
-      "to write (B-9) · Depends on: `alpha` in `dev` (last item B-2) · Hot files: `scripts/loops/`, the a|b form",
-    );
-    expect(rows[3].notes).toBe(
-      "[plan](delta-plan.md): **done**; B-40 waits on the user · Hot files: varies by slice; none now",
-    );
-  });
-
-  it("rewrites the section's intro, keeps the rest of the preamble, and refuses a second run", () => {
-    expect(
-      preamble.startsWith("# Backlog tracker\n\nIntro.\n\n## PRDs\n\n" + reg.INTRO + "\n\n| PRD | Flags |"),
-    ).toBe(true);
-    expect(preamble).not.toContain("Which PRDs exist");
-    expect(preamble.endsWith("|\n\nAfter the table.")).toBe(true);
-    expect(() => reg.migrate(preamble)).toThrow(/already migrated/);
-  });
-
-  it("says done only for **done** with at most a parenthesis after it", () => {
-    expect(reg.saysDone("[PRD](x.md): **done**")).toBe(true);
-    expect(reg.saysDone("[PRD](x.md): **done** (`abc`)")).toBe(true);
-    expect(reg.saysDone("**done** except going live")).toBe(false);
-    expect(reg.saysDone("**done**, all 6 slices in dev")).toBe(false);
-    expect(reg.saysDone("**Done 2026-11-20**: all in dev")).toBe(false);
-    expect(reg.saysDone("to write")).toBe(false);
   });
 });
 
@@ -87,7 +61,7 @@ describe("the table round trip", () => {
     row("two", { after: ["one"], notes: "[plan](two-plan.md)" }),
     row("three"),
   ];
-  const preamble = reg.withRows(reg.migrate(OLD).preamble, rows);
+  const preamble = reg.withRows(NEW, rows);
 
   it("writes and reads back the same rows in the same order", () => {
     expect(reg.rowsOf(preamble)).toEqual(rows);

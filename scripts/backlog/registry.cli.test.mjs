@@ -21,6 +21,21 @@ const cliFails = (cwd, ...a) => {
   throw new Error("expected the command to fail");
 };
 
+// The table before the registry (refused), and the registry's (written by hand in a test).
+const OLD_TABLE = `| PRD | Doc | Depends on | Hot files |
+| --- | --- | ---------- | --------- |
+| \`alpha\` | [PRD](alpha-prd.md): **done** (\`abc1234\`) | — | none now |
+| \`beta\` | [plan](beta-plan.md): 3 slices | \`alpha\` | \`scripts/loops/\` |
+| \`gamma\` | to write (B-2) | (none) | none now |
+| \`fixes-x\` | standing fixes | — | — |
+`;
+const NEW_TABLE = `| PRD | Flags | After | Hot files | Doc and notes |
+| --- | ----- | ----- | --------- | ------------- |
+| \`alpha\` | done | — | — | [PRD](alpha-prd.md): **done** (\`abc1234\`) |
+| \`beta\` | — | — | — | [plan](beta-plan.md): 3 slices |
+| \`gamma\` | — | — | — | to write (B-2) |
+| \`fixes-x\` | — | — | — | standing fixes |
+`;
 const BACKLOG = `# Backlog tracker
 
 Intro.
@@ -29,13 +44,7 @@ Intro.
 
 Which PRDs exist.
 
-| PRD | Doc | Depends on | Hot files |
-| --- | --- | ---------- | --------- |
-| \`alpha\` | [PRD](alpha-prd.md): **done** (\`abc1234\`) | — | none now |
-| \`beta\` | [plan](beta-plan.md): 3 slices | \`alpha\` | \`scripts/loops/\` |
-| \`gamma\` | to write (B-2) | (none) | none now |
-| \`fixes-x\` | standing fixes | — | — |
-
+${OLD_TABLE}
 ## Items
 
 ### B-1 · bug · Something in beta
@@ -77,24 +86,21 @@ const lastMessage = () => git(main, "log", "-1", "--format=%s%n%b");
 const order = () => JSON.parse(cli(prd, "prd", "list", "--json")).map((r) => r.topic);
 
 describe("backlog prd", () => {
-  it("before the migration, list says to run it and the rest works as before", () => {
+  it("refuses the old prose table, and the rest works as before; there is no migrate", () => {
     const r = cliFails(prd, "prd", "list");
     expect(r.code).toBe(1);
-    expect(r.out).toContain("isn't migrated yet: run pnpm backlog prd migrate");
-    expect(cliFails(prd, "prd", "set", "beta", "flags=hold").out).toContain("isn't migrated yet");
+    expect(r.out).toContain("the PRD table is in the old prose form");
+    expect(cliFails(prd, "prd", "set", "beta", "flags=hold").out).toContain("old prose form");
+    expect(cliFails(prd, "prd", "migrate").out).toContain(
+      'unknown prd command "migrate" (list, add, set, move)',
+    );
     expect(cli(prd, "list")).toContain("B-1");
   });
 
-  it("migrates once, in one backlog commit from a prd worktree", () => {
-    expect(cli(prd, "prd", "migrate")).toMatch(/^migrated 4 PRD rows \(same order\)/);
-    expect(lastMessage()).toBe(
-      "chore(backlog): prd migrate: the PRD table into the registry\nBy: prd/beta\n\nBacklog-Tool: prd migrate",
-    );
-    expect(git(main, "show", "--name-only", "--format=", "HEAD")).toBe("plans/backlog.md");
-    expect(file()).toContain(
-      "| `beta` | — | — | — | [plan](beta-plan.md): 3 slices · Depends on: `alpha` · Hot files: `scripts/loops/` |",
-    );
-    expect(cliFails(prd, "prd", "migrate").out).toContain("already migrated");
+  it("reads the registry's table once it is written by hand", () => {
+    writeFileSync(join(main, "plans/backlog.md"), file().replace(OLD_TABLE, NEW_TABLE));
+    git(main, "commit", "-q", "-am", "chore(backlog): the registry's columns");
+    expect(order()).toEqual(["alpha", "beta", "gamma", "fixes-x"]);
     expect(git(prd, "status", "--porcelain")).toBe("");
   });
 
@@ -115,11 +121,9 @@ describe("backlog prd", () => {
     expect(cli(prd, "prd", "set", "fixes-x", "flags=standing", "hot=scripts/loops/,apps/web/x.ts")).toBe(
       "updated fixes-x",
     );
-    // A quick second write folds into the first (amend.mjs): its text and trailer are in HEAD.
-    expect(lastMessage()).toContain(
-      "prd set fixes-x: flags=standing, hot=scripts/loops/,apps/web/x.ts\nBy: prd/beta",
-    );
-    expect(lastMessage()).toMatch(/Backlog-Tool: prd migrate\nBacklog-Tool: prd set$/);
+    expect(lastMessage()).toMatch(/^chore\(backlog\): prd set fixes-x: flags=standing, hot=scripts\/loops\//);
+    expect(lastMessage()).toMatch(/By: prd\/beta\n\nBacklog-Tool: prd set$/);
+    expect(git(main, "show", "--name-only", "--format=", "HEAD")).toBe("plans/backlog.md");
     const fixes = JSON.parse(cli(prd, "prd", "list", "--json")).find((r) => r.topic === "fixes-x");
     expect(fixes).toMatchObject({
       state: "planned",

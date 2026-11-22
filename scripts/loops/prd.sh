@@ -16,15 +16,19 @@ usage() {
 pnpm prd <command>
 
   See what's going on
-    status                    every worktree: branch, changes, dev server link; lease holders; the load
+    status                    every worktree: branch, changes, dev server link; sessions (managed or by hand);
+                              the dispatcher (running, paused and why, stopped; its last line); lease holders; the load
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     ready [topic]             the ready-to-land report: link, what it addresses, blockers
 
   Start and stop work
     start <topic>             create (or resume) a PRD's worktree and stack; prints how to open its orchestrator
-    dispatch [--once|--dry-run|--pause|--resume|--stop]   plan, start and reopen PRDs by itself, in its own tab
-    queue <topic> [--manual]  wait for a free PRD slot (in queue order), then create the worktree and open a
-                              fully autonomous orchestrator in this terminal (--manual: it asks how to land)
+    dispatch [--every <s>]    the dispatcher, left in a tab of its own: every minute it plans, starts and
+                              reopens PRDs by itself, one action a tick, in the registry's row order
+    dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
+    dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's)
+    queue <topic>             put the topic first in the PRD registry and return: the dispatcher takes it next
+                              (or, with none running, says to start one or pnpm prd start <topic>)
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
@@ -48,11 +52,14 @@ pnpm prd <command>
                               ones and files the ask list as one report (prompt tidy: the haiku brief)
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover [--at HH:MM] [--wait] [--no-agent]   after a restart, crash or usage limit: Docker, stale locks,
-                              the test Postgres, stacks one at a time, servers; then the recovery agent here
+                              the test Postgres, stacks one at a time, servers, the dispatcher in a background
+                              tab when it was running (its lock cleared when its pid is gone); then the recovery agent here
                               (claude --remote-control recover) tells live orchestrators and planners to carry
-                              on and reopens dead ones (--no-agent: stop before it); --at waits until then,
+                              on and reopens dead ones, leaving managed ones to a running dispatcher
+                              (--no-agent: stop before it); --at waits until then,
                               --wait probes claude every 10 min; recover --dry-run [--json] only shows what it would do
-    down                      before a planned restart: record what's up, stop servers, stacks, the test Postgres
+    down                      before a planned restart: record what's up (the dispatcher too), stop the
+                              dispatcher, servers, stacks, the test Postgres
     open <name> [--print]     reopen a PRD's or planner's session in a new iTerm2 tab: claude --continue when the
                               worktree has a saved conversation, else a fresh one with the resume prompt
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
@@ -145,7 +152,7 @@ case $cmd in
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
-  queue) exec "$bin/queue.sh" "$@" ;;
+  queue) exec node "$bin/queue.mjs" "$@" ;;
   dispatch) exec node "$bin/dispatch.mjs" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
