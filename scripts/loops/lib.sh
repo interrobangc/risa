@@ -328,11 +328,11 @@ pr_state() {
 }
 
 # pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,
-# one line, or the line and the findings).
+# one line, or the line and the findings); a clean one carries over dev merges.
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs" ${2:+"$2"} <<< "$state"
+  node "$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.

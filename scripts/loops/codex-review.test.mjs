@@ -5,11 +5,14 @@
 // (two P2 threads, plus a human comment), declined (one replied to and
 // resolved), outdated (the fix pushed and reviewed clean, but Codex left its
 // fixed thread open), clean (every thread resolved, asked again) and stale (one
-// more push, before Codex started on it).
+// more push, before Codex started on it). The carry rule runs against a
+// throwaway repository, with PR states built by hand in the same shape.
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { isCodex, verdict, verdictLine, verdictText } from "./codex-review.mjs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { carried, isCodex, verdict, verdictLine, verdictText } from "./codex-review.mjs";
 
 const CLI = new URL("./codex-review.mjs", import.meta.url).pathname;
 const path = (name) => new URL(`./codex-review.fixtures/${name}.json`, import.meta.url).pathname;
@@ -109,5 +112,202 @@ describe("codex-review verdict", () => {
     expect(JSON.parse(run()).state).toBe("findings");
     expect(run("--line")).toBe("codex: 2 open findings on b131ab7\n");
     expect(run("--text")).toContain("thread PRRT_kwDOVx-WLM66Riu7");
+  });
+});
+
+describe("a clean verdict carried over dev merges", () => {
+  let repo, reviewed;
+  const git = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
+  const commit = (files, msg) => {
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(repo, name), text);
+    git("add", "-A");
+    git("commit", "-qm", msg);
+    return git("rev-parse", "HEAD");
+  };
+  const lines = (...changed) =>
+    Array.from({ length: 9 }, (_, i) => (changed.includes(i) ? `line ${i} changed` : `line ${i}`)).join(
+      "\n",
+    ) + "\n";
+  // dev moves (files), then the branch merges it; returns the new head.
+  const mergeDev = (files) => {
+    git("checkout", "-q", "dev");
+    commit(files, "dev work");
+    git("checkout", "-q", "prd/x");
+    git("merge", "-q", "--no-ff", "-m", "merge dev", "dev");
+    return git("rev-parse", "HEAD");
+  };
+  const state = (sha, status) =>
+    `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: sha, status } })} -->`;
+  // The PR as GitHub returns it: Codex's summary says `now`; its edit history holds `before`.
+  const pr = (head, now, before = [], threads = []) => ({
+    number: 9,
+    url: "https://example.test/pr/9",
+    headRefOid: head,
+    reviews: { nodes: [] },
+    reviewThreads: { nodes: threads },
+    comments: {
+      nodes: [
+        {
+          author: { login: "chatgpt-codex-connector" },
+          body: state(...now),
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:09:00Z",
+          userContentEdits: {
+            nodes: before.map(([sha, status], i) => ({
+              editedAt: `2026-01-01T00:0${i}:00Z`,
+              diff: state(sha, status),
+            })),
+          },
+        },
+      ],
+    },
+    reactions: { nodes: [] },
+  });
+  const check = (json) => carried(json, { repo, trunk: "dev" });
+
+  beforeEach(() => {
+    repo = realpathSync(mkdtempSync(join(tmpdir(), "codex-carry-")));
+    execFileSync("git", ["init", "-q", "-b", "dev", repo]);
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    git("config", "core.hooksPath", "/dev/null");
+    commit({ "mine.txt": lines(), "other.txt": "o\n" }, "base");
+    git("checkout", "-qb", "prd/x");
+    reviewed = commit({ "mine.txt": lines(1) }, "work");
+  });
+  afterEach(() => rmSync(repo, { recursive: true, force: true }));
+
+  it("carries over a plain merge of dev that touches other files", () => {
+    const head = mergeDev({ "other.txt": "dev\n", "new.txt": "n\n" });
+    const json = pr(head, [reviewed, "completed"]);
+    expect(verdict(json).state).toBe("stale");
+    expect(carried(json).state).toBe("stale");
+    const v = check(json);
+    expect(v).toMatchObject({
+      state: "clean",
+      findings: [],
+      headSha: head,
+      reviewedSha: reviewed,
+      carriedFrom: reviewed,
+    });
+    expect(verdictLine(v)).toBe(
+      `codex: clean on ${head.slice(0, 7)} (carried from ${reviewed.slice(0, 7)}: only plain dev merges since, the PR's diff unchanged)`,
+    );
+  });
+
+  it("carries over several dev merges, and while Codex reviews the merged head by itself", () => {
+    mergeDev({ "other.txt": "dev\n" });
+    const head = mergeDev({ "new.txt": "n\n" });
+    const json = pr(
+      head,
+      [head, "running"],
+      [
+        [reviewed, "running"],
+        [reviewed, "completed"],
+      ],
+    );
+    expect(verdict(json)).toMatchObject({ state: "waiting", reviewedSha: reviewed, reviewingSha: head });
+    expect(check(json)).toMatchObject({ state: "clean", carriedFrom: reviewed });
+  });
+
+  it("is the head's own verdict once Codex finishes on it", () => {
+    const head = mergeDev({ "other.txt": "dev\n" });
+    const v = check(
+      pr(
+        head,
+        [head, "completed"],
+        [
+          [reviewed, "completed"],
+          [head, "running"],
+        ],
+      ),
+    );
+    expect(v).toMatchObject({ state: "clean", reviewedSha: head });
+    expect(v.carriedFrom).toBeUndefined();
+  });
+
+  it("still waits when the running review is of the head Codex already reviewed (--again)", () => {
+    const json = pr(reviewed, [reviewed, "running"], [[reviewed, "completed"]]);
+    expect(check(json)).toMatchObject({ state: "waiting", reviewingSha: reviewed });
+  });
+
+  it("doesn't carry over new work by the branch", () => {
+    mergeDev({ "other.txt": "dev\n" });
+    const head = commit({ "mine.txt": lines(1, 5) }, "more work");
+    const v = check(pr(head, [reviewed, "completed"]));
+    expect(v.state).toBe("stale");
+    expect(v.notCarried).toBe(`${head.slice(0, 7)} isn't a merge of dev`);
+    expect(verdictLine(v)).toContain("; not carried: ");
+    expect(check(pr(head, [head, "running"], [[reviewed, "completed"]])).state).toBe("waiting");
+  });
+
+  it("doesn't carry when dev changed a file the PR touches, even if it merged cleanly", () => {
+    const head = mergeDev({ "mine.txt": lines(7) });
+    const v = check(pr(head, [reviewed, "completed"]));
+    expect(v).toMatchObject({ state: "stale", notCarried: "dev changed mine.txt, which the PR touches" });
+  });
+
+  it("doesn't carry over a merge with a conflict resolved", () => {
+    git("checkout", "-q", "dev");
+    commit({ "mine.txt": lines().replace("line 1", "line 1 by dev") }, "dev work");
+    git("checkout", "-q", "prd/x");
+    expect(() => git("merge", "-q", "--no-ff", "-m", "merge dev", "dev")).toThrow();
+    const head = commit({ "mine.txt": lines(1) }, "merge dev");
+    expect(git("rev-list", "--parents", "-1", head).split(" ")).toHaveLength(3);
+    expect(check(pr(head, [reviewed, "completed"])).notCarried).toMatch(/isn't a plain merge of dev/);
+  });
+
+  it("doesn't carry over a merge of dev with changes added to it", () => {
+    mergeDev({ "other.txt": "dev\n" });
+    writeFileSync(join(repo, "extra.txt"), "slipped in\n");
+    git("add", "-A");
+    git("commit", "-q", "--amend", "--no-edit");
+    const v = check(pr(git("rev-parse", "HEAD"), [reviewed, "completed"]));
+    expect(v.notCarried).toMatch(/isn't a plain merge of dev/);
+  });
+
+  it("doesn't carry over a merge of another branch", () => {
+    git("checkout", "-qb", "side", "dev");
+    commit({ "side.txt": "s\n" }, "side work");
+    git("checkout", "-q", "prd/x");
+    git("merge", "-q", "--no-ff", "-m", "merge side", "side");
+    const v = check(pr(git("rev-parse", "HEAD"), [reviewed, "completed"]));
+    expect(v.notCarried).toMatch(/isn't a merge of dev/);
+  });
+
+  it("doesn't carry a review with a finding still open", () => {
+    const head = mergeDev({ "other.txt": "dev\n" });
+    const open = {
+      id: "T1",
+      isResolved: false,
+      path: "mine.txt",
+      line: 2,
+      comments: {
+        nodes: [{ author: { login: "chatgpt-codex-connector" }, body: "![P2 Badge](x) A finding", url: "u" }],
+      },
+    };
+    const v = check(pr(head, [reviewed, "completed"], [], [open]));
+    expect(v.state).toBe("stale");
+    expect(v.findings).toHaveLength(1);
+    expect(check(pr(head, [reviewed, "completed"], [], [{ ...open, isResolved: true }])).state).toBe("clean");
+  });
+
+  it("doesn't carry when the reviewed commit isn't in the checkout", () => {
+    const head = mergeDev({ "other.txt": "dev\n" });
+    const v = check(pr(head, ["1".repeat(40), "completed"]));
+    expect(v).toMatchObject({ state: "stale", notCarried: "1111111 isn't in this checkout" });
+  });
+
+  it("carries from the command line with --repo and --trunk only", () => {
+    const head = mergeDev({ "other.txt": "dev\n" });
+    const file = join(repo, "..", `codex-carry-${head}.json`);
+    writeFileSync(file, JSON.stringify(pr(head, [reviewed, "completed"])));
+    try {
+      const run = (...args) => execFileSync("node", [CLI, file, "--line", ...args], { encoding: "utf8" });
+      expect(run()).toMatch(/^codex: stale /);
+      expect(run(`--repo=${repo}`, "--trunk=dev")).toMatch(/^codex: clean on .* \(carried from /);
+    } finally {
+      rmSync(file, { force: true });
+    }
   });
 });

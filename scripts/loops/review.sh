@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Codex's review of a branch's open PR into dev: the verdict on its current
-# head (codex-review.mjs) and the open findings.
+# head (codex-review.mjs) and the open findings. A clean verdict carries over
+# a dev merge that leaves the PR's diff alone (the three rules there), even
+# while Codex reviews the merged head by itself, so a sync needs no new wait;
+# --again asks for a review of the head and waits for that one.
 #
 #   review.sh <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]…
 #
@@ -14,7 +17,7 @@
 #                      threads open, outdated) or a declined one (reply on the
 #                      thread with the reason first); repeatable
 #   --wait [min]       poll every 60 s (CARETOOK_REVIEW_POLL) until Codex has
-#                      answered on the head (clean or findings), for up to min
+#                      answered on the head (clean, carried or not, or findings), for up to min
 #                      minutes (default 20); a waiting or stale verdict keeps it
 #                      waiting. Run it in the background.
 #
@@ -59,10 +62,17 @@ done
 # field NAME → a field of the verdict's JSON ($v), or nothing.
 field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
 
+# codex [--line|--text] → the verdict on the PR's state (stdin). A clean one
+# carries over dev merges, unless --again asked for a review of this head.
+codex() {
+  if ((again)); then node "$(dirname "$0")/codex-review.mjs" "$@"; return; fi
+  node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$trunk" "$@"
+}
+
 # verdict → sets raw (the PR's state), v (the verdict's JSON) and state.
 verdict() {
   raw=$(pr_state "$number") || fail "gh couldn't read PR #$number"
-  v=$(node "$(dirname "$0")/codex-review.mjs" <<< "$raw")
+  v=$(codex <<< "$raw")
   state=$(field state)
 }
 
@@ -84,7 +94,7 @@ if [[ -n $wait ]]; then
   deadline=$(($(date +%s) + wait * 60))
   while [[ $state == waiting || $state == stale ]]; do
     if (($(date +%s) + poll > deadline)); then
-      node "$(dirname "$0")/codex-review.mjs" --line <<< "$raw" >&2
+      codex --line <<< "$raw" >&2
       echo "no review of the head within $wait min$([[ $state == stale ]] && echo " (stale: did you ask again? --again)")" >&2
       exit 75
     fi
@@ -97,6 +107,6 @@ if ((json)); then
   echo "$v"
 else
   echo "PR #$number $(field url)"
-  node "$(dirname "$0")/codex-review.mjs" --text <<< "$raw"
+  codex --text <<< "$raw"
 fi
 case $state in clean) exit 0 ;; findings) exit 1 ;; *) exit 2 ;; esac
