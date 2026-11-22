@@ -112,6 +112,49 @@ describe("the pure part", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("ends a record only while its pid is the ender's (--if-pid)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-unit-"));
+    try {
+      writeRecord(dir, "prd-t", { pid: 20, started: "2026-11-21T12:00:00Z" });
+      // A stale pid (the first session's wrapper, after a second took the name) leaves it live.
+      expect(writeRecord(dir, "prd-t", { ended: "2026-11-21T12:05:00Z", exit: 0 }, { ifPid: 10 })).toBeNull();
+      expect(readRecord(dir, "prd-t")).toEqual({ pid: 20, started: "2026-11-21T12:00:00Z" });
+      // No record at all: nothing to end.
+      expect(writeRecord(dir, "prd-none", { ended: "x" }, { ifPid: 10 })).toBeNull();
+      expect(readRecord(dir, "prd-none")).toBeNull();
+      // The matching pid ends it.
+      expect(writeRecord(dir, "prd-t", { ended: "2026-11-21T12:05:00Z", exit: 0 }, { ifPid: 20 })).toEqual({
+        pid: 20,
+        started: "2026-11-21T12:00:00Z",
+        ended: "2026-11-21T12:05:00Z",
+        exit: 0,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("set --if-pid exits 3 and leaves the record on a stale pid, and writes on the matching one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sessions-unit-"));
+    const node = (...a) =>
+      spawnSync("node", [join(HERE, "sessions.mjs"), "set", ...a], {
+        encoding: "utf8",
+        env: { ...process.env, CARETOOK_SESSIONS_DIR: dir },
+      });
+    try {
+      writeRecord(dir, "prd-t", { pid: 20 });
+      const stale = node("prd-t", "--if-pid", "10", "ended=now", "exit=0");
+      expect(stale.status).toBe(3);
+      expect(stale.stderr).toMatch(/pid 20, not 10/);
+      expect(readRecord(dir, "prd-t")).toEqual({ pid: 20 });
+      expect(node("prd-t", "--if-pid", "20", "ended=now", "exit=0").status).toBe(0);
+      expect(readRecord(dir, "prd-t")).toEqual({ pid: 20, ended: "now", exit: 0 });
+      expect(node("prd-t", "--if-pid", "x", "ended=now").status).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // The stub: records its pid, args and the record it sees, then behaves as
@@ -239,6 +282,27 @@ describe("session.sh", () => {
     expect(record("plan-m")).toMatchObject({ managed: true, exit: 0 });
     expect(run("session.sh", ["plan-m", "--", "x"], { STUB_NAME: "plan-m" }).status).toBe(0);
     expect(record("plan-m")).toMatchObject({ managed: false, auto: false });
+  });
+
+  it("leaves a newer session's record live when an older one under the same name exits", async () => {
+    const first = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "wait" });
+    await until(() => existsSync(join(state, "ready")));
+    const firstPid = stubPid();
+    rmSync(join(state, "ready"));
+    const second = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "wait" });
+    await until(() => existsSync(join(state, "ready")) && stubPid() !== firstPid);
+    const secondPid = stubPid();
+    process.kill(firstPid, "SIGTERM");
+    const a = await first.done;
+    expect(a.code).toBe(143);
+    expect(a.stderr).toMatch(/belongs to a newer session now; its end \(pid \d+\) isn't recorded/);
+    expect(record("prd-t")).toMatchObject({ pid: secondPid });
+    expect(record("prd-t")).not.toHaveProperty("ended");
+    process.kill(secondPid, "SIGTERM");
+    const b = await second.done;
+    expect(b.stderr).not.toMatch(/session.sh:/);
+    expect(record("prd-t")).toMatchObject({ pid: secondPid, exit: 143 });
+    expect(record("prd-t")).toHaveProperty("ended");
   });
 
   it("takes the kind and topic from a planner's name, and refuses a name it can't type", () => {

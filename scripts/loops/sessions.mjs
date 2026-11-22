@@ -20,7 +20,11 @@
 //                                             if missing); pid and exit are
 //                                             numbers, auto, managed and
 //                                             rotating booleans; key= removes
-//                                             the key
+//                                             the key; --if-pid <pid> (before
+//                                             the fields) writes only while the
+//                                             record's pid is PID, else exit 3
+//                                             and leaves it (a wrapper ending a
+//                                             session a newer one replaced)
 //   node sessions.mjs get <name>              the record as JSON (exit 1: none)
 //   node sessions.mjs list [--json]           every record, live or ended
 //   node sessions.mjs live <name>             its pid when live (exit 1 if not)
@@ -176,14 +180,21 @@ export function parseFields(/** @type {string[]} */ words) {
   return fields;
 }
 
-/** Merges FIELDS into NAME's record (undefined removes a key), written atomically. */
+/**
+ * Merges FIELDS into NAME's record (undefined removes a key), written atomically.
+ * With `ifPid`, only while the record's pid is that pid: otherwise nothing is
+ * written and it returns null (the record belongs to a newer session).
+ */
 export function writeRecord(
   /** @type {string} */ dir,
   /** @type {string} */ name,
   /** @type {Record<string, unknown>} */ fields,
+  /** @type {{ ifPid?: number }} */ { ifPid } = {},
 ) {
   mkdirSync(dir, { recursive: true });
-  const next = { ...(readRecord(dir, name) ?? {}), ...fields };
+  const current = readRecord(dir, name);
+  if (ifPid !== undefined && current?.pid !== ifPid) return null;
+  const next = { ...(current ?? {}), ...fields };
   for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
   const f = fileOf(dir, name);
   const tmp = `${f}.${process.pid}.tmp`;
@@ -207,9 +218,18 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     const ancestor = (/** @type {number} */ from) => ancestorClaude(from, processTable(), claudeName());
     switch (cmd) {
       case "set": {
-        const [name, ...words] = args;
-        if (!name) fail("usage: sessions.mjs set <name> key=value…", 2);
-        writeRecord(dir, name, parseFields(words));
+        const [name, ...rest] = args;
+        if (!name) fail("usage: sessions.mjs set <name> [--if-pid <pid>] key=value…", 2);
+        let ifPid;
+        if (rest[0] === "--if-pid") {
+          ifPid = Number(rest[1]);
+          if (!Number.isInteger(ifPid) || ifPid <= 0) fail("set: --if-pid <pid>", 2);
+          rest.splice(0, 2);
+        }
+        if (!writeRecord(dir, name, parseFields(rest), { ifPid })) {
+          const pid = readRecord(dir, name)?.pid;
+          fail(`set: ${name}'s record is pid ${pid ?? "none"}, not ${ifPid}; left as it is`, 3);
+        }
         break;
       }
       case "get": {

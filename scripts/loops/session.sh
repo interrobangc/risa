@@ -7,8 +7,11 @@
 # the foreground (the terminal stays the session's), and keeps
 # .loops/.sessions/<name>.json (sessions.mjs): at start pid, kind, topic,
 # started, the command, auto and managed (--managed: the dispatcher started
-# it), clearing rotating, ended and exit; when it exits, ended and exit. It exits with the session's code. The record stays
-# until rm.sh removes the worktree.
+# it), clearing rotating, ended and exit; when it exits, ended and exit, but
+# only while the record's pid is still this session's (sessions.mjs set
+# --if-pid): a second session opened under the same name keeps its record
+# live, and this one says so on stderr. It exits with the session's code. The
+# record stays until rm.sh removes the worktree.
 #
 # The kind and topic default from the name (prd-<topic>, plan-<topic>). The
 # pid is the claude process itself: a shell that records its own pid, then
@@ -44,15 +47,28 @@ for a in "$@"; do
   command+=" $(printf %q "$a")"
 done
 
-record() { node "$bin/sessions.mjs" set "$name" "$@"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 # The child records its own pid, then becomes claude, so the recorded pid is
 # the session's. In the foreground, so claude keeps the terminal and its input.
+# It also leaves the pid in PIDFILE, so the end is recorded only against it.
+pidfile=$(mktemp "${TMPDIR:-/tmp}/caretook-session.XXXXXX")
+trap 'rm -f "$pidfile"' EXIT
 code=0
 bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" rotating= ended= exit= &&
-  shift 8 && exec "$@"' _ \
-  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$claude_bin" "$@" || code=$?
+  echo $$ > "$9" && shift 9 && exec "$@"' _ \
+  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$pidfile" "$claude_bin" "$@" || code=$?
 
-record ended="$(now)" exit="$code" || echo "session.sh: couldn't record the end of $name" >&2
+pid=$(cat "$pidfile" 2>/dev/null || true)
+if [[ -z $pid ]]; then
+  echo "session.sh: $name never started; its record is left as it is" >&2
+else
+  rc=0
+  node "$bin/sessions.mjs" set "$name" --if-pid "$pid" ended="$(now)" exit="$code" 2>/dev/null || rc=$?
+  if ((rc == 3)); then
+    echo "session.sh: $name's record belongs to a newer session now; its end (pid $pid) isn't recorded" >&2
+  elif ((rc)); then
+    echo "session.sh: couldn't record the end of $name" >&2
+  fi
+fi
 exit "$code"
