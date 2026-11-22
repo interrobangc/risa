@@ -72,6 +72,9 @@ pnpm prd <command>
     rotate --self [--brief <file>]    replace the calling backlog session (or orchestrator) with a fresh one
                               (resume prompt, same name) from a background tab; refuses an uncommitted plan or
                               slice worktrees (--mid-wave: on the user's word); prints the command without iTerm2
+    session request backlog <name> [--brief <file>] [--model <m>]   ask the dispatcher for another backlog
+                              session, backlog-<name> (Remote Control "backlog - <name>"); the outcome is a notice
+    session requests [--json] the pending requests, and those settled in the last day
 
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
     ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]   file a
@@ -215,6 +218,11 @@ case $cmd in
   end) exec "$bin/end-session.sh" "$@" ;;
   rotate) exec "$bin/rotate.sh" "$@" ;;
   context) exec node "$bin/context.mjs" "$@" ;;
+  session)
+    CARETOOK_REQUESTS_DIR=${CARETOOK_REQUESTS_DIR:-$loops/.requests} \
+      CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} \
+      exec node "$bin/session-requests.mjs" "$@"
+    ;;
   review) exec "$bin/review.sh" "$@" ;;
   pr) exec "$bin/pr.sh" "$@" ;;
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;

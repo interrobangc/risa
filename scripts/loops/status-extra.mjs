@@ -11,10 +11,12 @@
 //                              the dispatcher's files are in the main checkout's .loops
 //                              (CARETOOK_DISPATCH_MAIN names another main checkout)
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten } from "./asks.mjs";
 import { contextDirOf, sizeNote, sizeRecord } from "./context.mjs";
 import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
+import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -130,5 +132,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   } catch {
     /* no git here: no dispatcher part */
   }
-  process.stdout.write(dispatcher + statusParts(s, a));
+  let requests = "";
+  try {
+    requests = pendingPart(process.env.CARETOOK_REQUESTS_DIR || join(dirname(s), ".requests"));
+  } catch {
+    /* an unreadable store: no requests part */
+  }
+  process.stdout.write(dispatcher + statusParts(s, a) + requests);
 }

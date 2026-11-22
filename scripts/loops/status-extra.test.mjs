@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAsk, settleAsk } from "./asks.mjs";
+import { createRequest } from "./session-requests.mjs";
 import { dispatcherPart, lastEntry, statusParts } from "./status-extra.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -127,6 +128,33 @@ describe("statusParts", () => {
       },
     });
     expect(none.stdout).toBe("DISPATCHER: stopped: start it in a tab of its own with pnpm prd dispatch\n\n");
+  });
+
+  it("the CLI prints the pending requests, from beside the sessions folder or the named one", () => {
+    const base = join(root, "requests");
+    const beside = join(base, "sessions");
+    const named = join(base, "named");
+    mkdirSync(beside, { recursive: true });
+    createRequest(join(base, ".requests"), { name: "beside", now: NOW });
+    createRequest(named, { name: "named", now: NOW });
+    const run = (extra) =>
+      spawnSync("node", [join(HERE, "status-extra.mjs")], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          CARETOOK_SESSIONS_DIR: beside,
+          CARETOOK_ASKS_DIR: empty,
+          CARETOOK_DISPATCH_MAIN: empty,
+          CARETOOK_REQUESTS_DIR: "",
+          ...extra,
+        },
+      }).stdout;
+    const byDefault = run({});
+    expect(byDefault).toContain("SESSION REQUESTS: 1 pending");
+    expect(byDefault).toContain("backlog - beside");
+    const override = run({ CARETOOK_REQUESTS_DIR: named });
+    expect(override).toContain("backlog - named");
+    expect(override).not.toContain("backlog - beside");
   });
 });
 

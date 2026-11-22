@@ -384,6 +384,15 @@ describe("plan and backlog", () => {
     expect(text).toContain("for nothing, `pnpm prd rotate --self`");
   });
 
+  it("backlog has the request paragraph: a brief, the request, the name, and no tab of its own", () => {
+    const text = ok("backlog");
+    expect(text).toContain("**When the user asks for another backlog session for a task**");
+    expect(text).toContain("`pnpm prd session request backlog <name> --brief <file>`");
+    expect(text).toContain("`backlog - <name>`");
+    expect(text).toContain("Never open a tab yourself");
+    expect(text).toContain("`pnpm prd notices`");
+  });
+
   it("backlog reads the open asks and the PRD registry, and leads with what waits on the user", () => {
     const text = ok("backlog");
     expect(text).toContain("`pnpm prd asks`");

@@ -369,6 +369,8 @@ describe("the tick", () => {
       "dispatch-pick.mjs",
       "context.mjs",
       "keep-alive.mjs",
+      "session-requests.mjs",
+      "notices.mjs",
       "asks.mjs",
       "ask.mjs",
       "sessions.mjs",
