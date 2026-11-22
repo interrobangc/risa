@@ -99,11 +99,13 @@ pnpm prd <command>
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
     check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
                               .loops/.check-times.log, and record that
-                              this commit passed; --quick: typecheck, lint, format and only the tests
-                              related to the diff since the last full pass (plus the tests that read files by
-                              path), recorded with its reason; a diff touching a migration, seeds, the sync
-                              config, a lockfile, a package.json or the Vitest config makes it a full check;
-                              the tooling tests join when the diff touches the tooling
+                              this commit passed; --quick: typecheck, lint, format, every unit test, and the
+                              integration and component test files the diff adds or edits, recorded with its
+                              reason. On a slice/ branch that is all (the slice check, against its prd/
+                              branch). On a prd/ or hotfix/ branch it adds the integration tests related to
+                              the diff since the last full pass, and a diff touching a migration, seeds, the
+                              sync config, a lockfile, a package.json or the Vitest config makes it a full
+                              check; the tooling tests join when the diff touches the tooling
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
     wait [check|browser|<kind>] [--timeout <s>]   block until this worktree's check (or that lease kind's
                               holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
@@ -306,21 +308,33 @@ case $cmd in
     # the Vitest config is a full one, and the tooling tests join when it touches
     # the tooling.
     [[ -n ${base:-} ]] || base=$(git -C "$dir" merge-base "$trunk" HEAD)
-    { read -r pmode; read -r preason; read -r ptooling; read -r palways; } < <(
-      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$( ((quick)) && echo quick || echo full)")
+    # A slice's --quick is the slice check: its own test files only, never forced to full.
+    asked=full
+    if ((quick)); then
+      asked=quick; cur=$(git -C "$dir" branch --show-current)
+      if [[ $cur == slice/* ]]; then
+        asked=slice; parent=${cur#slice/}; parent=prd/${parent%/*}
+        # A slice's own files are those since it left its PRD branch, not dev.
+        if git -C "$dir" rev-parse -q --verify "$parent" > /dev/null; then base=$(git -C "$dir" merge-base "$parent" HEAD); fi
+      fi
+    fi
+    { read -r pmode; read -r preason; read -r ptooling; read -r pown; } < <(
+      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked")
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
-    if [[ $pmode == quick ]]; then
-      echo "Quick check against ${base:0:7}: typecheck, lint, format, and the tests related to the diff ($why)"
+    if [[ $pmode == slice ]]; then
+      echo "Slice check against ${base:0:7}: typecheck, lint, format, every unit test, and the integration and component tests this diff adds or edits ($why)"
+    elif [[ $pmode == quick ]]; then
+      echo "Quick check against ${base:0:7}: typecheck, lint, format, every unit test, the integration tests related to the diff, and the component tests it adds or edits ($why)"
     elif ((quick)); then
       echo "$preason"; why=""
     fi
     [[ $ptooling == 1 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
     # shellcheck disable=SC2086
     (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
-      "$bin/check-run.sh" "$pmode" "${why:-$preason}" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $palways)
-    if [[ $pmode == quick ]]; then
+      "$bin/check-run.sh" "$pmode" "${why:-$preason}" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
+    if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
