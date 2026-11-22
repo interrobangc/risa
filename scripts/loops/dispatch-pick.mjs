@@ -8,7 +8,8 @@
 //   2. A prd/ or plan/ worktree whose session record is `managed` with no live
 //      session, and not marked `rotating` in the last ROTATING_GRACE_MS:
 //      `reopen`. After MAX_REOPENS reopens: an `ask` ("reopen again" or "hold
-//      the topic"), and the topic is skipped while that ask is open. A
+//      the topic"), and the topic is skipped while that ask is open. A row
+//      flagged `hold` (the answer "hold the topic") is never reopened. A
 //      worktree with no managed record was opened by hand: only reported, but
 //      it still takes a slot and its hot files.
 //   3. Busy: no start and no plan (reopens still happen).
@@ -135,6 +136,8 @@ export function pick(facts) {
     // A landed planner's worktree is tidy's; the topic speaks for itself.
     if (finished && w.kind === "plan") continue;
     if (finished) why = "done; its worktree is left over";
+    // The user's brake (or the answer "hold the topic"): a dead session stays down.
+    else if (flags(row).includes("hold") && !s?.live) why = `on hold; ${what} isn't live (not reopened)`;
     else if (!s?.managed)
       why = s?.live ? `running, opened by hand` : `opened by hand, ${what} isn't live (left alone)`;
     else if (s.live) why = w.kind === "plan" ? "being planned" : "running";

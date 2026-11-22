@@ -22,6 +22,7 @@ pnpm prd <command>
 
   Start and stop work
     start <topic>             create (or resume) a PRD's worktree and stack; prints how to open its orchestrator
+    dispatch [--once|--dry-run|--pause|--resume|--stop]   plan, start and reopen PRDs by itself, in its own tab
     queue <topic> [--manual]  wait for a free PRD slot (in queue order), then create the worktree and open a
                               fully autonomous orchestrator in this terminal (--manual: it asks how to land)
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
@@ -145,6 +146,7 @@ case $cmd in
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec "$bin/queue.sh" "$@" ;;
+  dispatch) exec node "$bin/dispatch.mjs" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
