@@ -91,13 +91,13 @@ describe("the tiers", () => {
     expect(() => ciRefName("nope", "x")).toThrow(/unknown tier/);
   });
 
-  it("include the ones before, and say what isn't built", () => {
-    expect(jobsFor("static")).toEqual({ jobs: ["static"], ranTier: "static", notBuilt: [] });
+  it("include the ones before, and full adds the build job", () => {
+    expect(jobsFor("static")).toEqual({ jobs: ["static"], ranTier: "static" });
     expect(jobsFor("unit").jobs).toEqual(["static", "unit"]);
+    expect(jobsFor("components").jobs).toEqual(["static", "unit", "integration", "components"]);
     expect(jobsFor("full")).toEqual({
-      jobs: ["static", "unit", "integration"],
-      ranTier: "integration",
-      notBuilt: ["components", "full"],
+      jobs: ["static", "unit", "integration", "components", "build"],
+      ranTier: "full",
     });
   });
 
@@ -107,8 +107,12 @@ describe("the tiers", () => {
       "static=true",
       "unit=true",
       "integration=false",
-      "not_built=",
+      "components=false",
+      "build=false",
     ]);
+    expect(planOutputs("ci/components/x")).toContain("components=true");
+    expect(planOutputs("ci/components/x")).toContain("build=false");
+    expect(planOutputs("ci/full/x")).toContain("build=true");
     expect(() => planOutputs("dev")).toThrow(/not a ci/);
   });
 });
@@ -153,19 +157,27 @@ describe("the verdict", () => {
     ).toEqual(["plan", "static"]);
   });
 
-  it("records what a higher tier really ran", () => {
-    const v = buildVerdict({
-      ...base,
-      tier: "full",
-      needs: { plan: ok, static: ok, unit: ok, integration: ok },
-    });
-    expect(v).toMatchObject({
+  it("waits for every job the tier ran: a full run needs its components and build", () => {
+    const needs = { plan: ok, static: ok, unit: ok, integration: ok, components: ok, build: ok };
+    expect(buildVerdict({ ...base, tier: "full", needs })).toMatchObject({
       kind: "green",
       tier: "full",
-      ranTier: "integration",
-      notBuilt: ["components", "full"],
+      ranTier: "full",
     });
-    expect(verdictLines(v).join("\n")).toMatch(/not built yet, so not run: components, full/);
+    const noBuild = buildVerdict({
+      ...base,
+      tier: "full",
+      needs: { ...needs, build: { result: "failure" } },
+    });
+    expect(noBuild).toMatchObject({ kind: "file", failed: { jobs: ["build"] } });
+    const skipped = { ...needs, build: { result: "skipped" } };
+    expect(buildVerdict({ ...base, tier: "components", needs: skipped }).kind).toBe("green");
+  });
+
+  it("still prints what an older verdict left out", () => {
+    const old = { kind: "green", tier: "full", commit: SHA, runId: "1", ranTier: "integration" };
+    const lines = verdictLines({ ...old, notBuilt: ["components", "full"] }).join("\n");
+    expect(lines).toMatch(/not built yet, so not run: components, full/);
   });
 
   it("summarizes a Vitest report, an import failure included", () => {

@@ -95,6 +95,7 @@ export const deleteRef = (/** @type {Io} */ io, /** @type {string} */ ref, /** @
 
 export function verdictLines(/** @type {any} */ v) {
   const lines = [`verdict: ${v.kind} · ${v.tier} · ${String(v.commit).slice(0, 8)} · run ${v.runId}`];
+  // A verdict from before the components and full jobs existed (artifacts last 7 days).
   if (v.notBuilt?.length)
     lines.push(`  ran up to ${v.ranTier}; not built yet, so not run: ${v.notBuilt.join(", ")}`);
   if (v.failed?.jobs?.length) lines.push(`  failed jobs: ${v.failed.jobs.join(", ")}`);
