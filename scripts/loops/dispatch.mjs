@@ -19,6 +19,9 @@
 //     (session.sh plan-<t> --auto --managed, --model opus, prompt.sh plan <t>
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
 //   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
+//   - keep-alive (keep-alive.mjs), beside the pick and outside the PRD slots:
+//     a fresh managed backlog session through the opener when none is live, or
+//     its own question after three quick deaths. CARETOOK_KEEP_SESSIONS=off;
 //   - ask: a reopen question filed with `pnpm prd ask` (session "dispatch"),
 //     then a one-shot helper session (haiku, Remote Control, in a background
 //     tab) whose prompt is "send this PushNotification, then pnpm prd end"; a
@@ -35,7 +38,8 @@
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
-// state: paused and why, reopen counts, the open reopen asks, the last tidy),
+// state: paused and why, reopen counts, the open reopen asks, the last tidy,
+// keepAlive: each kept kind's quick deaths, last open, open ask and stop),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
 // Env: CARETOOK_MAX_PRDS (3), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
@@ -59,9 +63,10 @@ import {
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getAsk, listAsks, settleDue } from "./asks.mjs";
-import { DISPATCH_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
+import { DISPATCH_SESSION, KEEP_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
+import { clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
-import { isLive, processOf, readRecords, writeRecord } from "./sessions.mjs";
+import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -142,7 +147,8 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
 }
 
 /** @typedef {{ paused?: { at: string, why: string } | null, reopens?: Record<string, number>,
- *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number }} DispatchState */
+ *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number,
+ *   keepAlive?: import("./keep-alive.mjs").KeepState }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -299,6 +305,44 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
   };
 }
 
+/** Every process's command line, or null when they can't be read. CARETOOK_PROCESS_FILE stands in (tests). */
+export function processLines(env = process.env) {
+  try {
+    if (env.CARETOOK_PROCESS_FILE)
+      return readFileSync(env.CARETOOK_PROCESS_FILE, "utf8").split("\n").filter(Boolean);
+    return [...processTable().values()].map((r) => r.args);
+  } catch {
+    return null;
+  }
+}
+
+/** Applies the answers to the keep-alive's own questions. */
+function settleKeepAnswers(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {(l: string) => void} */ out,
+) {
+  for (const [kind, entry] of Object.entries(readState(p.state).keepAlive ?? {})) {
+    if (!entry.asked) continue;
+    const { id } = entry.asked;
+    const a = getAsk(p.asks, id);
+    if (a && !a.answeredAt && !a.doneAt) continue;
+    const what = a?.answeredAt ? keepAnswerAction(a.answer) : null;
+    updateState(p.state, (s) => {
+      const keep = (s.keepAlive ??= {});
+      if (what === "open") delete keep[kind];
+      else if (what === "stop") keep[kind] = { stopped: true };
+      else if (keep[kind]) delete keep[kind].asked;
+    });
+    out(
+      what === "open"
+        ? `ask ${id} answered "${a?.answer}": ${kind} may be opened again`
+        : what === "stop"
+          ? `ask ${id} answered "${a?.answer}": ${kind} isn't kept alive until the dispatcher next starts`
+          : `ask ${id} ${a?.answeredAt ? `answered "${a.answer}" (unclear)` : a ? "dismissed" : "is gone"}: asking again`,
+    );
+  }
+}
+
 // ---- one tick --------------------------------------------------------------------
 
 /**
@@ -375,6 +419,7 @@ export function tick(
       });
       for (const n of stale) delete facts.reopens[n];
     }
+    settleKeepAnswers(p, out);
     if (g.state.lastTidy === undefined) updateState(p.state, (s) => void (s.lastTidy ??= now));
   }
 
@@ -387,6 +432,20 @@ export function tick(
       `  (the 5-minute load ${Math.round((g.gate.load ?? 0) * 10) / 10} is over ${g.gate.threshold})`,
     );
   lines.push(...head);
+
+  // The keep-alive, beside the pick: it takes no slot, so the pick's action still happens.
+  const keepDecisions = keepAliveDecision({
+    sessions: facts.sessions,
+    processes: processLines(env),
+    keep: readState(p.state).keepAlive ?? {},
+    paused: facts.paused,
+    off: env.CARETOOK_KEEP_SESSIONS === "off",
+    now,
+    claude: basename(env.CARETOOK_CLAUDE_BIN || "claude"),
+  });
+  for (const d of keepDecisions)
+    if (dryRun || d.action !== "none")
+      out(`keep-alive ${d.kind}: ${d.action === "none" ? d.why : `${d.action} (${d.why})`}`);
 
   if (dryRun) {
     out("(dry run: nothing written, nothing opened)");
@@ -401,6 +460,77 @@ export function tick(
     });
   const result = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
     r.ok ? r.out.split("\n").pop() || "ok" : `failed (exit ${r.code}): ${(r.err || r.out).split("\n").pop()}`;
+
+  let keptActed = false;
+  for (const d of keepDecisions) {
+    if (d.reset)
+      updateState(p.state, (s) => {
+        delete s.keepAlive?.[d.kind];
+      });
+    if (d.action === "open") {
+      // A session that came up since the facts were read keeps its record.
+      const current = readRecord(p.sessions, d.kind);
+      if (current && isLive(current, processOf(current.pid ?? 0))) {
+        out(`  ${d.kind}: came up meanwhile, nothing opened`);
+        continue;
+      }
+      keptActed = true;
+      writeRecord(p.sessions, d.kind, {
+        kind: d.kind,
+        managed: true,
+        pid: undefined,
+        started: undefined,
+        ended: undefined,
+        exit: undefined,
+        rotating: undefined,
+      });
+      updateState(p.state, (s) => {
+        s.keepAlive = { ...s.keepAlive, [d.kind]: { deaths: d.deaths ?? 0, openedAt: now } };
+      });
+      const r = run("bash", [join(bin, "open-session.sh"), d.kind, "--background"], { cwd: p.main });
+      out(`  ${d.kind}: ${result(r)}`);
+    } else if (d.action === "ask") {
+      keptActed = true;
+      // It waits, like the reopen question: an open burns usage, so it never defaults.
+      const args = [
+        "ask",
+        "--topic",
+        d.kind,
+        "--question",
+        d.text ?? "",
+        "--session",
+        KEEP_SESSION,
+        "--waits",
+      ];
+      for (const o of d.options ?? []) args.push("--option", o);
+      const r = run("node", [join(bin, "ask.mjs"), ...args], {
+        cwd: p.main,
+        env: { ...env, CARETOOK_ASKS_DIR: p.asks },
+      });
+      const id = r.ok ? r.out.split("\n")[0].trim() : "";
+      if (!/^a\d+$/.test(id)) {
+        out(`  filing the keep-alive ask failed: ${result(r)}`);
+        continue;
+      }
+      updateState(p.state, (s) => {
+        s.keepAlive = {
+          ...s.keepAlive,
+          [d.kind]: { ...s.keepAlive?.[d.kind], deaths: d.deaths, asked: { id } },
+        };
+      });
+      out(`  filed ask ${id}`);
+      const push =
+        r.out
+          .split("\n")
+          .find((l) => l.startsWith("Now send a PushNotification: "))
+          ?.slice("Now send a PushNotification: ".length) ?? `${d.kind}: ${d.text}`;
+      const helper = openTab(
+        helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+        HELPER_SESSION,
+      );
+      if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${result(helper)}`);
+    }
+  }
 
   switch (choice.action) {
     case "start":
@@ -480,7 +610,7 @@ export function tick(
       break;
     }
     default:
-      if (tidyDue(readState(p.state), now, { action: choice.action, paused: facts.paused })) {
+      if (!keptActed && tidyDue(readState(p.state), now, { action: choice.action, paused: facts.paused })) {
         const r = run("node", [join(bin, "tidy-cli.mjs"), "--yes"], { cwd: p.main });
         updateState(p.state, (s) => void (s.lastTidy = now));
         out(`tidy --yes: ${result(r)}`);
@@ -489,7 +619,7 @@ export function tick(
       }
   }
   for (const l of lines) say(l);
-  return { lines, action: choice.action, acted: choice.action !== "none" };
+  return { lines, action: choice.action, acted: choice.action !== "none" || keptActed };
 }
 
 // ---- the command line ------------------------------------------------------------
@@ -622,6 +752,10 @@ async function main() {
   process.on("exit", () => releaseLock(p.lock));
 
   if (!o.once) {
+    // A start begins again after "stop keeping it alive".
+    updateState(p.state, (s) => {
+      if (s.keepAlive) s.keepAlive = clearKeepStops(s.keepAlive);
+    });
     log([`started (pid ${process.pid}, every ${o.every}s)`], nowOf());
     console.log(
       `Dispatcher running (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
