@@ -127,7 +127,8 @@ export function chooseCommand({
 /**
  * A backlog or recovery session's command: always fresh in the main checkout,
  * under its own name, on its recorded model.
- * @param {{ name: string, main: string, record: { kind?: string, managed?: boolean, model?: string },
+ * @param {{ name: string, main: string,
+ *   record: { kind?: string, managed?: boolean, model?: string, remote?: string },
  *   wrapper?: string }} s
  */
 export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh }) {
