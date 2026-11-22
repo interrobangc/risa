@@ -174,14 +174,15 @@ export function collectTidyFacts({
 
   const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");
   const sessions = readRecords(sessionsDir).map(({ name, record }) => {
-    const m = /^(prd|plan)-(.+)$/.exec(name);
-    const worktree = m ? (m[1] === "prd" ? m[2] : `plan-${m[2]}`) : null;
+    const m = /^(prd|plan|hotfix)-(.+)$/.exec(name);
+    const worktree = m ? (m[1] === "prd" ? m[2] : `${m[1]}-${m[2]}`) : null;
     const w = worktree ? byName.get(worktree) : undefined;
     return {
       name,
       live: isLive(record, processOf(record.pid ?? 0, now), now),
       rotating: !!record.rotating,
       worktree,
+      worktreeless: record.kind === "backlog" || record.kind === "recovery",
       worktreeExists: worktree ? existsSync(join(loops, worktree)) : undefined,
       ...(w ? { branch: w.branch, landed: w.landed } : {}),
       path: join(sessionsDir, `${name}.json`),

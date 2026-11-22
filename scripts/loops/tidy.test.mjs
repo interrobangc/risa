@@ -109,6 +109,24 @@ describe("worktrees", () => {
 describe("sessions", () => {
   const base = { name: "prd-t", worktree: "t", worktreeExists: true, branch: "prd/t", landed: false };
 
+  it("an ended backlog record with no worktree is safe; a live or rotating one is never touched", () => {
+    const rec = { name: "backlog", worktree: null, worktreeless: true, path: "/s/backlog.json" };
+    expect(one({ sessions: [{ ...rec, live: false }] }).safe).toEqual([
+      {
+        kind: "record",
+        target: "backlog",
+        why: "ended, and it has no worktree",
+        how: "delete the record",
+        path: "/s/backlog.json",
+      },
+    ]);
+    for (const s of [
+      { ...rec, live: true },
+      { ...rec, live: false, rotating: true },
+    ])
+      expect(one({ sessions: [s] })).toEqual({ safe: [], ask: [], kept: [] });
+  });
+
   it("an ended record whose worktree is gone is safe; a live, rotating or still-housed one isn't", () => {
     const { safe, ask } = one({
       sessions: [

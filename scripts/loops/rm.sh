@@ -83,6 +83,7 @@ release_slot "$name"
 case $branch in
   prd/*) rm -f "$loops/.sessions/prd-${branch#prd/}.json" ;;
   plan/*) rm -f "$loops/.sessions/plan-${branch#plan/}.json" ;;
+  hotfix/*) rm -f "$loops/.sessions/hotfix-${branch#hotfix/}.json" ;;
 esac
 
 # Mark it done through the main checkout's backlog tool (one commit on dev); a

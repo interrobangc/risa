@@ -182,7 +182,9 @@ after_infrastructure() {
     echo "--no-agent: to message and reopen them, run pnpm prd recover again without it, or pnpm prd open <name> for each."
   else
     echo "Opening the recovery agent (claude --remote-control recover) in the main checkout."
-    cd "$main" && exec claude --remote-control recover "$("$bin/prompt.sh" recover)"
+    local wrapper
+    wrapper=$(cd "$bin" && pwd)/session.sh
+    cd "$main" && exec "$wrapper" recover --kind recovery -- --remote-control recover "$("$bin/prompt.sh" recover)"
   fi
 }
 
