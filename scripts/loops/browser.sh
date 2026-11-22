@@ -52,9 +52,10 @@
 # page state), TIMEOUT and FLAKY lines, and the table (a failure that printed
 # none of those gets the log's last lines). --verbose prints everything.
 #
-# The manifest scripts/loops/checks lists every check: its usual seconds, its
-# cap, whether it never exits, and whether it's in the lean set (e2e, the
-# suite), in suite order. --changed runs what the files need, lean or not. Three limits end a check, each as TIMEOUT (so the one retry applies):
+# The manifest scripts/loops/checks lists every check: its cap, whether it
+# never exits, and whether it's in the lean set (e2e, the suite), in suite
+# order. --changed runs what the files need, lean or not. Three limits end a
+# check, each as TIMEOUT (so the one retry applies):
 #   - silence: no output line for CARETOOK_BROWSER_SILENCE seconds (default 90);
 #   - its cap: --timeout S, else the manifest's cap, else 600 s;
 #   - the suite cap (--suite and --changed): CARETOOK_BROWSER_SUITE_CAP seconds,
@@ -147,24 +148,24 @@ check_name() {
   echo "${b%.spec}"
 }
 
-# manifest_get CHECK COLUMN → a manifest field (2 usual, 3 cap, 4 never-exits,
-# 5 e2e), or nothing when the check isn't listed.
+# manifest_get CHECK COLUMN → a manifest field (2 cap, 3 never-exits, 4 e2e),
+# or nothing when the check isn't listed.
 manifest_get() {
-  awk -v c="$(check_name "$1")" -v k="$2" '!/^#/ && NF >= 5 && $1 == c { print $k; exit }' "$manifest"
+  awk -v c="$(check_name "$1")" -v k="$2" '!/^#/ && NF >= 4 && $1 == c { print $k; exit }' "$manifest"
 }
 
 # The suite: the manifest's e2e checks (the lean set), in its order; every
 # check, in its order, for sorting what --changed picks.
-suite_default=$(awk '!/^#/ && NF >= 5 && $5 == "yes" { printf "%s ", $1 }' "$manifest")
-manifest_order=$(awk '!/^#/ && NF >= 5 { printf "%s ", $1 }' "$manifest")
+suite_default=$(awk '!/^#/ && NF >= 4 && $4 == "yes" { printf "%s ", $1 }' "$manifest")
+manifest_order=$(awk '!/^#/ && NF >= 4 { printf "%s ", $1 }' "$manifest")
 
 # never_exits CHECK → whether the check never exits on its own.
-never_exits() { [[ $(manifest_get "$1" 4) == yes ]]; }
+never_exits() { [[ $(manifest_get "$1" 3) == yes ]]; }
 
 # cap_of CHECK → its cap in seconds: the manifest's, else $default_cap.
 cap_of() {
   local v
-  v=$(manifest_get "$1" 3)
+  v=$(manifest_get "$1" 2)
   [[ $v =~ ^[0-9]+$ ]] && echo "$v" || echo "$default_cap"
 }
 
