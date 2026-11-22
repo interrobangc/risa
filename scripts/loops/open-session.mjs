@@ -8,7 +8,7 @@
 //   - otherwise a fresh session with the resume prompt:
 //       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] [--managed] -- --remote-control prd-<topic> \
 //               "$(scripts/loops/prompt.sh orchestrator <topic> --resume [--auto])"
-//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> [--auto] [--managed] -- --model fable --remote-control plan-<topic> \
+//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> [--auto] [--managed] -- --model opus --remote-control plan-<topic> \
 //               "$(scripts/loops/prompt.sh plan <topic> [--auto])"
 //
 // Run-through (--auto) is the plan's _Status_ saying so, or the session's last
@@ -102,8 +102,8 @@ export function chooseCommand({
     mode: "fresh",
     auto,
     managed,
-    // A fresh planner runs on fable, as `pnpm prd plan` starts it (prd.sh's agent_model).
-    command: `${wrap}${kind === "plan" ? "--model fable " : ""}--remote-control ${session} "$(${prompt})"`,
+    // A fresh planner runs on opus, as `pnpm prd plan` starts it (prd.sh's agent_model).
+    command: `${wrap}${kind === "plan" ? "--model opus " : ""}--remote-control ${session} "$(${prompt})"`,
   };
 }
 

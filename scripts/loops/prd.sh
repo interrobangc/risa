@@ -7,7 +7,7 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
 # The model plan, backlog and hotfix sessions run on unless --model names another.
-agent_model=fable
+agent_model=opus
 # Every command runs on .nvmrc's Node, whatever shell called it.
 use_node || true
 
@@ -32,12 +32,12 @@ pnpm prd <command>
     plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
-                              (either form runs on fable; --model <m> runs that one session on model m)
+                              (either form runs on opus; --model <m> runs that one session on model m)
                               (it reads the backlog and helps you decide what's next)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
-                              (on fable; --model <m> for another model)
+                              (on opus; --model <m> for another model)
                               (prompt hotfix <name> ["<the fix>"] is that session's first prompt)
                               (pnpm prd check there, then pnpm prd land hotfix/<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
@@ -166,7 +166,7 @@ case $cmd in
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;
   plan)
     # --model <m> (or --model=<m>), anywhere: this one session's model, passed to claude --model
-    # (default: $agent_model, fable).
+    # (default: $agent_model, opus).
     model=$agent_model rest=()
     while (($#)); do
       case $1 in

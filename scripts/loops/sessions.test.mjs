@@ -353,7 +353,7 @@ describe("sessions start through the wrapper", () => {
   it("pnpm prd plan --open records a planner; without --open it prints the wrapped command", () => {
     const printed = run("prd.sh", ["plan", "v"]);
     expect(printed.stdout).toContain(
-      `cd ${join(loops, "plan-v")} && scripts/loops/session.sh plan-v -- --model fable --remote-control plan-v`,
+      `cd ${join(loops, "plan-v")} && scripts/loops/session.sh plan-v -- --model opus --remote-control plan-v`,
     );
     expect(run("prd.sh", ["plan", "v", "--open", "--model", "opus"]).status).toBe(0);
     expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });

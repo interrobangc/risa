@@ -58,7 +58,7 @@ describe("the pure parts", () => {
 
   it("builds the run-through, managed session lines, with no item ids", () => {
     expect(sessionLine({ kind: "plan", topic: "t", dir: "/l/plan-t", wrapper: "/b/session.sh" })).toBe(
-      `cd /l/plan-t && /b/session.sh plan-t --auto --managed -- --model fable --remote-control plan-t "$(scripts/loops/prompt.sh plan t --auto)"`,
+      `cd /l/plan-t && /b/session.sh plan-t --auto --managed -- --model opus --remote-control plan-t "$(scripts/loops/prompt.sh plan t --auto)"`,
     );
     expect(sessionLine({ kind: "prd", topic: "t", dir: "/l/t", wrapper: "/b/session.sh" })).toBe(
       `cd /l/t && /b/session.sh prd-t --auto --managed -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --auto)"`,
@@ -262,7 +262,7 @@ describe("one tick per action", () => {
     expect(calls("new")).toEqual(["plan p"]);
     const [open] = openCalls();
     expect(open[1]).toBe(
-      `cd ${join(loops, "plan-p")} && ${scripts("session.sh")} plan-p --auto --managed -- --model fable --remote-control plan-p "$(scripts/loops/prompt.sh plan p --auto)"`,
+      `cd ${join(loops, "plan-p")} && ${scripts("session.sh")} plan-p --auto --managed -- --model opus --remote-control plan-p "$(scripts/loops/prompt.sh plan p --auto)"`,
     );
     expect(open[1]).not.toMatch(/B-\d/);
   });

@@ -228,7 +228,7 @@ describe("choosing the command", () => {
     ).toMatchObject({
       session: "plan-u",
       mode: "fresh",
-      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"`,
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model opus --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"`,
     });
   });
 
@@ -252,7 +252,7 @@ describe("choosing the command", () => {
     expect(choose("prd/t", false, { auto: true }).managed).toBe(false);
     expect(choose("plan/u", false, { managed: true, auto: true })).toMatchObject({
       managed: true,
-      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u --auto --managed -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u --auto)"`,
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u --auto --managed -- --model opus --remote-control plan-u "$(scripts/loops/prompt.sh plan u --auto)"`,
     });
   });
 
@@ -364,11 +364,7 @@ describe("pnpm prd open", () => {
     writeRecord("plan-v", { pid: 1, rotating: true });
     expect(ok(["plan-v"])).toMatch(/a fresh session with the resume prompt/);
     expect(tabCommand()).toBe(
-      tabLine(
-        "plan-v",
-        "plan-v",
-        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"',
-      ),
+      tabLine("plan-v", "plan-v", '--model opus --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"'),
     );
     rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
   });
@@ -380,7 +376,7 @@ describe("pnpm prd open", () => {
       tabLine(
         "plan-v",
         "plan-v --auto --managed",
-        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v --auto)"',
+        '--model opus --remote-control plan-v "$(scripts/loops/prompt.sh plan v --auto)"',
       ),
     );
   });
@@ -401,11 +397,7 @@ describe("pnpm prd open", () => {
     mkdirSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true });
     ok(["plan-v"]);
     expect(tabCommand()).toBe(
-      tabLine(
-        "plan-v",
-        "plan-v",
-        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"',
-      ),
+      tabLine("plan-v", "plan-v", '--model opus --remote-control plan-v "$(scripts/loops/prompt.sh plan v)"'),
     );
   });
 

@@ -16,7 +16,7 @@
 //     (session.sh prd-<t> --auto --managed, prompt.sh orchestrator <t> --auto)
 //     in a background iTerm2 tab (the opener's --command … --background);
 //   - plan: `new.sh plan <topic>`, then a managed, run-through planner
-//     (session.sh plan-<t> --auto --managed, --model fable, prompt.sh plan <t>
+//     (session.sh plan-<t> --auto --managed, --model opus, prompt.sh plan <t>
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
 //   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
 //   - ask: a reopen question filed with `pnpm prd ask` (session "dispatch"),
@@ -105,7 +105,7 @@ export function sessionLine(
   const name = `${s.kind}-${s.topic}`;
   const head = `cd ${sh(s.dir)} && ${sh(s.wrapper)} ${name} --auto --managed -- `;
   return s.kind === "plan"
-    ? `${head}--model fable --remote-control ${name} "$(scripts/loops/prompt.sh plan ${sh(s.topic)} --auto)"`
+    ? `${head}--model opus --remote-control ${name} "$(scripts/loops/prompt.sh plan ${sh(s.topic)} --auto)"`
     : `${head}--remote-control ${name} "$(scripts/loops/prompt.sh orchestrator ${sh(s.topic)} --auto)"`;
 }
 
