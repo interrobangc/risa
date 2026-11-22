@@ -29,6 +29,8 @@
 // Never, whatever the facts: a dirty worktree, any build or Vite cache (unlike
 // `reclaim --yes`), the main checkout, an unmerged branch, a session itself.
 
+import { createHash } from "node:crypto";
+
 /** Tickets younger than this are left alone: their holder may still be writing its pid. */
 export const TICKET_GRACE_SECS = 60;
 /** Browser-hang logs older than this go. */
@@ -46,15 +48,30 @@ export const testDbName = (/** @type {string} */ name) =>
 const WORKER_SUFFIX = /^_w([1-9]|1[0-6])$/;
 
 /**
+ * Test database DB's worker copies' name without the _w<n>:
+ * caretook_tw_<stem cut to 38>_<md5 of DB cut to 8> (workerDatabaseName in
+ * packages/data/src/db/testDatabase.ts; test-db.sh's worker_prefix).
+ * @param {string} db
+ */
+export const testDbWorkerPrefix = (db) =>
+  `caretook_tw_${db.replace(/^caretook_test_/, "").slice(0, 38)}_${createHash("md5").update(db).digest("hex").slice(0, 8)}`;
+
+/**
  * The worktree that owns test database DB, or null: its own database, or one of
- * its integration workers' copies (<database cut to 59>_w<n>). Known names come
+ * its integration workers' copies (caretook_tw_…_w<n>, which no worktree's own
+ * database can be). Copies named the old way, <database cut to 59>_w<n>, still
+ * count as their worktree's until it's gone, then as orphans; known names come
  * first, so a topic ending -w<n> owns its database instead of it reading as
- * another's worker copy; only a name no worktree owns is an orphan.
+ * another's old copy.
  * @param {string} db
  * @param {string[]} worktrees  the worktree names
  */
 export function testDbOwner(db, worktrees) {
   for (const w of worktrees) if (testDbName(w) === db) return w;
+  for (const w of worktrees) {
+    const prefix = testDbWorkerPrefix(testDbName(w));
+    if (db.startsWith(prefix) && WORKER_SUFFIX.test(db.slice(prefix.length))) return w;
+  }
   for (const w of worktrees) {
     const base = testDbName(w).slice(0, 59);
     if (db.startsWith(base) && WORKER_SUFFIX.test(db.slice(base.length))) return w;
