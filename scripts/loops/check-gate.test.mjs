@@ -77,6 +77,12 @@ describe("the check gate", () => {
     expect(how()).toBe(`full on ${tip.slice(0, 7)}`);
   });
 
+  it("needs a check when app code is renamed to .md", () => {
+    git("mv", "apps/web/a.ts", "apps/web/a.md");
+    git("commit", "-qm", "rename");
+    expect(ok()).toBe(false);
+  });
+
   it("keeps a pass across later docs and tooling commits, not app ones", () => {
     const checked = commit({ "apps/web/a.ts": "2" }, "app");
     record(`${checked} full`);
