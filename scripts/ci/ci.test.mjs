@@ -18,6 +18,7 @@ const running = {
   databaseId: 7,
   headSha: SHA,
   headBranch: REF,
+  workflowName: "CI",
   status: "in_progress",
   createdAt: "2026-11-22T10:00:00Z",
   url: "https://example.test/7",
@@ -294,6 +295,13 @@ describe("ci run", () => {
     expect(await request(w)).toBe(EXIT.notGreen);
     expect(w.lines.at(-1)).toMatch(/can't be reached; the ref is kept/);
     expect(w.pushes()).toHaveLength(1);
+  });
+
+  it("finds runs without --workflow, which 404s off the default branch, and ignores other workflows", async () => {
+    const w = world({ at: SHA, runs: [{ ...running, workflowName: "Deploy" }] });
+    await request(w);
+    expect(w.calls.some((c) => c.includes("--workflow"))).toBe(false);
+    expect(w.lines[0]).not.toMatch(/already running/);
   });
 
   it("reads a push that starts no run as unknown", async () => {

@@ -22,18 +22,19 @@ import { pathToFileURL } from "node:url";
 import { TIERS, ciRefName, isTier, parseCiRef } from "./tiers.mjs";
 import { isVerdict } from "./verdict.mjs";
 
-export const WORKFLOW = "ci.yml";
+/** The workflow's name. Runs are filtered by it: `gh run list --workflow` 404s until ci.yml is on the default branch. */
+export const WORKFLOW_NAME = "CI";
 export const EXIT = { green: 0, notGreen: 1, usage: 2, timeout: 75 };
 const DEFAULT_WAIT_MIN = 30;
 /** How long a pushed ref gets to show a run before it reads as unknown. */
 const START_WAIT_MS = 120_000;
 /** Polls in a row GitHub may fail before the run reads as unknown. */
 const MAX_POLL_FAILURES = 3;
-const RUN_FIELDS = "databaseId,headSha,headBranch,status,conclusion,createdAt,url";
+const RUN_FIELDS = "databaseId,headSha,headBranch,status,conclusion,createdAt,url,workflowName";
 
 /**
  * @typedef {{ ok: boolean, out: string }} Result
- * @typedef {{ databaseId: number, headSha: string, headBranch?: string, status: string, conclusion?: string, createdAt: string, url?: string }} Run
+ * @typedef {{ databaseId: number, headSha: string, headBranch?: string, status: string, conclusion?: string, createdAt: string, url?: string, workflowName?: string }} Run
  * @typedef {{ git: (args: string[]) => Result, gh: (args: string[]) => Result, sleep: (ms: number) => Promise<void>, now: () => number, log: (line: string) => void, pollMs: number }} Io
  */
 
@@ -64,10 +65,10 @@ export function remoteSha(/** @type {Io} */ io, /** @type {string} */ ref) {
 
 /** @returns {Run[] | null} null when GitHub can't be read */
 function listRuns(/** @type {Io} */ io, /** @type {string[]} */ filter) {
-  const r = io.gh(["run", "list", "--workflow", WORKFLOW, ...filter, "--limit", "30", "--json", RUN_FIELDS]);
+  const r = io.gh(["run", "list", ...filter, "--limit", "30", "--json", RUN_FIELDS]);
   if (!r.ok) return null;
   try {
-    return JSON.parse(r.out || "[]");
+    return JSON.parse(r.out || "[]").filter((/** @type {Run} */ run) => run.workflowName === WORKFLOW_NAME);
   } catch {
     return null;
   }
