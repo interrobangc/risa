@@ -249,6 +249,51 @@ describe("plan and backlog", () => {
     expect(plan.trimEnd()).toMatch(/Start by summarising[^]*$/);
   });
 
+  it("plain plan: one AskUserQuestion round, a plain landing, and the row set when it exists", () => {
+    const plan = ok("plan", "T", "B-1");
+    expect(plan).toContain("in one AskUserQuestion round of at most four questions");
+    expect(plan).not.toContain("pnpm prd ask");
+    expect(plan).not.toContain("--force");
+    expect(plan).toContain('`pnpm prd land plan/T -m "docs(T): PRD and plan for … (B-<n>, …)"`');
+    expect(plan).toMatch(
+      /when `pnpm backlog prd list` already has a row for T, set it with `pnpm backlog prd set T/,
+    );
+    expect(plan).toMatch(/when it has none, add it first with `pnpm backlog prd add T`/);
+    expect(plan).toContain("report the decisions you assumed");
+  });
+
+  it("plan --auto: questions and the report through pnpm prd ask with a push, never AskUserQuestion", () => {
+    for (const plan of [ok("plan", "T", "--auto", "B-1"), ok("plan", "T", "B-1", "--auto")]) {
+      expect(plan).toContain('You are the planning agent for "T".');
+      expect(plan).toContain("(B-1)");
+      expect(plan).not.toContain("AskUserQuestion");
+      expect(plan).not.toContain("--force");
+      expect(plan).toContain('`pnpm prd ask --topic T --question "<text>"');
+      expect(plan).toContain("PushNotification");
+      expect(plan).toContain("`pnpm prd ask --wait <id>` in the background, with no `--timeout`");
+      expect(plan).toContain("**Never put your own recommendation in place of an answer:**");
+      // After the landing: the report, then rm, then end.
+      const land = plan.indexOf("`pnpm prd land plan/T -m");
+      const report = plan.indexOf('`pnpm prd ask --topic T --report "<text>"`');
+      const rm = plan.indexOf("`pnpm prd rm plan-T`");
+      expect(land).toBeGreaterThan(0);
+      expect(report).toBeGreaterThan(land);
+      expect(rm).toBeGreaterThan(report);
+      expect(plan.indexOf("&& pnpm prd end`")).toBeGreaterThan(rm);
+      expect(plan).toContain("`pnpm backlog prd set T flags=hold`");
+    }
+    const r = prompt("plan", "T", "--resume");
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("--auto");
+  });
+
+  it("a fixes orchestrator sets its row's hot files and leaves colliding fixes for later", () => {
+    const text = ok("orchestrator", "fixes-ui");
+    expect(text).toContain("`pnpm backlog prd set fixes-ui hot=<path prefixes>`");
+    expect(text).toContain("Leave for a later wave any fix that would touch a running topic's hot files");
+    expect(ok("orchestrator", "T")).not.toContain("hot=<path prefixes>");
+  });
+
   it("backlog reads the open asks and the PRD registry, and leads with what waits on the user", () => {
     const text = ok("backlog");
     expect(text).toContain("`pnpm prd asks`");

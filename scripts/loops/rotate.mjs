@@ -7,6 +7,8 @@
 //   - doneFlags(rows, topic): the flags `pnpm prd rm` writes to mark TOPIC done
 //     (its flags plus done, less hold), or why it writes none: no row, a
 //     standing topic, or already done.
+//   - clearsHot(rows, topic): whether removing TOPIC's worktree clears its row's
+//     hot files: a standing topic (a fixes topic's wave sets them) that has some.
 //
 // CLI:
 //   node rotate.mjs slices-left <plan file>   the slices left, one line, space-
@@ -15,6 +17,8 @@
 //   node rotate.mjs done-flags <topic>        stdin: `pnpm backlog prd list
 //                                             --json`; prints the flags to set
 //                                             (exit 0), or why not (exit 1)
+//   node rotate.mjs clears-hot <topic>        stdin: as done-flags; exit 0 when
+//                                             rm.sh clears the row's hot files
 //   node rotate.mjs run-through <plan file>   exit 0 when _Status_ records the
 //                                             run-through landing mode
 import { readFileSync } from "node:fs";
@@ -68,6 +72,15 @@ export function doneFlags(rows, topic) {
   return { flags: [...row.flags.filter((f) => f !== "hold"), "done"] };
 }
 
+/**
+ * @param {{ topic: string, flags: string[], hot?: string[] }[]} rows the registry (`prd list --json`)
+ * @param {string} topic
+ */
+export function clearsHot(rows, topic) {
+  const row = rows.find((r) => r.topic === topic);
+  return Boolean(row?.flags.includes("standing") && row.hot?.length);
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const [cmd, arg] = process.argv.slice(2);
   const read = (/** @type {string} */ f) => {
@@ -93,11 +106,16 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       console.log(d.flags.join(","));
       break;
     }
+    case "clears-hot":
+      process.exit(clearsHot(JSON.parse(readFileSync(0, "utf8")), arg ?? "") ? 0 : 1);
+      break;
     case "run-through":
       process.exit(runThrough(read(arg ?? "")) ? 0 : 1);
       break;
     default:
-      console.error("usage: rotate.mjs slices-left <plan> | done-flags <topic> | run-through <plan>");
+      console.error(
+        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan>",
+      );
       process.exit(2);
   }
 }

@@ -20,7 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { doneFlags, slicesLeft } from "./rotate.mjs";
+import { clearsHot, doneFlags, slicesLeft } from "./rotate.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -69,6 +69,18 @@ describe("the pure part", () => {
     expect(doneFlags(rows, "c")).toEqual({ skip: "c is standing: it never finishes" });
     expect(doneFlags(rows, "d")).toEqual({ skip: "d is already done" });
     expect(doneFlags(rows, "e")).toEqual({ skip: "the PRD table has no row e" });
+  });
+
+  it("clears hot files only for a standing row that has some", () => {
+    const rows = [
+      { topic: "f", flags: ["standing"], hot: ["scripts/loops/"] },
+      { topic: "g", flags: ["standing"], hot: [] },
+      { topic: "p", flags: [], hot: ["apps/web/"] },
+    ];
+    expect(clearsHot(rows, "f")).toBe(true);
+    expect(clearsHot(rows, "g")).toBe(false);
+    expect(clearsHot(rows, "p")).toBe(false);
+    expect(clearsHot(rows, "missing")).toBe(false);
   });
 });
 
@@ -125,7 +137,14 @@ const until = async (what, ms = 10_000) => {
 const liveSession = async (extra = {}) => {
   const s = start(
     "bash",
-    [scripts("session.sh"), "prd-w", ...(extra.auto ? ["--auto"] : []), "--", "x"],
+    [
+      scripts("session.sh"),
+      "prd-w",
+      ...(extra.auto ? ["--auto"] : []),
+      ...(extra.managed ? ["--managed"] : []),
+      "--",
+      "x",
+    ],
     { STUB_MODE: extra.mode ?? "wait", STUB_NAME: "prd-w" },
     wt,
   );
@@ -333,6 +352,21 @@ describe("rotate-into.sh", () => {
     }
   });
 
+  it("carries managed over from the record, and leaves a by-hand session by hand", async () => {
+    const first = await liveSession({ managed: true });
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await first.s.done;
+    expect(JSON.parse(stateFile("record-at-start"))).toMatchObject({ managed: true, auto: false });
+    expect(record("prd-w")).toMatchObject({ managed: true });
+
+    rmSync(state, { recursive: true, force: true });
+    rmSync(sessions, { recursive: true, force: true });
+    const second = await liveSession();
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await second.s.done;
+    expect(JSON.parse(stateFile("record-at-start")).managed).toBe(false);
+  });
+
   it("kills a session that ignores TERM after the wait, making a record when there was none", async () => {
     const s = start(stub, [], { STUB_MODE: "stubborn" }, wt);
     await until(() => existsSync(join(state, "ready")));
@@ -368,6 +402,8 @@ The registry.
 | \`std\` | standing | — | — | standing |
 | \`unm\` | — | — | — | not merged |
 | \`notable\` | — | — | — | no table |
+| \`fixes-x\` | standing, alone | — | \`scripts/loops/\`, \`docs/\` | a fixes wave |
+| \`busy\` | — | — | \`apps/web/\` | a PRD with hot files |
 
 ## Items
 
@@ -444,5 +480,27 @@ Intro.
     expect(r.stdout).toMatch(/kept prd\/unm: it isn't merged/);
     for (const t of ["open", "std", "notable", "unm"]) expect(flagsOf(t)).not.toContain("done");
     expect(flagsOf("std")).toEqual(["standing"]);
+  });
+
+  it("clears a standing topic's hot files when its worktree goes, keeping its flags; others keep theirs", () => {
+    commitOnDev({
+      "plans/backlog.md": REGISTRY,
+      "plans/fixes-x-plan.md": plan(`${MERGED}\n| 3 | 2 | not started | |`),
+      "plans/busy-plan.md": plan(`${MERGED}\n| 3 | 2 | not started | |`),
+    });
+    prdWorktree("fixes-x", { merged: false });
+    prdWorktree("busy");
+    const rowOf = (topic) => JSON.parse(backlog("prd", "list", "--json")).find((r) => r.topic === topic);
+
+    let r = run("rm.sh", ["fixes-x", "--force"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Cleared fixes-x's hot files in the PRD registry");
+    expect(rowOf("fixes-x")).toMatchObject({ flags: ["standing", "alone"], hot: [] });
+    expect(git(main, "log", "-1", "--format=%s")).toMatch(/^chore\(backlog\): prd set fixes-x: hot=—/);
+
+    r = run("rm.sh", ["busy"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain("hot files");
+    expect(rowOf("busy").hot).toEqual(["apps/web/"]);
   });
 });

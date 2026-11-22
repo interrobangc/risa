@@ -4,15 +4,17 @@
 //
 //   - a saved Claude conversation for that path (a *.jsonl transcript in
 //     ~/.claude/projects/<path with every non-alphanumeric as ->):
-//       cd <dir> && <this checkout>/scripts/loops/session.sh <session> [--auto] -- --continue --remote-control <session>
+//       cd <dir> && <this checkout>/scripts/loops/session.sh <session> [--auto] [--managed] -- --continue --remote-control <session>
 //   - otherwise a fresh session with the resume prompt:
-//       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] -- --remote-control prd-<topic> \
+//       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] [--managed] -- --remote-control prd-<topic> \
 //               "$(scripts/loops/prompt.sh orchestrator <topic> --resume [--auto])"
-//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> -- --model fable --remote-control plan-<topic> \
-//               "$(scripts/loops/prompt.sh plan <topic>)"
+//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> [--auto] [--managed] -- --model fable --remote-control plan-<topic> \
+//               "$(scripts/loops/prompt.sh plan <topic> [--auto])"
 //
 // Run-through (--auto) is the plan's _Status_ saying so, or the session's last
-// record having been run-through (carried over to the new record). A record
+// record having been run-through (carried over to the new record); a run-through
+// planner is the unattended one (prompt.sh plan --auto). `managed` (the
+// dispatcher started it) is carried over from the record the same way. A record
 // marked `rotating` (a rotation cut short) always gets a fresh session, never
 // --continue, so the long conversation it was replacing doesn't come back.
 //
@@ -22,7 +24,7 @@
 // The session names stay prd-<topic> and plan-<topic>, so Remote Control still
 // reaches them.
 //
-// CLI: node open-session.mjs <worktree dir>  → JSON {session, kind, topic, mode, auto, command}
+// CLI: node open-session.mjs <worktree dir>  → JSON {session, kind, topic, mode, auto, managed, command}
 // Env: CARETOOK_CLAUDE_PROJECTS (tests: in place of ~/.claude/projects);
 // CARETOOK_SESSIONS_DIR (default .sessions beside the worktree).
 import { execFileSync } from "node:child_process";
@@ -58,8 +60,9 @@ const ownSessionSh = fileURLToPath(new URL("./session.sh", import.meta.url));
 
 /**
  * @param {{ dir: string, branch: string, conversation: boolean, runThrough: boolean,
- *   record?: { auto?: boolean, rotating?: boolean } | null, wrapper?: string }} w
- * @returns {{ session: string, kind: "prd" | "plan", topic: string, mode: "continue" | "fresh", auto: boolean, command: string }}
+ *   record?: { auto?: boolean, managed?: boolean, rotating?: boolean } | null, wrapper?: string }} w
+ * @returns {{ session: string, kind: "prd" | "plan", topic: string, mode: "continue" | "fresh", auto: boolean,
+ *   managed: boolean, command: string }}
  */
 export function chooseCommand({
   dir,
@@ -76,7 +79,8 @@ export function chooseCommand({
   const topic = m[2];
   const session = `${kind}-${topic}`;
   const auto = statusAuto || record?.auto === true;
-  const wrap = `cd ${sh(dir)} && ${sh(wrapper)} ${session}${auto ? " --auto" : ""} -- `;
+  const managed = record?.managed === true;
+  const wrap = `cd ${sh(dir)} && ${sh(wrapper)} ${session}${auto ? " --auto" : ""}${managed ? " --managed" : ""} -- `;
   if (conversation && !record?.rotating)
     return {
       session,
@@ -84,18 +88,20 @@ export function chooseCommand({
       topic,
       mode: "continue",
       auto,
+      managed,
       command: `${wrap}--continue --remote-control ${session}`,
     };
   const prompt =
     kind === "prd"
       ? `scripts/loops/prompt.sh orchestrator ${sh(topic)} --resume${auto ? " --auto" : ""}`
-      : `scripts/loops/prompt.sh plan ${sh(topic)}`;
+      : `scripts/loops/prompt.sh plan ${sh(topic)}${auto ? " --auto" : ""}`;
   return {
     session,
     kind,
     topic,
     mode: "fresh",
     auto,
+    managed,
     // A fresh planner runs on fable, as `pnpm prd plan` starts it (prd.sh's agent_model).
     command: `${wrap}${kind === "plan" ? "--model fable " : ""}--remote-control ${session} "$(${prompt})"`,
   };

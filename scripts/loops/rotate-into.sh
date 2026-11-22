@@ -12,8 +12,9 @@
 #    end, so that write can't land on the new record).
 # 3. Execs session.sh with the same name and the resume prompt (prompt.sh
 #    orchestrator <topic> --resume), plus --auto when the record or the plan's
-#    _Status_ says run-through: always a fresh session, never --continue.
-#    session.sh clears rotating as it starts.
+#    _Status_ says run-through, and --managed when the record is the
+#    dispatcher's: always a fresh session, never --continue. session.sh clears
+#    rotating as it starts.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -44,6 +45,8 @@ before=$(sessions get "$name" 2>/dev/null || true)
 auto=""
 [[ $(field "$before" auto) == true ]] && auto=1
 node "$bin/rotate.mjs" run-through "$dir/plans/$topic-plan.md" && auto=1
+managed=""
+[[ $(field "$before" managed) == true ]] && managed=1
 # Its session.sh will write ended when the old pid exits (only when the record is its).
 wrapped=""
 [[ -n $before && $(field "$before" pid) == "$old" && -z $(field "$before" ended) ]] && wrapped=1
@@ -73,4 +76,4 @@ fi
 
 cd "$dir"
 args=(--remote-control "$name" "$("$bin/prompt.sh" orchestrator "$topic" --resume ${auto:+--auto})")
-exec "$bin/session.sh" "$name" ${auto:+--auto} -- "${args[@]}"
+exec "$bin/session.sh" "$name" ${auto:+--auto} ${managed:+--managed} -- "${args[@]}"

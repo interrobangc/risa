@@ -92,9 +92,12 @@ describe("the pure part", () => {
   it("merges fields into a record and removes empty ones", () => {
     const dir = mkdtempSync(join(tmpdir(), "sessions-unit-"));
     try {
-      expect(parseFields(["pid=12", "auto=true", "rotating=", "topic=t", "command=a=b c"])).toEqual({
+      expect(
+        parseFields(["pid=12", "auto=true", "managed=true", "rotating=", "topic=t", "command=a=b c"]),
+      ).toEqual({
         pid: 12,
         auto: true,
+        managed: true,
         rotating: undefined,
         topic: "t",
         command: "a=b c",
@@ -232,9 +235,29 @@ describe("session.sh", () => {
     expect(Date.parse(after.ended)).toBeGreaterThanOrEqual(Date.parse(after.started));
   });
 
+  it("records --managed (the dispatcher's), and by hand without it", () => {
+    let r = run("session.sh", ["plan-m", "--auto", "--managed", "--", "x"], { STUB_NAME: "plan-m" });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(state, "record-at-start"), "utf8"))).toMatchObject({
+      kind: "plan",
+      auto: true,
+      managed: true,
+    });
+    expect(readFileSync(join(state, "args"), "utf8")).toBe("x\n");
+    expect(record("plan-m")).toMatchObject({ managed: true, exit: 0 });
+    r = run("session.sh", ["plan-m", "--", "x"], { STUB_NAME: "plan-m" });
+    expect(record("plan-m")).toMatchObject({ managed: false, auto: false });
+  });
+
   it("takes the kind and topic from a planner's name, and refuses a name it can't type", () => {
     expect(run("session.sh", ["plan-u", "--", "x"], { STUB_NAME: "plan-u" }).status).toBe(0);
-    expect(record("plan-u")).toMatchObject({ kind: "plan", topic: "u", auto: false, exit: 0 });
+    expect(record("plan-u")).toMatchObject({
+      kind: "plan",
+      topic: "u",
+      auto: false,
+      managed: false,
+      exit: 0,
+    });
     const r = run("session.sh", ["backlog", "--", "x"]);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/--kind prd\|plan/);
