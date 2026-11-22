@@ -127,7 +127,7 @@ pnpm prd <command>
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
 
   CI (runs only on request; nothing starts it on a push to dev, staging or main, or on a PR)
-    ci run <tier> [--ref <branch>] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier
+    ci run <tier> [--ref <branch>] [--files <file>…] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier (--files: only those test files, a verdict that is never a gate)
                               (static, unit, integration, components, full; each includes the ones before);
                               --wait blocks for the verdict (0 green, 1 not green, 75 at the timeout)
     ci [<branch>]             the latest whole-tier verdict for the branch's tip
