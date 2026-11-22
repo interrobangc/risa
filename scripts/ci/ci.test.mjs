@@ -94,9 +94,15 @@ describe("the tiers", () => {
   it("include the ones before, and full adds the build job", () => {
     expect(jobsFor("static")).toEqual({ jobs: ["static"], ranTier: "static" });
     expect(jobsFor("unit").jobs).toEqual(["static", "unit"]);
-    expect(jobsFor("components").jobs).toEqual(["static", "unit", "integration", "components"]);
+    expect(jobsFor("components").jobs).toEqual([
+      "static",
+      "unit",
+      "integration",
+      "components-1",
+      "components-2",
+    ]);
     expect(jobsFor("full")).toEqual({
-      jobs: ["static", "unit", "integration", "components", "build"],
+      jobs: ["static", "unit", "integration", "components-1", "components-2", "build"],
       ranTier: "full",
     });
   });
@@ -108,11 +114,11 @@ describe("the tiers", () => {
       "unit=true",
       "integration=false",
       "components=false",
-      "build=false",
+      "full=false",
     ]);
     expect(planOutputs("ci/components/x")).toContain("components=true");
-    expect(planOutputs("ci/components/x")).toContain("build=false");
-    expect(planOutputs("ci/full/x")).toContain("build=true");
+    expect(planOutputs("ci/components/x")).toContain("full=false");
+    expect(planOutputs("ci/full/x")).toContain("full=true");
     expect(() => planOutputs("dev")).toThrow(/not a ci/);
   });
 });
@@ -158,7 +164,15 @@ describe("the verdict", () => {
   });
 
   it("waits for every job the tier ran: a full run needs its components and build", () => {
-    const needs = { plan: ok, static: ok, unit: ok, integration: ok, components: ok, build: ok };
+    const needs = {
+      plan: ok,
+      static: ok,
+      unit: ok,
+      integration: ok,
+      "components-1": ok,
+      "components-2": ok,
+      build: ok,
+    };
     expect(buildVerdict({ ...base, tier: "full", needs })).toMatchObject({
       kind: "green",
       tier: "full",
@@ -170,6 +184,11 @@ describe("the verdict", () => {
       needs: { ...needs, build: { result: "failure" } },
     });
     expect(noBuild).toMatchObject({ kind: "file", failed: { jobs: ["build"] } });
+    const oneShard = { ...needs, "components-2": { result: "failure" } };
+    expect(buildVerdict({ ...base, tier: "components", needs: oneShard })).toMatchObject({
+      kind: "file",
+      failed: { jobs: ["components-2"] },
+    });
     const skipped = { ...needs, build: { result: "skipped" } };
     expect(buildVerdict({ ...base, tier: "components", needs: skipped }).kind).toBe("green");
   });
