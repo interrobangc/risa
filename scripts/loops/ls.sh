@@ -6,7 +6,7 @@
 # a day), and who holds the machine-wide leases (browser checks and pnpm prd
 # check: lease.sh holders), and after the worktree table the dispatcher (running,
 # paused and why, or stopped; its last log entry), the recorded sessions (managed
-# or by hand) and the open asks. (pnpm prd status, and pnpm prd status-watch)
+# or by hand), the open asks and the live notices. (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -50,6 +50,9 @@ echo "PRD worktrees: $(prd_count) of $max_prds"
 # heading included, when there are none.
 extra=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$(dirname "$0")/status-extra.mjs" 2>/dev/null || true)
 [[ -z $extra ]] || printf '\n%s\n' "${extra%$'\n'}"
+# The live notices (notice.mjs status): nothing, heading included, when there are none.
+notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
+[[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
 
 # Sections are separated by a blank line; stale leases only show when there are any.
 stale=""
