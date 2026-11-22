@@ -11,8 +11,9 @@
 # a saved Claude conversation (and its record isn't marked rotating), else a
 # fresh session with the resume prompt (prompt.sh orchestrator <topic> --resume,
 # plus --auto when the plan's _Status_ or the last record says run-through;
-# prompt.sh plan for a planner). Sessions keep their names, prd-<topic> and
-# plan-<topic>.
+# prompt.sh plan for a planner, with --auto for a run-through one). The record's
+# managed (the dispatcher's) is carried over. Sessions keep their names,
+# prd-<topic> and plan-<topic>.
 #
 # It opens the command in a new iTerm2 tab (osascript) and writes it to that
 # tab as `exec`, so the tab closes when the session ends. --background leaves

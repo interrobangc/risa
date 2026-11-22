@@ -1,5 +1,6 @@
 // The two parts `pnpm prd status` prints after the worktree table: the recorded
-// sessions (.loops/.sessions: name, live or ended, age, run-through or not) and
+// sessions (.loops/.sessions: name, live or ended, age, run-through or not,
+// managed by the dispatcher or opened by hand) and
 // the open asks (the count, the oldest and its age). A part with nothing to show
 // prints nothing, heading included. Ended sessions older than a day are left
 // out to keep the list short.
@@ -32,13 +33,19 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
       up ? (record.rotating ? "live, rotating" : "live") : "ended",
       Number.isNaN(since) ? "?" : age(record.started, now),
       record.auto ? "run-through" : "asks first",
+      record.managed ? "managed" : "by hand",
     ]);
   }
   if (rows.length) {
-    const w = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i].length)));
+    const w = [0, 1, 2, 3].map((i) => Math.max(...rows.map((r) => r[i].length)));
     out.push("SESSIONS (ended over a day ago left out)");
     for (const r of rows)
-      out.push(`${r[0].padEnd(w[0])}  ${r[1].padEnd(w[1])}  ${r[2].padEnd(w[2])}  ${r[3]}`);
+      out.push(
+        `${r
+          .slice(0, 4)
+          .map((c, i) => c.padEnd(w[i]))
+          .join("  ")}  ${r[4]}`,
+      );
     out.push("");
   }
 

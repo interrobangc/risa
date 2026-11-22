@@ -160,6 +160,7 @@ describe("choosing the command", () => {
       topic: "t",
       mode: "continue",
       auto: true,
+      managed: false,
       command: `${W} --auto -- --continue --remote-control prd-t`,
     });
   });
@@ -228,6 +229,30 @@ describe("choosing the command", () => {
       session: "plan-u",
       mode: "fresh",
       command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u)"`,
+    });
+  });
+
+  it("carries a record's managed over, continued or fresh, and reopens a run-through planner with --auto", () => {
+    const choose = (branch, conversation, record) =>
+      chooseCommand({
+        dir: `/w/.loops/${branch.replace("/", "-").replace(/^prd-/, "")}`,
+        branch,
+        conversation,
+        runThrough: false,
+        record,
+        wrapper: SESSION_SH,
+      });
+    expect(choose("prd/t", true, { managed: true })).toMatchObject({
+      managed: true,
+      command: `${W} --managed -- --continue --remote-control prd-t`,
+    });
+    expect(choose("prd/t", false, { managed: true, auto: true }).command).toBe(
+      `${W} --auto --managed -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume --auto)"`,
+    );
+    expect(choose("prd/t", false, { auto: true }).managed).toBe(false);
+    expect(choose("plan/u", false, { managed: true, auto: true })).toMatchObject({
+      managed: true,
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u --auto --managed -- --model fable --remote-control plan-u "$(scripts/loops/prompt.sh plan u --auto)"`,
     });
   });
 
@@ -346,6 +371,18 @@ describe("pnpm prd open", () => {
       ),
     );
     rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
+  });
+
+  it("reopens a managed, run-through planner as one: --managed and the --auto plan prompt", () => {
+    writeRecord("plan-v", { pid: 1, auto: true, managed: true, ended: "2026-11-21T00:00:00Z" });
+    ok(["plan-v"]);
+    expect(tabCommand()).toBe(
+      tabLine(
+        "plan-v",
+        "plan-v --auto --managed",
+        '--model fable --remote-control plan-v "$(scripts/loops/prompt.sh plan v --auto)"',
+      ),
+    );
   });
 
   it("leaves --auto off when _Status_ doesn't record run-through", () => {

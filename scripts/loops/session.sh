@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run an orchestrator's or planner's claude session and record it.
 #
-#   session.sh <name> [--kind prd|plan] [--topic <t>] [--auto] -- <claude args…>
+#   session.sh <name> [--kind prd|plan] [--topic <t>] [--auto] [--managed] -- <claude args…>
 #
 # Runs ${CARETOOK_CLAUDE_BIN:-claude} with the args as this script's child, in
 # the foreground (the terminal stays the session's), and keeps
 # .loops/.sessions/<name>.json (sessions.mjs): at start pid, kind, topic,
-# started, the command and auto, clearing rotating, ended and exit; when it
-# exits, ended and exit. It exits with the session's code. The record stays
+# started, the command, auto and managed (--managed: the dispatcher started
+# it), clearing rotating, ended and exit; when it exits, ended and exit. It exits with the session's code. The record stays
 # until rm.sh removes the worktree.
 #
 # The kind and topic default from the name (prd-<topic>, plan-<topic>). The
@@ -20,16 +20,17 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 
 name=${1:-}; (($#)) && shift
-[[ -n $name && $name != -* ]] || die "usage: session.sh <name> [--kind prd|plan] [--topic <t>] [--auto] -- <claude args…>"
-kind="" topic="" auto=false
+[[ -n $name && $name != -* ]] || die "usage: session.sh <name> [--kind prd|plan] [--topic <t>] [--auto] [--managed] -- <claude args…>"
+kind="" topic="" auto=false managed=false
 case $name in prd-*) kind=prd topic=${name#prd-} ;; plan-*) kind=plan topic=${name#plan-} ;; esac
 while (($#)); do
   case $1 in
     --kind) kind=${2:?--kind prd|plan}; shift ;;
     --topic) topic=${2:?--topic <t>}; shift ;;
     --auto) auto=true ;;
+    --managed) managed=true ;;
     --) shift; break ;;
-    *) die "session.sh: unknown option $1 (--kind, --topic, --auto, then -- and claude's args)" ;;
+    *) die "session.sh: unknown option $1 (--kind, --topic, --auto, --managed, then -- and claude's args)" ;;
   esac
   shift
 done
@@ -49,9 +50,9 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # The child records its own pid, then becomes claude, so the recorded pid is
 # the session's. In the foreground, so claude keeps the terminal and its input.
 code=0
-bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" rotating= ended= exit= &&
-  shift 7 && exec "$@"' _ \
-  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$claude_bin" "$@" || code=$?
+bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" rotating= ended= exit= &&
+  shift 8 && exec "$@"' _ \
+  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$claude_bin" "$@" || code=$?
 
 record ended="$(now)" exit="$code" || echo "session.sh: couldn't record the end of $name" >&2
 exit "$code"

@@ -8,6 +8,8 @@
 #   prompt.sh orchestrator <topic> --resume [--auto]   take over after an interruption: reconcile
 #     the plan's _Status_ with git, respawn in-flight slices with --continue
 #   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (pnpm prd plan <topic> --open)
+#   prompt.sh plan <topic> --auto [B-n …]   the same, unattended (the dispatcher's): questions and
+#     the report through pnpm prd ask, never AskUserQuestion
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
@@ -99,7 +101,7 @@ fi
 fix_line=""
 if [[ $topic == fixes-* ]]; then
   bt='`'
-  fix_line=" **This is a fixes topic:** before your first wave, append one slice per waiting item (${bt}pnpm backlog list${bt}, status triaged, prd=$topic) to plans/$topic-plan.md, each with ${bt}Reads: plans/fixes-rules.md${bt}; the plan is the whole spec."
+  fix_line=" **This is a fixes topic:** before each wave, append one slice per waiting item (${bt}pnpm backlog list${bt}, status triaged, prd=$topic) to plans/$topic-plan.md, each with ${bt}Reads: plans/fixes-rules.md${bt}; the plan is the whole spec. Leave for a later wave any fix that would touch a running topic's hot files (${bt}pnpm backlog prd list${bt}). Once the wave's slices are written, set your row's hot files to the path prefixes they will touch: ${bt}pnpm backlog prd set $topic hot=<path prefixes>${bt} (removing your worktree clears them)."
 fi
 case $kind in
   orchestrator)
@@ -170,17 +172,32 @@ EOF
     fi
     ;;
   plan)
+    auto="" items=""
+    for a in "${@:3}"; do
+      case $a in
+        --auto) auto=1 ;;
+        B-[0-9]*) items+="${items:+ }$a" ;;
+        *) echo "plan takes --auto and B-<n> ids, not $a" >&2; exit 1 ;;
+      esac
+    done
+    if [[ -n $auto ]]; then
+      ask_line="- **Decide, then report: no interview, and nobody is watching this terminal** (the dispatcher opened you). Read docs/agents/preferences.md and explore the code. Ask only what the handbook's _What to ask_ names (scope, who can see or change what, existing data, compliance, a new dependency, product direction you can't pick with confidence: what the product does, never how it looks), and never in this terminal: each question is its own \`pnpm prd ask --topic $topic --question \"<text>\" --option \"<a>\" --option \"<b>\" --recommend <a>\`, which prints its id; right after it, call the PushNotification tool yourself (a tool you call, not a command) with the line it printed, so the question reaches the user's phone. Then run \`pnpm prd ask --wait <id>\` in the background, with no \`--timeout\`, and keep exploring and writing what doesn't depend on the answer; you're woken when it prints. **Never put your own recommendation in place of an answer:** wait for it however long it takes, and land nothing before it comes. With nothing to ask, say so and carry on. Decide everything else yourself: the module sketch, the test choices and the slice breakdown need no approval. **Never ask about a UX or UI detail** (layout, where a control sits, icons or text, wording, colours, defaults, empty states): pick the smallest version that fits the item's words and the existing screens, and record it as assumed in the _Decisions_ table, where the user vetoes."
+      report_line="then file the report with \`pnpm prd ask --topic $topic --report \"<text>\"\` and send its PushNotification line: the text names the topic and what it plans, lists the _Decisions_ table's assumed rows (the costliest to change first) and what the skeptic changed, says how to veto (tell any planning or backlog session, or hold the topic before its first slice starts: \`pnpm backlog prd set $topic flags=hold\`), and stands alone. Then \`pnpm prd rm plan-$topic\`"
+    else
+      ask_line="- **Decide, then report: no interview.** Read docs/agents/preferences.md and explore the code. Ask the user only what the handbook's _What to ask_ names (scope, who can see or change what, existing data, compliance, a new dependency, product direction you can't pick with confidence: what the product does, never how it looks), in one AskUserQuestion round of at most four questions, your recommendation first, with a PushNotification just before it so the question reaches the user's phone; with nothing to ask, say so and carry on. Decide everything else yourself: the module sketch, the test choices and the slice breakdown need no approval. **Never ask about a UX or UI detail** (layout, where a control sits, icons or text, wording, colours, defaults, empty states): pick the smallest version that fits the item's words and the existing screens, and record it as assumed in the _Decisions_ table, where the user vetoes."
+      report_line="\`pnpm prd rm plan-$topic\`, report the decisions you assumed (the costliest to change first) and how to start it"
+    fi
     cat <<EOF
 You are the planning agent for "$topic".
 
 - Your worktree is $loops/plan-$topic, on branch plan/$topic (from dev), with no Docker stack. Work only there; never in the main checkout ($main).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read your handbook, docs/agents/planner.md, and docs/agents/backlog.md, then the area docs the topic touches (_Area index_). Then \`pnpm backlog list\` and \`pnpm backlog show B-<n>\` for the items behind "$topic"${items:+ ($items)}.
-- **Decide, then report: no interview.** Read docs/agents/preferences.md and explore the code. Ask the user only what the handbook's _What to ask_ names (scope, who can see or change what, existing data, compliance, a new dependency, product direction you can't pick with confidence: what the product does, never how it looks), in one AskUserQuestion round of at most four questions, your recommendation first, with a PushNotification just before it so the question reaches the user's phone; with nothing to ask, say so and carry on. Decide everything else yourself: the module sketch, the test choices and the slice breakdown need no approval. **Never ask about a UX or UI detail** (layout, where a control sits, icons or text, wording, colours, defaults, empty states): pick the smallest version that fits the item's words and the existing screens, and record it as assumed in the _Decisions_ table, where the user vetoes.
+$ask_line
 - Write the PRD as plans/$topic-prd.md, opening with the handbook's _Decisions_ table and following _The PRD's shape_. Then cut it into tracer-bullet slices, saved as plans/$topic-plan.md, in the handbook's _The plan's shape_ (about six slices at most: cut a bigger one into follow-on topics), with each slice's fields line (_Slice fields_) and acceptance criteria that name the tests (_The test budget_).
 - **Don't load the \`write-a-prd\`, \`prd-to-plan\` or \`grill-me\` skills:** they make you interview the user and wait for approval. The handbook has their templates.
 - Run the handbook's _The skeptic pass_ with one fresh agent before landing, and act on what it finds.
 - Don't file GitHub issues.
-- Commit both files on plan/$topic (\`docs($topic): …\`), triage the items, and add the topic's row to the PRD table with \`pnpm backlog prd add $topic\`, then \`pnpm backlog prd set $topic after=<topic> hot=<path prefixes>\` (never a hand edit of the table and no \`pnpm backlog commit\`: those commands commit), then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic --force -m "docs($topic): PRD and plan for … (B-<n>, …)"\`, \`pnpm prd rm plan-$topic\`, report the decisions you assumed (the costliest to change first) and how to start it, and as your last step run \`cd $main && pnpm prd end\` (it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
+- Commit both files on plan/$topic (\`docs($topic): …\`), triage the items, and give the topic its row in the PRD table: when \`pnpm backlog prd list\` already has a row for $topic, set it with \`pnpm backlog prd set $topic after=<topic> hot=<path prefixes>\`; when it has none, add it first with \`pnpm backlog prd add $topic\` (never a hand edit of the table and no \`pnpm backlog commit\`: those commands commit). Then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic -m "docs($topic): PRD and plan for … (B-<n>, …)"\` (plain: a plan branch never needs a forced landing), $report_line, and as your last step run \`cd $main && pnpm prd end\` (it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
 
 Start by summarising what the backlog says about "$topic", then explore.
 EOF

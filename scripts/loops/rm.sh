@@ -13,6 +13,8 @@
 # no slice left to run marks its topic done in the PRD registry (pnpm backlog
 # prd set <topic> flags=…,done), except a standing topic; before the table is
 # migrated, or when _Status_ can't be read, it marks nothing and says so.
+# A standing topic's PRD worktree (a fixes wave) clears its row's hot files
+# instead (pnpm backlog prd set <topic> hot=—), merged or not; its flags stay.
 #
 #   scripts/loops/rm.sh <name> [--force] [--keep-branch]
 set -euo pipefail
@@ -64,6 +66,13 @@ if [[ $branch == prd/* ]]; then
   fi
 fi
 
+# A standing topic's wave set its row's hot files; with its worktree gone they go too.
+clear_hot=""
+if [[ $branch == prd/* ]] && hot_rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) &&
+  node "$(dirname "$0")/rotate.mjs" clears-hot "${branch#prd/}" <<<"$hot_rows"; then
+  clear_hot=${branch#prd/}
+fi
+
 stack_teardown "$dir"
 # Its databases on the shared test Postgres, worker copies too (nothing when that isn't running).
 "$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
@@ -83,6 +92,14 @@ if [[ -n $mark_done ]]; then
     echo "Marked $mark_done done in the PRD registry (flags $flags)"
   else
     echo "couldn't mark $mark_done done (pnpm backlog prd set $mark_done flags=$flags)" >&2
+  fi
+fi
+
+if [[ -n $clear_hot ]]; then
+  if (cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd set "$clear_hot" "hot=—" >/dev/null); then
+    echo "Cleared $clear_hot's hot files in the PRD registry (its wave is over)"
+  else
+    echo "couldn't clear $clear_hot's hot files (pnpm backlog prd set $clear_hot hot=—)" >&2
   fi
 fi
 

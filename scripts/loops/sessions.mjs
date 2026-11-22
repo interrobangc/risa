@@ -1,6 +1,7 @@
 // Session records: .loops/.sessions/<name>.json, one per orchestrator or
 // planner session started through session.sh (pid, kind, topic, started,
-// command, auto, rotating, and ended and exit once it has exited). A record
+// command, auto, managed (the dispatcher started it), rotating, and ended and
+// exit once it has exited). A record
 // stays after its session exits and goes with its worktree (rm.sh), so "no
 // live session" is a pid check.
 //
@@ -17,8 +18,9 @@
 // the main checkout):
 //   node sessions.mjs set <name> key=value…   merge fields into the record (made
 //                                             if missing); pid and exit are
-//                                             numbers, auto and rotating
-//                                             booleans; key= removes the key
+//                                             numbers, auto, managed and
+//                                             rotating booleans; key= removes
+//                                             the key
 //   node sessions.mjs get <name>              the record as JSON (exit 1: none)
 //   node sessions.mjs list [--json]           every record, live or ended
 //   node sessions.mjs live <name>             its pid when live (exit 1 if not)
@@ -46,7 +48,7 @@ export function parseEtime(/** @type {string} */ s) {
 
 /**
  * @typedef {{ pid?: number, kind?: string, topic?: string, started?: string, command?: string,
- *   auto?: boolean, rotating?: boolean, ended?: string, exit?: number }} SessionRecord
+ *   auto?: boolean, managed?: boolean, rotating?: boolean, ended?: string, exit?: number }} SessionRecord
  */
 
 /**
@@ -156,7 +158,7 @@ export function readRecords(/** @type {string} */ dir) {
     .filter((r) => r.record !== null);
 }
 
-/** The fields a set's key=value words give (pid, exit: numbers; auto, rotating: booleans; key=: removed). */
+/** The fields a set's key=value words give (pid, exit: numbers; auto, managed, rotating: booleans; key=: removed). */
 export function parseFields(/** @type {string[]} */ words) {
   /** @type {Record<string, unknown>} */
   const fields = {};
@@ -167,7 +169,8 @@ export function parseFields(/** @type {string[]} */ words) {
     const value = w.slice(i + 1);
     if (value === "") fields[key] = undefined;
     else if (key === "pid" || key === "exit") fields[key] = Number(value);
-    else if (key === "auto" || key === "rotating") fields[key] = value === "true" || value === "1";
+    else if (key === "auto" || key === "managed" || key === "rotating")
+      fields[key] = value === "true" || value === "1";
     else fields[key] = value;
   }
   return fields;

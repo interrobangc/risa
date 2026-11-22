@@ -30,16 +30,16 @@ describe("statusParts", () => {
     expect(statusParts(empty, join(root, "missing"), { now: NOW })).toBe("");
   });
 
-  it("lists sessions (live or ended, age, run-through) and leaves out ended ones over a day old", () => {
-    record("prd-a", { pid: 1, started: ago(3 * H), auto: true });
+  it("lists sessions (live or ended, age, run-through, managed) and leaves out ended ones over a day old", () => {
+    record("prd-a", { pid: 1, started: ago(3 * H), auto: true, managed: true });
     record("prd-b", { pid: 2, started: ago(2 * H), rotating: true });
     record("plan-c", { pid: 3, started: ago(5 * H), ended: ago(H), exit: 0 });
     record("old", { pid: 4, started: ago(60 * H), ended: ago(48 * H), exit: 0 });
     const out = statusParts(sessions, asks, { now: NOW, live: (r) => !r.ended });
     expect(out).toContain("SESSIONS");
-    expect(out).toMatch(/prd-a +live +3h +run-through/);
-    expect(out).toMatch(/prd-b +live, rotating +2h +asks first/);
-    expect(out).toMatch(/plan-c +ended +5h +asks first/);
+    expect(out).toMatch(/prd-a +live +3h +run-through +managed$/m);
+    expect(out).toMatch(/prd-b +live, rotating +2h +asks first +by hand$/m);
+    expect(out).toMatch(/plan-c +ended +5h +asks first +by hand$/m);
     expect(out).not.toContain("old ");
     expect(out).not.toContain("OPEN ASKS");
   });
