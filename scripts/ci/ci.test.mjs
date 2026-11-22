@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { EXIT, main, parseRunArgs, requestRun, latestVerdict, verdictLines } from "./ci.mjs";
 import { TIERS, ciRefName, jobsFor, parseCiRef, planOutputs } from "./tiers.mjs";
-import { buildVerdict, summarizeVitest } from "./verdict.mjs";
+import { buildVerdict, mergeSummaries, summarizeVitest } from "./verdict.mjs";
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -193,6 +193,31 @@ describe("the verdict", () => {
       truncated: false,
     });
     expect(summarizeVitest(null, "/w").reported).toBe(false);
+  });
+});
+
+describe("a job's reports", () => {
+  const one = (/** @type {string} */ file) => ({
+    reported: true,
+    files: [file],
+    tests: [{ file, name: "breaks" }],
+    truncated: false,
+  });
+
+  it("merge into one summary", () => {
+    expect(mergeSummaries([one("a"), one("b")])).toEqual({
+      reported: true,
+      files: ["a", "b"],
+      tests: [
+        { file: "a", name: "breaks" },
+        { file: "b", name: "breaks" },
+      ],
+      truncated: false,
+    });
+  });
+
+  it("say so when one is missing", () => {
+    expect(mergeSummaries([one("a"), summarizeVitest(null, "/w")]).reported).toBe(false);
   });
 });
 
