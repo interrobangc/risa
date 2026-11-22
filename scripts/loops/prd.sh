@@ -115,12 +115,19 @@ pnpm prd <command>
                               holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
                               naming it. Wait on a background check with this, never \`pgrep -f\` (it matches itself)
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
-                              by mode and by PRD); runs no check, works from any checkout
+                              by mode, PRD and step, the ten most-failed test files); runs no check,
+                              works from any checkout
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
     browser --smoke …         any of these in smoke mode: each check's core path only (after a merge)
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
+
+  CI (runs only on request; nothing starts it on a push to dev, staging or main, or on a PR)
+    ci run <tier> [--ref <branch>] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier
+                              (static, unit, integration, components, full; each includes the ones before);
+                              --wait blocks for the verdict (0 green, 1 not green, 75 at the timeout)
+    ci [<branch>]             the latest whole-tier verdict for the branch's tip
 
   Land
     land <topic> [-m subject] [--recheck "<why>"] [--no-review] [--local]
@@ -192,6 +199,7 @@ case $cmd in
   gc) exec "$bin/gc.sh" "$@" ;;
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
+  ci) exec node "$bin/../ci/ci.mjs" "$@" ;;
   wait)
     kind=check
     [[ ${1:-} == "" || ${1:-} == -* ]] || { kind=$1; shift; }
@@ -304,29 +312,17 @@ case $cmd in
     done
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
     record=$(checked_file "$dir")
-    if ((quick)); then
-      # The base is the last full pass (or a quick pass's own base) when it's
-      # an ancestor of HEAD, else where the branch left dev.
-      read -r prev mode qbase _ 2>/dev/null < "$record" || true
-      [[ ${mode:-} == quick ]] && prev=$qbase
-      if [[ -n ${prev:-} ]] && git -C "$dir" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then base=$prev
-      else base=$(git -C "$dir" merge-base "$trunk" HEAD); fi
-    fi
     # The mode comes from the plan (check-plan.mjs): a quick check on a diff that
     # touches a migration, seeds, the sync config, a lockfile, a package.json or
     # the Vitest config is a full one, and the tooling tests join when it touches
-    # the tooling.
-    [[ -n ${base:-} ]] || base=$(git -C "$dir" merge-base "$trunk" HEAD)
-    # A slice's --quick is the slice check: its own test files only, never forced to full.
+    # the tooling. A slice's --quick is the slice check: its own test files only,
+    # never forced to full.
     asked=full
     if ((quick)); then
-      asked=quick; cur=$(git -C "$dir" branch --show-current)
-      if [[ $cur == slice/* ]]; then
-        asked=slice; parent=${cur#slice/}; parent=prd/${parent%/*}
-        # A slice's own files are those since it left its PRD branch, not dev.
-        if git -C "$dir" rev-parse -q --verify "$parent" > /dev/null; then base=$(git -C "$dir" merge-base "$parent" HEAD); fi
-      fi
+      asked=quick
+      [[ $(git -C "$dir" branch --show-current) == slice/* ]] && asked=slice
     fi
+    base=$(check_base "$dir" "$asked")
     { read -r pmode; read -r preason; read -r ptooling; read -r pown; } < <(
       git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked")
     rm -f "$record"

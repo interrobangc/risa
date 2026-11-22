@@ -65,6 +65,35 @@ describe("check log summary", () => {
     expect(runs[1].loadWaited).toBeNull();
   });
 
+  it("counts failures by step and the most-failed files", () => {
+    const failed = (step, files, exit = 1) =>
+      [...line("2026-11-22T10:00:00Z", "prd/x", "quick", 60, exit).split("\t"), "0", step, files, ""].join(
+        "\t",
+      );
+    const many = Array.from({ length: 12 }, (_, i) => `f${String(i).padStart(2, "0")}.test.ts`).join(",");
+    const text = [
+      failed("unit", "a.test.ts,b.test.ts"),
+      failed("unit", "a.test.ts"),
+      failed("lint", ""),
+      failed("integration", many),
+      failed("", "ignored.test.ts", 0),
+      line("2026-11-20T10:00:00Z", "prd/x", "full", 60, 1),
+    ].join("\n");
+    const s = summarize(text);
+    expect(s.failuresByStep).toEqual([
+      { step: "unit", failures: 2 },
+      { step: "(not recorded)", failures: 1 },
+      { step: "integration", failures: 1 },
+      { step: "lint", failures: 1 },
+    ]);
+    expect(s.topFailedFiles).toHaveLength(10);
+    expect(s.topFailedFiles[0]).toEqual({ file: "a.test.ts", failures: 2 });
+    expect(s.topFailedFiles.map((x) => x.file)).not.toContain("ignored.test.ts");
+    const out = formatSummary(s);
+    expect(out).toContain("Failures by step:");
+    expect(out).toContain("Most-failed test files:");
+  });
+
   it("names a PRD from the branch, else the worktree", () => {
     expect(prdOf({ branch: "slice/x/3", worktree: "x-3" })).toBe("x");
     expect(prdOf({ branch: "prd/x", worktree: "x" })).toBe("x");

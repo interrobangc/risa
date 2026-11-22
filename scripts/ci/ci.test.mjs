@@ -1,0 +1,374 @@
+// `pnpm prd ci`, the tiers and the verdict, against a fake git and gh: the ref
+// for each tier, reuse and re-push, the wait's exit codes, when the ref goes,
+// and what reads as unknown.
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { EXIT, main, parseRunArgs, requestRun, latestVerdict, verdictLines } from "./ci.mjs";
+import { TIERS, ciRefName, jobsFor, parseCiRef, planOutputs } from "./tiers.mjs";
+import { buildVerdict, mergeSummaries, summarizeVitest } from "./verdict.mjs";
+
+const SHA = "a".repeat(40);
+const OTHER = "b".repeat(40);
+const REF = "ci/unit/slice-t-2";
+const green = { version: 1, commit: SHA, runId: "7", tier: "unit", kind: "green", failed: { jobs: [] } };
+const running = {
+  databaseId: 7,
+  headSha: SHA,
+  headBranch: REF,
+  workflowName: "CI",
+  status: "in_progress",
+  createdAt: "2026-11-22T10:00:00Z",
+  url: "https://example.test/7",
+};
+
+/** A fake world: the ref's SHA, the runs, each run's state and verdict. */
+function world({
+  at = "",
+  runs = [],
+  afterPush = [running],
+  view = { status: "completed", conclusion: "success" },
+  verdict = green,
+  reachable = true,
+} = {}) {
+  const calls = /** @type {string[]} */ ([]);
+  let pushed = false;
+  /** @type {string[]} */ const lines = [];
+  let clock = 0;
+  const io = {
+    git(/** @type {string[]} */ args) {
+      calls.push(`git ${args.join(" ")}`);
+      if (args[0] === "ls-remote")
+        return reachable ? { ok: true, out: at ? `${at}\trefs/heads/${REF}` : "" } : { ok: false, out: "" };
+      if (args[0] === "push") {
+        pushed = !args.at(-1)?.startsWith(":");
+        return { ok: true, out: "" };
+      }
+      if (args[0] === "branch") return { ok: true, out: "slice/t/2" };
+      if (args[0] === "rev-parse") return { ok: true, out: SHA };
+      return { ok: false, out: "" };
+    },
+    gh(/** @type {string[]} */ args) {
+      calls.push(`gh ${args.join(" ")}`);
+      if (!reachable) return { ok: false, out: "" };
+      if (args[1] === "list")
+        return { ok: true, out: JSON.stringify(pushed ? [...afterPush, ...runs] : runs) };
+      if (args[1] === "view") return { ok: true, out: JSON.stringify(view) };
+      if (args[1] === "download") {
+        if (!verdict) return { ok: false, out: "" };
+        writeFileSync(join(args[args.indexOf("--dir") + 1], "verdict.json"), JSON.stringify(verdict));
+        return { ok: true, out: "" };
+      }
+      return { ok: false, out: "" };
+    },
+    sleep: async (/** @type {number} */ ms) => {
+      clock += ms;
+    },
+    now: () => clock,
+    log: (/** @type {string} */ l) => lines.push(l),
+    pollMs: 1000,
+  };
+  const pushes = () => calls.filter((c) => c.startsWith("git push"));
+  return { io, calls, lines, pushes };
+}
+
+const request = (/** @type {any} */ w, waitMin = /** @type {number | null} */ (5)) =>
+  requestRun({ tier: "unit", branch: "slice/t/2", sha: SHA, waitMin }, w.io);
+
+describe("the tiers", () => {
+  it("name a ref for each tier", () => {
+    expect(TIERS.map((t) => ciRefName(t, "slice/test-gates/2"))).toEqual([
+      "ci/static/slice-test-gates-2",
+      "ci/unit/slice-test-gates-2",
+      "ci/integration/slice-test-gates-2",
+      "ci/components/slice-test-gates-2",
+      "ci/full/slice-test-gates-2",
+    ]);
+    expect(parseCiRef("ci/unit/slice-t-2")).toEqual({ tier: "unit", name: "slice-t-2" });
+    expect(parseCiRef("ci/nope/x")).toBeNull();
+    expect(() => ciRefName("nope", "x")).toThrow(/unknown tier/);
+  });
+
+  it("include the ones before, and say what isn't built", () => {
+    expect(jobsFor("static")).toEqual({ jobs: ["static"], ranTier: "static", notBuilt: [] });
+    expect(jobsFor("unit").jobs).toEqual(["static", "unit"]);
+    expect(jobsFor("full")).toEqual({
+      jobs: ["static", "unit", "integration"],
+      ranTier: "integration",
+      notBuilt: ["components", "full"],
+    });
+  });
+
+  it("give the plan job no integration on a unit run", () => {
+    expect(planOutputs("ci/unit/x")).toEqual([
+      "tier=unit",
+      "static=true",
+      "unit=true",
+      "integration=false",
+      "not_built=",
+    ]);
+    expect(() => planOutputs("dev")).toThrow(/not a ci/);
+  });
+});
+
+describe("the verdict", () => {
+  const ok = { result: "success" };
+  const base = { commit: SHA, runId: "1" };
+
+  it("is green only when every job of the tier passed", () => {
+    const v = buildVerdict({
+      ...base,
+      tier: "unit",
+      needs: { plan: ok, static: ok, unit: ok, integration: { result: "skipped" } },
+    });
+    expect(v).toMatchObject({ version: 1, kind: "green", tier: "unit", ranTier: "unit", narrowed: false });
+  });
+
+  it("is file for a failed or skipped job of the tier, naming the tests", () => {
+    const failures = JSON.stringify({
+      files: ["a.test.ts"],
+      tests: [{ file: "a.test.ts", name: "breaks" }],
+      truncated: false,
+    });
+    const v = buildVerdict({
+      ...base,
+      tier: "unit",
+      needs: { plan: ok, static: ok, unit: { result: "failure", outputs: { failures } } },
+    });
+    expect(v.kind).toBe("file");
+    expect(v.failed).toEqual({
+      jobs: ["unit"],
+      files: ["a.test.ts"],
+      tests: [{ job: "unit", file: "a.test.ts", name: "breaks" }],
+      truncated: false,
+    });
+    expect(
+      buildVerdict({ ...base, tier: "unit", needs: { plan: ok, static: ok, unit: { result: "skipped" } } })
+        .kind,
+    ).toBe("file");
+    expect(
+      buildVerdict({ ...base, tier: "static", needs: { plan: { result: "failure" } } }).failed.jobs,
+    ).toEqual(["plan", "static"]);
+  });
+
+  it("records what a higher tier really ran", () => {
+    const v = buildVerdict({
+      ...base,
+      tier: "full",
+      needs: { plan: ok, static: ok, unit: ok, integration: ok },
+    });
+    expect(v).toMatchObject({
+      kind: "green",
+      tier: "full",
+      ranTier: "integration",
+      notBuilt: ["components", "full"],
+    });
+    expect(verdictLines(v).join("\n")).toMatch(/not built yet, so not run: components, full/);
+  });
+
+  it("summarizes a Vitest report, an import failure included", () => {
+    const summary = summarizeVitest(
+      {
+        testResults: [
+          {
+            name: "/w/a.test.ts",
+            status: "failed",
+            assertionResults: [
+              { status: "failed", fullName: " a breaks " },
+              { status: "passed", fullName: "a works" },
+            ],
+          },
+          { name: "/w/b.test.ts", status: "failed", assertionResults: [] },
+          { name: "/w/c.test.ts", status: "passed", assertionResults: [{ status: "passed", fullName: "c" }] },
+        ],
+      },
+      "/w",
+    );
+    expect(summary).toEqual({
+      reported: true,
+      files: ["a.test.ts", "b.test.ts"],
+      tests: [{ file: "a.test.ts", name: "a breaks" }],
+      truncated: false,
+    });
+    expect(summarizeVitest(null, "/w").reported).toBe(false);
+  });
+});
+
+describe("a job's reports", () => {
+  const one = (/** @type {string} */ file) => ({
+    reported: true,
+    files: [file],
+    tests: [{ file, name: "breaks" }],
+    truncated: false,
+  });
+
+  it("merge into one summary", () => {
+    expect(mergeSummaries([one("a"), one("b")])).toEqual({
+      reported: true,
+      files: ["a", "b"],
+      tests: [
+        { file: "a", name: "breaks" },
+        { file: "b", name: "breaks" },
+      ],
+      truncated: false,
+    });
+  });
+
+  it("say so when one is missing", () => {
+    expect(mergeSummaries([one("a"), summarizeVitest(null, "/w")]).reported).toBe(false);
+  });
+});
+
+describe("ci run", () => {
+  it("parses its arguments", () => {
+    expect(parseRunArgs(["unit"])).toEqual({ tier: "unit", ref: null, waitMin: null });
+    expect(parseRunArgs(["full", "--ref", "prd/t", "--wait"])).toEqual({
+      tier: "full",
+      ref: "prd/t",
+      waitMin: 30,
+    });
+    expect(parseRunArgs(["unit", "--wait", "5"]).waitMin).toBe(5);
+    expect(() => parseRunArgs(["nope"])).toThrow(/needs a tier/);
+    expect(() => parseRunArgs(["unit", "--bad"])).toThrow(/unknown argument/);
+  });
+
+  it("exits 0 on green and deletes the ref after the verdict", async () => {
+    const w = world();
+    expect(await request(w)).toBe(EXIT.green);
+    expect(w.pushes()).toEqual([
+      `git push --force-with-lease=refs/heads/${REF}: origin ${SHA}:refs/heads/${REF}`,
+      `git push --force-with-lease=refs/heads/${REF}:${SHA} origin :refs/heads/${REF}`,
+    ]);
+    expect(w.lines.join("\n")).toMatch(/verdict: green/);
+  });
+
+  it("exits 1 on a failed verdict, and still deletes the ref", async () => {
+    const w = world({
+      verdict: { ...green, kind: "file", failed: { jobs: ["unit"], files: [], tests: [] } },
+      view: { status: "completed", conclusion: "failure" },
+    });
+    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(w.pushes().at(-1)).toContain(`origin :refs/heads/${REF}`);
+  });
+
+  it("exits 75 at the timeout and keeps the ref", async () => {
+    const w = world({ view: { status: "in_progress" } });
+    expect(await request(w, 1)).toBe(EXIT.timeout);
+    expect(w.pushes()).toHaveLength(1);
+    expect(w.lines.at(-1)).toMatch(/is kept/);
+  });
+
+  it("returns after the push without --wait, keeping the ref", async () => {
+    const w = world();
+    expect(await request(w, null)).toBe(EXIT.green);
+    expect(w.pushes()).toHaveLength(1);
+    expect(w.calls.some((c) => c.includes("run view"))).toBe(false);
+  });
+
+  it("reuses a live run when the ref is already at the commit", async () => {
+    const w = world({ at: SHA, runs: [running], afterPush: [] });
+    expect(await request(w)).toBe(EXIT.green);
+    expect(w.pushes()).toEqual([
+      `git push --force-with-lease=refs/heads/${REF}:${SHA} origin :refs/heads/${REF}`,
+    ]);
+    expect(w.lines[0]).toMatch(/already running/);
+  });
+
+  it("deletes and pushes again when the ref is at the commit with no live run", async () => {
+    const done = { ...running, databaseId: 6, status: "completed", conclusion: "success" };
+    const w = world({ at: SHA, runs: [done] });
+    expect(await request(w)).toBe(EXIT.green);
+    expect(w.pushes().slice(0, 2)).toEqual([
+      `git push --force-with-lease=refs/heads/${REF}:${SHA} origin :refs/heads/${REF}`,
+      `git push --force-with-lease=refs/heads/${REF}: origin ${SHA}:refs/heads/${REF}`,
+    ]);
+  });
+
+  it("moves a ref at another commit, guarded by what it was", async () => {
+    const w = world({ at: OTHER });
+    await request(w);
+    expect(w.pushes()[0]).toBe(
+      `git push --force-with-lease=refs/heads/${REF}:${OTHER} origin ${SHA}:refs/heads/${REF}`,
+    );
+  });
+
+  it.each([
+    ["a cancelled run", { view: { status: "completed", conclusion: "cancelled" } }, /cancelled/],
+    ["a run with no verdict", { verdict: null }, /no verdict/],
+    ["a verdict for another commit", { verdict: { ...green, commit: OTHER } }, /another commit/],
+  ])("reads %s as unknown and keeps the ref", async (_name, opts, why) => {
+    const w = world(/** @type {any} */ (opts));
+    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(w.lines.at(-1)).toMatch(/^verdict: unknown/);
+    expect(w.lines.at(-1)).toMatch(why);
+    expect(w.pushes()).toHaveLength(1);
+  });
+
+  it("reads an unreachable GitHub as unknown and pushes nothing", async () => {
+    const w = world({ reachable: false });
+    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(w.lines).toEqual(["verdict: unknown (GitHub can't be reached)"]);
+    expect(w.pushes()).toEqual([]);
+  });
+
+  it("reads GitHub going away during the wait as unknown and keeps the ref", async () => {
+    const w = world();
+    const gh = w.io.gh;
+    w.io.gh = (args) => (args[1] === "view" ? { ok: false, out: "" } : gh(args));
+    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(w.lines.at(-1)).toMatch(/can't be reached; the ref is kept/);
+    expect(w.pushes()).toHaveLength(1);
+  });
+
+  it("finds runs without --workflow, which 404s off the default branch, and ignores other workflows", async () => {
+    const w = world({ at: SHA, runs: [{ ...running, workflowName: "Deploy" }] });
+    await request(w);
+    expect(w.calls.some((c) => c.includes("--workflow"))).toBe(false);
+    expect(w.lines[0]).not.toMatch(/already running/);
+  });
+
+  it("reads a push that starts no run as unknown", async () => {
+    const w = world({ afterPush: [] });
+    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(w.lines.at(-1)).toMatch(/no run started/);
+  });
+});
+
+describe("ci [<branch>]", () => {
+  const done = (/** @type {number} */ id, /** @type {string} */ at, extra = {}) => ({
+    ...running,
+    databaseId: id,
+    status: "completed",
+    conclusion: "success",
+    createdAt: at,
+    ...extra,
+  });
+
+  it("prints the latest verdict for the tip", () => {
+    const w = world({ runs: [done(1, "2026-11-22T09:00:00Z"), done(2, "2026-11-22T10:00:00Z")] });
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.green);
+    expect(w.calls.find((c) => c.includes("download"))).toContain("download 2 ");
+  });
+
+  it("skips a cancelled run and a narrowed verdict", () => {
+    const w = world({ runs: [done(2, "2026-11-22T10:00:00Z", { conclusion: "cancelled" })] });
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.notGreen);
+    const n = world({ runs: [done(1, "2026-11-22T09:00:00Z")], verdict: { ...green, narrowed: true } });
+    expect(latestVerdict({ sha: SHA }, n.io)).toBe(EXIT.notGreen);
+    expect(n.lines.at(-1)).toMatch(/no verdict/);
+  });
+
+  it("reads an unreachable GitHub as unknown", () => {
+    const w = world({ reachable: false });
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.notGreen);
+    expect(w.lines).toEqual(["verdict: unknown (GitHub can't be reached)"]);
+  });
+
+  it("main uses the current branch", async () => {
+    const w = world({ runs: [done(1, "2026-11-22T09:00:00Z")] });
+    expect(await main([], w.io)).toBe(EXIT.green);
+    expect(await main(["a", "b"], w.io)).toBe(EXIT.usage);
+  });
+});

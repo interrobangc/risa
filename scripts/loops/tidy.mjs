@@ -14,7 +14,9 @@
 //         - dangling Docker volumes of a caretook-loopN project no worktree
 //           names (docker volume rm);
 //         - .loops/.browser-hangs logs older than a week;
-//         - ended session records whose worktree is gone.
+//         - ended session records whose worktree is gone;
+//         - ci/ refs on origin older than a day with no run going
+//           (git push --delete, only while still at the same commit).
 //   ask   reported only (one `pnpm prd ask --report`):
 //         - a live session whose worktree is gone or whose branch landed in dev
 //           (it looks finished: ask it, then the user closes it);
@@ -35,6 +37,8 @@ import { createHash } from "node:crypto";
 export const TICKET_GRACE_SECS = 60;
 /** Browser-hang logs older than this go. */
 export const HANG_LOG_DAYS = 7;
+/** A ci/ ref with no run going may go once it's this old. */
+export const CI_REF_SECS = 86400;
 /** Item statuses `pnpm backlog archive` moves out. */
 export const ARCHIVABLE = ["landed", "staging", "live", "dropped"];
 /** The long-lived branches tidy never lists. */
@@ -119,6 +123,7 @@ export function testDbOwner(db, worktrees) {
  * @property {TidySession[]} [sessions]
  * @property {TidyBranch[]} [branches]
  * @property {string[]} [staleRemotes]   remote-tracking refs `git fetch --prune` would drop
+ * @property {{ ref: string, sha: string, ageSecs: number | null, running: boolean }[]} [ciRefs]   ci/ refs on origin; a null age is unknown
  * @property {TidyLock[]} [locks]
  * @property {{ db: string, worktree: string|null }[]} [testDbs]
  * @property {{ name: string, project: string }[]} [volumes]   dangling volumes
@@ -127,7 +132,7 @@ export function testDbOwner(db, worktrees) {
  * @property {{ id: string, title?: string, status: string }[] | null} [items]   backlog items
  * @property {{ topic: string, flags: string[], state: string, waiting: number, notes?: string }[] | null} [registry]
  *
- * @typedef {{ kind: string, target: string, why: string, how?: string, path?: string }} Finding
+ * @typedef {{ kind: string, target: string, why: string, how?: string, path?: string, sha?: string }} Finding
  */
 
 /**
@@ -209,6 +214,17 @@ export function tidy(facts) {
 
   for (const r of facts.staleRemotes ?? [])
     safe.push({ kind: "remote", target: r, why: "gone from the remote", how: "git fetch --prune" });
+
+  for (const c of facts.ciRefs ?? []) {
+    if (c.running || c.ageSecs === null || c.ageSecs <= CI_REF_SECS) continue;
+    safe.push({
+      kind: "ci-ref",
+      target: c.ref,
+      why: `${Math.floor(c.ageSecs / 3600)} hours old, no run going`,
+      how: "git push --delete",
+      sha: c.sha,
+    });
+  }
 
   for (const l of facts.locks ?? []) {
     if (!["slot", "lease"].includes(l.kind) || l.alive) continue;

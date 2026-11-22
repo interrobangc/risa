@@ -119,6 +119,28 @@ stop_server() {
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
 
+# check_base DIR ASKED (full|quick|slice) → the commit a check's diff starts from.
+# A slice: where it left its PRD branch. A quick check: the last full pass (or a
+# quick pass's own base) when it's an ancestor of HEAD. Otherwise where the
+# branch left the trunk.
+check_base() {
+  local dir=$1 asked=$2 cur parent prev="" pmode="" qbase="" _rest
+  if [[ $asked == slice ]]; then
+    cur=$(git -C "$dir" branch --show-current); parent=${cur#slice/}; parent=prd/${parent%/*}
+    if git -C "$dir" rev-parse -q --verify "$parent" > /dev/null; then
+      git -C "$dir" merge-base "$parent" HEAD; return
+    fi
+  fi
+  if [[ $asked != full ]]; then
+    read -r prev pmode qbase _rest 2>/dev/null < "$(checked_file "$dir")" || true
+    [[ $pmode == quick ]] && prev=$qbase
+    if [[ -n $prev ]] && git -C "$dir" merge-base --is-ancestor "$prev" HEAD 2>/dev/null; then
+      echo "$prev"; return
+    fi
+  fi
+  git -C "$dir" merge-base "$trunk" HEAD
+}
+
 # The record is one line: `<sha> full`, or `<sha> quick <base> <why>` for a
 # `pnpm prd check --quick` (typecheck, lint, format and the tests related to
 # the diff since <base>). A bare `<sha>` (older records) reads as full.
