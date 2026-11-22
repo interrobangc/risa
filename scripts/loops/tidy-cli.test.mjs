@@ -215,14 +215,14 @@ describe("tidy --yes", () => {
     expect(existsSync(join(loops, "t-3"))).toBe(true);
     expect(git(main, "branch", "--list", "slice/t/9")).toMatch(/slice\/t\/9/);
 
-    // One report ask, with the PushNotification line.
+    // One report ask, with no PushNotification line (only questions push).
     const filed = filedAsks();
     expect(filed).toHaveLength(1);
     const ask = JSON.parse(readFileSync(join(asks, filed[0]), "utf8"));
     expect(ask.kind).toBe("report");
     expect(ask.topic).toBe("tidy");
     expect(ask.text).toMatch(/branch slice\/t\/9: no worktree, not merged/);
-    expect(out).toMatch(/^Now send a PushNotification: tidy: /m);
+    expect(out).not.toMatch(/^Now send a PushNotification/m);
 
     // Through the (fake) Docker: the orphan database and the dangling volume only.
     const calls = readFileSync(log, "utf8");

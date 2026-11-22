@@ -135,7 +135,7 @@ describe("orchestrator", () => {
     }
   });
 
-  it("--auto: questions and reports go through pnpm prd ask with a push, never AskUserQuestion", () => {
+  it("--auto: questions and reports go through pnpm prd ask, only a question is pushed, never AskUserQuestion", () => {
     for (const flags of [["--auto"], ["--resume", "--auto"]]) {
       const out = ok("orchestrator", "T", ...flags);
       expect(out).toContain("`pnpm prd ask --topic T --question");
@@ -143,7 +143,10 @@ describe("orchestrator", () => {
       expect(out).toContain("`pnpm prd ask --wait <id>` in the background");
       expect(out).toContain("`pnpm prd answer <id>");
       expect(out).toContain("`pnpm prd ask --topic T --report");
-      expect(out).toContain("Push other reports only when something failed");
+      expect(out).toContain("never pushed: no PushNotification for a report");
+      expect(out).toContain(
+        "**The only PushNotification you ever send is the line `pnpm prd ask` prints for a question**",
+      );
       expect(out).toContain("`to-test/<date>-<time>-<topic>.md`");
       expect(out).toContain("names the topic, what landed and that to-test file, and stands alone");
       expect(out).not.toContain("AskUserQuestion");
@@ -400,7 +403,7 @@ describe("tidy", () => {
     expect(text).toContain("dead lease and slot tickets");
     expect(text).toContain("**Never close or end a session**");
     expect(text).toContain("**Never delete unmerged work**");
-    expect(text).toContain("send that PushNotification");
+    expect(text).toContain("A report is never pushed: send no PushNotification for it.");
     expect(text).not.toContain(RESUME);
   });
 });

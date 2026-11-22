@@ -73,7 +73,8 @@ pnpm prd <command>
     ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question; prints its id
                               and the PushNotification line to send; a macOS notification, and
                               \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set (failures ignored)
-    ask --topic <t> --report <text>   file a report (a landed wave, what to try); the same notifications
+    ask --topic <t> --report <text>   file a report (a landed wave, what to try); never pushed (no
+                              PushNotification line); the same macOS notification and hook
     ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout)
     asks [--json]             the open asks: topic, age, options numbered, the recommended one marked
     asks --done <id>          dismiss one (a read report, a question no longer needed)

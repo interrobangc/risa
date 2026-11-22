@@ -12,8 +12,10 @@
 // .loops/.asks). `ask` takes --session <name> (default CARETOOK_SESSION, else
 // what prd.sh passes as --here-session) and the topic defaults to --here-topic.
 //
-// Filing one prints its id, then "Now send a PushNotification: …" for the asking
-// session to push to the keeper's phone. It also shows a macOS notification
+// Filing one prints its id. A question then prints "Now send a PushNotification:
+// …" for the asking session to push to the keeper's phone; a report prints no
+// such line and is never pushed (the keeper wants pushes for questions only,
+// and only this line). Either kind also shows a macOS notification
 // when osascript is on the PATH, and runs `$CARETOOK_ASK_NOTIFY <id> <kind>
 // <topic> <text>` when that is set (a command line, run by sh), bounded by
 // CARETOOK_ASK_NOTIFY_TIMEOUT seconds (default 10); either one failing is only
@@ -159,8 +161,10 @@ async function ask(argv) {
     recommended: opts.recommend ?? null,
   });
   console.log(record.id);
-  console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}`);
-  if (kind === "question") console.log(`Then wait in the background: pnpm prd ask --wait ${record.id}`);
+  if (kind === "question") {
+    console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}`);
+    console.log(`Then wait in the background: pnpm prd ask --wait ${record.id}`);
+  } else console.log("Filed. No PushNotification for a report: only questions are pushed.");
   await tell(record);
 }
 

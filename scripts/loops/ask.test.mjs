@@ -86,15 +86,14 @@ describe("pnpm prd ask", () => {
     );
   });
 
-  it("files a report, shortening the push line", () => {
+  it("files a report with no push line", () => {
     const text = `Wave 1 landed. ${"Try the list. ".repeat(20)}`;
     const r = prd(["ask", "--topic", "demo", "--report", text, "--session", "prd-demo"]);
     expect(r.status, r.stderr).toBe(0);
-    const [id, push, ...rest] = r.stdout.trim().split("\n");
-    expect(id).toBe("a1");
-    expect(push).toMatch(/^Now send a PushNotification: demo: Wave 1 landed\. Try the list\..*…$/);
-    expect(push.length).toBeLessThan(170);
-    expect(rest).toEqual([]);
+    expect(r.stdout.trim().split("\n")).toEqual([
+      "a1",
+      "Filed. No PushNotification for a report: only questions are pushed.",
+    ]);
     expect(JSON.parse(readFileSync(join(dir, "a1.json"), "utf8")).session).toBe("prd-demo");
   });
 
