@@ -16,6 +16,31 @@ import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
 const targets = (/** @type {{ target: string }[]} */ list) => list.map((f) => f.target);
 const one = (/** @type {import("./tidy.mjs").TidyFacts} */ facts) => tidy(facts);
 
+describe("ci refs", () => {
+  const ref = { ref: "ci/unit/x", sha: "a".repeat(40), ageSecs: 90_000, running: false };
+
+  it("a ref older than a day with no run going is safe, naming its commit", () => {
+    expect(one({ ciRefs: [ref] }).safe).toEqual([
+      {
+        kind: "ci-ref",
+        target: "ci/unit/x",
+        why: "25 hours old, no run going",
+        how: "git push --delete",
+        sha: ref.sha,
+      },
+    ]);
+  });
+
+  it("a young ref, one with a run going and one of unknown age are left", () => {
+    const ciRefs = [
+      { ...ref, ageSecs: 3600 },
+      { ...ref, running: true },
+      { ...ref, ageSecs: null },
+    ];
+    expect(one({ ciRefs })).toEqual({ safe: [], ask: [], kept: [] });
+  });
+});
+
 describe("worktrees", () => {
   const slice = { name: "t-1", branch: "slice/t/1", merged: true, dirty: false };
   const plan = { name: "plan-t", branch: "plan/t", landed: true, level: true, dirty: false };

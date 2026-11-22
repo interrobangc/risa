@@ -118,6 +118,12 @@ pnpm prd <command>
     browser --smoke …         any of these in smoke mode: each check's core path only (after a merge)
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
 
+  CI (runs only on request; nothing starts it on a push to dev, staging or main, or on a PR)
+    ci run <tier> [--ref <branch>] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier
+                              (static, unit, integration, components, full; each includes the ones before);
+                              --wait blocks for the verdict (0 green, 1 not green, 75 at the timeout)
+    ci [<branch>]             the latest whole-tier verdict for the branch's tip
+
   Land
     land <topic> [-m subject] [--recheck "<why>"] [--no-review] [--local]
                               merge prd/<topic> into dev (only when the dev keeper says so) through its
@@ -188,6 +194,7 @@ case $cmd in
   gc) exec "$bin/gc.sh" "$@" ;;
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
+  ci) exec node "$bin/../ci/ci.mjs" "$@" ;;
   wait)
     kind=check
     [[ ${1:-} == "" || ${1:-} == -* ]] || { kind=$1; shift; }
