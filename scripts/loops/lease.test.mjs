@@ -330,6 +330,20 @@ describe("browser leases and the old path", SLOW, () => {
     cli(["release", "browser", "--pid", pid], extra);
   });
 
+  it("keeps a holder whose program name differs from its process name (Linux's comm)", () => {
+    const holder = spawn("bash", ["-c", "exec -a lease-holder-prog sleep 30"]);
+    children.push(holder);
+    const extra = { CARETOOK_BROWSER_SLOTS: "1", CARETOOK_BROWSER_LEASES: join(root, "comm-browser") };
+    const pid = String(holder.pid);
+    spawnSync("sh", [
+      "-c",
+      `until ps -p ${pid} -o command= | grep -q lease-holder-prog; do sleep 0.05; done`,
+    ]);
+    expect(cli(["take", "browser", "--pid", pid], extra).status).toBe(0);
+    expect(cli(["take", "browser", "--wait", "1", "--pid", String(process.pid)], extra).status).toBe(75);
+    cli(["release", "browser", "--pid", pid], extra);
+  });
+
   it("holds browser leases under lease.sh's own command line", async () => {
     const h = await hold("browser", "web:components");
     const command = execFileSync("ps", ["-p", String(h.child.pid), "-o", "command="], { encoding: "utf8" });

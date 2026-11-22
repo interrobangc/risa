@@ -164,7 +164,7 @@ stack_stopped_secs() {
   now=$(date +%s)
   ids=$(docker ps -aq --filter "label=com.docker.compose.project=$proj" 2>/dev/null || true)
   if [[ -z $ids ]]; then
-    t=$(stat -f %m "$1/.env" 2>/dev/null || stat -c %Y "$1/.env" 2>/dev/null || echo "$now")
+    t=$(file_mtime "$1/.env" || echo "$now")
     echo $((now - t)); return 0
   fi
   # shellcheck disable=SC2086

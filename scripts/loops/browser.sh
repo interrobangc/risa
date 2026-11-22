@@ -366,7 +366,7 @@ run_once() {
         sleep "$hang_grace"; touch "$finished"; break
       fi
       if ((now - start >= t)); then touch "$marker"; break; fi
-      last=$(stat -f %m "$log" 2>/dev/null || echo "$start")
+      last=$(file_mtime "$log" || echo "$start")
       ((last < start)) && last=$start
       if ((now - last >= silence)); then touch "$silent"; break; fi
       sleep 1
