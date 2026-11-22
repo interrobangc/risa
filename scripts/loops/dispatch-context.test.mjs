@@ -10,6 +10,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -160,6 +161,52 @@ describe("the context decision", () => {
   });
 });
 
+describe("a managed backlog session", () => {
+  const backlog = (extra = {}) => session({ name: "backlog", kind: "backlog", topic: "", ...extra });
+  const facts = (size, extra = {}) => ({ sessions: [backlog()], sizes: { backlog: size }, ...extra });
+  const entries = { backlog: { pid: 100, askId: "a1" } };
+  const yes = { a1: question({ topic: "backlog", answeredAt: ago(1), answer: CONTEXT_OPTIONS[0] }) };
+  const deliveredAt = NOW - WAIT;
+
+  it("is nudged and then asked like an orchestrator, under its own name", () => {
+    expect(decide(facts(over()))).toEqual([{ type: "nudge", session: "backlog", pid: 100 }]);
+    const [a] = decide(facts(delivered));
+    expect(a).toMatchObject({ type: "ask", session: "backlog", topic: "backlog" });
+    expect(a.text).toBe("backlog is at 200k context and hasn't rotated");
+  });
+
+  it("gets nothing when opened by hand", () => {
+    expect(decide({ sessions: [backlog({ managed: false })], sizes: { backlog: delivered } })).toEqual([]);
+  });
+
+  it("covers a named backlog session", () => {
+    const named = backlog({ name: "backlog-tax" });
+    expect(decide({ sessions: [named], sizes: { "backlog-tax": over() } })).toEqual([
+      { type: "nudge", session: "backlog-tax", pid: 100 },
+    ]);
+  });
+
+  it("holds the rotation a tick while a command runs", () => {
+    const f = facts(delivered, { entries, asks: yes, running: new Set(["backlog"]) });
+    expect(types(decide(f))).toEqual(["answered", "hold"]);
+  });
+
+  it.each([
+    ["written after the delivery", { backlog: deliveredAt + 1 }, true],
+    ["written at the delivery", { backlog: deliveredAt }, false],
+    ["older than the delivery", { backlog: deliveredAt - MIN }, false],
+    ["missing", {}, false],
+  ])("rotates with a brief only when it is fresh: %s", (_what, briefs, brief) => {
+    expect(decide(facts(delivered, { entries, asks: yes, briefs }))[1]).toEqual({
+      type: "rotate-backlog",
+      session: "backlog",
+      pid: 100,
+      topic: "backlog",
+      brief,
+    });
+  });
+});
+
 describe("a command under the session", () => {
   it("counts pnpm prd commands, but not a wait on a question", () => {
     expect(runsPrdCommand("node /opt/pnpm.cjs prd land x")).toBe(true);
@@ -168,6 +215,13 @@ describe("a command under the session", () => {
     expect(runsPrdCommand("zsh -c pnpm prd ask --wait a7")).toBe(false);
     expect(runsPrdCommand("zsh -c pnpm prd ask --wait a7; pnpm prd land x")).toBe(true);
     expect(runsPrdCommand("pnpm test:tooling")).toBe(false);
+  });
+
+  it("counts pnpm backlog commands", () => {
+    expect(runsPrdCommand("zsh -c pnpm backlog set B-1 status=triaged")).toBe(true);
+    expect(runsPrdCommand("node /opt/pnpm.cjs backlog ingest")).toBe(true);
+    expect(runsPrdCommand("node /m/scripts/backlog/backlog.mjs note B-1 fictional")).toBe(true);
+    expect(runsPrdCommand("cat plans/backlog.md")).toBe(false);
   });
 
   it("walks the descendants and never reads the session's own arguments", () => {
@@ -319,6 +373,8 @@ describe("the tick", () => {
       "ask.mjs",
       "sessions.mjs",
       "load-gate.mjs",
+      "rotate.mjs",
+      "open-session.mjs",
     ])
       copyFileSync(join(HERE, f), scripts(f));
     writeFileSync(scripts("open-session.sh"), OPEN_SH);
@@ -347,7 +403,7 @@ describe("the tick", () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   beforeEach(() => {
     procs = [];
-    for (const d of [stubs, sessions, asksDir, join(loops, ".context")])
+    for (const d of [stubs, sessions, asksDir, join(loops, ".context"), join(loops, ".briefs")])
       rmSync(d, { recursive: true, force: true });
     for (const f of [".dispatch.json", ".dispatch.log", ".dispatch.lock"])
       rmSync(join(loops, f), { force: true });
@@ -422,6 +478,104 @@ describe("the tick", () => {
     const reports = listAsks(asksDir).filter((a) => a.kind === "report");
     expect(reports).toHaveLength(1);
     expect(reports[0].text).toContain("uncommitted changes");
+  });
+
+  describe("for a backlog session", () => {
+    const backlogSize = () => join(loops, ".context", "backlog.json");
+    const brief = () => join(loops, ".briefs", "backlog.md");
+    const liveBacklog = (script = "while :; do sleep 1; done") => {
+      const child = spawn("bash", ["-c", script], { detached: true, stdio: "ignore" });
+      procs.push(child);
+      mkdirSync(sessions, { recursive: true });
+      writeFileSync(
+        join(sessions, "backlog.json"),
+        JSON.stringify({
+          pid: child.pid,
+          kind: "backlog",
+          managed: true,
+          started: new Date().toISOString(),
+        }),
+      );
+      mkdirSync(dirname(backlogSize()), { recursive: true });
+      writeFileSync(
+        backlogSize(),
+        JSON.stringify({
+          pid: child.pid,
+          size: 200_000,
+          firstOverAt: iso(T0 - 3600),
+          nudgeAt: iso(T0 - 1800),
+          nudgeDeliveredAt: iso(T0 - 900),
+        }),
+      );
+      return /** @type {number} */ (child.pid);
+    };
+    const writeBrief = (secs, text = "Fictional brief.\n") => {
+      mkdirSync(dirname(brief()), { recursive: true });
+      writeFileSync(brief(), text);
+      utimesSync(brief(), secs, secs);
+    };
+    const rotationLines = () => callsOf("open").filter((l) => l.includes("rotate-into.sh"));
+    const askAndAnswer = () => {
+      tick();
+      const [ask] = listAsks(asksDir);
+      expect(ask).toMatchObject({ topic: "backlog", session: CONTEXT_SESSION, defaults: true });
+      answer(ask.id, CONTEXT_OPTIONS[0]);
+    };
+
+    it("rotates with a brief written after the delivery", () => {
+      const pid = liveBacklog();
+      askAndAnswer();
+      writeBrief(T0 - 60);
+      tick();
+      expect(callsOf("rotate")).toEqual([]);
+      expect(rotationLines()).toHaveLength(1);
+      expect(rotationLines()[0]).toContain(
+        `rotate-into.sh backlog ${pid} --reason context --brief ${brief()} --title backlog --background`,
+      );
+    });
+
+    it("rotates without a brief when the only one is older, and says so", () => {
+      const pid = liveBacklog();
+      askAndAnswer();
+      writeBrief(T0 - 3000);
+      tick();
+      expect(rotationLines()[0]).toContain(`rotate-into.sh backlog ${pid} --reason context --no-brief`);
+    });
+
+    it("treats an empty brief as none", () => {
+      liveBacklog();
+      askAndAnswer();
+      writeBrief(T0 - 60, "  \n");
+      tick();
+      expect(rotationLines()[0]).toContain("--no-brief");
+    });
+
+    it("holds the rotation while a pnpm backlog command runs under it", () => {
+      liveBacklog(`bash -c "while :; do sleep 1; done # pnpm backlog ingest"; true`);
+      askAndAnswer();
+      for (let i = 0; i < 50; i++) if (tick(["--dry-run"]).includes("waits to rotate")) break;
+      expect(tick()).toContain("waits to rotate");
+      expect(rotationLines()).toEqual([]);
+    });
+
+    it("files one report when the rotation can't open", () => {
+      liveBacklog();
+      askAndAnswer();
+      writeFileSync(
+        scripts("open-session.sh"),
+        `#!/usr/bin/env bash\n[[ "$*" != *rotate-into* ]] || { echo "no tab" >&2; exit 1; }\n`,
+      );
+      try {
+        tick();
+        tick();
+      } finally {
+        writeFileSync(scripts("open-session.sh"), OPEN_SH);
+      }
+      const reports = listAsks(asksDir).filter((a) => a.kind === "report");
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({ topic: "backlog" });
+      expect(reports[0].text).toContain("no tab");
+    });
   });
 
   it("writes nothing on a dry run", () => {

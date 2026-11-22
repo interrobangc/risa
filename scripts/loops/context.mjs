@@ -1,7 +1,7 @@
 // The context watch: how large a recorded session has grown, and the reminder
 // to hand off past the limit.
 //
-// session.sh gives `prd` sessions context-settings.json (claude --settings), a
+// session.sh gives `prd` and `backlog` sessions context-settings.json (claude --settings), a
 // PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
 // it, it adds a reminder to the agent's context. It never blocks a tool call
@@ -9,7 +9,8 @@
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
-// session's.
+// session's. A backlog session's subagents get no reminder: they have no
+// orchestrator to hand off to.
 //
 // Records, in .context beside the sessions folder (the main checkout's .loops):
 //   <name>.json            pid, size, readAt, firstOverAt, remindedAt, nudgeAt
@@ -123,6 +124,14 @@ export function orchestratorNudge(/** @type {number} */ size, /** @type {number}
   return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't rotated. Rotate now: commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). If the step in hand can't resume from _Status_, run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
 }
 
+export function backlogReminder(/** @type {number} */ size, /** @type {number} */ limit) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. At the next pause in the talk with the user, never in the middle of a question, hand off with a brief, without asking which mode: run \`pnpm prd rotate --self --brief-path\` for where to write it, write what's in hand, what was decided and what's next (at most about 40 lines), then run \`pnpm prd rotate --self --brief <that file>\`. Only a step that can't be picked up from a brief may finish first: run \`pnpm prd context --keep "<why>"\`.`;
+}
+
+export function backlogNudge(/** @type {number} */ size, /** @type {number} */ limit) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, never in the middle of a question, write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`. If a step can't be picked up from a brief, run \`pnpm prd context --keep "<why>"\`. Otherwise the user is asked next, and the session is rotated if they don't answer: a brief written from now on goes with it, and without one nothing is handed over.`;
+}
+
 export function loopReminder(/** @type {number} */ size, /** @type {number} */ limit) {
   return `Context watch: this agent is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. Commit your work, write your hand-off so far as your final message and tell your orchestrator to continue this slice with a fresh \`--continue\` agent.`;
 }
@@ -130,10 +139,11 @@ export function loopReminder(/** @type {number} */ size, /** @type {number} */ l
 /**
  * What the hook does with a new size. Pure.
  * @param {any} current the record, or null
- * @param {{ pid: number, size: number, now: number, limit: number, remindMs: number, loop?: boolean }} facts
+ * @param {{ pid: number, size: number, now: number, limit: number, remindMs: number, loop?: boolean,
+ *   backlog?: boolean }} facts
  * @returns {{ record: any, message: string | null }}
  */
-export function hookDecision(current, { pid, size, now, limit, remindMs, loop = false }) {
+export function hookDecision(current, { pid, size, now, limit, remindMs, loop = false, backlog = false }) {
   const at = new Date(now).toISOString();
   const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
   if (record.keep && !(Date.parse(record.keep.until) > now)) delete record.keep;
@@ -146,11 +156,12 @@ export function hookDecision(current, { pid, size, now, limit, remindMs, loop = 
   if (!loop && record.nudgeAt && !record.nudgeDeliveredAt) {
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
-    return { record, message: orchestratorNudge(size, limit) };
+    return { record, message: (backlog ? backlogNudge : orchestratorNudge)(size, limit) };
   }
   if (record.remindedAt && now - Date.parse(record.remindedAt) < remindMs) return { record, message: null };
   record.remindedAt = at;
-  return { record, message: (loop ? loopReminder : orchestratorReminder)(size, limit) };
+  const remind = loop ? loopReminder : backlog ? backlogReminder : orchestratorReminder;
+  return { record, message: remind(size, limit) };
 }
 
 const readJson = (/** @type {string} */ file) => {
@@ -211,10 +222,14 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   const name = env.CARETOOK_SESSION_NAME;
   const pid = Number(env.CARETOOK_SESSION_PID);
   const sessions = env.CARETOOK_SESSIONS_DIR;
-  if (!name || !pid || !sessions || readRecord(sessions, name)?.pid !== pid) return "";
+  if (!name || !pid || !sessions) return "";
+  const session = readRecord(sessions, name);
+  if (session?.pid !== pid) return "";
   const input = JSON.parse(raw);
   const dir = contextDirOf(sessions);
   const loop = Boolean(input.agent_id);
+  const backlog = session.kind === "backlog";
+  if (loop && backlog) return "";
   const transcript = loop ? agentTranscript(input) : input.transcript_path;
   if (typeof transcript !== "string") return "";
   const size = readSize(transcript, { agent: loop });
@@ -227,7 +242,15 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
     // A new session under this name: its old agents' records go too.
     if (!loop && current && current.pid !== pid)
       rmSync(join(dir, ".agents", name), { recursive: true, force: true });
-    const d = hookDecision(current, { pid, size, now, limit: limitOf(env), remindMs: remindMsOf(env), loop });
+    const d = hookDecision(current, {
+      pid,
+      size,
+      now,
+      limit: limitOf(env),
+      remindMs: remindMsOf(env),
+      loop,
+      backlog,
+    });
     message = d.message;
     return d.record;
   });

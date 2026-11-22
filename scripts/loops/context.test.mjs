@@ -132,6 +132,21 @@ describe("hookDecision", () => {
     expect(loop.message).toContain("this agent");
     expect(loop.message).toContain("fresh `--continue` agent");
   });
+
+  it("gives a backlog session the backlog words, for the reminder and the nudge", () => {
+    const first = hookDecision(null, { ...facts, size: 170_000, backlog: true });
+    expect(first.message).toContain("170k");
+    expect(first.message).toContain("next pause in the talk");
+    expect(first.message).toContain("never in the middle of a question");
+    expect(first.message).toContain("pnpm prd rotate --self --brief-path");
+    expect(first.message).toContain("pnpm prd rotate --self --brief <that file>");
+    expect(first.message).not.toContain("--mid-wave");
+    const waiting = { ...first.record, nudgeAt: iso(NOW) };
+    const nudge = hookDecision(waiting, { ...facts, size: 180_000, backlog: true });
+    expect(nudge.message).toContain("second notice");
+    expect(nudge.message).toContain("pnpm prd rotate --self --brief <that file>");
+    expect(nudge.message).not.toContain("--mid-wave");
+  });
 });
 
 let root, sessions, context, transcript;
@@ -231,6 +246,24 @@ describe("the hook as a command", () => {
     // Its transcript missing: nothing, and never the session's transcript instead.
     expect(hook({ transcript_path: transcript, agent_id: "a2" }).stdout).toBe("");
     expect(existsSync(join(context, ".agents", "prd-t", "a2.json"))).toBe(false);
+  });
+
+  it("gives a backlog session the backlog words, and its subagents nothing", () => {
+    writeFileSync(
+      join(sessions, "backlog.json"),
+      JSON.stringify({ pid: PID, kind: "backlog", started: new Date().toISOString() }),
+    );
+    const asBacklog = { CARETOOK_SESSION_NAME: "backlog" };
+    writeFileSync(transcript, assistant(1, 170_000));
+    mkdirSync(join(root, "s1", "subagents"), { recursive: true });
+    writeFileSync(
+      join(root, "s1", "subagents", "agent-a1.jsonl"),
+      assistant(1, 165_000, 0, { isSidechain: true }),
+    );
+    expect(hook({ transcript_path: transcript, agent_id: "a1" }, asBacklog).stdout).toBe("");
+    expect(existsSync(join(context, ".agents", "backlog"))).toBe(false);
+    const r = hook({ transcript_path: transcript }, asBacklog);
+    expect(contextOf(r.stdout).additionalContext).toContain("pnpm prd rotate --self --brief-path");
   });
 
   it("exits 0 with no output on a missing transcript, bad input or an unwritable folder", () => {

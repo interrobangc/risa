@@ -437,7 +437,14 @@ describe("pnpm prd rotate --self", () => {
     expect(atStart.pid).not.toBe(old.pid);
     expect(atStart).not.toHaveProperty("rotating");
     const args = newArgs();
-    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
+    expect(args.slice(0, 6)).toEqual([
+      "--settings",
+      scripts("context-settings.json"),
+      "--model",
+      "sonnet",
+      "--remote-control",
+      "backlog",
+    ]);
     const prompt = promptOf(args);
     expect(prompt.startsWith("You are the new backlog/inbox planning agent.")).toBe(true);
     expect(prompt).not.toContain("Brief from the session before");
@@ -455,7 +462,7 @@ describe("pnpm prd rotate --self", () => {
     await s.done;
     expect(stubPid()).not.toBe(pid);
     const args = newArgs();
-    expect(args.slice(0, 2)).toEqual(["--remote-control", "backlog - tax"]);
+    expect(args.slice(2, 4)).toEqual(["--remote-control", "backlog - tax"]);
   });
 
   it("leads the new prompt with the brief and deletes the file", async () => {
@@ -498,6 +505,27 @@ describe("pnpm prd rotate --self", () => {
     } finally {
       rmSync(join(main, "rel-brief.md"), { force: true });
     }
+  });
+
+  it("says at the top of the new prompt that no brief came with --no-brief", async () => {
+    const old = await selfSession("backlog");
+    const line = `cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid} --reason context --no-brief`;
+    expect(runInto(line).status).toBe(0);
+    await old.s.done;
+    const prompt = promptOf(newArgs());
+    expect(prompt.startsWith("## No brief from the session before")).toBe(true);
+    expect(prompt).toContain("nothing was handed over");
+    expect(prompt).not.toContain("Brief from the session before\n\nThe last session wrote");
+  });
+
+  it("refuses --brief with --no-brief before anything ends", async () => {
+    const old = await selfSession("backlog");
+    const line = `cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid} --brief /x --no-brief`;
+    const r = runInto(line);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr + r.stdout).toContain("--brief or --no-brief, not both");
+    expect(() => process.kill(old.pid, 0)).not.toThrow();
+    await finish(old);
   });
 
   it("deletes a stale brief when a session of that name starts, and doesn't use it", async () => {

@@ -80,11 +80,11 @@ done
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# The context watch (context.mjs): orchestrators get its hook through an extra
+# The context watch (context.mjs): orchestrators and backlog sessions get its hook through an extra
 # settings file, so the user's own sessions never run it. Any other kind clears
 # what it could inherit from a session that started it.
 unset CARETOOK_SESSION_NAME CARETOOK_SESSION_PID CARETOOK_CONTEXT_HOOK
-if [[ $kind == prd ]]; then
+if [[ $kind == prd || $kind == backlog ]]; then
   export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
   set -- --settings "$bin/context-settings.json" "$@"
 fi

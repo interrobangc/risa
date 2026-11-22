@@ -31,9 +31,9 @@
 // The session record (managed, auto) is written before a new session's tab
 // opens, so a tab that never starts is reopened like a dead session.
 //
-// Each tick also follows up on managed orchestrators that stay over the context
-// limit (dispatch-context.mjs): a nudge, a defaulting question, the mid-wave
-// rotation. CARETOOK_CONTEXT_NUDGE_MIN (15); CARETOOK_CONTEXT_WATCH=off stops it.
+// Each tick also follows up on managed orchestrators and backlog sessions that
+// stay over the context limit (dispatch-context.mjs): a nudge, a defaulting
+// question, the rotation. CARETOOK_CONTEXT_NUDGE_MIN (15); CARETOOK_CONTEXT_WATCH=off stops it.
 //
 // Every TIDY_EVERY_MS (six hours), on a tick that does nothing else (and isn't
 // paused), it runs `pnpm prd tidy --yes`. A usage limit isn't detected: the
@@ -70,6 +70,7 @@ import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
 import { contextDirOf, limitOf, sizeRecord, updateRecord } from "./context.mjs";
 import { CONTEXT_OPTIONS, CONTEXT_SESSION, commandUnder, contextDecision } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
+import { briefProblem } from "./rotate.mjs";
 import { clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
@@ -352,12 +353,22 @@ function contextStep(
     }
     for (const s of sessions) if (s.live && (!table || commandUnder(s.pid, table))) running.add(s.name);
   }
+  // A backlog session's brief, when it could be used: a bad one is no brief, never a failed rotation.
+  const briefFile = (/** @type {string} */ name) => join(dirname(p.sessions), ".briefs", `${name}.md`);
+  /** @type {Record<string, number>} */
+  const briefs = {};
+  for (const s of sessions) {
+    if (!s.live || s.kind !== "backlog" || !entries[s.name]?.askId) continue;
+    const file = briefFile(s.name);
+    if (!briefProblem(file)) briefs[s.name] = statSync(file).mtimeMs;
+  }
   const actions = contextDecision({
     sessions,
     sizes,
     entries,
     asks,
     running,
+    briefs,
     paused: g.facts.paused,
     limit,
     waitMs,
@@ -382,7 +393,7 @@ function contextStep(
   let acted = false;
   for (const a of actions) {
     if (a.type === "hold") {
-      out(`context: ${a.session} waits to rotate: a pnpm prd command is running under it`);
+      out(`context: ${a.session} waits to rotate: a pnpm prd or pnpm backlog command is running under it`);
       continue;
     }
     if (dryRun) {
@@ -443,10 +454,27 @@ function contextStep(
         { cwd: p.main },
       );
       if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${lastLine(helper)}`);
-    } else if (a.type === "rotate") {
-      const r = run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
-        cwd: p.main,
-      });
+    } else if (a.type === "rotate" || a.type === "rotate-backlog") {
+      // A backlog session: `rotate --self` finds its caller by ancestry, so the tick opens its line.
+      const r =
+        a.type === "rotate"
+          ? run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
+              cwd: p.main,
+            })
+          : run(
+              "bash",
+              [
+                join(HERE, "open-session.sh"),
+                "--command",
+                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context ${
+                  a.brief ? `--brief ${sh(briefFile(a.session))}` : "--no-brief"
+                }`,
+                "--title",
+                a.session,
+                "--background",
+              ],
+              { cwd: p.main },
+            );
       const reported = entries[a.session]?.reported === true;
       setEntry(a.session, { triedAt: now, ...(r.ok ? {} : { reported: true }) });
       if (r.ok) out(`context: ${a.session} rotating`);

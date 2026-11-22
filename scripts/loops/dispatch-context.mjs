@@ -1,15 +1,18 @@
 // The dispatcher's context follow-up: what it does about a managed orchestrator
-// that stays over the context limit. Pure: the tick (dispatch.mjs) gathers the
+// or backlog session that stays over the context limit. Pure: the tick (dispatch.mjs) gathers the
 // size records, session records, asks and running commands, and acts.
 //
-// For a live managed orchestrator over the limit with no keep:
+// For a live managed orchestrator or backlog session over the limit with no keep:
 //   1. the wait (CARETOOK_CONTEXT_NUDGE_MIN, 15) after `firstOverAt`: a nudge,
 //      left in the size record for the hook to deliver at the next tool call;
 //   2. the same wait after its delivery: one defaulting question. A nudge never
 //      delivered (the session is inside one long command) never gets this far;
-//   3. on "rotate it now", the mid-wave rotation at the first tick with no
-//      `pnpm prd` command under the session. `ask --wait` doesn't count: it can
-//      wait for days, and the fresh session finds the answer in the asks queue.
+//   3. on "rotate it now", the rotation at the first tick with no `pnpm prd` or
+//      `pnpm backlog` command under the session (a backlog write commits in the
+//      main checkout). `ask --wait` doesn't count: it can wait for days, and the
+//      fresh session finds the answer in the asks queue. An orchestrator rotates
+//      mid-wave; a backlog session into a fresh one, with its brief only when it
+//      was written after the nudge's delivery.
 //      A refusal is reported once and tried again only after the wait;
 //   4. on "leave it", an unclear answer or a dismissal: nothing more until the
 //      session ends, even if it dips under the limit and crosses it again.
@@ -36,7 +39,8 @@ export const CONTEXT_OPTIONS = ["rotate it now", "leave it"];
  *   | { type: "ask", session: string, pid: number, topic: string, text: string }
  *   | { type: "answered", session: string, pid: number, answer: "rotate" | "leave", askId: string }
  *   | { type: "hold", session: string }
- *   | { type: "rotate", session: string, pid: number, topic: string }} ContextAction
+ *   | { type: "rotate", session: string, pid: number, topic: string }
+ *   | { type: "rotate-backlog", session: string, pid: number, topic: string, brief: boolean }} ContextAction
  */
 
 /** What a context question's answer means; anything unclear leaves the session alone. */
@@ -51,9 +55,9 @@ export const contextQuestion = (/** @type {string} */ session, /** @type {number
   `${session} is at ${kilo(size)} context and hasn't rotated`;
 
 const PRD_COMMAND =
-  /(?:\bpnpm(?:\.c?js)?\s+(?:run\s+)?prd|scripts\/loops\/prd\.sh)\b((?:\s+[^\s;&|]+){0,2})/g;
+  /(?:\bpnpm(?:\.c?js)?\s+(?:run\s+)?(?:prd|backlog)|scripts\/loops\/prd\.sh|scripts\/backlog\/backlog\.mjs)\b((?:\s+[^\s;&|]+){0,2})/g;
 
-/** Whether a command line runs a `pnpm prd` command that a rotation must not cut. */
+/** Whether a command line runs a `pnpm prd` or `pnpm backlog` command that a rotation must not cut. */
 export function runsPrdCommand(/** @type {string} */ args) {
   return [...(args ?? "").matchAll(PRD_COMMAND)].some((m) => !/^\s+ask\s+--wait\b/.test(m[1]));
 }
@@ -82,7 +86,8 @@ export function commandUnder(pid, table) {
  * This tick's context actions, in the order to apply them.
  * @param {{ sessions: ContextSession[], sizes?: Record<string, any>,
  *   entries?: Record<string, ContextEntry>, asks?: Record<string, any>, running?: Set<string>,
- *   paused?: boolean, limit: number, waitMs: number, now: number }} facts
+ *   briefs?: Record<string, number>, paused?: boolean, limit: number, waitMs: number,
+ *   now: number }} facts `briefs`: a session's usable brief file, by when it was written (ms)
  * @returns {ContextAction[]}
  */
 export function contextDecision({
@@ -91,6 +96,7 @@ export function contextDecision({
   entries = {},
   asks = {},
   running = new Set(),
+  briefs = {},
   paused = false,
   limit,
   waitMs,
@@ -104,7 +110,9 @@ export function contextDecision({
     return ask && awaitsAnswer(ask) ? /** @type {string} */ (e.askId) : null;
   };
   const watched = new Map(
-    sessions.filter((s) => s.live && s.managed && s.kind === "prd" && s.topic).map((s) => [s.name, s]),
+    sessions
+      .filter((s) => s.live && s.managed && ((s.kind === "prd" && s.topic) || s.kind === "backlog"))
+      .map((s) => [s.name, s]),
   );
   for (const [session, e] of Object.entries(entries)) {
     const s = watched.get(session);
@@ -114,7 +122,8 @@ export function contextDecision({
   for (const s of watched.values()) {
     const session = s.name;
     const pid = s.pid;
-    const topic = /** @type {string} */ (s.topic);
+    // A backlog session has no topic: its questions and reports go under its name.
+    const topic = s.kind === "backlog" ? session : /** @type {string} */ (s.topic);
     const e = entries[session]?.pid === pid ? entries[session] : null;
     const rec = sizes[session]?.pid === pid ? sizes[session] : null;
     if (!(typeof rec?.size === "number" && rec.size > limit)) {
@@ -135,9 +144,12 @@ export function contextDecision({
 
     if (answer === "rotate") {
       if (e?.triedAt && now - e.triedAt < waitMs) continue;
-      actions.push(
-        running.has(session) ? { type: "hold", session } : { type: "rotate", session, pid, topic },
-      );
+      if (running.has(session)) actions.push({ type: "hold", session });
+      else if (s.kind === "backlog") {
+        const delivered = Date.parse(rec.nudgeDeliveredAt ?? "");
+        const brief = briefs[session] !== undefined && briefs[session] > delivered;
+        actions.push({ type: "rotate-backlog", session, pid, topic, brief });
+      } else actions.push({ type: "rotate", session, pid, topic });
       continue;
     }
     if (rec.nudgeDeliveredAt) {

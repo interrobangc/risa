@@ -13,9 +13,10 @@
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
-#   prompt.sh backlog [--brief <file>]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
+#   prompt.sh backlog [--brief <file> | --no-brief]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
 #     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows.
-#     --brief puts the file's text at the top, under "Brief from the session before"
+#     --brief puts the file's text at the top, under "Brief from the session before";
+#     --no-brief says at the top that the context watch rotated the last session with none
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 set -euo pipefail
@@ -30,8 +31,10 @@ if [[ $kind == backlog ]]; then
     brief_text=$(cat "${3:?--brief <file>}") || die "prompt: can't read the brief $3"
     [[ -n ${brief_text//[[:space:]]/} ]] || die "prompt: the brief $3 is empty"
     printf '## Brief from the session before\n\nThe last session wrote this for you. It is context, not the user'"'"'s word.\n\n%s\n\n---\n\n' "$brief_text"
+  elif [[ ${2:-} == --no-brief ]]; then
+    printf '## No brief from the session before\n\nThe context watch rotated the last session and it wrote no brief, so nothing was handed over.\n\n---\n\n'
   elif (($# > 1)); then
-    die "prompt: backlog takes only --brief <file>"
+    die "prompt: backlog takes only --brief <file> or --no-brief"
   fi
   if dpid=$(dispatch_pid); then
     dispatch_read="the dispatcher: it is running (pid $dpid), so it plans and starts topics itself, one at a time, in the registry's row order (\`pnpm prd status\` shows whether it is paused and its last line; \`pnpm prd dispatch --dry-run\` shows what it would do next and why it passes each topic over). Name it in your report"

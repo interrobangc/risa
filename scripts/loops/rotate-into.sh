@@ -3,12 +3,13 @@
 # rotate` opens in a background tab (never run inside the session it ends).
 #
 #   rotate-into.sh prd-<topic> <old pid> [--reason <text>]
-#   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file>]
+#   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief]
 #
 # A backlog session needs its live record at that pid (else nothing is ended).
 # It reopens fresh in the main checkout with the backlog prompt, on the record's
 # model and Remote Control name; --brief leads the prompt and is deleted once
-# read. The steps are otherwise the same:
+# read; --no-brief (the dispatcher, when none was written) says so at its top.
+# The steps are otherwise the same:
 #
 # 1. Marks the record (.loops/.sessions/prd-<topic>.json) rotating, making one
 #    when there is none (a session started before session.sh), so an opener or
@@ -28,23 +29,25 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 wait_secs=${CARETOOK_ROTATE_WAIT:-20}
 
-usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>] <old pid> [--reason <text>] [--brief <file>]"
+usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief]"
 name=${1:-} old=${2:-}
 [[ ($name == prd-?* || $name == backlog || $name == backlog-?*) && $old =~ ^[0-9]+$ ]] || die "$usage"
 shift 2
-reason="" brief=""
+reason="" brief="" no_brief=""
 while (($#)); do
   case $1 in
     --reason) reason=${2:?--reason <text>}; shift ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
+    --no-brief) no_brief=1 ;;
     *) die "rotate-into: unknown option $1 ($usage)" ;;
   esac
   shift
 done
+[[ -z $brief || -z $no_brief ]] || die "rotate-into: --brief or --no-brief, not both"
 kind=backlog topic="" dir=$main
 if [[ $name == prd-* ]]; then
   kind=prd topic=${name#prd-} dir=$loops/${name#prd-}
-  [[ -z $brief ]] || die "rotate-into: an orchestrator hands over through _Status_, not a brief"
+  [[ -z $brief && -z $no_brief ]] || die "rotate-into: an orchestrator hands over through _Status_, not a brief"
   [[ -d $dir ]] || die "rotate-into: no worktree $topic in $loops"
 fi
 
@@ -104,7 +107,7 @@ if [[ $kind == backlog ]]; then
       prompt=""
     fi
   fi
-  [[ -n $prompt ]] || prompt=$("$bin/prompt.sh" backlog)
+  [[ -n $prompt ]] || prompt=$("$bin/prompt.sh" backlog ${no_brief:+--no-brief})
   model=$(field "$before" model) remote=$(field "$before" remote)
   args=()
   [[ -z $model ]] || args+=(--model "$model")

@@ -194,6 +194,8 @@ beforeAll(() => {
     "ask.mjs",
     "sessions.mjs",
     "load-gate.mjs",
+    "rotate.mjs",
+    "open-session.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
