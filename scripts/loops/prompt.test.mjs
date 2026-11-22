@@ -373,6 +373,17 @@ describe("plan and backlog", () => {
     expect(ok("orchestrator", "T")).not.toContain("hot=<path prefixes>");
   });
 
+  it("backlog has the hand-off paragraph with both modes", () => {
+    const text = ok("backlog");
+    expect(text).toContain('**When the user says "hand off"**');
+    expect(text).toContain("**A short brief** (recommended");
+    expect(text).toContain("at most about 40 lines");
+    expect(text).toContain("**Nothing** (the new session starts blank)");
+    expect(text).toContain("`pnpm prd rotate --self --brief-path`");
+    expect(text).toContain("`pnpm prd rotate --self --brief <that file>`");
+    expect(text).toContain("for nothing, `pnpm prd rotate --self`");
+  });
+
   it("backlog reads the open asks and the PRD registry, and leads with what waits on the user", () => {
     const text = ok("backlog");
     expect(text).toContain("`pnpm prd asks`");

@@ -3,6 +3,12 @@
 # rotate` opens in a background tab (never run inside the session it ends).
 #
 #   rotate-into.sh prd-<topic> <old pid> [--reason <text>]
+#   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file>]
+#
+# A backlog session needs its live record at that pid (else nothing is ended).
+# It reopens fresh in the main checkout with the backlog prompt, on the record's
+# model and Remote Control name; --brief leads the prompt and is deleted once
+# read. The steps are otherwise the same:
 #
 # 1. Marks the record (.loops/.sessions/prd-<topic>.json) rotating, making one
 #    when there is none (a session started before session.sh), so an opener or
@@ -22,21 +28,25 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 wait_secs=${CARETOOK_ROTATE_WAIT:-20}
 
-usage="usage: rotate-into.sh prd-<topic> <old pid> [--reason <text>]"
+usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>] <old pid> [--reason <text>] [--brief <file>]"
 name=${1:-} old=${2:-}
-[[ $name == prd-?* && $old =~ ^[0-9]+$ ]] || die "$usage"
+[[ ($name == prd-?* || $name == backlog || $name == backlog-?*) && $old =~ ^[0-9]+$ ]] || die "$usage"
 shift 2
-reason=""
+reason="" brief=""
 while (($#)); do
   case $1 in
     --reason) reason=${2:?--reason <text>}; shift ;;
+    --brief) brief=${2:?--brief <file>}; shift ;;
     *) die "rotate-into: unknown option $1 ($usage)" ;;
   esac
   shift
 done
-topic=${name#prd-}
-dir=$loops/$topic
-[[ -d $dir ]] || die "rotate-into: no worktree $topic in $loops"
+kind=backlog topic="" dir=$main
+if [[ $name == prd-* ]]; then
+  kind=prd topic=${name#prd-} dir=$loops/${name#prd-}
+  [[ -z $brief ]] || die "rotate-into: an orchestrator hands over through _Status_, not a brief"
+  [[ -d $dir ]] || die "rotate-into: no worktree $topic in $loops"
+fi
 
 sessions() { node "$bin/sessions.mjs" "$@"; }
 field() { node -e 'const r = JSON.parse(process.argv[1] || "{}"); const v = r[process.argv[2]]; process.stdout.write(v === undefined ? "" : String(v))' "$1" "$2"; }
@@ -44,7 +54,14 @@ field() { node -e 'const r = JSON.parse(process.argv[1] || "{}"); const v = r[pr
 before=$(sessions get "$name" 2>/dev/null || true)
 auto=""
 [[ $(field "$before" auto) == true ]] && auto=1
-node "$bin/rotate.mjs" run-through "$dir/plans/$topic-plan.md" && auto=1
+[[ $kind != prd ]] || ! node "$bin/rotate.mjs" run-through "$dir/plans/$topic-plan.md" || auto=1
+if [[ $kind == backlog ]]; then
+  [[ $(field "$before" kind) == backlog ]] || die "rotate-into: $name has no backlog record; nothing was ended"
+  [[ $(sessions live "$name" 2>/dev/null || true) == "$old" ]] || die "rotate-into: pid $old isn't $name's live session; nothing was ended"
+  if [[ -n $brief ]]; then
+    why=$(node "$bin/rotate.mjs" brief-check "$brief") || die "rotate-into: $why; nothing was ended"
+  fi
+fi
 managed=""
 [[ $(field "$before" managed) == true ]] && managed=1
 # Its session.sh will write ended when the old pid exits (only when the record is its).
@@ -52,7 +69,8 @@ wrapped=""
 [[ -n $before && $(field "$before" pid) == "$old" && -z $(field "$before" ended) ]] && wrapped=1
 
 if [[ -n $before ]]; then sessions set "$name" rotating=true; else sessions set "$name" kind=prd topic="$topic" rotating=true; fi
-echo "Rotating $name${reason:+ ($reason)}: ending pid $old, then a fresh session with the resume prompt${auto:+ (run-through)}."
+if [[ $kind == prd ]]; then what="the resume prompt"; else what="the backlog prompt${brief:+ and the brief}"; fi
+echo "Rotating $name${reason:+ ($reason)}: ending pid $old, then a fresh session with $what${auto:+ (run-through)}."
 
 # Gone, or a zombie waiting for its parent.
 alive() { local s; s=$(ps -o stat= -p "$1" 2>/dev/null) || return 1; [[ -n $s && $s != Z* ]]; }
@@ -65,7 +83,7 @@ if alive "$old"; then
   kill -KILL "$old" 2>/dev/null || true
   echo "pid $old ignored TERM for ${wait_secs}s: killed it."
   for ((i = 0; i < 50; i++)); do alive "$old" || break; sleep 0.2; done
-  alive "$old" && die "rotate-into: pid $old is still running; $name is left marked rotating (pnpm prd open $topic starts it fresh)"
+  alive "$old" && die "rotate-into: pid $old is still running; $name is left marked rotating (pnpm prd open ${topic:-$name} starts it fresh)"
 fi
 if [[ -n $wrapped ]]; then
   for ((i = 0; i < 50; i++)); do
@@ -75,5 +93,23 @@ if [[ -n $wrapped ]]; then
 fi
 
 cd "$dir"
+if [[ $kind == backlog ]]; then
+  # The old session is gone, so a brief that went bad now costs the brief, never the session.
+  prompt=""
+  if [[ -n $brief ]]; then
+    if prompt=$("$bin/prompt.sh" backlog --brief "$brief"); then
+      rm -f "$brief"
+    else
+      echo "rotate-into: couldn't read the brief $brief: starting without it" >&2
+      prompt=""
+    fi
+  fi
+  [[ -n $prompt ]] || prompt=$("$bin/prompt.sh" backlog)
+  model=$(field "$before" model) remote=$(field "$before" remote)
+  args=()
+  [[ -z $model ]] || args+=(--model "$model")
+  args+=(--remote-control "${remote:-$name}" "$prompt")
+  exec "$bin/session.sh" "$name" --kind backlog ${managed:+--managed} -- "${args[@]}"
+fi
 args=(--remote-control "$name" "$("$bin/prompt.sh" orchestrator "$topic" --resume ${auto:+--auto})")
 exec "$bin/session.sh" "$name" ${auto:+--auto} ${managed:+--managed} -- "${args[@]}"

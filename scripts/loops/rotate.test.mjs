@@ -98,6 +98,11 @@ case \${STUB_MODE:-exit} in
     touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
   stubborn) trap '' TERM; touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
   rotate) bash "$PRD_SH" rotate > "$STUB_STATE/rotate.out" 2>&1; echo "$?" > "$STUB_STATE/rotate.code" ;;
+  self)
+    trap 'cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-term" 2>/dev/null; exit 143' TERM
+    bash "$PRD_SH" rotate --self \${STUB_ARGS:-} > "$STUB_STATE/rotate.out" 2>&1; echo "$?" > "$STUB_STATE/rotate.code"
+    [[ -n \${STUB_STAY:-} ]] || exit 0
+    touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
 esac
 `;
 
@@ -385,6 +390,209 @@ describe("rotate-into.sh", () => {
     expect(run("rotate-into.sh", ["plan-w", "123"]).stderr).toMatch(/usage: rotate-into\.sh prd-<topic>/);
     expect(run("rotate-into.sh", ["prd-w"]).status).toBe(1);
     expect(run("rotate-into.sh", ["prd-nope", "123"]).stderr).toMatch(/no worktree nope/);
+  });
+});
+
+describe("pnpm prd rotate --self", () => {
+  const briefs = () => join(loops, ".briefs");
+  const briefFile = (name = "backlog") => join(briefs(), `${name}.md`);
+  /** A recorded session that runs `rotate --self` from inside itself, then stays up. */
+  const selfSession = async (name, { args = "", cwd = main, claude = ["--model", "sonnet"] } = {}) => {
+    const s = start(
+      "bash",
+      [scripts("session.sh"), name, "--", ...claude, "--remote-control", name, "x"],
+      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args },
+      cwd,
+    );
+    await until(() => existsSync(join(state, "ready")));
+    return { s, pid: stubPid(), out: stateFile("rotate.out"), code: stateFile("rotate.code").trim() };
+  };
+  const finish = async ({ s, pid }) => {
+    process.kill(pid, "SIGTERM");
+    await s.done;
+  };
+  const runInto = (line, name = "backlog") =>
+    spawnSync("bash", ["-c", line], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...env, STUB_MODE: "exit", STUB_NAME: name },
+    });
+  /** The new session's args: flags first, the prompt as the rest. */
+  const newArgs = () => stateFile("args").split("\n");
+  const promptOf = (args) => args.slice(args.indexOf("--remote-control") + 2).join("\n");
+
+  beforeEach(() => rmSync(briefs(), { recursive: true, force: true }));
+
+  it("ends a backlog session and opens one of the same name, model and Remote Control, with no brief", async () => {
+    const old = await selfSession("backlog");
+    expect(old.code).toBe("0");
+    expect(old.out).toContain(`Rotating backlog: pid ${old.pid} (the calling session).`);
+    const line = printedLine(old.out);
+    expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid}`);
+    expect(runInto(line).status).toBe(0);
+    expect((await old.s.done).code).toBe(143);
+    expect(JSON.parse(stateFile("record-at-term"))).toMatchObject({ pid: old.pid, rotating: true });
+    const atStart = JSON.parse(stateFile("record-at-start"));
+    expect(atStart).toMatchObject({ kind: "backlog", model: "sonnet", remote: "backlog" });
+    expect(atStart.pid).not.toBe(old.pid);
+    expect(atStart).not.toHaveProperty("rotating");
+    const args = newArgs();
+    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
+    const prompt = promptOf(args);
+    expect(prompt.startsWith("You are the new backlog/inbox planning agent.")).toBe(true);
+    expect(prompt).not.toContain("Brief from the session before");
+  });
+
+  it("keeps a Remote Control name that differs from the record's", async () => {
+    const s = start(
+      "bash",
+      [scripts("session.sh"), "backlog-tax", "--", "--remote-control", "backlog - tax", "x"],
+      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: "backlog-tax" },
+    );
+    await until(() => existsSync(join(state, "ready")));
+    const pid = stubPid();
+    expect(runInto(printedLine(stateFile("rotate.out")), "backlog-tax").status).toBe(0);
+    await s.done;
+    expect(stubPid()).not.toBe(pid);
+    const args = newArgs();
+    expect(args.slice(0, 2)).toEqual(["--remote-control", "backlog - tax"]);
+  });
+
+  it("leads the new prompt with the brief and deletes the file", async () => {
+    const text = "Fictional hand-over: `$HOME` stays as typed.\nNext: sort the inbox.";
+    const file = join(root, "my brief.md");
+    writeFileSync(file, `${text}\n`);
+    const s = start(
+      "bash",
+      [scripts("session.sh"), "backlog", "--", "--model", "sonnet", "--remote-control", "backlog", "x"],
+      { STUB_MODE: "wait", STUB_NAME: "backlog" },
+    );
+    await until(() => existsSync(join(state, "ready")));
+    const pid = stubPid();
+    const line = `cd ${main} && ${scripts("rotate-into.sh")} backlog ${pid} --brief '${file}'`;
+    expect(runInto(line).status).toBe(0);
+    await s.done;
+    const prompt = promptOf(newArgs());
+    expect(prompt.startsWith("## Brief from the session before")).toBe(true);
+    expect(prompt).toContain(text);
+    expect(prompt.indexOf(text)).toBeLessThan(
+      prompt.indexOf("You are the new backlog/inbox planning agent."),
+    );
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it("passes --brief on as an absolute path and prints where to write one", async () => {
+    const pathRun = await selfSession("backlog", { args: "--brief-path" });
+    expect(pathRun.code).toBe("0");
+    expect(pathRun.out.trim()).toBe(briefFile());
+    expect(existsSync(briefs())).toBe(true);
+    await finish(pathRun);
+
+    rmSync(state, { recursive: true, force: true });
+    writeFileSync(join(main, "rel-brief.md"), "Fictional notes.\n");
+    try {
+      const old = await selfSession("backlog", { args: "--brief rel-brief.md" });
+      expect(old.code).toBe("0");
+      expect(printedLine(old.out)).toContain(`--brief ${join(main, "rel-brief.md")}`);
+      await finish(old);
+    } finally {
+      rmSync(join(main, "rel-brief.md"), { force: true });
+    }
+  });
+
+  it("deletes a stale brief when a session of that name starts, and doesn't use it", async () => {
+    mkdirSync(briefs(), { recursive: true });
+    writeFileSync(briefFile(), "Fictional stale brief.\n");
+    const r = run("session.sh", ["backlog", "--", "--remote-control", "backlog", "x"], {
+      STUB_MODE: "exit",
+      STUB_NAME: "backlog",
+    });
+    expect(r.status).toBe(0);
+    expect(existsSync(briefFile())).toBe(false);
+    expect(stateFile("args")).not.toContain("Fictional stale brief.");
+  });
+
+  it.each([
+    ["missing", null, /can't read the brief/],
+    ["empty", " \n", /is empty/],
+    ["too long", "x".repeat(64 * 1024 + 1), /is over 64 KB/],
+  ])("refuses a %s brief before anything ends", async (_what, content, why) => {
+    const file = join(root, "bad-brief.md");
+    rmSync(file, { force: true });
+    if (content !== null) writeFileSync(file, content);
+    const old = await selfSession("backlog", { args: `--brief ${file}` });
+    expect(old.code).toBe("1");
+    expect(old.out).toMatch(why);
+    expect(old.out).toContain("nothing was ended");
+    expect(old.out).not.toContain("iTerm2 isn't here");
+    expect(spawnSync("kill", ["-0", String(old.pid)]).status).toBe(0);
+    expect(record("backlog")).not.toHaveProperty("rotating");
+
+    // The tab refuses it too, if the file went bad after rotate's own check.
+    const r = runInto(`cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid} --brief ${file}`);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("nothing was ended");
+    expect(spawnSync("kill", ["-0", String(old.pid)]).status).toBe(0);
+    expect(record("backlog")).not.toHaveProperty("rotating");
+    await finish(old);
+    rmSync(file, { force: true });
+  });
+
+  it("behaves as plain rotate for an orchestrator, and takes no brief", async () => {
+    const old = await selfSession("prd-w", { cwd: wt, claude: [] });
+    expect(old.code).toBe("0");
+    expect(old.out).toContain(`Rotating prd-w: pid ${old.pid} (from its record).`);
+    expect(printedLine(old.out)).toBe(`cd ${wt} && ${scripts("rotate-into.sh")} prd-w ${old.pid}`);
+    await finish(old);
+
+    rmSync(state, { recursive: true, force: true });
+    const briefed = await selfSession("prd-w", { cwd: wt, claude: [], args: "--brief /nope" });
+    expect(briefed.code).toBe("1");
+    expect(briefed.out).toContain("an orchestrator hands over through _Status_");
+    await finish(briefed);
+  });
+
+  it.each([
+    ["hotfix-x", /hotfix-x is a hotfix session: only backlog sessions and orchestrators/],
+    ["recover", /recover is a recovery session: only backlog sessions and orchestrators/],
+  ])("refuses %s, saying why", async (name, why) => {
+    const old = await selfSession(name);
+    expect(old.code).toBe("1");
+    expect(old.out).toMatch(why);
+    expect(spawnSync("kill", ["-0", String(old.pid)]).status).toBe(0);
+    await finish(old);
+  });
+
+  it("refuses an unrecorded caller, and a shell under no claude", () => {
+    expect(
+      spawnSync(stub, [], { cwd: main, encoding: "utf8", env: { ...env, STUB_MODE: "self" } }).status,
+    ).toBe(0);
+    expect(stateFile("rotate.code").trim()).toBe("1");
+    expect(stateFile("rotate.out")).toMatch(/its claude \(pid \d+\) has no live session record/);
+    const r = run("prd.sh", ["rotate", "--self"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/this shell isn't under a claude process/);
+  });
+
+  it("refuses on a slice branch, whose shell carries its orchestrator's session", async () => {
+    const dir = join(loops, "w-9");
+    git(main, "worktree", "add", "-q", "-b", "slice/w/9", dir, "prd/w");
+    try {
+      const old = await selfSession("prd-w", { cwd: dir, claude: [] });
+      expect(old.code).toBe("1");
+      expect(old.out).toContain("refused on a slice branch");
+      await finish(old);
+    } finally {
+      git(main, "worktree", "remove", "--force", dir);
+      git(main, "branch", "-D", "slice/w/9");
+    }
+  });
+
+  it("refuses the brief flags without --self, and a pid that isn't the live backlog session", async () => {
+    expect(run("prd.sh", ["rotate", "w", "--brief", "x"]).stderr).toContain("go with --self");
+    const r = runInto(`cd ${main} && ${scripts("rotate-into.sh")} backlog 999999`);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("has no backlog record; nothing was ended");
   });
 });
 
