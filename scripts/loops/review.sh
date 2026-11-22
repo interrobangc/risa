@@ -19,11 +19,13 @@
 #   --wait [min]       poll every 60 s (CARETOOK_REVIEW_POLL) until Codex has
 #                      answered on the head (clean, carried or not, or findings), for up to min
 #                      minutes (default 20); a waiting or stale verdict keeps it
-#                      waiting. Run it in the background.
+#                      waiting, and out of credits ends it at once (no review is
+#                      coming). Run it in the background.
 #
 # A topic means prd/<topic>; prd/, hotfix/ and other branches are taken as given.
-# Exit status: 0 clean, 1 findings, 2 waiting or stale, 75 when --wait times out,
-# 3 for anything else (no open PR, gh failing, a bad argument).
+# Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
+# answered with its usage-limit comment), 75 when --wait times out, 3 for
+# anything else (no open PR, gh failing, a bad argument).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -109,4 +111,4 @@ else
   echo "PR #$number $(field url)"
   codex --text <<< "$raw"
 fi
-case $state in clean) exit 0 ;; findings) exit 1 ;; *) exit 2 ;; esac
+case $state in clean) exit 0 ;; findings) exit 1 ;; out-of-credits) exit 4 ;; *) exit 2 ;; esac

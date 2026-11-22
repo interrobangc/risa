@@ -7,6 +7,9 @@
 //             `@codex review` asks again)
 //   findings  Codex reviewed the head and threads of its own are unresolved
 //   clean     Codex reviewed the head and none of its threads is unresolved
+//   out-of-credits  the head isn't reviewed and Codex's latest word on the PR
+//             is its "reached your Codex usage limits" comment: no review is
+//             coming until credits are added (review.sh doesn't wait for one)
 //
 // A clean verdict on an older head carries forward to the head (carried,
 // below; it needs the repository, so only with --repo and --trunk) when all
@@ -58,6 +61,7 @@ export const PR_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
 
 const STATE_LINE = /<!--\s*codex-review-state:v1\s+(\{.*?\})\s*-->/s;
 const BADGE = /!\[P(\d)\s+Badge\]/i;
+const OUT_OF_CREDITS = /reached your Codex usage limits/i;
 
 /** Is this login Codex's (with or without the "[bot]" suffix)? */
 export function isCodex(login) {
@@ -133,10 +137,41 @@ function reviewedCommit(pr, summary) {
   return reviews.at(-1)?.commit.oid ?? null;
 }
 
-/** Is a Codex review running now (the summary says so, or its 👀 is on the PR)? */
+/**
+ * Is a Codex review running now (the summary says so, or its 👀 is on the PR)?
+ * A "failed" review (out of credits, say) isn't running.
+ */
 function running(pr, summary) {
-  if (summary?.status && summary.status !== "completed") return true;
+  if (summary?.status && !["completed", "failed"].includes(summary.status)) return true;
   return nodes(pr.reactions).some((r) => r.content === "EYES" && isCodex(r.user?.login));
+}
+
+/**
+ * When Codex last said it is out of credits, if that is its latest word on the
+ * PR, else null: newer than its other comments, its reviews and its 👀. Its
+ * summary marks the review it couldn't run "failed" in the same moment (on PR
+ * #48, a second before the limit comment), so a failed summary doesn't count.
+ */
+export function outOfCreditsAt(pr) {
+  const codexComments = nodes(pr.comments).filter((c) => isCodex(c.author?.login));
+  const at = (c) => String(c.updatedAt ?? c.createdAt ?? "");
+  const limit = codexComments
+    .filter((c) => OUT_OF_CREDITS.test(c.body ?? ""))
+    .map(at)
+    .toSorted()
+    .at(-1);
+  if (!limit) return null;
+  const counts = (c) => !OUT_OF_CREDITS.test(c.body ?? "") && stateIn(c.body)?.status !== "failed";
+  const other = [
+    ...codexComments.filter(counts).map(at),
+    ...nodes(pr.reviews)
+      .filter((r) => isCodex(r.author?.login))
+      .map((r) => String(r.submittedAt ?? "")),
+    ...nodes(pr.reactions)
+      .filter((r) => r.content === "EYES" && isCodex(r.user?.login))
+      .map((r) => String(r.createdAt ?? "")),
+  ];
+  return other.some((t) => t > limit) ? null : limit;
 }
 
 /** Codex's unresolved threads, as findings. */
@@ -162,8 +197,10 @@ export function openFindings(pr) {
  * { state, findings, headSha, reviewedSha, reviewingSha, summaryAt, number, url }.
  * reviewingSha is the commit a running review is on; summaryAt is when Codex
  * last updated its summary (review.sh --again waits for it to change).
- * findings are listed for "findings" and "stale" (still open from the older
- * review); for "clean" and "waiting" they're empty. While a review runs,
+ * findings are listed for "findings", "stale" and "out-of-credits" (still open
+ * from the older review); for "clean" and "waiting" they're empty. A head
+ * Codex hasn't reviewed is "out-of-credits" instead of waiting or stale when
+ * its usage-limit comment is its latest word (outOfCreditsAt). While a review runs,
  * reviewedSha is the commit of the review before it. This reads the PR's state
  * only: carried (below) adds the rule that needs the repository.
  */
@@ -181,6 +218,10 @@ export function verdict(json) {
     number: pr.number ?? null,
     url: pr.url ?? null,
   };
+  const headReviewed = !isRunning && reviewedSha && reviewedSha === headSha;
+  const limitAt = headReviewed ? null : outOfCreditsAt(pr);
+  if (limitAt)
+    return { state: "out-of-credits", findings: openFindings(pr), outOfCreditsAt: limitAt, ...base };
   if (isRunning || !reviewedSha) return { state: "waiting", findings: [], ...base };
   const findings = openFindings(pr);
   if (reviewedSha !== headSha) return { state: "stale", findings, ...base };
@@ -268,12 +309,14 @@ export function carryRefusal(repo, trunk, reviewedSha, headSha) {
  */
 export function carried(json, { repo, trunk } = {}) {
   const v = verdict(json);
-  if (!repo || !trunk || (v.state !== "stale" && v.state !== "waiting")) return v;
+  if (!repo || !trunk || !["stale", "waiting", "out-of-credits"].includes(v.state)) return v;
   if (!v.reviewedSha || v.reviewedSha === v.headSha) return v;
   if (openFindings(pullRequestOf(json)).length) return v;
   const why = carryRefusal(repo, trunk, v.reviewedSha, v.headSha);
   if (why) return { ...v, notCarried: why };
-  return { ...v, state: "clean", findings: [], carriedFrom: v.reviewedSha };
+  const clean = { ...v, state: "clean", findings: [], carriedFrom: v.reviewedSha };
+  delete clean.outOfCreditsAt;
+  return clean;
 }
 
 /** One line, for reports: "codex: clean on abc1234". */
@@ -285,6 +328,8 @@ export function verdictLine(v) {
         : `codex: clean on ${short(v.headSha)}`;
     case "findings":
       return `codex: ${v.findings.length} open finding${v.findings.length === 1 ? "" : "s"} on ${short(v.headSha)}`;
+    case "out-of-credits":
+      return `codex: out of credits, no review of ${short(v.headSha)} is coming (last reviewed ${short(v.reviewedSha)}); land with --no-review, or add credits and ask again with --again`;
     case "stale":
       return `codex: stale (last reviewed ${short(v.reviewedSha)}, head ${short(v.headSha)}${v.notCarried ? `; not carried: ${v.notCarried}` : ""}): ask again with --again`;
     default:

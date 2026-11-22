@@ -5,14 +5,16 @@
 // (two P2 threads, plus a human comment), declined (one replied to and
 // resolved), outdated (the fix pushed and reviewed clean, but Codex left its
 // fixed thread open), clean (every thread resolved, asked again) and stale (one
-// more push, before Codex started on it). The carry rule runs against a
+// more push, before Codex started on it). out-of-credits is PR #48 (dev into
+// staging): Codex reviewed one head, then answered later pushes with its usage
+// limit comment and marked its summary "failed". The carry rule runs against a
 // throwaway repository, with PR states built by hand in the same shape.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { carried, isCodex, verdict, verdictLine, verdictText } from "./codex-review.mjs";
+import { carried, isCodex, outOfCreditsAt, verdict, verdictLine, verdictText } from "./codex-review.mjs";
 
 const CLI = new URL("./codex-review.mjs", import.meta.url).pathname;
 const path = (name) => new URL(`./codex-review.fixtures/${name}.json`, import.meta.url).pathname;
@@ -95,6 +97,42 @@ describe("codex-review verdict", () => {
     const v = verdict(pr);
     expect(v).toMatchObject({ state: "stale", findings: [], headSha: LAST, reviewedSha: FIXED });
     expect(verdictLine(v)).toBe("codex: stale (last reviewed 2783795, head 70d3d0f): ask again with --again");
+  });
+
+  it("is out of credits when Codex's usage-limit comment is its latest word, keeping old findings", () => {
+    const v = verdict(fixture("out-of-credits"));
+    expect(v).toMatchObject({
+      state: "out-of-credits",
+      headSha: "7a205be1d73d85e099e8a70b3e80b03f1372cde5",
+      reviewedSha: "69e9c6e268a0a3214d48d32ef6f5c9ada803e2ae",
+      reviewingSha: null,
+      outOfCreditsAt: "2026-11-22T05:04:50Z",
+    });
+    expect(v.findings.map((f) => f.priority)).toEqual(["P2", "P2"]);
+    expect(verdictLine(v)).toBe(
+      "codex: out of credits, no review of 7a205be is coming (last reviewed 69e9c6e); land with --no-review, or add credits and ask again with --again",
+    );
+  });
+
+  it("isn't out of credits once Codex is back at work after its limit comment", () => {
+    const pr = fixture("out-of-credits");
+    pr.reactions.nodes.push({
+      content: "EYES",
+      createdAt: "2026-11-22T06:00:00Z",
+      user: { login: "chatgpt-codex-connector[bot]" },
+    });
+    expect(outOfCreditsAt(pr)).toBeNull();
+    expect(verdict(pr).state).toBe("waiting");
+  });
+
+  it("isn't out of credits when Codex reviewed the head", () => {
+    const pr = fixture("clean");
+    pr.comments.nodes.unshift({
+      author: { login: "chatgpt-codex-connector" },
+      body: "You have reached your Codex usage limits for code reviews.",
+      createdAt: "2026-11-21T03:00:00Z",
+    });
+    expect(verdict(pr).state).toBe("clean");
   });
 
   it("accepts the full GraphQL response as well as the pullRequest node", () => {

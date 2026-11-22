@@ -111,7 +111,7 @@ pnpm prd <command>
     review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
                               Codex's verdict on the branch's open PR into dev (clean, findings, waiting,
                               stale) and its findings; --again asks Codex again, --resolve closes a declined
-                              thread, --wait polls until Codex answers on the head (exit 0/1/2, 75 timed out);
+                              thread, --wait polls until Codex answers on the head (exit 0/1/2, 4 out of credits, 75 timed out);
                               a clean verdict carries over a plain dev merge
     pr <topic|hotfix/name> [-m subject]   push dev (fast-forward only) and the branch, then open its PR into
                               dev, or update the open one (title: the landing subject; body: backlog items,
