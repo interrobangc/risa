@@ -370,7 +370,12 @@ export function tick(
 
   const choice = pick(facts);
   const head = formatPick(choice);
-  if (g.gate.busy) head.splice(1, 0, `  (the 5-minute load ${g.gate.load} is over ${g.gate.threshold})`);
+  if (g.gate.busy)
+    head.splice(
+      1,
+      0,
+      `  (the 5-minute load ${Math.round((g.gate.load ?? 0) * 10) / 10} is over ${g.gate.threshold})`,
+    );
   lines.push(...head);
 
   if (dryRun) {
