@@ -197,7 +197,7 @@ describe("pnpm prd check's check lease", SLOW, () => {
     const { out } = cli(["holders"]);
     expect(out).toMatch(/^check leases: 2 of 2 held$/m);
     expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(2);
-    expect(out).toMatch(/^browser leases: 0 of 3 held$/m);
+    expect(out).toMatch(/^browser leases: 0 of 2 held$/m);
 
     expect(await Promise.all(runs.map((r) => r.exit))).toEqual([0, 0, 0, 0, 0]);
     expect(runs.filter((r) => r.err.includes("All 2 check leases are taken; waiting"))).toHaveLength(3);

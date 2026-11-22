@@ -10,7 +10,7 @@
 #   lease.sh holders [kind…]                                who holds what (default: browser, check, and
 #                                                           any other kind in use)
 #
-# Kinds and their limits: browser (CARETOOK_BROWSER_SLOTS, default 3), check
+# Kinds and their limits: browser (CARETOOK_BROWSER_SLOTS, default 2), check
 # (CARETOOK_CHECK_SLOTS, default 2), anything else (CARETOOK_<KIND>_SLOTS,
 # default 1). The wait is --wait S, else CARETOOK_<KIND>_WAIT, else 1200 s
 # (check: 1800 s); giving up exits 75. Waiters poll every CARETOOK_<KIND>_POLL
@@ -106,7 +106,7 @@ lease_held() {
 
 lease_slots() {
   local d=1
-  case $1 in browser) d=3 ;; check) d=2 ;; esac
+  case $1 in browser) d=2 ;; check) d=2 ;; esac
   lease_env "$1" SLOTS "$d"
 }
 lease_wait_max() {
