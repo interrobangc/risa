@@ -170,10 +170,16 @@ describe("backlog prd", () => {
     expect(cli(main, "doctor")).toBe("backlog ok");
   });
 
+  // The After cells are written by hand in one commit: `prd set` is tested above,
+  // and each CLI write is a node start and about 25 git commands, which put
+  // this test past its 20 s timeout under load.
   it("doctor reports the registry's findings and --fix touches none", () => {
-    cli(prd, "prd", "set", "alpha", "after=ghost");
-    cli(prd, "prd", "set", "gamma", "after=delta");
-    cli(prd, "prd", "set", "delta", "after=gamma");
+    const after = { alpha: "`ghost`", gamma: "`delta`", delta: "`gamma`" };
+    const rows = file().replace(/^\| `([a-z-]+)` \|([^|]*)\|[^|]*\|/gm, (row, topic, flags) =>
+      topic in after ? `| \`${topic}\` |${flags}| ${after[topic]} |` : row,
+    );
+    writeFileSync(join(main, "plans/backlog.md"), rows);
+    git(main, "commit", "-q", "-am", "chore(backlog): after cells by hand");
     cli(prd, "add", "bug", "Orphan", "--prd", "nowhere");
     cli(prd, "add", "bug", "Late", "--prd", "alpha");
     const expected = [
