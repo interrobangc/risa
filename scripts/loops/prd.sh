@@ -60,8 +60,9 @@ pnpm prd <command>
                               --wait probes claude every 10 min; recover --dry-run [--json] only shows what it would do
     down                      before a planned restart: record what's up (the dispatcher too), stop the
                               dispatcher, servers, stacks, the test Postgres
-    open <name> [--print]     reopen a PRD's or planner's session in a new iTerm2 tab: claude --continue when the
-                              worktree has a saved conversation, else a fresh one with the resume prompt
+    open <name> [--print]     reopen a recorded session in a new iTerm2 tab: claude --continue when a PRD, planner
+                              or hotfix worktree has a saved conversation, else a fresh one with the resume prompt;
+                              backlog and recovery sessions (main checkout) always open fresh
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
     end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
                               orchestrator or planner, after pnpm prd rm); its tab closes
@@ -224,7 +225,9 @@ case $cmd in
     model_args=(--model "$model")
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
-      cd "$main" && exec claude ${model_args[@]+"${model_args[@]}"} --remote-control backlog "$("$bin/prompt.sh" backlog)"
+      wrapper=$(cd "$bin" && pwd)/session.sh
+      cd "$main" && exec "$wrapper" backlog --kind backlog -- \
+        ${model_args[@]+"${model_args[@]}"} --remote-control backlog "$("$bin/prompt.sh" backlog)"
     fi
     topic=$1; shift; open=0 items=()
     for a in "$@"; do
@@ -257,11 +260,13 @@ case $cmd in
     dir=$loops/hotfix-$name
     if [[ -d $dir ]]; then echo "Worktree hotfix-$name already exists at $dir."; else "$bin/new.sh" hotfix "$name"; fi
     if ((open)); then
-      cd "$dir" && exec claude --model "$model" --remote-control "hotfix-$name" "$("$bin/prompt.sh" hotfix "$name" ${fix:+"$fix"})"
+      wrapper=$(cd "$bin" && pwd)/session.sh
+      cd "$dir" && exec "$wrapper" "hotfix-$name" --kind hotfix --topic "$name" -- \
+        --model "$model" --remote-control "hotfix-$name" "$("$bin/prompt.sh" hotfix "$name" ${fix:+"$fix"})"
     fi
     echo
     echo "Start its session in a new terminal (or rerun with --open; or carry on in the one that asked for it):"
-    echo "  cd $dir && claude --model $(printf %q "$model") --remote-control hotfix-$name \"\$(scripts/loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
+    echo "  cd $dir && scripts/loops/session.sh hotfix-$name -- --model $(printf %q "$model") --remote-control hotfix-$name \"\$(scripts/loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
     ;;
   start)
     topic=${1:?topic}

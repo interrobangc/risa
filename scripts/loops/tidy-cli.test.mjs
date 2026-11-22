@@ -168,6 +168,16 @@ beforeAll(() => {
       ended: "2026-01-01T01:00:00Z",
     }),
   );
+  // An ended backlog session, which never had a worktree.
+  writeFileSync(
+    join(sessions, "backlog.json"),
+    JSON.stringify({
+      pid: 999997,
+      kind: "backlog",
+      started: "2026-01-01T00:00:00Z",
+      ended: "2026-01-01T01:00:00Z",
+    }),
+  );
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -197,7 +207,15 @@ describe("tidy (no --yes)", () => {
 
   it("--json gives the same lists", () => {
     const { safe, ask, kept } = JSON.parse(ok(["--json"]));
-    expect(safe.map((f) => f.kind)).toEqual(["worktree", "record", "lease", "test-db", "volume", "hang-log"]);
+    expect(safe.map((f) => f.kind)).toEqual([
+      "worktree",
+      "record",
+      "record",
+      "lease",
+      "test-db",
+      "volume",
+      "hang-log",
+    ]);
     expect(ask.map((f) => f.target)).toEqual(["slice/t/9"]);
     expect(kept.map((f) => f.target)).toEqual(["t-2"]);
   });
@@ -268,6 +286,7 @@ describe("tidy --yes", () => {
     expect(git(main, "branch", "--list", "slice/t/1")).toBe("");
     expect(existsSync(lease())).toBe(false);
     expect(existsSync(join(sessions, "prd-gone.json"))).toBe(false);
+    expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
 
     // The dirty worktree, the active one and the unmerged branch stay.
     expect(readFileSync(join(loops, "t-2", "work-2.txt"), "utf8")).toMatch(/not committed/);

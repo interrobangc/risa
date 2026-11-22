@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# End an orchestrator's or planner's session. (pnpm prd end)
+# End a recorded session. (pnpm prd end)
 #
 #   end-session.sh [<name>]
 #
-# With a name (prd-<topic>, plan-<topic>): the live session its record names.
+# With a name (prd-<topic>, plan-<topic>, hotfix-<name>, backlog, recover): the live session its record names.
 # With none, the calling shell's own session: the record of the worktree it is
 # in when that is live, else the shell's ancestor claude process (a session
 # started before session.sh, or one whose worktree `pnpm prd rm` has removed).
@@ -31,7 +31,7 @@ else
   if [[ -n $here ]]; then
     case $(git -C "$loops/$here" branch --show-current 2>/dev/null) in
       prd/*) session=prd-$here ;;
-      plan/*) session=$here ;;
+      plan/* | hotfix/*) session=$here ;;
     esac
   fi
   found=$(node "$bin/sessions.mjs" self ${session:+"$session"}) ||

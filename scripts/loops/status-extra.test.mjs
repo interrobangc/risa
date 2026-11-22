@@ -31,15 +31,19 @@ describe("statusParts", () => {
   });
 
   it("lists sessions (live or ended, age, run-through, managed) and leaves out ended ones over a day old", () => {
-    record("prd-a", { pid: 1, started: ago(3 * H), auto: true, managed: true });
-    record("prd-b", { pid: 2, started: ago(2 * H), rotating: true });
-    record("plan-c", { pid: 3, started: ago(5 * H), ended: ago(H), exit: 0 });
+    record("prd-a", { pid: 1, kind: "prd", started: ago(3 * H), auto: true, managed: true });
+    record("prd-b", { pid: 2, kind: "prd", started: ago(2 * H), rotating: true });
+    record("plan-c", { pid: 3, kind: "plan", started: ago(5 * H), ended: ago(H), exit: 0 });
+    record("backlog", { pid: 4, kind: "backlog", started: ago(H) });
+    record("hotfix-t", { pid: 5, kind: "hotfix", started: ago(H) });
     record("old", { pid: 4, started: ago(60 * H), ended: ago(48 * H), exit: 0 });
     const out = statusParts(sessions, asks, { now: NOW, live: (r) => !r.ended });
     expect(out).toContain("SESSIONS");
-    expect(out).toMatch(/prd-a +live +3h +run-through +managed +no size yet$/m);
-    expect(out).toMatch(/prd-b +live, rotating +2h +asks first +by hand +no size yet$/m);
-    expect(out).toMatch(/plan-c +ended +5h +asks first +by hand$/m);
+    expect(out).toMatch(/prd-a +prd +live +3h +run-through +managed +no size yet$/m);
+    expect(out).toMatch(/prd-b +prd +live, rotating +2h +asks first +by hand +no size yet$/m);
+    expect(out).toMatch(/plan-c +plan +ended +5h +asks first +by hand$/m);
+    expect(out).toMatch(/backlog +backlog +live +1h/);
+    expect(out).toMatch(/hotfix-t +hotfix +live +1h/);
     expect(out).not.toContain("old ");
     expect(out).not.toContain("OPEN ASKS");
   });
