@@ -451,35 +451,52 @@ Intro.
     expect(r.stdout).toMatch(/Removed pre and its branch prd\/pre/);
   });
 
-  it("sets done only for a merged branch with no slice left, keeping the other flags, never for standing", () => {
-    commitOnDev({
-      "plans/backlog.md": REGISTRY,
-      "plans/fin-plan.md": plan(MERGED),
-      "plans/open-plan.md": plan(`${MERGED}\n| 3 | 2 | not started | |`),
-      "plans/std-plan.md": plan(MERGED),
-      "plans/unm-plan.md": plan(MERGED),
-      "plans/notable-plan.md": "# Plan\n\n## Status\n\nAll in.\n",
+  // One rm.sh is about a second of work alone (a hundred bash lines, six node
+  // starts, a test-db drop), so each removal is a test of its own: five in one
+  // test took 7 s at load 22 and passed 20 s under load.
+  describe("sets done only for a merged branch with no slice left, keeping the other flags, never for standing", () => {
+    beforeAll(() => {
+      commitOnDev({
+        "plans/backlog.md": REGISTRY,
+        "plans/fin-plan.md": plan(MERGED),
+        "plans/open-plan.md": plan(`${MERGED}\n| 3 | 2 | not started | |`),
+        "plans/std-plan.md": plan(MERGED),
+        "plans/unm-plan.md": plan(MERGED),
+        "plans/notable-plan.md": "# Plan\n\n## Status\n\nAll in.\n",
+      });
+      for (const t of ["fin", "open", "std", "notable"]) prdWorktree(t);
+      prdWorktree("unm", { merged: false });
+    }, 60_000);
+
+    it("marks a merged branch with no slice left done", () => {
+      const r = run("rm.sh", ["fin"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("Marked fin done in the PRD registry (flags done)");
+      expect(flagsOf("fin")).toEqual(["done"]);
+      expect(git(main, "log", "-1", "--format=%s")).toMatch(/^chore\(backlog\): prd set fin: flags=done/);
     });
-    for (const t of ["fin", "open", "std", "notable"]) prdWorktree(t);
-    prdWorktree("unm", { merged: false });
 
-    let r = run("rm.sh", ["fin"]);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain("Marked fin done in the PRD registry (flags done)");
-    expect(flagsOf("fin")).toEqual(["done"]);
-    expect(git(main, "log", "-1", "--format=%s")).toMatch(/^chore\(backlog\): prd set fin: flags=done/);
+    it.each([
+      ["open", "Not marking open done: slices 3 are still to run (plans/open-plan.md)"],
+      ["std", "Not marking std done: std is standing: it never finishes"],
+      ["notable", "Not marking notable done: plans/notable-plan.md has no _Status_ slice table"],
+    ])("leaves %s undone and says why", (topic, why) => {
+      expect(run("rm.sh", [topic]).stdout).toContain(why);
+    });
 
-    r = run("rm.sh", ["open"]);
-    expect(r.stdout).toContain("Not marking open done: slices 3 are still to run (plans/open-plan.md)");
-    r = run("rm.sh", ["std"]);
-    expect(r.stdout).toContain("Not marking std done: std is standing: it never finishes");
-    r = run("rm.sh", ["notable"]);
-    expect(r.stdout).toContain("Not marking notable done: plans/notable-plan.md has no _Status_ slice table");
-    r = run("rm.sh", ["unm"]);
-    expect(r.stdout).not.toMatch(/done/);
-    expect(r.stdout).toMatch(/kept prd\/unm: it isn't merged/);
-    for (const t of ["open", "std", "notable", "unm"]) expect(flagsOf(t)).not.toContain("done");
-    expect(flagsOf("std")).toEqual(["standing"]);
+    it("says nothing of done for an unmerged branch, and keeps it", () => {
+      const r = run("rm.sh", ["unm"]);
+      expect(r.stdout).not.toMatch(/done/);
+      expect(r.stdout).toMatch(/kept prd\/unm: it isn't merged/);
+    });
+
+    it("left the others' flags as they were", () => {
+      const flags = Object.fromEntries(
+        JSON.parse(backlog("prd", "list", "--json")).map((r) => [r.topic, r.flags]),
+      );
+      for (const t of ["open", "std", "notable", "unm"]) expect(flags[t]).not.toContain("done");
+      expect(flags.std).toEqual(["standing"]);
+    });
   });
 
   it("clears a standing topic's hot files when its worktree goes, keeping its flags; others keep theirs", () => {

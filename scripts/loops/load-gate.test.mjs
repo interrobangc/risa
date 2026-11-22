@@ -248,6 +248,21 @@ describe("the scripts that wait or warn", () => {
     quiet();
   });
 
+  it("is off in the tooling tests' shared env (vitest.config.ts), so their slice starts never poll", async () => {
+    expect(process.env.CARETOOK_LOAD_GATE).toBe("off");
+    busy();
+    const t0 = Date.now();
+    const r = await run("new.sh", ["slice", "t", "1"], {
+      CARETOOK_LOAD_GATE: process.env.CARETOOK_LOAD_GATE,
+      CARETOOK_LOAD_WAIT: "30",
+    });
+    quiet();
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).not.toMatch(/busy/);
+    expect(Date.now() - t0).toBeLessThan(15_000);
+    fresh("t-1");
+  });
+
   it("pnpm prd start only warns", async () => {
     busy();
     const r = await run("prd.sh", ["start", "w"], { CARETOOK_LOAD_WAIT: "30" });
