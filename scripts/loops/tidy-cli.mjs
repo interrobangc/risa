@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
-import { formatTidy, reportText, tidy } from "./tidy.mjs";
+import { formatTidy, reportText, testDbOwner, tidy } from "./tidy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -38,10 +38,6 @@ const ageSecs = (/** @type {string} */ p, /** @type {number} */ now) => {
     return null;
   }
 };
-
-/** stack-lib.sh's test_db_name. */
-export const testDbName = (/** @type {string} */ name) =>
-  `caretook_test_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`.slice(0, 63);
 
 /** The working directory of every process, by pid (lsof -d cwd). */
 function processCwds() {
@@ -151,11 +147,13 @@ export function collectTidyFacts({ main = "", env = process.env, now = Date.now(
       ageSecs: ageSecs(l.path, now),
     }));
 
-  const owners = new Map(worktrees.map((w) => [testDbName(w.name), w.name]));
+  // The owner comes from the name alone: list's "(worker copy …)" label is a
+  // guess that a topic ending -w<n> fails (B-440).
+  const names = worktrees.map((w) => w.name);
   const testDbs = lines(run("bash", [join(HERE, "test-db.sh"), "list"], { cwd: main, env }).out)
-    .map((l) => /^(caretook_test_[a-z0-9_]+)( \(worker copy)?/.exec(l))
-    .filter((m) => !!m)
-    .map((m) => ({ db: m[1], worktree: m[2] ? null : (owners.get(m[1]) ?? null) }));
+    .map((l) => /^caretook_test_[a-z0-9_]+/.exec(l)?.[0])
+    .filter((db) => !!db)
+    .map((db) => ({ db, worktree: testDbOwner(db, names) }));
 
   const usedProjects = [
     "caretook",

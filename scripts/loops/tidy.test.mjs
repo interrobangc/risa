@@ -1,7 +1,15 @@
 // The cleanup sorter (tidy.mjs): every safe, ask and never case, with a dirty,
 // live or young case beside each safe one. Pure: facts in, lists out.
 import { describe, expect, it } from "vitest";
-import { HANG_LOG_DAYS, TICKET_GRACE_SECS, formatTidy, reportText, tidy } from "./tidy.mjs";
+import {
+  HANG_LOG_DAYS,
+  TICKET_GRACE_SECS,
+  formatTidy,
+  reportText,
+  testDbName,
+  testDbOwner,
+  tidy,
+} from "./tidy.mjs";
 
 const targets = (/** @type {{ target: string }[]} */ list) => list.map((f) => f.target);
 const one = (/** @type {import("./tidy.mjs").TidyFacts} */ facts) => tidy(facts);
@@ -172,6 +180,44 @@ describe("leftovers", () => {
         how: "test-db drop-db caretook_test_gone",
       },
     ]);
+  });
+
+  describe("testDbOwner (B-440)", () => {
+    const names = ["foo-w2", "bar"];
+
+    it("a live topic ending -w<n> owns its database and its workers' copies", () => {
+      expect(testDbName("foo-w2")).toBe("caretook_test_foo_w2");
+      expect(testDbOwner("caretook_test_foo_w2", names)).toBe("foo-w2");
+      expect(testDbOwner("caretook_test_foo_w2_w1", names)).toBe("foo-w2");
+      expect(testDbOwner("caretook_test_foo_w2_w16", names)).toBe("foo-w2");
+      expect(testDbOwner("caretook_test_bar_w3", names)).toBe("bar");
+    });
+
+    it("a worker copy of a gone topic, or an out-of-range copy, has no owner", () => {
+      expect(testDbOwner("caretook_test_gone_w1", names)).toBeNull();
+      expect(testDbOwner("caretook_test_gone", names)).toBeNull();
+      expect(testDbOwner("caretook_test_bar_w17", names)).toBeNull();
+      expect(testDbOwner("caretook_test_barn", names)).toBeNull();
+    });
+
+    it("a long name's copies are cut to 59 before the suffix, as test-db.sh does", () => {
+      const long = `t-${"x".repeat(70)}`;
+      const db = testDbName(long);
+      expect(db).toHaveLength(63);
+      expect(testDbOwner(db, [long])).toBe(long);
+      expect(testDbOwner(`${db.slice(0, 59)}_w4`, [long])).toBe(long);
+    });
+
+    it("tidy keeps what it owns and offers only the orphans", () => {
+      const dbs = [
+        "caretook_test_foo_w2",
+        "caretook_test_foo_w2_w1",
+        "caretook_test_gone_w1",
+        "caretook_test_gone",
+      ];
+      const { safe } = one({ testDbs: dbs.map((db) => ({ db, worktree: testDbOwner(db, names) })) });
+      expect(targets(safe)).toEqual(["caretook_test_gone_w1", "caretook_test_gone"]);
+    });
   });
 
   it("stale remote-tracking refs are safe (git fetch --prune)", () => {
