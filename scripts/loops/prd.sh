@@ -114,7 +114,8 @@ pnpm prd <command>
                               holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
                               naming it. Wait on a background check with this, never \`pgrep -f\` (it matches itself)
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
-                              by mode and by PRD); runs no check, works from any checkout
+                              by mode, PRD and step, the ten most-failed test files); runs no check,
+                              works from any checkout
     sync                      merge dev into this PRD branch
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
