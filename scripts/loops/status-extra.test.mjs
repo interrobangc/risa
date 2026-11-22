@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createAsk } from "./asks.mjs";
+import { createAsk, settleAsk } from "./asks.mjs";
 import { dispatcherPart, lastEntry, statusParts } from "./status-extra.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -55,8 +55,30 @@ describe("statusParts", () => {
     createAsk(asks, { kind: "report", topic: "y", text: "Wave landed", now: NOW - 2 * H });
     const out = statusParts(empty, asks, { now: NOW });
     expect(out).not.toContain("SESSIONS");
-    expect(out).toContain("OPEN ASKS: 2");
+    expect(out).toContain("OPEN ASKS: 2 (pnpm prd asks): 1 question awaiting an answer, 1 report");
     expect(out).toMatch(/oldest: a1 question x, 1d ago: Which way\?/);
+  });
+
+  it("counts the questions awaiting an answer and the defaulted ones apart", () => {
+    const dir = join(root, "asks-defaulted");
+    const q = (topic, extra) =>
+      createAsk(dir, {
+        kind: "question",
+        topic,
+        text: `${topic}?`,
+        options: ["a", "b"],
+        recommended: "a",
+        ...extra,
+      });
+    q("d", { defaults: true, waitMin: 30, now: NOW - 3 * H });
+    q("e", { defaults: true, waitMin: 30, now: NOW - 2 * H });
+    q("f", { now: NOW - H });
+    settleAsk(dir, "a1", { now: NOW - 2 * H });
+    settleAsk(dir, "a2", { now: NOW - H });
+    const out = statusParts(empty, dir, { now: NOW });
+    expect(out).toContain("OPEN ASKS: 3 (pnpm prd asks): 1 question awaiting an answer, 2 decided for you");
+    // The oldest line names the oldest awaiting an answer, not a decided one.
+    expect(out).toMatch(/oldest: a3 question f, 1h ago: f\?/);
   });
 
   it("runs as a CLI from the two folders", () => {

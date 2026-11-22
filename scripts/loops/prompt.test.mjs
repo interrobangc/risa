@@ -148,6 +148,13 @@ describe("orchestrator", () => {
       expect(out).toContain(
         "**The only PushNotification you ever send is the line `pnpm prd ask` prints for a question**",
       );
+      // What silence means: --defaults with a recommendation, --waits for the never list, the tool decides.
+      expect(out).toContain("--recommend <a> --defaults` (or `--waits`, below)");
+      expect(out).toContain("Pass `--defaults` on it: if no one answers within 30 minutes, the tool takes");
+      expect(out).toContain(
+        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), and compliance",
+      );
+      expect(out).toContain("The tool, never you, puts the recommendation in place of an answer");
       expect(out).toContain("`to-test/<date>-<time>-<topic>.md`");
       expect(out).toContain("names the topic, what landed and that to-test file, and stands alone");
       expect(out).not.toContain("AskUserQuestion");
@@ -155,8 +162,11 @@ describe("orchestrator", () => {
     for (const flags of [[], ["--resume"]]) {
       const out = ok("orchestrator", "T", ...flags);
       expect(out).not.toContain("pnpm prd ask");
+      expect(out).not.toContain("--defaults");
       expect(out).toContain("AskUserQuestion");
     }
+    // An attended planner asks in front of the user: nothing defaults there.
+    expect(ok("plan", "T", "B-1")).not.toContain("--defaults");
   });
 
   it("--resume: reconcile _Status_ with git first, respawn with --continue, review handed-off slices", () => {
@@ -321,6 +331,14 @@ describe("plan and backlog", () => {
       expect(plan).toContain("PushNotification");
       expect(plan).toContain("`pnpm prd ask --wait <id>` in the background, with no `--timeout`");
       expect(plan).toContain("**Never put your own recommendation in place of an answer:**");
+      // A planner's questions default like any other: --defaults with a recommendation, --waits for the never list.
+      expect(plan).toContain("--recommend <a> --defaults` (or `--waits`, below)");
+      expect(plan).toContain("Pass `--defaults` on it");
+      expect(plan).toContain(
+        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), and compliance",
+      );
+      expect(plan).toContain("The tool, never you, puts the recommendation in place of an answer");
+      expect(plan).not.toContain("wait for it however long it takes");
       // After the landing: the report, then rm, then end.
       const land = plan.indexOf("`pnpm prd land plan/T -m");
       const report = plan.indexOf('`pnpm prd ask --topic T --report "<text>"`');

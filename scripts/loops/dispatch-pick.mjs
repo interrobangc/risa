@@ -16,7 +16,8 @@
 //   4. A `planned` topic may `start` when a slot is free, every `After` topic
 //      is `done`, no running topic shares a hot-file prefix with it, no
 //      `alone` topic runs (and nothing runs when it is the `alone` one), and
-//      it has no open question.
+//      it has no open question (one awaiting an answer; a defaulted one
+//      doesn't count).
 //   5. A fixes topic (`standing`) also needs no other fixes topic running, and
 //      at least caps.fixesMin waiting items, or fewer when no other topic may
 //      start this tick.
@@ -30,7 +31,7 @@
 // other, as plain text (`scripts/loops/session` and
 // `scripts/loops/session.sh`); a topic with no hot files collides with nothing.
 
-import { isOpen } from "./asks.mjs";
+import { awaitsAnswer } from "./asks.mjs";
 
 /** A managed session that died is reopened this many times; the next death is an ask. */
 export const MAX_REOPENS = 2;
@@ -54,7 +55,7 @@ export const DEFAULT_CAPS = { prds: 3, planners: 1, fixesMin: 3 };
  *   a session record (prd-<topic>, plan-<topic>) with its liveness; rotatingAt
  *   is when it was marked rotating (ms or ISO; none counts as just now)
  * @typedef {{ id: string, kind: string, topic: string, session?: string | null,
- *   answeredAt?: string | null, doneAt?: string | null }} PickAsk
+ *   answeredAt?: string | null, doneAt?: string | null, defaulted?: boolean }} PickAsk
  * @typedef {{ rows: PickRow[], worktrees?: PickWorktree[], sessions?: PickSession[],
  *   asks?: PickAsk[], reopens?: Record<string, number>, busy?: boolean, paused?: boolean,
  *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number }} PickFacts
@@ -99,7 +100,8 @@ export function pick(facts) {
   const reopens = facts.reopens ?? {};
   const flags = (/** @type {PickRow | undefined} */ r) => r?.flags ?? [];
 
-  const asks = (facts.asks ?? []).filter((a) => a.kind === "question" && isOpen(a));
+  // An open question is one that awaits an answer: a defaulted one has its answer.
+  const asks = (facts.asks ?? []).filter(awaitsAnswer);
   const questionOf = (/** @type {string} */ topic) => asks.find((a) => a.topic === topic);
   const reopenAskOf = (/** @type {string} */ topic) =>
     asks.find((a) => a.topic === topic && a.session === DISPATCH_SESSION);

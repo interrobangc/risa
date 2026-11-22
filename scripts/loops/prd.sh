@@ -70,15 +70,21 @@ pnpm prd <command>
                               slice worktrees (--mid-wave: on the user's word); prints the command without iTerm2
 
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
-    ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question; prints its id
-                              and the PushNotification line to send; a macOS notification, and
-                              \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set (failures ignored)
+    ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]   file a
+                              question; prints its id and the PushNotification line to send; a macOS
+                              notification, and \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set
+                              (failures ignored). With a recommendation, --defaults takes it after
+                              \$CARETOOK_ASK_DEFAULT_MIN (30) min unanswered; --waits (money, data, a live
+                              deploy, a destructive step, compliance) waits however long
     ask --topic <t> --report <text>   file a report (a landed wave, what to try); never pushed (no
                               PushNotification line); the same macOS notification and hook
-    ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout)
-    asks [--json]             the open asks: topic, age, options numbered, the recommended one marked
+    ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout);
+                              applies a due default and says so
+    asks [--json]             the open asks: topic, age, options numbered, the recommended one marked,
+                              a defaulting one's countdown; then the ones decided for you
     asks --done <id>          dismiss one (a read report, a question no longer needed)
-    answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait)
+    answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait;
+                              refused once defaulted)
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)

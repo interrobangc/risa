@@ -298,6 +298,24 @@ describe("rule 4: starts", () => {
     expect(go({ rows: [row("a", "planned")], asks }).topic).toBe("a");
   });
 
+  it("a defaulted question no longer skips its topic; one still awaiting an answer does", () => {
+    const defaulted = question("a5", "a", {
+      defaults: true,
+      defaulted: true,
+      answer: "yes",
+      answeredAt: "2026-11-21T11:30:00Z",
+    });
+    expect(go({ rows: [row("a", "planned")], asks: [defaulted] })).toMatchObject({
+      action: "start",
+      topic: "a",
+    });
+    // Due but not settled yet: it still awaits an answer (the tick settles it first).
+    const due = question("a6", "a", { defaults: true, defaultAt: "2026-11-21T11:00:00Z" });
+    const p = go({ rows: [row("a", "planned")], asks: [due] });
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "a")).toBe("has an open question (a6)");
+  });
+
   it("hold and done are never picked", () => {
     const p = go({ rows: [row("a", "hold"), row("b", "done"), row("c", "planned")] });
     expect(p.topic).toBe("c");
