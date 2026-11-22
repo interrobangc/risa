@@ -60,6 +60,7 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 $plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
 $run_line
 - **When the user says "hand off"** (from the phone too), ask once with AskUserQuestion which mode: **A short brief** (recommended: what's in hand, what was decided and what's next, at most about 40 lines) or **Nothing** (the new session starts blank). For a brief, run \`pnpm prd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`pnpm prd rotate --self --brief <that file>\`; for nothing, \`pnpm prd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
+- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines), run \`pnpm prd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`pnpm prd notices\` or \`pnpm prd session requests\`, then message the session by that name.
 EOF
   exit 0
 fi

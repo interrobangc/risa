@@ -146,7 +146,7 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh }
     managed,
     command:
       `cd ${sh(main)} && ${sh(wrapper)} ${sh(name)} --kind ${kind}${managed ? " --managed" : ""} -- ` +
-      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(name)} "$(scripts/loops/prompt.sh ${role})"`,
+      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(record.remote || name)} "$(scripts/loops/prompt.sh ${role})"`,
   };
 }
 
