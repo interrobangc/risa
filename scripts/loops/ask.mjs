@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // pnpm prd ask | asks | answer: the asks queue's command line (the store is asks.mjs).
 //
-//   ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n>]   file a question
+//   ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]
+//                                     file a question; one with a recommendation says whether it
+//                                     takes it after CARETOOK_ASK_DEFAULT_MIN (30) minutes unanswered
+//                                     (--defaults) or waits for the user however long (--waits)
 //   ask --topic <t> --report <text>                                         file a report
-//   ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0); 75 at the timeout
-//   asks [--json]                     the open asks, oldest first
+//   ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0); 75 at the timeout.
+//                                     It applies a due default (then says so on a second line)
+//   asks [--json]                     the open asks, oldest first (a defaulting one with its
+//                                     countdown), then the ones decided for you until dismissed
 //   asks --done <id>                  dismiss one (a read report, a question no longer needed)
-//   answer <id> <option number or text…>
+//   answer <id> <option number or text…>   (refused on a defaulted ask)
 //
 // The directory is CARETOOK_ASKS_DIR (prd.sh sets the main checkout's
 // .loops/.asks). `ask` takes --session <name> (default CARETOOK_SESSION, else
@@ -25,13 +30,19 @@ import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import {
   AskError,
+  DEFAULT_WAIT_MIN,
+  NEVER_DEFAULT,
   answerAsk,
+  clock,
   createAsk,
   dismissAsk,
   formatAsks,
   getAsk,
+  isDue,
   listAsks,
+  settleAsk,
   shorten,
+  span,
 } from "./asks.mjs";
 
 const TIMED_OUT = 75;
@@ -133,25 +144,44 @@ async function tell(ask) {
   }
 }
 
+/** CARETOOK_ASK_DEFAULT_MIN: the minutes a defaulting question waits (fractions allowed). */
+const waitMinutes = () => {
+  const v = process.env.CARETOOK_ASK_DEFAULT_MIN;
+  const n = Number(v);
+  return v != null && v !== "" && Number.isFinite(n) && n >= 0 ? n : DEFAULT_WAIT_MIN;
+};
+
 async function ask(argv) {
-  const { opts, rest } = parse(argv, [
-    "topic",
-    "question",
-    "report",
-    "option",
-    "recommend",
-    "session",
-    "wait",
-    "timeout",
-    "here-topic",
-    "here-session",
-  ]);
+  const { opts, rest } = parse(
+    argv,
+    [
+      "topic",
+      "question",
+      "report",
+      "option",
+      "recommend",
+      "session",
+      "wait",
+      "timeout",
+      "here-topic",
+      "here-session",
+    ],
+    ["defaults", "waits"],
+  );
   if (rest.length) fail(`ask: unexpected ${rest.join(" ")} (quote the text)`);
   const dir = dirOf();
   if (opts.wait != null) return wait(dir, opts.wait, opts.timeout);
   if ((opts.question == null) === (opts.report == null))
     fail("ask needs one of --question <text> or --report <text>");
   const kind = opts.question != null ? "question" : "report";
+  const waitMin = waitMinutes();
+  if (kind === "report" && (opts.defaults || opts.waits))
+    fail("a report neither defaults nor waits: drop --defaults/--waits");
+  if (opts.defaults && opts.waits) fail("a question takes --defaults or --waits, not both");
+  if (kind === "question" && opts.recommend != null && !opts.defaults && !opts.waits)
+    fail(
+      `a question with a recommendation must say what silence means: --defaults (it takes the recommendation after ${waitMin} min with no answer) or --waits (it waits for the user however long it takes). Never --defaults for ${NEVER_DEFAULT}: those take --waits. Nothing was filed`,
+    );
   const record = createAsk(dir, {
     kind,
     topic: opts.topic || opts["here-topic"] || fail("ask needs --topic <topic> outside a worktree"),
@@ -159,10 +189,15 @@ async function ask(argv) {
     session: opts.session || process.env.CARETOOK_SESSION || opts["here-session"] || null,
     options: opts.option,
     recommended: opts.recommend ?? null,
+    defaults: Boolean(opts.defaults),
+    waitMin,
   });
   console.log(record.id);
   if (kind === "question") {
-    console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}`);
+    const when = record.defaults
+      ? ` (takes "${shorten(record.recommended, 40)}" at ${clock(record.defaultAt)} unless answered)`
+      : "";
+    console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}${when}`);
     console.log(`Then wait in the background: pnpm prd ask --wait ${record.id}`);
   } else console.log("Filed. No PushNotification for a report: only questions are pushed.");
   await tell(record);
@@ -174,10 +209,22 @@ async function wait(dir, id, timeout) {
   const poll = (Number(process.env.CARETOOK_ASK_POLL) || 2) * 1000;
   const end = Date.now() + limit * 1000;
   for (;;) {
-    const a = getAsk(dir, id) ?? fail(`no ask ${id}`);
+    let a = getAsk(dir, id) ?? fail(`no ask ${id}`);
     if (a.kind !== "question") fail(`${id} is a report: there's no answer to wait for`);
+    if (isDue(a)) {
+      // A waiting session applies its own default once due (a user's answer that got there first stands).
+      try {
+        a = settleAsk(dir, id).ask;
+      } catch (e) {
+        if (!(e instanceof AskError)) throw e;
+      }
+    }
     if (a.answeredAt) {
       console.log(a.answer);
+      if (a.defaulted)
+        console.log(
+          `(defaulted: no answer in ${span(Date.parse(a.defaultAt) - Date.parse(a.askedAt))}, so it took the recommendation at ${clock(a.answeredAt)}; the user sees it under "decided for you")`,
+        );
       return;
     }
     if (a.doneAt) fail(`${id} was dismissed without an answer`);

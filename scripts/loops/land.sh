@@ -46,6 +46,8 @@
 # landed, how to try it, what wasn't checked, the follow-ups. Land writes it
 # itself so it exists even if the session dies after merging; agents only add
 # files there. No file for a plan/ branch, a docs-only landing or a failed merge.
+# The same landings post a notice on the notice board (notice.mjs) for six
+# hours: "landed <branch> in dev as <sha>: sync at your next wave boundary".
 #
 # Test seam: CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) measures the sync against origin/dev instead of dev, and stops the PR
@@ -226,6 +228,26 @@ write_to_test() {
   } > "$file" || { echo "couldn't write $file"; return 0; }
   echo "to-test file: $file"
 }
+# post_landed → after a code landing (the same test as the to-test file's: a
+# prd/ or hotfix/ branch whose diff isn't Markdown only), the notice board's
+# "landed, sync at your next wave boundary" line for six hours (notice.mjs),
+# from the topic's session. A failure to post only warns: it never fails the landing.
+post_landed() {
+  [[ -n $want_to_test ]] || return 0
+  local sha session
+  if [[ $path == pr ]]; then
+    sha=$(git -C "$main" rev-parse --short "origin/$trunk" 2>/dev/null || git -C "$main" rev-parse --short "$trunk")
+  else
+    sha=$(git -C "$main" rev-parse --short "$trunk")
+  fi
+  case $branch in prd/*) session=prd-$topic ;; *) session=${branch%%/*}-${topic//\//-} ;; esac
+  CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
+    --session "$session" --topic "$topic" --for 360 \
+    "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" >/dev/null 2>&1 &&
+    echo "notice posted: $topic landed as $sha (six hours)" ||
+    echo "warning: couldn't post the landing notice (ignored)" >&2
+  return 0
+}
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
   grep -qE '^packages/data/src/db/(migrations|seeds)/' <<< "$changed" &&
@@ -242,6 +264,7 @@ if [[ $path == local ]]; then
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
   write_to_test || echo "couldn't write the to-test file"
+  post_landed || true
   next_steps
   exit 0
 fi
@@ -280,6 +303,7 @@ push_trunk
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"
 write_to_test "$url" || echo "couldn't write the to-test file"
+post_landed || true
 (dev_sync "$branch") ||
   die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`pnpm prd dev-sync $branch\`"
 next_steps

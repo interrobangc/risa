@@ -2,7 +2,8 @@
 // (running, paused and why, or stopped, and its log's last entry), the recorded
 // sessions (.loops/.sessions: name, live or ended, age, run-through or not,
 // managed by the dispatcher or opened by hand) and the open asks (the count,
-// the oldest and its age). The sessions and asks parts print nothing, heading
+// split into questions awaiting an answer, reports and those decided for you;
+// the oldest awaiting one, else the oldest, and its age). The sessions and asks parts print nothing, heading
 // included, when they have nothing to show; the dispatcher's always prints.
 // Ended sessions older than a day are left out to keep the list short.
 //
@@ -11,7 +12,7 @@
 //                              (CARETOOK_DISPATCH_MAIN names another main checkout)
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { age, listAsks, shorten } from "./asks.mjs";
+import { age, awaitsAnswer, listAsks, shorten } from "./asks.mjs";
 import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 
@@ -96,8 +97,17 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
 
   const asks = existsSync(asksDir) ? listAsks(asksDir) : [];
   if (asks.length) {
-    const o = asks[0];
-    out.push(`OPEN ASKS: ${asks.length} (pnpm prd asks)`);
+    // Questions awaiting an answer, reports, and the questions decided for you, counted apart.
+    const awaiting = asks.filter(awaitsAnswer);
+    const defaulted = asks.filter((a) => a.defaulted);
+    const reports = asks.filter((a) => a.kind === "report");
+    const counts = [
+      [awaiting.length, `question${awaiting.length === 1 ? "" : "s"} awaiting an answer`],
+      [reports.length, `report${reports.length === 1 ? "" : "s"}`],
+      [defaulted.length, "decided for you"],
+    ].flatMap(([n, what]) => (n ? [`${n} ${what}`] : []));
+    const o = awaiting[0] ?? asks[0];
+    out.push(`OPEN ASKS: ${asks.length} (pnpm prd asks): ${counts.join(", ")}`);
     out.push(`oldest: ${o.id} ${o.kind} ${o.topic}, ${age(o.askedAt, now)} ago: ${shorten(o.text, 80)}`);
     out.push("");
   }

@@ -29,7 +29,13 @@ beforeEach(() => {
     CARETOOK_ASKS_DIR: dir,
     CARETOOK_ASK_POLL: "0.2",
   };
-  for (const k of ["CARETOOK_ASK_NOTIFY", "CARETOOK_ASK_NOTIFY_TIMEOUT", "CARETOOK_SESSION"]) delete env[k];
+  for (const k of [
+    "CARETOOK_ASK_NOTIFY",
+    "CARETOOK_ASK_NOTIFY_TIMEOUT",
+    "CARETOOK_SESSION",
+    "CARETOOK_ASK_DEFAULT_MIN",
+  ])
+    delete env[k];
 });
 afterEach(() => {
   for (const c of children.splice(0)) if (c.exitCode === null && c.signalCode === null) c.kill("SIGKILL");
@@ -67,9 +73,34 @@ const askQuestion = (extra) =>
       "after the check",
       "--recommend",
       "yes",
+      "--waits",
     ],
     extra,
   );
+/** A question that takes "yes" after CARETOOK_ASK_DEFAULT_MIN minutes. */
+const askDefaulting = (minutes, extra = {}) =>
+  prd(
+    [
+      "ask",
+      "--topic",
+      "demo",
+      "--question",
+      "Land wave 1 now?",
+      "--option",
+      "yes",
+      "--option",
+      "after the check",
+      "--recommend",
+      "yes",
+      "--defaults",
+    ],
+    { CARETOOK_ASK_DEFAULT_MIN: String(minutes), ...extra },
+  );
+const stored = (id) => JSON.parse(readFileSync(join(dir, `${id}.json`), "utf8"));
+const hhmm = (iso) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 describe("pnpm prd ask", () => {
   it("files a question: prints the id, the PushNotification line, and notifies", () => {
@@ -126,9 +157,106 @@ describe("pnpm prd ask", () => {
     expect(prd(["ask", "--topic", "demo"]).stderr).toMatch(/needs one of --question/);
     expect(prd(["ask", "--topic", "d", "--question", "q", "--report", "r"]).status).toBe(1);
     expect(prd(["ask", "--question", "q"]).stderr).toMatch(/needs --topic/);
-    const r = prd(["ask", "--topic", "d", "--question", "q", "--option", "a", "--recommend", "b"]);
+    const r = prd(["ask", "--topic", "d", "--question", "q", "--option", "a", "--recommend", "b", "--waits"]);
     expect(r.stderr).toMatch(/isn't one of the options/);
     expect(existsSync(join(dir, "a1.json"))).toBe(false);
+  });
+});
+
+describe("defaults on silence", () => {
+  it("refuses a recommended question with neither flag: files nothing, names both flags and the never list", () => {
+    const r = prd(["ask", "--topic", "d", "--question", "q", "--option", "a", "--recommend", "a"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("--defaults");
+    expect(r.stderr).toContain("--waits");
+    expect(r.stderr).toMatch(
+      /money .*data loss .*a live deploy .*a destructive step .*a new dependency .*compliance/,
+    );
+    expect(r.stderr).toContain("Nothing was filed");
+    expect(existsSync(join(dir, "a1.json"))).toBe(false);
+  });
+
+  it("refuses both flags, --defaults with no recommendation, and either on a report", () => {
+    const both = ["ask", "--topic", "d", "--question", "q", "--option", "a", "--recommend", "a"];
+    expect(prd([...both, "--defaults", "--waits"]).stderr).toMatch(/not both/);
+    expect(prd(["ask", "--topic", "d", "--question", "q", "--option", "a", "--defaults"]).stderr).toMatch(
+      /needs a recommendation/,
+    );
+    expect(prd(["ask", "--topic", "d", "--report", "r", "--waits"]).stderr).toMatch(/report neither/);
+    expect(existsSync(join(dir, "a1.json"))).toBe(false);
+    // A question with no recommendation waits, flag or not.
+    expect(prd(["ask", "--topic", "d", "--question", "q", "--option", "a"]).status).toBe(0);
+    expect(stored("a1")).toMatchObject({ defaults: false, defaultAt: null });
+  });
+
+  it("a defaulting question's push line says what it takes and when; a waiting one's is unchanged", () => {
+    const r = askDefaulting(30);
+    expect(r.status, r.stderr).toBe(0);
+    const a = stored("a1");
+    expect(a).toMatchObject({ defaults: true, recommended: "yes", defaulted: false });
+    expect(Date.parse(a.defaultAt) - Date.parse(a.askedAt)).toBe(30 * 60_000);
+    expect(r.stdout.split("\n")[1]).toBe(
+      `Now send a PushNotification: demo: Land wave 1 now? (takes "yes" at ${hhmm(a.defaultAt)} unless answered)`,
+    );
+    expect(askQuestion().stdout.split("\n")[1]).toBe("Now send a PushNotification: demo: Land wave 1 now?");
+    expect(stored("a2")).toMatchObject({ defaults: false });
+  });
+
+  it("--wait on a due ask prints the option, says it was defaulted, and exits 0", async () => {
+    askDefaulting(0.005); // 0.3 s
+    const w = start(["ask", "--wait", "a1", "--timeout", "15"]);
+    expect(await w.exit).toBe(0);
+    const [answer, note] = w.out.trim().split("\n");
+    expect(answer).toBe("yes");
+    expect(note).toMatch(/^\(defaulted: no answer in 0s, so it took the recommendation at \d\d:\d\d;/);
+    expect(stored("a1")).toMatchObject({ answer: "yes", defaulted: true });
+  });
+
+  it("--wait returns a user's answer given before the default", async () => {
+    askDefaulting(1);
+    const w = start(["ask", "--wait", "a1", "--timeout", "15"]);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(prd(["answer", "a1", "2"]).status).toBe(0);
+    expect(await w.exit).toBe(0);
+    expect(w.out).toBe("after the check\n");
+    expect(stored("a1")).toMatchObject({ answer: "after the check", defaulted: false });
+  });
+
+  it("asks shows the countdown, and a due ask as due without settling it: it can still be answered", async () => {
+    askDefaulting(30);
+    expect(prd(["asks"]).stdout.split("\n")[0]).toMatch(
+      /^a1 {2}question {2}demo {2}\d+s ago, takes "yes" in 30m \(at \d\d:\d\d\) unless answered$/,
+    );
+    askDefaulting(0.001);
+    await new Promise((r) => setTimeout(r, 200));
+    const listed = prd(["asks"]).stdout;
+    expect(listed).toMatch(/^a2 {2}question {2}demo {2}\d+s ago, takes "yes": due \(still answerable\)$/m);
+    expect(stored("a2")).toMatchObject({ answeredAt: null, defaulted: false });
+    expect(prd(["asks", "--json"]).status).toBe(0);
+    expect(stored("a2").answeredAt).toBe(null);
+    expect(prd(["answer", "a2", "2"]).stdout).toBe("a2 answered: after the check\n");
+  });
+
+  it("asks lists a defaulted ask under its own heading, --json carries the fields, answer is refused", async () => {
+    askDefaulting(0.001);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await start(["ask", "--wait", "a1"]).exit).toBe(0);
+    askQuestion();
+    const listed = prd(["asks"]).stdout;
+    const [open, decided] = listed.split("DECIDED FOR YOU");
+    expect(open).toMatch(/^a2 {2}question/);
+    expect(decided).toMatch(/\na1 {2}question {2}demo/);
+    expect(decided).toMatch(/→ took "yes" at \d\d:\d\d, \d+s ago, unanswered/);
+    const json = JSON.parse(prd(["asks", "--json"]).stdout);
+    expect(json.map((a) => a.id)).toEqual(["a1", "a2"]);
+    expect(json[0]).toMatchObject({ defaults: true, defaulted: true, answer: "yes" });
+    expect(typeof json[0].defaultAt).toBe("string");
+    expect(json[1]).toMatchObject({ defaults: false, defaultAt: null, defaulted: false });
+    const r = prd(["answer", "a1", "2"]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/a1 was decided for you: it took "yes"/);
+    expect(prd(["asks", "--done", "a1"]).status).toBe(0);
+    expect(prd(["asks"]).stdout).not.toContain("DECIDED FOR YOU");
   });
 });
 

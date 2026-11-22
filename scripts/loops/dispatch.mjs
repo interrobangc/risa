@@ -58,7 +58,7 @@ import {
 } from "node:fs";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getAsk, listAsks } from "./asks.mjs";
+import { getAsk, listAsks, settleDue } from "./asks.mjs";
 import { DISPATCH_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { isLive, processOf, readRecords, writeRecord } from "./sessions.mjs";
@@ -323,6 +323,16 @@ export function tick(
   const now = facts.now;
 
   if (!dryRun) {
+    // Due defaults first, so a question whose session died still settles and
+    // its reopened session finds the answer (a dry run writes nothing).
+    let settled = [];
+    try {
+      settled = settleDue(p.asks, { now });
+    } catch (e) {
+      out(`couldn't apply the due defaults (${e instanceof Error ? e.message : String(e)})`);
+    }
+    for (const a of settled) out(`ask ${a.id} (${a.topic}) defaulted to "${a.answer}": no answer came`);
+    if (settled.length) facts.asks = listAsks(p.asks);
     // The answers to the dispatcher's own asks, from earlier ticks.
     const asked = g.state.asked ?? {};
     for (const [session, { id, topic }] of Object.entries(asked)) {
@@ -428,7 +438,17 @@ export function tick(
     case "ask": {
       const session = /** @type {string} */ (choice.session);
       const topic = /** @type {string} */ (choice.topic);
-      const args = ["ask", "--topic", topic, "--question", choice.text ?? "", "--session", DISPATCH_SESSION];
+      // Its own question waits: a reopen burns usage (money), so it never defaults.
+      const args = [
+        "ask",
+        "--topic",
+        topic,
+        "--question",
+        choice.text ?? "",
+        "--session",
+        DISPATCH_SESSION,
+        "--waits",
+      ];
       for (const o of choice.options ?? []) args.push("--option", o);
       const r = run("node", [join(bin, "ask.mjs"), ...args], {
         cwd: p.main,

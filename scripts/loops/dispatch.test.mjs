@@ -21,6 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createAsk, getAsk } from "./asks.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import {
   HELPER_SESSION,
@@ -499,6 +500,64 @@ describe("deaths and the reopen ask", () => {
     updateReopens({ "prd-a": 1, "prd-gone": 2 });
     ok();
     expect(dstate().reopens).toEqual({});
+  });
+});
+
+describe("defaults on silence", () => {
+  const defaulting = (topic, session) =>
+    createAsk(asks, {
+      kind: "question",
+      topic,
+      session,
+      text: "Land now?",
+      options: ["yes", "no"],
+      recommended: "yes",
+      defaults: true,
+      now: T0 * 1000,
+    });
+
+  it("a tick settles a due ask of a dead session, and its reopened session finds the answer", () => {
+    worktree("a", "prd/a");
+    deadRecord("prd-a");
+    setRows([{ topic: "a", state: "running" }]);
+    defaulting("a", "prd-a");
+    setClock(T0 + 60);
+    expect(ok()).not.toContain("defaulted");
+    expect(getAsk(asks, "a1").answeredAt).toBe(null);
+    setClock(T0 + 31 * 60);
+    expect(ok()).toContain('ask a1 (a) defaulted to "yes": no answer came');
+    expect(getAsk(asks, "a1")).toMatchObject({ answer: "yes", defaulted: true });
+    const waited = execFileSync("node", [scripts("ask.mjs"), "ask", "--wait", "a1"], {
+      env: { ...env, CARETOOK_ASKS_DIR: asks },
+      encoding: "utf8",
+    });
+    expect(waited.split("\n")[0]).toBe("yes");
+    expect(waited).toContain("(defaulted: no answer in 30m");
+  });
+
+  it("a topic whose only ask was defaulted is started on the same tick; a dry run settles nothing", () => {
+    setRows([{ topic: "b", state: "planned" }]);
+    defaulting("b", "plan-b");
+    setClock(T0 + 31 * 60);
+    const dry = ok(["--dry-run"]);
+    expect(dry).toContain("has an open question (a1)");
+    expect(getAsk(asks, "a1").answeredAt).toBe(null);
+    const out = ok();
+    expect(out).toContain('ask a1 (b) defaulted to "yes"');
+    expect(out).toContain("start b");
+  });
+
+  it("files its own reopen question as waiting: it never settles", () => {
+    worktree("a", "prd/a");
+    deadRecord("prd-a");
+    setRows([{ topic: "a", state: "running" }]);
+    ok();
+    ok();
+    expect(ok()).toContain("filed ask a1");
+    expect(askFile("a1")).toMatchObject({ defaults: false, defaultAt: null });
+    setClock(T0 + 24 * 3600);
+    expect(ok()).toContain("waits on ask a1");
+    expect(askFile("a1").answeredAt).toBe(null);
   });
 });
 
