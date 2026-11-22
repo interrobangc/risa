@@ -212,6 +212,44 @@ fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
 # load_avg → the 1, 5 and 15 minute load averages.
 load_avg() { sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs || uptime | sed 's/.*load average[s]*: //'; }
 
+# The load gate (load-gate.mjs decides; busy is the 5-minute load over
+# CARETOOK_LOAD_BUSY, default twice the cores). load_gate → "<busy|ok|off|unread>
+# <load> <threshold> <cores>"; a missing or failing script reads as unread (not busy).
+load_gate() {
+  local s out
+  s="$(dirname "${BASH_SOURCE[0]}")/load-gate.mjs"
+  out=$([[ -f $s ]] && node "$s" 2>/dev/null || true)
+  echo "${out:-unread - - -}"
+}
+
+# load_gate_wait WHAT: while the machine is busy, poll (CARETOOK_LOAD_POLL, 15 s)
+# for at most CARETOOK_LOAD_WAIT (600 s), then go ahead and say so. Sets
+# load_waited to the seconds waited. CARETOOK_LOAD_GATE=off or
+# CARETOOK_LEASES=off waits for nothing. Always returns 0.
+load_waited=0
+load_gate_wait() {
+  local what=$1 max=${CARETOOK_LOAD_WAIT:-600} poll=${CARETOOK_LOAD_POLL:-15} t0 state l thr _c said=""
+  load_waited=0
+  [[ ${CARETOOK_LOAD_GATE:-} == off || ${CARETOOK_LEASES:-} == off ]] && return 0
+  [[ $max =~ ^[0-9]+$ ]] || max=600
+  t0=$(date +%s)
+  while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy ]]; do
+    load_waited=$(($(date +%s) - t0))
+    if [[ -z $said ]]; then
+      echo "The machine is busy (5-minute load $l, over $thr): waiting up to ${max}s before $what (CARETOOK_LOAD_WAIT)…"
+      said=1
+    fi
+    if ((load_waited >= max)); then
+      echo "Gave up waiting for the load after ${load_waited}s (still $l, over $thr): starting $what anyway."
+      return 0
+    fi
+    sleep "$poll"
+  done
+  load_waited=$(($(date +%s) - t0))
+  [[ -z $said ]] || echo "The load dropped to $l (threshold $thr) after ${load_waited}s: starting $what."
+  return 0
+}
+
 # The disk guard: free space on the volume holding the main checkout, against
 # CARETOOK_MIN_FREE_GB (default 10). new.sh (a stacked worktree), stack.sh up
 # and browser.sh's check build call require_disk; ls.sh prints disk_line.
