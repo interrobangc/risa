@@ -66,7 +66,7 @@
 # "N/M passed", or signout-wipe's "errors:"). Their verdict comes from the
 # "N/M passed" line, or "ended" when they print none.
 #
-# Env: CARETOOK_BROWSER_SLOTS (leases, default 3), CARETOOK_BROWSER_WAIT (s),
+# Env: CARETOOK_BROWSER_SLOTS (leases, default 2), CARETOOK_BROWSER_WAIT (s),
 # CARETOOK_BROWSER_SUITE (the suite, space or comma separated; default the
 # manifest's e2e checks), CARETOOK_BROWSER_SILENCE (s, default 90),
 # CARETOOK_BROWSER_SUITE_CAP (s), CARETOOK_BROWSER_PAUSE (s between suite
