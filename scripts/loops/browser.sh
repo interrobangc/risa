@@ -62,10 +62,9 @@
 #     default the sum of the selected checks' caps. Past it the running check is
 #     killed, nothing is retried, and the rest are listed as NOT-RUN.
 # A kill stops the check's whole process tree (node, Chrome, proxies).
-# Checks that never exit on their own (never-exits yes: layout-offline,
-# signout-wipe) are stopped 2 s after they print their last line ($hang_done:
-# "N/M passed", or signout-wipe's "errors:"). Their verdict comes from the
-# "N/M passed" line, or "ended" when they print none.
+# Checks that never exit on their own (never-exits yes) are stopped 2 s after
+# they print their last line ($hang_done: "N/M passed", or "errors:"). Their
+# verdict comes from the "N/M passed" line, or "ended" when they print none.
 #
 # Env: CARETOOK_BROWSER_SLOTS (leases, default 2), CARETOOK_BROWSER_WAIT (s),
 # CARETOOK_BROWSER_SUITE (the suite, space or comma separated; default the
