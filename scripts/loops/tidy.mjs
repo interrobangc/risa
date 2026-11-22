@@ -38,6 +38,30 @@ export const ARCHIVABLE = ["landed", "staging", "live", "dropped"];
 /** The long-lived branches tidy never lists. */
 export const PROTECTED_BRANCHES = ["dev", "main", "staging"];
 
+/** stack-lib.sh's test_db_name: a worktree's own test database. */
+export const testDbName = (/** @type {string} */ name) =>
+  `caretook_test_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`.slice(0, 63);
+
+/** A worker copy's suffix (test-db.sh's worker_re; packages/data/src/db/testDatabase.ts). */
+const WORKER_SUFFIX = /^_w([1-9]|1[0-6])$/;
+
+/**
+ * The worktree that owns test database DB, or null: its own database, or one of
+ * its integration workers' copies (<database cut to 59>_w<n>). Known names come
+ * first, so a topic ending -w<n> owns its database instead of it reading as
+ * another's worker copy; only a name no worktree owns is an orphan.
+ * @param {string} db
+ * @param {string[]} worktrees  the worktree names
+ */
+export function testDbOwner(db, worktrees) {
+  for (const w of worktrees) if (testDbName(w) === db) return w;
+  for (const w of worktrees) {
+    const base = testDbName(w).slice(0, 59);
+    if (db.startsWith(base) && WORKER_SUFFIX.test(db.slice(base.length))) return w;
+  }
+  return null;
+}
+
 /**
  * @typedef {object} TidyWorktree
  * @property {string} name              its directory in .loops
