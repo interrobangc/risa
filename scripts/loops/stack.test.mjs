@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -200,18 +201,14 @@ describe("rm.sh", () => {
   it("drops its integration workers' databases too", () => {
     ok("new.sh", ["slice", "t", "6"]);
     rmSync(log, { force: true });
-    // What the shared server answers for t-6: its database and three worker copies.
-    const psql = [
-      "caretook_test_t_6",
-      "caretook_test_t_6_w1",
-      "caretook_test_t_6_w2",
-      "caretook_test_t_6_w3",
-    ];
+    // What the shared server answers for the worker copies: t-6's three, t-60's
+    // one, and t-6-w1's own database, which isn't a copy of t-6's (B-405).
+    const copies = [1, 2, 3].map((n) => workerDatabaseName("caretook_test_t_6", n));
+    const psql = [...copies, workerDatabaseName("caretook_test_t_60", 1), "caretook_test_t_6_w1"];
     const out = ok("rm.sh", ["t-6"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql.join("\n") } });
     expect(out).toMatch(/dropped test database caretook_test_t_6 and 3 worker copies/);
     const drops = calls().match(/dropdb .*/g) ?? [];
-    expect(drops.map((d) => d.split(" ").at(-1)).sort()).toEqual(psql);
-    expect(calls()).toMatch(/datname ~ '\^caretook_test_t_6_w/);
+    expect(drops.map((d) => d.split(" ").at(-1)).sort()).toEqual(["caretook_test_t_6", ...copies].sort());
     expect(existsSync(join(loops, "t-6"))).toBe(false);
   });
 
@@ -300,17 +297,23 @@ describe("test-db.sh", () => {
   });
 
   it("lists each worktree database with its worker copies, and orphaned copies", () => {
+    const gone = workerDatabaseName("caretook_test_gone", 1);
     const psql = [
       "caretook_test_a_1",
-      "caretook_test_a_1_w1",
-      "caretook_test_a_1_w2",
       "caretook_test_a_10",
-      "caretook_test_gone_w1",
+      // An old-style copy lists as a database: tidy decides its owner by name.
+      "caretook_test_a_1_w3",
+      workerDatabaseName("caretook_test_a_1", 1),
+      workerDatabaseName("caretook_test_a_1", 2),
+      gone,
     ].join("\n");
     expect(ok("test-db.sh", ["list"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql } })).toBe(
-      "caretook_test_a_1 (+2 worker copies)\ncaretook_test_a_10\n" +
-        "caretook_test_gone_w1 (worker copy, its database is gone)\n",
+      "caretook_test_a_1 (+2 worker copies)\ncaretook_test_a_10\ncaretook_test_a_1_w3\n" +
+        `${gone} (worker copy, its database is gone)\n`,
     );
+    // tidy drops such an orphan by name.
+    ok("test-db.sh", ["drop-db", gone], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: "" } });
+    expect(calls()).toContain(`dropdb -U caretook --if-exists --force ${gone}`);
   });
 
   it("down stops only the shared project", () => {

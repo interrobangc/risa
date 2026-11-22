@@ -191,7 +191,7 @@ export function collectTidyFacts({
   // guess that a topic ending -w<n> fails (B-440).
   const names = worktrees.map((w) => w.name);
   const testDbs = lines(run("bash", [join(HERE, "test-db.sh"), "list"], { cwd: main, env }).out)
-    .map((l) => /^caretook_test_[a-z0-9_]+/.exec(l)?.[0])
+    .map((l) => /^caretook_(test|tw)_[a-z0-9_]+/.exec(l)?.[0])
     .filter((db) => !!db)
     .map((db) => ({ db, worktree: testDbOwner(db, names) }));
 
