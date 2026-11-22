@@ -56,6 +56,15 @@ describe("check log summary", () => {
     expect(runs[2]).toMatchObject({ filesRun: 12, filesAll: 500, loadStart: 10, loadEnd: 12 });
   });
 
+  it("parses the seconds waited for the load, none on a line from before the gate", () => {
+    const { runs, skipped } = parseLog(
+      `${line("2026-11-21T12:00:00Z", "prd/beta", "full", 60, 0)}\t95\n${log}`,
+    );
+    expect(skipped).toBe(0);
+    expect(runs[0]).toMatchObject({ seconds: 60, loadWaited: 95 });
+    expect(runs[1].loadWaited).toBeNull();
+  });
+
   it("names a PRD from the branch, else the worktree", () => {
     expect(prdOf({ branch: "slice/x/3", worktree: "x-3" })).toBe("x");
     expect(prdOf({ branch: "prd/x", worktree: "x" })).toBe("x");

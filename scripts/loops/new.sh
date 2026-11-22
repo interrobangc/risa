@@ -59,6 +59,16 @@ dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }
 
+# The load gate (load-gate.mjs): a slice waits while the machine is busy (at
+# most CARETOOK_LOAD_WAIT, then it goes ahead); a PRD started by hand only warns.
+if [[ $kind == slice ]]; then
+  load_gate_wait "slice $topic-$n"
+elif [[ $kind == prd ]]; then
+  read -r gstate gload gthr _ <<< "$(load_gate)"
+  [[ $gstate != busy ]] ||
+    echo "Warning: the machine is busy (5-minute load $gload, over $gthr); starting $name anyway. Its checks and slices will wait for the load."
+fi
+
 if ((stack)); then
   require_main_env
   require_disk "a new stack for $name"

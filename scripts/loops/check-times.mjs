@@ -2,13 +2,15 @@
 // summary: `pnpm prd check --times [--since <date>]`. Pure functions, plus a
 // small CLI at the bottom.
 //
-// A line has eleven tab-separated fields: start, worktree, branch, mode,
+// A line has twelve tab-separated fields: start, worktree, branch, mode,
 // reason, seconds, load at start, load at end, exit code, test files run, test
-// files in all.
+// files in all, and the seconds the check waited for the load (the load gate;
+// lines written before it have eleven, and no wait).
 import { existsSync, readFileSync } from "node:fs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
- *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null }} Run */
+ *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
+ *   loadWaited: number | null }} Run */
 
 const num = (s) => (s !== undefined && s !== "" && Number.isFinite(Number(s)) ? Number(s) : null);
 
@@ -44,6 +46,7 @@ export function parseLog(text) {
       exit,
       filesRun: num(f[9]),
       filesAll: num(f[10]),
+      loadWaited: num(f[11]),
     });
   }
   return { runs, skipped };
