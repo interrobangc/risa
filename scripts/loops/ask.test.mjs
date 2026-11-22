@@ -169,7 +169,9 @@ describe("defaults on silence", () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("--defaults");
     expect(r.stderr).toContain("--waits");
-    expect(r.stderr).toMatch(/money .*data loss .*a live deploy .*a destructive step .*compliance/);
+    expect(r.stderr).toMatch(
+      /money .*data loss .*a live deploy .*a destructive step .*a new dependency .*compliance/,
+    );
     expect(r.stderr).toContain("Nothing was filed");
     expect(existsSync(join(dir, "a1.json"))).toBe(false);
   });

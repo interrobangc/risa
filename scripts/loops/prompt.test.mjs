@@ -152,7 +152,7 @@ describe("orchestrator", () => {
       expect(out).toContain("--recommend <a> --defaults` (or `--waits`, below)");
       expect(out).toContain("Pass `--defaults` on it: if no one answers within 30 minutes, the tool takes");
       expect(out).toContain(
-        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), and compliance",
+        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), a new dependency (AGENTS.md: the user's approval), and compliance",
       );
       expect(out).toContain("The tool, never you, puts the recommendation in place of an answer");
       expect(out).toContain("`to-test/<date>-<time>-<topic>.md`");
@@ -335,7 +335,7 @@ describe("plan and backlog", () => {
       expect(plan).toContain("--recommend <a> --defaults` (or `--waits`, below)");
       expect(plan).toContain("Pass `--defaults` on it");
       expect(plan).toContain(
-        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), and compliance",
+        "Pass `--waits` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), a new dependency (AGENTS.md: the user's approval), and compliance",
       );
       expect(plan).toContain("The tool, never you, puts the recommendation in place of an answer");
       expect(plan).not.toContain("wait for it however long it takes");

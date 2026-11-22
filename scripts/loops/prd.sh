@@ -75,7 +75,7 @@ pnpm prd <command>
                               notification, and \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set
                               (failures ignored). With a recommendation, --defaults takes it after
                               \$CARETOOK_ASK_DEFAULT_MIN (30) min unanswered; --waits (money, data, a live
-                              deploy, a destructive step, compliance) waits however long
+                              deploy, a destructive step, a new dependency, compliance) waits however long
     ask --topic <t> --report <text>   file a report (a landed wave, what to try); never pushed (no
                               PushNotification line); the same macOS notification and hook
     ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout);
