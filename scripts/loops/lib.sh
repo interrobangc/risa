@@ -241,11 +241,10 @@ trunk_drift() {
 fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
 
 # load_avg → the 1, 5 and 15 minute load averages.
-# One clean line on Linux (/proc) and macOS (sysctl), uptime as the last resort.
+# One clean line: sysctl on macOS, uptime on Linux (where sysctl prints nothing).
 load_avg() {
   local l
-  l=$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null) || l=""
-  [[ -n $l ]] || l=$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs) || l=""
+  l=$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs) || l=""
   [[ -n $l ]] || l=$(uptime 2>/dev/null | sed 's/.*load average[s]*: //' | tr -d ',') || l=""
   echo "$l"
 }
