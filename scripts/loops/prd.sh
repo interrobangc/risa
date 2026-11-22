@@ -86,6 +86,15 @@ pnpm prd <command>
     answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait;
                               refused once defaulted)
 
+  Notices (one-way lines for other sessions, in the main checkout's .loops/.notices; nothing waits on them)
+    notice "<text>" [--for <min>] [--topic <t>]   post one line (200 characters at most); prints its id;
+                              it lives 60 minutes, --for up to 1440 (24 hours)
+    notices [--json]          the live ones, oldest first: session, topic, age, time left
+    notices --done <id>       withdraw one
+                              check, sync, slice, browser, pr, ready and land print other sessions' live
+                              notices first (stderr, five lines at most); status prints them all; a code
+                              landing posts "landed …: sync at your next wave boundary" for six hours
+
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
     check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
@@ -134,6 +143,22 @@ USAGE
 }
 
 cmd=${1:-help}; (($#)) && shift
+# The notice board (notice.mjs): other sessions' live notices on stderr, five
+# lines at most, before the commands that touch shared work. It never fails
+# the command (an unreadable board prints nothing).
+notices_dir=${CARETOOK_NOTICES_DIR:-$loops/.notices}
+here_session() {
+  local h; h=$(here_name)
+  if [[ -n ${CARETOOK_SESSION:-} ]]; then echo "$CARETOOK_SESSION"
+  elif [[ $h == plan-* ]]; then echo "$h"
+  elif [[ -n $h ]]; then echo "prd-$(topic_of "$h")"; fi
+}
+case $cmd in
+  check | sync | slice | browser | pr | ready | land)
+    [[ $cmd == check && " $* " == *" --times "* ]] ||
+      CARETOOK_NOTICES_DIR=$notices_dir node "$bin/notice.mjs" gate --self "$(here_session 2>/dev/null)" 1>&2 2>/dev/null || true
+    ;;
+esac
 case $cmd in
   status | ls) exec "$bin/ls.sh" "$@" ;;
   status-watch | watch)
@@ -315,6 +340,15 @@ case $cmd in
       else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
     fi
     exec node "$bin/ask.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
+    ;;
+  notice | notices)
+    # The posting session and topic default to the worktree's, as for ask.
+    here=$(here_name) here_args=()
+    if [[ $cmd == notice && -n $here ]]; then
+      if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
+      else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
+    fi
+    CARETOOK_NOTICES_DIR=$notices_dir exec node "$bin/notice.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
   help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;

@@ -448,3 +448,72 @@ describe("land.sh writes a to-test file", () => {
     expect(files()).toEqual([]);
   });
 });
+
+describe("land.sh posts a landing notice", () => {
+  const board = () => join(root, "notices");
+  const notices = () =>
+    existsSync(board())
+      ? readdirSync(board())
+          .filter((f) => /^n\d+\.json$/.test(f))
+          .map((f) => JSON.parse(readFileSync(join(board(), f), "utf8")))
+      : [];
+  const landFor = (args, extra = {}) =>
+    spawnSync("bash", ["scripts/loops/land.sh", ...args], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PR_HEAD: spawnSync("git", ["-C", repo, "rev-parse", "prd/throwaway-x"], {
+          encoding: "utf8",
+        }).stdout.trim(),
+        CARETOOK_NOTICES_DIR: board(),
+        ...extra,
+      },
+    });
+  const prdLand = (extra) =>
+    landFor(["throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review"], extra);
+
+  it("posts one for a code landing, with the topic and the commit, for six hours", () => {
+    branch({ "apps/web/b.ts": "2" });
+    const r = prdLand();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    const [n, ...more] = notices();
+    expect(more).toEqual([]);
+    expect(n).toMatchObject({ session: "prd-throwaway-x", topic: "throwaway-x" });
+    expect(n.text).toContain(`landed prd/throwaway-x in dev as ${git("rev-parse", "--short", "origin/dev")}`);
+    expect(n.text).toContain("sync at your next wave boundary");
+    expect(Date.parse(n.expiresAt) - Date.parse(n.postedAt)).toBe(6 * 3600_000);
+    expect(r.stdout).toContain("notice posted");
+  });
+
+  it("posts one for a local hotfix landing too", () => {
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/c.ts": "3" }, "fix it");
+    git("checkout", "-q", "dev");
+    const r = landFor(["hotfix/throwaway-y", "--local", "--force", "-m", "fix(web): c"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(notices()).toMatchObject([{ session: "hotfix-throwaway-y", topic: "throwaway-y" }]);
+    expect(notices()[0].text).toContain(`as ${git("rev-parse", "--short", "dev")}`);
+  });
+
+  it("posts none for a Markdown-only landing or a plan/ landing", () => {
+    branch({ "docs/x.md": "d" });
+    expect(prdLand().status).toBe(0);
+    git("checkout", "-qb", "plan/throwaway-z");
+    commit({ "plans/throwaway-z-plan.md": "p", "scripts/loops/z.sh": "z" }, "plan it");
+    git("checkout", "-q", "dev");
+    const r = landFor(["plan/throwaway-z", "-m", "docs(throwaway-z): plan"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(notices()).toEqual([]);
+  });
+
+  it("still lands when the notice can't be posted", () => {
+    branch({ "apps/web/b.ts": "2" });
+    writeFileSync(join(root, "not-a-dir"), "x");
+    const r = prdLand({ CARETOOK_NOTICES_DIR: join(root, "not-a-dir", "notices") });
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("Landed prd/throwaway-x");
+    expect(r.stderr).toContain("couldn't post the landing notice");
+  });
+});
