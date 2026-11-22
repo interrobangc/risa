@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DISPATCH_SESSION,
+  KEEP_SESSION,
   MAX_REOPENS,
   REOPEN_OPTIONS,
   ROTATING_GRACE_MS,
@@ -528,5 +529,42 @@ describe("nothing to do, and the reasons", () => {
     expect(p.reasons).toEqual([
       { topic: "ghost", why: "opened by hand, its orchestrator isn't live (left alone) (no registry row)" },
     ]);
+  });
+});
+
+describe("the keep-alive's question", () => {
+  const keepAsk = (id, topic) => question(id, topic, { session: KEEP_SESSION });
+
+  it("is never read as the topic's reopen question: the reopen ask is still filed", () => {
+    const p = go({
+      rows: [row("a", "running")],
+      worktrees: [prdWt("a")],
+      sessions: [session("prd-a", { live: false })],
+      reopens: { "prd-a": MAX_REOPENS },
+      asks: [keepAsk("a1", "a")],
+    });
+    expect(p).toMatchObject({ action: "ask", session: "prd-a", options: REOPEN_OPTIONS });
+  });
+
+  it("with a reopen question open too, the reopen one alone holds the topic", () => {
+    const p = go({
+      rows: [row("a", "running")],
+      worktrees: [prdWt("a")],
+      sessions: [session("prd-a", { live: false })],
+      reopens: { "prd-a": MAX_REOPENS },
+      asks: [keepAsk("a1", "a"), question("a2", "a", { session: DISPATCH_SESSION })],
+    });
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "a")).toContain("waits on ask a2");
+  });
+
+  it("doesn't stop a start, and a backlog session takes no slot", () => {
+    const p = go({
+      rows: [row("a", "planned")],
+      sessions: [session("backlog"), session("backlog-notes")],
+      asks: [keepAsk("a1", "a")],
+      caps: { prds: 1 },
+    });
+    expect(p).toMatchObject({ action: "start", topic: "a" });
   });
 });
