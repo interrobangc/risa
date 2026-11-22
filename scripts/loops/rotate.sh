@@ -16,23 +16,73 @@
 # --background) and returns at once, so the calling session can say its last
 # line; the tab ends the old session and starts the fresh one under the same
 # name. Without iTerm2 it prints that command to run and ends nothing.
+#
+#   rotate.sh --self [--brief <file>] [--reason <text>]
+#   rotate.sh --self --brief-path
+#
+# --self rotates the calling session, found by its ancestor claude pid among the
+# live records. A backlog session reopens fresh in the main checkout under the
+# same name, model and Remote Control; --brief puts the file at the top of the
+# new prompt (a file it can't use is refused before anything ends, and the file
+# is deleted once read). --brief-path prints where to write one. An orchestrator
+# behaves as plain rotate (its hand-over is _Status_, so no brief); any other
+# kind, an unrecorded caller and a slice agent's shell are refused.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 
-topic="" mid_wave="" reason=""
+topic="" mid_wave="" reason="" self="" brief="" brief_path=""
 while (($#)); do
   case $1 in
     --mid-wave) mid_wave=1 ;;
     --reason) reason=${2:?--reason <text>}; shift ;;
-    -h | --help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>)" ;;
+    --self) self=1 ;;
+    --brief) brief=${2:?--brief <file>}; shift ;;
+    --brief-path) brief_path=1 ;;
+    -h | --help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>, --self, --brief <file>, --brief-path)" ;;
     *) [[ -z $topic ]] || die "rotate: one topic at a time"; topic=$1 ;;
   esac
   shift
 done
+
+[[ -n $self || (-z $brief && -z $brief_path) ]] || die "rotate: --brief and --brief-path go with --self"
+[[ -z $brief || -z $brief_path ]] || die "rotate: --brief or --brief-path, not both"
+if [[ -n $self ]]; then
+  [[ -z $topic ]] || die "rotate --self: takes no topic (it rotates the calling session)"
+  [[ $(git branch --show-current 2>/dev/null) != slice/* ]] ||
+    die "rotate --self: refused on a slice branch: this shell carries its orchestrator's session (hand off to your orchestrator)"
+  caller=$(node "$bin/sessions.mjs" caller 2>&1) || die "rotate --self: $caller (only a recorded session rotates itself)"
+  IFS=$'\t' read -r self_name self_kind self_pid self_topic <<<"$caller"
+  case $self_kind in
+    backlog)
+      [[ -z $mid_wave ]] || die "rotate --self: --mid-wave is for an orchestrator; $self_name is a backlog session"
+      if [[ -n $brief_path ]]; then
+        mkdir -p "$loops/.briefs"
+        echo "$loops/.briefs/$self_name.md"
+        exit 0
+      fi
+      line="cd $(printf %q "$main") && $(printf %q "$bin/rotate-into.sh") $self_name $self_pid"
+      if [[ -n $brief ]]; then
+        why=$(node "$bin/rotate.mjs" brief-check "$brief") || die "rotate --self: $why; nothing was ended"
+        brief=$(cd "$(dirname "$brief")" && pwd)/$(basename "$brief")
+        line+=" --brief $(printf %q "$brief")"
+      fi
+      [[ -z $reason ]] || line+=" --reason $(printf %q "$reason")"
+      echo "Rotating $self_name: pid $self_pid (the calling session)${brief:+, with a brief}."
+      exec "$bin/open-session.sh" --command "$line" --title "$self_name" --background
+      ;;
+    prd)
+      [[ -z $brief && -z $brief_path ]] || die "rotate --self: an orchestrator hands over through _Status_, not a brief"
+      topic=$self_topic
+      ;;
+    *)
+      die "rotate --self: $self_name is a $self_kind session: only backlog sessions and orchestrators rotate themselves (a hotfix has no _Status_ to resume from, and recovery is one-shot)"
+      ;;
+  esac
+fi
 
 here=$(here_name)
 here_topic=""
