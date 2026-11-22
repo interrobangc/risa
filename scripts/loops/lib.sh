@@ -245,8 +245,10 @@ load_gate_wait() {
     fi
     sleep "$poll"
   done
+  # Never busy: no wait (reading the load itself can cross a second).
+  [[ -n $said ]] || return 0
   load_waited=$(($(date +%s) - t0))
-  [[ -z $said ]] || echo "The load dropped to $l (threshold $thr) after ${load_waited}s: starting $what."
+  echo "The load dropped to $l (threshold $thr) after ${load_waited}s: starting $what."
   return 0
 }
 
