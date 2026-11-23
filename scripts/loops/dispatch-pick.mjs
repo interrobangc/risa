@@ -44,7 +44,7 @@ export const KEEP_SESSION = "dispatch-keep";
 /** The answers a reopen ask offers. */
 export const REOPEN_OPTIONS = ["reopen again", "hold the topic"];
 /** The caps when the caller gives none: CARETOOK_MAX_PRDS, CARETOOK_MAX_PLANNERS, CARETOOK_FIXES_MIN. */
-export const DEFAULT_CAPS = { prds: 3, planners: 1, fixesMin: 3 };
+export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
 
 /**
  * @typedef {{ topic: string, flags?: string[], after?: string[], hot?: string[],

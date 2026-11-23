@@ -284,6 +284,19 @@ describe("one tick per action", () => {
     expect(open[1]).not.toMatch(/B-\d/);
   });
 
+  it("the PRD cap defaults to four, and CARETOOK_MAX_PRDS overrides it", () => {
+    const names = ["w", "x", "y"];
+    for (const n of names) worktree(n, `prd/${n}`);
+    const running = names.map((topic) => ({ topic, state: "running" }));
+    setRows([...running, { topic: "a", state: "planned" }]);
+    expect(ok(["--dry-run"])).toContain("start a:");
+    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
+    worktree("z", "prd/z");
+    setRows([...running, { topic: "z", state: "running" }, { topic: "a", state: "planned" }]);
+    expect(ok(["--dry-run"])).toContain("no free slot (4 of 4 running)");
+    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "5" })).toContain("start a:");
+  });
+
   it("a failed worktree opens nothing", () => {
     setRows([{ topic: "a", state: "planned" }]);
     const out = ok(["--once"], { STUB_NEW_FAIL: "1" });

@@ -49,7 +49,7 @@
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
-// Env: CARETOOK_MAX_PRDS (3), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
+// Env: CARETOOK_MAX_PRDS (4), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
 // the pick's caps; CARETOOK_LOAD_* (load-gate.mjs); CARETOOK_SESSIONS_DIR,
 // CARETOOK_ASKS_DIR; CARETOOK_ITERM_APP (default /Applications/iTerm.app);
 // CARETOOK_CLAUDE_BIN (the helper's claude); CARETOOK_CLOCK_FILE (tests: epoch
@@ -318,7 +318,7 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
       busy: gate.busy,
       paused: Boolean(state.paused),
       caps: {
-        prds: positive(env.CARETOOK_MAX_PRDS, 3),
+        prds: positive(env.CARETOOK_MAX_PRDS, 4),
         planners: positive(env.CARETOOK_MAX_PLANNERS, 1),
         fixesMin: positive(env.CARETOOK_FIXES_MIN, 3),
       },
