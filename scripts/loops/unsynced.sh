@@ -9,7 +9,8 @@
 # Exits: 0 passed, 3 the merge conflicts, 4 the typecheck failed, 5 the worktree
 # holds a check or browser lease, 6 the worktree isn't clean at TIP.
 #
-# Source it for unsynced_verdict, unsynced_commits and unsynced_clear. The marker
+# Source it for unsynced_verdict, unsynced_dev_brake, unsynced_commits and
+# unsynced_clear. The marker
 # (in the worktree's git dir, so it never shows as a change) is written before the
 # merge starts: `tip dev pid`, then the process's start time, so a reused pid
 # doesn't read as a live landing. `land`, `check` and `sync` call unsynced_clear.
@@ -61,6 +62,40 @@ unsynced_verdict() {
     else if (!v.drift) console.log("no\tdev brought nothing to land over");
     else console.log("go\t" + v.dev + "\t" + v.base);
   ' <<< "$out"
+}
+
+# unsynced_dev_brake SHA → sets dev_brake to why dev is known to be braked, or
+# empty: SHA's latest whole-tier verdict is a brake, or a dev-brake notice is live
+# (a brake on an earlier commit stays in force through it). Read only: `ci <sha>`
+# requests no run. No verdict, unknown or an unreachable GitHub is no known brake;
+# an unreadable board is no notice, and says so once. Paths are resolved because
+# ci.mjs's main guard compares its path with import.meta.url.
+dev_brake="" dev_brake_warned=""
+unsynced_dev_brake() {
+  local sha=$1 here out rc=0
+  dev_brake=""
+  here=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+  out=$(cd "$main" && node "$here/../ci/ci.mjs" "$sha" 2>/dev/null) || rc=$?
+  if ((rc == 1)) && grep -q "^verdict: brake · [^ ]* · ${sha:0:8} · " <<< "$out"; then
+    dev_brake="CI reads a brake on $trunk's tip ${sha:0:8}"
+    return 0
+  fi
+  rc=0
+  out=$(node -e '
+    const [blame, notices, dir] = process.argv.slice(1);
+    Promise.all([import(blame), import(notices)])
+      .then(([{ noticeKey }, { listNotices }]) => {
+        const hit = listNotices(dir).find((n) => noticeKey(String(n.text)));
+        if (hit) console.log(hit.text);
+      })
+      .catch(() => process.exit(3));
+  ' "$here/../ci/blame.mjs" "$here/notices.mjs" "${CARETOOK_NOTICES_DIR:-$loops/.notices}" 2>/dev/null) || rc=$?
+  if ((rc != 0)); then
+    [[ -n $dev_brake_warned ]] || echo "warning: couldn't read the dev-brake notices; going on as if there are none" >&2
+    dev_brake_warned=1
+  elif [[ -n $out ]]; then
+    dev_brake="a dev-brake notice is live: $out"
+  fi
 }
 
 # unsynced_commits BASE DEV → how many of dev's first-parent commits since BASE
