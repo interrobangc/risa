@@ -41,6 +41,20 @@ describe("ci refs", () => {
   });
 });
 
+describe("the quarantine", () => {
+  it("removes an entry whose item is done, through the backlog's write", () => {
+    const entry = { file: "scripts/loops/a.test.mjs", name: "one", item: "B-7" };
+    expect(one({ quarantineDone: [entry] }).safe).toEqual([
+      {
+        kind: "quarantine",
+        target: "scripts/loops/a.test.mjs: one",
+        why: "its item B-7 is done",
+        how: "pnpm backlog ci-file",
+      },
+    ]);
+  });
+});
+
 describe("worktrees", () => {
   const slice = { name: "t-1", branch: "slice/t/1", merged: true, dirty: false };
   const plan = { name: "plan-t", branch: "plan/t", landed: true, level: true, dirty: false };

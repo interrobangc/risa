@@ -451,3 +451,98 @@ describe("backlog CLI: multi-id writes and amending", () => {
     expect(git(m3, "rev-parse", "HEAD^")).toBe(stale);
   });
 });
+
+describe("backlog ci-file", () => {
+  const FILE = "scripts/loops/a.test.mjs";
+  const LIST = "scripts/ci/quarantine.txt";
+  const flake = {
+    key: "k1",
+    title: "CI flake: a",
+    prd: "fixes-tooling",
+    note: "flaked",
+    quarantine: { file: FILE, name: "one" },
+  };
+  let dir, repo, origin;
+  const file = (...a) =>
+    JSON.parse(
+      execFileSync("node", [CLI, "ci-file", ...a.slice(1)], {
+        cwd: repo,
+        encoding: "utf8",
+        env,
+        input: JSON.stringify({ findings: a[0] }),
+      }),
+    );
+  const count = (ref = "dev") => Number(git(repo, "rev-list", "--count", ref));
+  const list = () => git(repo, "show", `HEAD:${LIST}`);
+  beforeAll(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "backlog-ci-file-")));
+    repo = join(dir, "repo");
+    origin = join(dir, "origin.git");
+    execFileSync("git", ["init", "-q", "--bare", "-b", "dev", origin]);
+    execFileSync("git", ["init", "-q", "-b", "dev", repo]);
+    git(repo, "config", "user.email", "test@example.com");
+    git(repo, "config", "user.name", "Test");
+    git(repo, "config", "commit.gpgsign", "false");
+    git(repo, "remote", "add", "origin", origin);
+    execFileSync("mkdir", ["-p", join(repo, "plans"), join(repo, "scripts/ci")]);
+    writeFileSync(join(repo, "plans/backlog.md"), "# Backlog\n\n## Items\n");
+    writeFileSync(join(repo, LIST), "# the quarantine\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "init");
+    git(repo, "push", "-q", "origin", "dev");
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("files and quarantines in one commit, followed by a push", () => {
+    const before = count();
+    const out = file([flake], "--push");
+    expect(out).toMatchObject({ filed: [{ key: "k1", id: "B-1", created: true }], pushed: true });
+    expect(count()).toBe(before + 1);
+    expect(git(repo, "show", "--name-only", "--format=", "HEAD").split("\n").sort()).toEqual([
+      "plans/backlog.md",
+      LIST,
+    ]);
+    expect(list()).toContain(`${FILE}\tone\tB-1`);
+    expect(git(origin, "rev-parse", "dev")).toBe(git(repo, "rev-parse", "dev"));
+    expect(readFileSync(join(repo, LIST), "utf8")).toContain("B-1");
+  });
+
+  it("a second find only adds a note, and never amends", () => {
+    const head = git(repo, "rev-parse", "HEAD");
+    expect(file([flake])).toMatchObject({ filed: [{ id: "B-1", created: false }], pushed: null });
+    expect(git(repo, "rev-parse", "HEAD~1")).toBe(head);
+    expect(list().match(/B-1/g)).toHaveLength(1);
+    const text = readFileSync(join(repo, "plans/backlog.md"), "utf8");
+    expect(text.match(/### B-/g)).toHaveLength(1);
+    expect(text).toContain("[ci-key k1]");
+  });
+
+  it("a brake-list flake is filed with no entry", () => {
+    const out = file([{ ...flake, key: "k2", title: "CI flake: b", quarantine: null }]);
+    expect(out.filed[0]).toMatchObject({ id: "B-2", created: true });
+    expect(list()).not.toContain("B-2");
+  });
+
+  it("a done item's entry leaves on the next write", () => {
+    cli(repo, "set", "B-1", "--status", "dropped");
+    expect(file([]).removed).toEqual([`${FILE}\tone\tB-1`]);
+    expect(list()).not.toContain("B-1");
+    expect(readFileSync(join(repo, LIST), "utf8")).not.toContain("B-1");
+  });
+
+  it("refuses to force a push onto a diverged origin", () => {
+    const other = join(dir, "other");
+    execFileSync("git", ["clone", "-q", "-b", "dev", origin, other]);
+    git(other, "config", "user.email", "test@example.com");
+    git(other, "config", "user.name", "Test");
+    git(other, "commit", "-q", "--allow-empty", "-m", "elsewhere");
+    git(other, "push", "-q", "origin", "dev");
+    const theirs = git(other, "rev-parse", "HEAD");
+    const out = file(
+      [{ ...flake, key: "k3", title: "CI flake: c", quarantine: { file: FILE, name: "three" } }],
+      "--push",
+    );
+    expect(out.pushed).toBe(false);
+    expect(git(origin, "rev-parse", "dev")).toBe(theirs);
+  });
+});

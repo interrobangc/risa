@@ -139,6 +139,37 @@ describe("docs_only", () => {
   });
 });
 
+describe("CI's two lists on dev", () => {
+  const LISTS = ["scripts/ci/quarantine.txt", "scripts/ci/brake-list.txt"];
+  const lib = (/** @type {string} */ body) =>
+    spawnSync("bash", ["-c", `source scripts/loops/lib.sh && ${body}`], { cwd: repo, encoding: "utf8" });
+
+  it.each(LISTS)("a dev commit changing only %s is not drift", (list) => {
+    branch({ "apps/web/b.ts": "2" });
+    commit({ [list]: "a line\n" }, "chore(backlog): filed from CI");
+    expect(lib("trunk_drift prd/throwaway-x").stdout).toBe("");
+    commit({ "apps/web/a.ts": "changed" }, "real work");
+    expect(lib("trunk_drift prd/throwaway-x").stdout.trim()).toBe("apps/web/a.ts");
+  });
+
+  it.each(LISTS)("a commit changing only %s keeps a recorded pass", (list) => {
+    git("checkout", "-qb", "prd/throwaway-x");
+    commit({ "apps/web/b.ts": "2" }, "work");
+    const checked = git("rev-parse", "HEAD");
+    writeFileSync(join(git("rev-parse", "--absolute-git-dir"), "caretook-checked"), `${checked} full\n`);
+    commit({ [list]: "a line\n" }, "chore(ci): the list");
+    expect(lib("checked_ok . prd/throwaway-x").status).toBe(0);
+    expect(lib("checked_how . prd/throwaway-x").stdout).toContain(`full on ${checked.slice(0, 7)}`);
+    commit({ "apps/web/b.ts": "3" }, "more work");
+    expect(lib("checked_ok . prd/throwaway-x").status).not.toBe(0);
+  });
+
+  it("a branch changing only a list still needs a check", () => {
+    branch({ "scripts/ci/quarantine.txt": "a line\n" });
+    expect(lib("checked_ok . prd/throwaway-x").status).not.toBe(0);
+  });
+});
+
 describe("land.sh on the PR path", () => {
   it("lands a Markdown-only PR with no verdict, and says so", () => {
     branch({ "docs/x.md": "d" });
