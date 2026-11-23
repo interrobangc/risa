@@ -90,6 +90,7 @@ export function testDbOwner(db, worktrees) {
  * @property {string} branch
  * @property {boolean} [merged]         a slice whose tip is merged into its prd/ branch
  * @property {boolean} [landed]         its tip is a merged parent of a merge commit in dev
+ * @property {string} [held]             a merged slice its wave still needs, and why
  * @property {boolean} [level]          its tip is in dev (nothing dev lacks)
  * @property {boolean} [dirty]
  * @property {string} [busy]            what is running in it (a process, a server, a lease), if anything
@@ -159,6 +160,7 @@ export function tidy(facts) {
     if (w.dirty)
       kept.push({ kind: "worktree", target: w.name, why: `${what}, but it has uncommitted changes` });
     else if (w.busy) kept.push({ kind: "worktree", target: w.name, why: `${what}, but ${w.busy}` });
+    else if (slice && w.held) kept.push({ kind: "worktree", target: w.name, why: `${what}, but ${w.held}` });
     else if (plan && s)
       kept.push({ kind: "worktree", target: w.name, why: `${what}, but its session ${s.name} is live` });
     else safe.push({ kind: "worktree", target: w.name, why: what, how: `pnpm prd rm ${w.name}` });

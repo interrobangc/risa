@@ -149,6 +149,47 @@ slice_merged() {
   git -C "$1" log --merges --format='%P' -n 2000 "$parent" | awk '{for (i = 2; i <= NF; i++) print $i}' | grep -qx "$tip"
 }
 
+# slice_held DIR → for a merged slice its wave still needs, prints why and returns
+# true: its tip hasn't reached the trunk, a requested run of its topic has no
+# verdict, or GitHub can't say. A slice stays until its wave's verdict is green.
+slice_held() {
+  local branch topic out rc=0
+  branch=$(git -C "$1" branch --show-current 2>/dev/null) || return 1
+  topic=${branch#slice/}; topic=${topic%%/*}
+  if ! git -C "$1" merge-base --is-ancestor HEAD "$trunk" 2>/dev/null; then
+    echo "its wave hasn't landed"
+    return 0
+  fi
+  out=$(node "$(dirname "${BASH_SOURCE[0]}")/../ci/outstanding.mjs" "$topic" "$1" 2>/dev/null) || rc=$?
+  case $rc in
+    0) return 1 ;;
+    10) echo "its topic's run has no verdict: ${out//$'\n'/, }" ;;
+    *) echo "GitHub can't be read, so its wave's run is unknown" ;;
+  esac
+}
+
+# slice_state DIR GOING → a slice's place in its wave. GOING is 1 while its
+# topic has a requested run out. Handed off: clean, and merged or checked at its
+# tip. Fixing: not that, on a branch merged before. Otherwise working.
+slice_state() {
+  local dir=$1 going=${2:-0} branch parent tip checked seconds
+  branch=$(git -C "$dir" branch --show-current 2>/dev/null) || return 1
+  parent=$(parent_of "$branch")
+  tip=$(git -C "$dir" rev-parse HEAD 2>/dev/null) || return 1
+  checked=$(cut -d' ' -f1 "$(checked_file "$dir")" 2>/dev/null || true)
+  if [[ -z $(git -C "$dir" status --porcelain) ]] && { [[ $checked == "$tip" ]] || slice_merged "$dir"; }; then
+    if ((going)); then echo "waiting for the run"; else echo "handed off"; fi
+    return
+  fi
+  seconds=$(git -C "$dir" log --merges --format='%P' -n 2000 "$parent" 2>/dev/null |
+    awk '{for (i = 2; i <= NF; i++) print $i}')
+  if [[ -n $seconds ]] && grep -Fx -f <(printf '%s\n' "$seconds") <<<"$(git -C "$dir" rev-list --first-parent -n 2000 HEAD)" >/dev/null; then
+    echo "fixing"
+  else
+    echo "working"
+  fi
+}
+
 # iso_epoch ISO → epoch seconds of an RFC 3339 time (Docker's FinishedAt).
 iso_epoch() {
   local s=${1%%.*}; s=${s%Z}

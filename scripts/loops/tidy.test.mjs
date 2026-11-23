@@ -77,6 +77,15 @@ describe("worktrees", () => {
     expect(ask).toEqual([]);
   });
 
+  it("keeps a merged slice its wave still needs, with why, and lists it once that clears", () => {
+    const held = { ...slice, held: "its wave hasn't landed" };
+    expect(one({ worktrees: [held] }).kept).toEqual([
+      { kind: "worktree", target: "t-1", why: "slice/t/1 is merged into prd/t, but its wave hasn't landed" },
+    ]);
+    expect(one({ worktrees: [held] }).safe).toEqual([]);
+    expect(one({ worktrees: [slice] }).safe.map((f) => f.target)).toEqual(["t-1"]);
+  });
+
   it("an unmerged slice worktree is never listed", () => {
     expect(one({ worktrees: [{ ...slice, merged: false }] })).toEqual({ safe: [], ask: [], kept: [] });
   });

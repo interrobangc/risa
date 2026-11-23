@@ -8,7 +8,8 @@
 # Two kinds (pnpm prd status flags the same ones):
 #   - a slice worktree whose branch is merged into its PRD branch: removed with
 #     rm.sh (worktree, stack, test database, branch). One with uncommitted
-#     changes is refused and kept.
+#     changes is refused and kept, and so is one its wave still needs (not
+#     landed, or a requested run of its topic with no verdict).
 #   - a stack stopped for over CARETOOK_GC_STOPPED_HOURS (24): taken down with
 #     `stack.sh down` (containers, data, slot); the worktree stays.
 set -euo pipefail
@@ -31,6 +32,10 @@ for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
   dir=${dir%/}; name=$(basename "$dir")
   if slice_merged "$dir"; then
+    if held=$(slice_held "$dir"); then
+      echo "keep        $name (merged, but $held)"
+      continue
+    fi
     remove+=("$name")
     echo "remove      $name ($(git -C "$dir" branch --show-current) is merged into $(parent_of "$(git -C "$dir" branch --show-current)"))"
     continue

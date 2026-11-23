@@ -74,6 +74,8 @@ for dir in "$loops"/*/; do
   if slice_merged "$dir"; then
     if [[ -n $dirty ]]; then
       keep "$name: merged, but has uncommitted changes (commit or discard them, then pnpm prd reclaim)"
+    elif held=$(slice_held "$dir"); then
+      keep "$name: merged, but $held"
     else
       add worktree "$name" "$(du_kb "$dir")" "$branch is merged into $(parent_of "$branch")"
       continue

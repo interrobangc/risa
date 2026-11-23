@@ -119,6 +119,9 @@ beforeAll(() => {
   mkdirSync(join(main, "scripts/backlog"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => /\.(sh|mjs)$/.test(f) && !f.endsWith(".test.mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  mkdirSync(join(main, "scripts/ci"), { recursive: true });
+  for (const f of ["outstanding.mjs", "tiers.mjs"])
+    copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), FAKE_BACKLOG);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\nnode_modules/\n");
   mkdirSync(join(main, "plans"));
@@ -140,6 +143,8 @@ beforeAll(() => {
     git(dir, "commit", "-q", "-m", `feat(t): slice ${n}`);
     git(prd, "merge", "--no-ff", "-q", "-m", `feat(t): merge slice ${n}`, `slice/t/${n}`);
   }
+  // Their wave has landed, so nothing holds them for a fix.
+  git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land the wave", "prd/t");
   writeFileSync(join(loops, "t-2", "work-2.txt"), "more, not committed\n");
   // Slice 3 is active: a commit, not merged.
   writeFileSync(join(loops, "t-3", "work-3.txt"), "wip\n");
@@ -256,6 +261,21 @@ describe("a failed process inspection", () => {
       expect(t1(lists)?.why).toMatch(/^slice\/t\/1 is merged into prd\/t, but its processes are unknown \(/);
       expect(t1(lists)?.why).toMatch(why);
     }
+  });
+
+  it("keeps a merged slice while its topic's run has no verdict or GitHub can't say", () => {
+    const none = { status: 1, stdout: "", stderr: "" };
+    const out = [{ ref: "ci/full/prd-t", name: "prd-t", sha: "a", run: 7, url: "https://ci.example/7" }];
+    let lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => out }));
+    expect(lists.safe.some((f) => f.target === "t-1")).toBe(false);
+    expect(t1(lists)?.why).toBe(
+      "slice/t/1 is merged into prd/t, but its topic's run has no verdict: ci/full/prd-t (https://ci.example/7)",
+    );
+    lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => null }));
+    expect(t1(lists)?.why).toMatch(/GitHub can't be read/);
+    const other = [{ ...out[0], ref: "ci/full/prd-other", name: "prd-other" }];
+    lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => other }));
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "worktree", target: "t-1" }));
   });
 
   it("an empty successful inspection still lets a merged worktree go", () => {
