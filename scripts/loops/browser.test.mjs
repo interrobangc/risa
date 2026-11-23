@@ -262,6 +262,8 @@ describe("a suite", SLOW, () => {
   });
 });
 
+const PACKAGE = '{\n  "name": "a",\n  "scripts": { "x": "1" }\n}\n';
+
 // --changed --list against the real manifest and check-areas.d/, in a throwaway
 // repo with a stub file per check (the selection only, nothing runs).
 describe("--changed with the real map", SLOW, () => {
@@ -301,6 +303,8 @@ describe("--changed with the real map", SLOW, () => {
       if (line.trim() && !line.startsWith("#"))
         writeFileSync(join(checks, `${line.split(/\s+/)[0]}.spec.mjs`), "\n");
     writeFileSync(join(real, ".nvmrc"), `${process.versions.node.split(".")[0]}\n`);
+    mkdirSync(join(real, "packages/data"), { recursive: true });
+    writeFileSync(join(real, "packages/data/package.json"), PACKAGE);
     execFileSync("git", ["init", "-q", real]);
     execFileSync("git", ["-C", real, "add", "."]);
     execFileSync("git", [
@@ -314,6 +318,30 @@ describe("--changed with the real map", SLOW, () => {
       "-qm",
       "base",
     ]);
+  });
+
+  it("leaves out the lean set for a scripts-only package.json and keeps it for any other change", () => {
+    const file = "packages/data/package.json";
+    execFileSync("git", ["-C", real, "clean", "-qfd", "apps", "packages"]);
+    const list = (text) => {
+      writeFileSync(join(real, file), text);
+      const r = spawnSync("bash", [BROWSER, "--changed", "--base", "HEAD", "--list"], {
+        cwd: real,
+        env,
+        encoding: "utf8",
+      });
+      return `${r.stdout}${r.stderr}`;
+    };
+    try {
+      const scriptsOnly = list(PACKAGE.replace('"x": "1"', '"x": "2"'));
+      expect(scriptsOnly).toMatch(/packages\/data\/package\.json +- \(scripts only\)$/m);
+      expect(scriptsOnly).toMatch(/No browser checks needed for these changes\./);
+      const other = list(PACKAGE.replace('"name": "a"', '"name": "b"'));
+      expect(other).toMatch(/packages\/data\/package\.json +@suite$/m);
+      expect(other).toMatch(/needs the whole lean set/);
+    } finally {
+      execFileSync("git", ["-C", real, "checkout", "-q", "--", file]);
+    }
   });
 
   it("selects no end-to-end check for a timeline-only change (component tests cover it)", () => {

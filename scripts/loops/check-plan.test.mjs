@@ -1,5 +1,7 @@
-import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { planCheck, planToolingLint } from "./check-plan.mjs";
 
@@ -78,6 +80,66 @@ describe("planCheck", () => {
   });
 });
 
+describe("planCheck on a package.json's contents", () => {
+  const manifest = (fields) => `${JSON.stringify({ name: "a", version: "1.0.0", ...fields }, null, 2)}\n`;
+  const plan = (file, base, head, others = []) =>
+    planCheck([...others, file], "quick", new Map([[file, { base, head }]]));
+
+  it.each([
+    ["added", manifest({}), manifest({ scripts: { dev: "vite" } })],
+    ["edited", manifest({ scripts: { dev: "vite" } }), manifest({ scripts: { dev: "vite --host" } })],
+    ["removed", manifest({ scripts: { dev: "vite" } }), manifest({})],
+    ["a lifecycle hook", manifest({ scripts: {} }), manifest({ scripts: { postinstall: "node x.mjs" } })],
+  ])("a scripts-only change stays quick: %s", (_, base, head) => {
+    expect(plan("package.json", base, head)).toMatchObject({ mode: "quick", reason: "" });
+    expect(plan("packages/data/package.json", base, head).mode).toBe("quick");
+  });
+
+  it.each([
+    ["a dependency", manifest({ dependencies: { a: "1.0.0" } }), manifest({ dependencies: { a: "1.0.1" } })],
+    ["another field", manifest({ type: "module" }), manifest({ type: "commonjs" })],
+    [
+      "scripts and a field",
+      manifest({ scripts: { a: "x" }, private: true }),
+      manifest({ scripts: { a: "y" }, private: false }),
+    ],
+    [
+      "the order of exports conditions",
+      manifest({ exports: { import: "./a.mjs", default: "./a.cjs" } }),
+      manifest({ exports: { default: "./a.cjs", import: "./a.mjs" } }),
+    ],
+    ["an added file", null, manifest({})],
+    ["a deleted file", manifest({}), null],
+    ["an unparseable base", "{ nope", manifest({})],
+    ["an unparseable head", manifest({}), "{ nope"],
+    ["a manifest that isn't an object", "[]", "[]"],
+  ])("forces full: %s", (_, base, head) => {
+    const forced = plan("apps/web/package.json", base, head);
+    expect(forced.mode).toBe("full");
+    expect(forced.reason).toContain("a package.json");
+  });
+
+  it("forces full for a package.json whose contents it wasn't given", () => {
+    expect(planCheck(["package.json"], "quick", new Map()).mode).toBe("full");
+  });
+
+  it("a scripts-only change beside a lockfile change still forces full", () => {
+    const forced = plan("package.json", manifest({}), manifest({ scripts: { a: "x" } }), ["pnpm-lock.yaml"]);
+    expect(forced.mode).toBe("full");
+    expect(forced.reason).toContain("the lockfile");
+  });
+
+  it("one scripts-only package.json doesn't excuse another that changed more", () => {
+    const packages = new Map([
+      ["package.json", { base: manifest({}), head: manifest({ scripts: { a: "x" } }) }],
+      ["apps/web/package.json", { base: manifest({}), head: manifest({ private: true }) }],
+    ]);
+    const forced = planCheck(["package.json", "apps/web/package.json"], "quick", packages);
+    expect(forced.mode).toBe("full");
+    expect(forced.reason).toContain("apps/web/package.json");
+  });
+});
+
 describe("planToolingLint", () => {
   it("lints and formats the changed tooling files of a tooling-only diff", () => {
     const plan = planToolingLint([
@@ -134,5 +196,48 @@ describe("check-plan.mjs CLI", () => {
 
   it("an unknown mode is a full check", () => {
     expect(cli("other", ["apps/web/app/a.ts"])[0]).toBe("full");
+  });
+
+  it("reads --base and --head from git, and without them any package.json forces full", () => {
+    const repo = mkdtempSync(join(tmpdir(), "check-plan-"));
+    const git = (...args) =>
+      execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+        encoding: "utf8",
+      }).trim();
+    const commit = (file, text) => {
+      mkdirSync(dirname(join(repo, file)), { recursive: true });
+      writeFileSync(join(repo, file), text);
+      git("add", ".");
+      git("commit", "-qm", "c");
+      return git("rev-parse", "HEAD");
+    };
+    const withRefs = (base, head, file) =>
+      spawnSync(
+        "node",
+        [
+          join(ROOT, "scripts/loops/check-plan.mjs"),
+          "--mode",
+          "quick",
+          "--repo",
+          repo,
+          "--base",
+          base,
+          "--head",
+          head,
+        ],
+        { input: file, encoding: "utf8" },
+      ).stdout.split("\n")[0];
+    try {
+      git("init", "-q");
+      const file = "packages/a/package.json";
+      const first = commit(file, '{"name":"a","scripts":{"x":"1"}}\n');
+      const scripts = commit(file, '{"name":"a","scripts":{"x":"2"}}\n');
+      const version = commit(file, '{"name":"a","version":"2.0.0","scripts":{"x":"2"}}\n');
+      expect(withRefs(first, scripts, file)).toBe("quick");
+      expect(withRefs(scripts, version, file)).toBe("full");
+      expect(cli("quick", [file])[0]).toBe("full");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
