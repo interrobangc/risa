@@ -5,6 +5,12 @@
 //                                     file a question; one with a recommendation says whether it
 //                                     takes it after CARETOOK_ASK_DEFAULT_MIN (30) minutes unanswered
 //                                     (--defaults) or waits for the user however long (--waits)
+//                                     It needs --skeptic <id>: a skeptic's `ask` verdict on this
+//                                     question, or a land `no` or plan `send-back` (each used once).
+//                                     The dispatcher's own sessions (--session dispatch…) are exempt
+//   ask --decided --skeptic <id> --topic <t> --question <text> --option <a>… --chose <a|n>
+//                                     file what a skeptic decided: settled, never pushed, listed
+//                                     under "decided for you"
 //   ask --topic <t> --report <text>                                         file a report
 //   ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0); 75 at the timeout.
 //                                     It applies a due default (then says so on a second line)
@@ -31,6 +37,7 @@ import { delimiter, join } from "node:path";
 import {
   AskError,
   DEFAULT_WAIT_MIN,
+  DISPATCHER_SESSIONS,
   NEVER_DEFAULT,
   answerAsk,
   clock,
@@ -43,7 +50,9 @@ import {
   settleAsk,
   shorten,
   span,
+  validateAsk,
 } from "./asks.mjs";
+import { SkepticError, questionHash, useRecord } from "./skeptics.mjs";
 
 const TIMED_OUT = 75;
 
@@ -165,8 +174,10 @@ async function ask(argv) {
       "timeout",
       "here-topic",
       "here-session",
+      "skeptic",
+      "chose",
     ],
-    ["defaults", "waits"],
+    ["defaults", "waits", "decided"],
   );
   if (rest.length) fail(`ask: unexpected ${rest.join(" ")} (quote the text)`);
   const dir = dirOf();
@@ -182,17 +193,36 @@ async function ask(argv) {
     fail(
       `a question with a recommendation must say what silence means: --defaults (it takes the recommendation after ${waitMin} min with no answer) or --waits (it waits for the user however long it takes). Never --defaults for ${NEVER_DEFAULT}: those take --waits. Nothing was filed`,
     );
-  const record = createAsk(dir, {
+  if (kind === "report" && (opts.skeptic != null || opts.decided))
+    fail("a report needs no skeptic: drop --skeptic/--decided");
+  if (opts.decided && (opts.skeptic == null || opts.chose == null))
+    fail("ask --decided needs --skeptic <id> and --chose <option>");
+  if (!opts.decided && opts.chose != null) fail("--chose goes with --decided");
+  const input = {
     kind,
     topic: opts.topic || opts["here-topic"] || fail("ask needs --topic <topic> outside a worktree"),
     text: opts.question ?? opts.report,
-    session: opts.session || process.env.CARETOOK_SESSION || opts["here-session"] || null,
     options: opts.option,
     recommended: opts.recommend ?? null,
-    defaults: Boolean(opts.defaults),
+    defaults: Boolean(opts.defaults) && !opts.decided,
     waitMin,
+    chose: opts.chose ?? null,
+  };
+  // Everything that can refuse the question comes first: using the record spends it.
+  const { chose } = validateAsk(input);
+  const skeptic = kind === "question" ? spendVerdict(opts, input, chose) : null;
+  const record = createAsk(dir, {
+    ...input,
+    session: opts.session || process.env.CARETOOK_SESSION || opts["here-session"] || null,
+    skeptic,
   });
   console.log(record.id);
+  if (opts.decided) {
+    console.log(
+      `Decided by the skeptic: "${record.answer}" (${skeptic.why}). Carry on with it; the user can veto it under "decided for you". Nothing to push or wait for.`,
+    );
+    return;
+  }
   if (kind === "question") {
     const when = record.defaults
       ? ` (takes "${shorten(record.recommended, 40)}" at ${clock(record.defaultAt)} unless answered)`
@@ -201,6 +231,40 @@ async function ask(argv) {
     console.log(`Then wait in the background: pnpm prd ask --wait ${record.id}`);
   } else console.log("Filed. No PushNotification for a report: only questions are pushed.");
   await tell(record);
+}
+
+/**
+ * Spend the --skeptic record this question needs; returns what the ask keeps of
+ * it, or null for a dispatcher's question. Only an explicit --session exempts,
+ * so an inherited CARETOOK_SESSION can't.
+ */
+function spendVerdict(opts, input, chose) {
+  if (opts.skeptic == null) {
+    if (DISPATCHER_SESSIONS.includes(opts.session)) return null;
+    fail(
+      `a question goes to a skeptic first. Nothing was filed. Write the question, options, recommendation and evidence to a file; run a fresh agent on Opus with the brief from pnpm prd prompt skeptic ask --evidence <file>; record its answer with pnpm prd skeptic record --kind ask --verdict decide|ask --why "<its line>" --question "<text>" --offer "<a>"… --defaults|--waits [--option "<chosen>"]. On ask, file this again with --skeptic <id>; on decide, file it with pnpm prd ask --decided --skeptic <id> --chose "<a>"`,
+    );
+  }
+  const dir =
+    process.env.CARETOOK_SKEPTIC_DIR || fail("CARETOOK_SKEPTIC_DIR isn't set (run this through pnpm prd)");
+  const hash = questionHash(input.text, input.options);
+  const wanted = opts.decided
+    ? {
+        use: "decided",
+        topic: input.topic,
+        questionHash: hash,
+        chose,
+        askerClass: opts.waits ? "waits" : "defaults",
+      }
+    : {
+        use: "ask",
+        topic: input.topic,
+        questionHash: hash,
+        // A question with no recommendation can't default, so it counts as --waits.
+        askerClass: opts.defaults ? "defaults" : "waits",
+      };
+  const { id, verdict, why } = useRecord(dir, opts.skeptic, wanted);
+  return { id, verdict, why };
 }
 
 async function wait(dir, id, timeout) {
@@ -221,7 +285,9 @@ async function wait(dir, id, timeout) {
     }
     if (a.answeredAt) {
       console.log(a.answer);
-      if (a.defaulted)
+      if (a.defaulted && a.skeptic?.verdict === "decide")
+        console.log(`(decided by skeptic ${a.skeptic.id}: ${a.skeptic.why}; listed under "decided for you")`);
+      else if (a.defaulted)
         console.log(
           `(defaulted: no answer in ${span(Date.parse(a.defaultAt) - Date.parse(a.askedAt))}, so it took the recommendation at ${clock(a.answeredAt)}; the user sees it under "decided for you")`,
         );
@@ -260,6 +326,6 @@ try {
   else if (cmd === "answer") answer(argv);
   else fail(`ask.mjs: unknown command ${cmd ?? ""} (ask, asks, answer)`);
 } catch (e) {
-  if (e instanceof AskError) fail(e.message);
+  if (e instanceof AskError || e instanceof SkepticError) fail(e.message);
   throw e;
 }

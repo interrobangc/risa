@@ -361,6 +361,23 @@ describe("plan and backlog", () => {
     expect(plan).toContain("report the decisions you assumed");
   });
 
+  it("both asking paragraphs send a question past a fresh Opus skeptic, then ask or file the decision", () => {
+    for (const out of [ok("orchestrator", "T", "--auto"), ok("plan", "T", "--auto", "B-1")]) {
+      expect(out).toContain("**A fresh skeptic reads every question first.**");
+      expect(out).toContain("`pnpm prd prompt skeptic ask --evidence <file>`");
+      expect(out).toContain('`model: "opus"`');
+      expect(out).toContain("`pnpm prd skeptic record --kind ask --verdict <decide|ask>");
+      expect(out).toContain('--option "<b>" --skeptic <id> --recommend <a> --defaults`');
+      expect(out).toContain("`pnpm prd ask --decided --skeptic <id> --topic T");
+      expect(out).toContain("with no PushNotification and no wait");
+      expect(out).toContain("A `--waits` question is never decided");
+      expect(out).toContain("a land `no` or a plan `send-back` already counts");
+    }
+    // A terminal the user is watching gets no skeptic.
+    for (const out of [ok("orchestrator", "T"), ok("plan", "T", "B-1")])
+      expect(out).not.toContain("A fresh skeptic reads every question");
+  });
+
   it("plan --auto: questions and the report through pnpm prd ask with a push, never AskUserQuestion", () => {
     for (const plan of [ok("plan", "T", "--auto", "B-1"), ok("plan", "T", "B-1", "--auto")]) {
       expect(plan).toContain('You are the planning agent for "T".');

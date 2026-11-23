@@ -373,6 +373,7 @@ describe("the tick", () => {
       "notices.mjs",
       "asks.mjs",
       "ask.mjs",
+      "skeptics.mjs",
       "sessions.mjs",
       "load-gate.mjs",
       "rotate.mjs",

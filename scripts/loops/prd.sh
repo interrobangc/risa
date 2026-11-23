@@ -77,12 +77,14 @@ pnpm prd <command>
     session requests [--json] the pending requests, and those settled in the last day
 
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
-    ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]   file a
-                              question; prints its id and the PushNotification line to send; a macOS
+    ask --topic <t> --question <text> --skeptic <id> [--option <a>]… [--recommend <a|n> --defaults|--waits]
+                              file a question past a skeptic (the dispatcher's own need none); prints its id and the PushNotification line to send; a macOS
                               notification, and \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set
                               (failures ignored). With a recommendation, --defaults takes it after
                               \$CARETOOK_ASK_DEFAULT_MIN (30) min unanswered; --waits (money, data, a live
                               deploy, a destructive step, a new dependency, compliance) waits however long
+    ask --decided --skeptic <id> --topic <t> --question <text> --option <a>… --chose <a|n>   file what a
+                              skeptic decided: settled, never pushed, listed under decided for you
     ask --topic <t> --report <text>   file a report (a landed wave, what to try); never pushed (no
                               PushNotification line); the same macOS notification and hook
     ask --wait <id> [--timeout <s>]   print the answer once there is one (exit 0; 75 at the timeout);
@@ -381,6 +383,7 @@ case $cmd in
   ask | asks | answer)
     # The asking session and topic default to the worktree's: plan-<t> → plan-<t>, else prd-<topic>.
     export CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks}
+    export CARETOOK_SKEPTIC_DIR=${CARETOOK_SKEPTIC_DIR:-$loops/.skeptic}
     here=$(here_name) here_args=()
     if [[ $cmd == ask && -n $here ]]; then
       if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")

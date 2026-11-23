@@ -6,10 +6,14 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DISPATCHER_SESSIONS } from "./asks.mjs";
+import { CONTEXT_SESSION } from "./dispatch-context.mjs";
+import { DISPATCH_SESSION, KEEP_SESSION } from "./dispatch-pick.mjs";
+import { recordVerdict } from "./skeptics.mjs";
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
 
-let root, dir, stubs, env;
+let root, dir, skepticDir, stubs, env;
 const children = [];
 
 beforeAll(() => {
@@ -22,11 +26,13 @@ beforeAll(() => {
 });
 beforeEach(() => {
   dir = mkdtempSync(join(root, "asks-"));
+  skepticDir = mkdtempSync(join(root, "skeptic-"));
   rmSync(join(root, "osascript.args"), { force: true });
   env = {
     ...process.env,
     PATH: `${stubs}:${process.env.PATH}`,
     CARETOOK_ASKS_DIR: dir,
+    CARETOOK_SKEPTIC_DIR: skepticDir,
     CARETOOK_ASK_POLL: "0.2",
   };
   for (const k of [
@@ -42,8 +48,11 @@ afterEach(() => {
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-const prd = (args, extra = {}) =>
+const raw = (args, extra = {}) =>
   spawnSync("bash", [PRD_SH, ...args], { cwd: root, encoding: "utf8", env: { ...env, ...extra } });
+// The queue's own behavior, filed as the dispatcher (no skeptic); the skeptic's tests use raw.
+const prd = (args, extra) =>
+  raw(args[0] === "ask" && args.includes("--question") ? [...args, "--session", "dispatch"] : args, extra);
 const start = (args) => {
   const child = spawn("bash", [PRD_SH, ...args], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
   children.push(child);
@@ -225,7 +234,7 @@ describe("defaults on silence", () => {
   it("asks shows the countdown, and a due ask as due without settling it: it can still be answered", async () => {
     askDefaulting(30);
     expect(prd(["asks"]).stdout.split("\n")[0]).toMatch(
-      /^a1 {2}question {2}demo {2}\d+s ago, takes "yes" in 30m \(at \d\d:\d\d\) unless answered$/,
+      /^a1 {2}question {2}demo {2}\d+s ago, dispatch, takes "yes" in 30m \(at \d\d:\d\d\) unless answered$/,
     );
     askDefaulting(0.001);
     await new Promise((r) => setTimeout(r, 200));
@@ -303,7 +312,7 @@ describe("pnpm prd asks", () => {
     prd(["ask", "--topic", "other", "--report", "Landed.", "--session", "prd-other"]);
     const r = prd(["asks"]);
     expect(r.stdout).toMatch(
-      /^a1 {2}question {2}demo {2}\d+s ago\n {4}Land wave 1 now\?\n {4}1\. yes {2}\(recommended\)\n {4}2\. after the check\n\na2 {2}report {2}other {2}\d+s ago, prd-other\n {4}Landed\.\n$/,
+      /^a1 {2}question {2}demo {2}\d+s ago, dispatch\n {4}Land wave 1 now\?\n {4}1\. yes {2}\(recommended\)\n {4}2\. after the check\n\na2 {2}report {2}other {2}\d+s ago, prd-other\n {4}Landed\.\n$/,
     );
     expect(JSON.parse(prd(["asks", "--json"]).stdout).map((a) => a.id)).toEqual(["a1", "a2"]);
     expect(prd(["asks", "--done", "a2"]).stdout).toBe("a2 dismissed\n");
@@ -318,5 +327,183 @@ describe("pnpm prd asks", () => {
     expect(group).toMatch(/^\n {2}Asks /);
     for (const c of ["ask --topic", "ask --wait", "asks [--json]", "asks --done", "answer <id>"])
       expect(group.split("\n\n")[0]).toContain(c);
+  });
+});
+
+describe("a skeptic before every ask", () => {
+  const Q = "Keep the old column?";
+  const OFFERS = ["keep", "drop"];
+  const question = (...more) => [
+    "ask",
+    "--topic",
+    "demo",
+    "--question",
+    Q,
+    ...OFFERS.flatMap((o) => ["--option", o]),
+    ...more,
+  ];
+  const verdict = (fields = {}) =>
+    recordVerdict(skepticDir, {
+      kind: "ask",
+      verdict: "ask",
+      why: "the user's call",
+      topic: "demo",
+      question: Q,
+      offers: OFFERS,
+      askerClass: "defaults",
+      ...fields,
+    }).id;
+  const decide = (fields = {}) =>
+    verdict({ verdict: "decide", option: "keep", why: "reversible", ...fields });
+  const filed = () => (existsSync(join(dir, "a1.json")) ? stored("a1") : null);
+
+  it("without --skeptic it files nothing and names the steps", () => {
+    const r = raw(question("--recommend", "keep", "--defaults"));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("goes to a skeptic first");
+    expect(r.stderr).toContain("pnpm prd prompt skeptic ask --evidence");
+    expect(r.stderr).toContain("pnpm prd skeptic record --kind ask");
+    expect(filed()).toBeNull();
+  });
+
+  it("only the dispatcher's sessions are exempt, and only by an explicit --session", () => {
+    expect(DISPATCHER_SESSIONS).toEqual([DISPATCH_SESSION, CONTEXT_SESSION, KEEP_SESSION]);
+    for (const s of DISPATCHER_SESSIONS) expect(raw(question("--session", s, "--waits")).status).toBe(0);
+    expect(raw(question("--session", "prd-demo", "--waits")).status).toBe(1);
+    expect(raw(question("--waits"), { CARETOOK_SESSION: "dispatch" }).status).toBe(1);
+  });
+
+  it("a report needs none, and refuses one", () => {
+    expect(raw(["ask", "--topic", "demo", "--report", "Landed."]).status).toBe(0);
+    const r = raw(["ask", "--topic", "demo", "--report", "Landed.", "--skeptic", "s1"]);
+    expect(r.stderr).toMatch(/report needs no skeptic/);
+  });
+
+  it("an ask verdict files it as today, --defaults and --waits unchanged, carrying the verdict", () => {
+    const d = raw(question("--recommend", "keep", "--defaults", "--skeptic", verdict()));
+    expect(d.status).toBe(0);
+    expect(d.stdout).toContain("Now send a PushNotification");
+    expect(stored("a1")).toMatchObject({
+      defaults: true,
+      skeptic: { id: "s1", verdict: "ask", why: "the user's call" },
+    });
+    const w = raw(question("--recommend", "keep", "--waits", "--skeptic", verdict({ askerClass: "waits" })));
+    expect(w.status).toBe(0);
+    expect(stored("a2")).toMatchObject({ defaults: false, defaultAt: null });
+  });
+
+  it("a question with no recommendation counts as --waits", () => {
+    expect(raw(question("--skeptic", verdict())).status).toBe(1);
+    expect(raw(question("--skeptic", verdict({ askerClass: "waits" }))).status).toBe(0);
+  });
+
+  it("a decide verdict is refused, pointing at --decided", () => {
+    const r = raw(question("--recommend", "keep", "--defaults", "--skeptic", decide()));
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("pnpm prd ask --decided --skeptic s1");
+    expect(filed()).toBeNull();
+  });
+
+  it("another question, a reused record and an unknown one are refused", () => {
+    const other = raw([
+      ...question("--recommend", "keep", "--defaults", "--skeptic", verdict({ question: "Something else?" })),
+    ]);
+    expect(other.stderr).toMatch(/another question/);
+    const id = verdict();
+    expect(raw(question("--recommend", "keep", "--defaults", "--skeptic", id)).status).toBe(0);
+    const again = raw(question("--recommend", "keep", "--defaults", "--skeptic", id));
+    expect(again.status).toBe(1);
+    expect(again.stderr).toMatch(/already used/);
+    expect(raw(question("--waits", "--skeptic", "s99")).stderr).toMatch(/no such skeptic record/);
+  });
+
+  it("a question that can't be filed doesn't burn the verdict", () => {
+    const id = verdict();
+    const bad = raw(question("--recommend", "neither", "--defaults", "--skeptic", id));
+    expect(bad.stderr).toMatch(/isn't one of the options/);
+    expect(existsSync(join(skepticDir, `${id}.used`))).toBe(false);
+    expect(raw(question("--recommend", "keep", "--defaults", "--skeptic", id)).status).toBe(0);
+  });
+
+  it("a land no and a plan send-back file a question", () => {
+    const tip = "a".repeat(40);
+    const land = recordVerdict(skepticDir, {
+      kind: "land",
+      verdict: "no",
+      why: "thin evidence",
+      topic: "demo",
+      tip,
+      action: "force",
+    }).id;
+    const plan = recordVerdict(skepticDir, {
+      kind: "plan",
+      verdict: "send-back",
+      why: "twice rejected",
+      topic: "demo",
+    }).id;
+    expect(raw(question("--waits", "--skeptic", land)).status).toBe(0);
+    expect(raw(question("--waits", "--skeptic", plan)).status).toBe(0);
+    expect(stored("a1").skeptic).toMatchObject({ verdict: "no" });
+    expect(stored("a2").skeptic).toMatchObject({ verdict: "send-back" });
+  });
+
+  describe("--decided", () => {
+    const decided = (id, ...more) => question("--decided", "--skeptic", id, "--chose", "keep", ...more);
+
+    it("files a settled record, with no push line and no notification", () => {
+      const hookFile = join(root, "decided-hook");
+      const r = raw(decided(decide()), { CARETOOK_ASK_NOTIFY: `touch ${hookFile}; true` });
+      expect(r.status).toBe(0);
+      expect(r.stdout.split("\n")[0]).toBe("a1");
+      expect(r.stdout).not.toContain("Now send a PushNotification");
+      expect(existsSync(join(root, "osascript.args"))).toBe(false);
+      expect(existsSync(hookFile)).toBe(false);
+      expect(stored("a1")).toMatchObject({
+        answer: "keep",
+        defaulted: true,
+        defaults: false,
+        skeptic: { id: "s1", verdict: "decide", why: "reversible" },
+      });
+    });
+
+    it("takes the option by number", () => {
+      const r = raw(question("--decided", "--skeptic", decide(), "--chose", "1"));
+      expect(r.status).toBe(0);
+      expect(stored("a1").answer).toBe("keep");
+    });
+
+    it("is listed under decided for you with its why, --json carries it, --done dismisses it", () => {
+      raw(decided(decide()));
+      const listed = raw(["asks"]).stdout;
+      expect(listed).toContain("DECIDED FOR YOU (by a skeptic");
+      expect(listed).toMatch(/→ a skeptic chose "keep" at \d\d:\d\d, \d+s ago: reversible/);
+      const [json] = JSON.parse(raw(["asks", "--json"]).stdout);
+      expect(json.skeptic).toEqual({ id: "s1", verdict: "decide", why: "reversible" });
+      expect(raw(["ask", "--wait", "a1"]).stdout).toContain("decided by skeptic s1: reversible");
+      expect(raw(["answer", "a1", "2"]).stderr).toMatch(/decided by a skeptic/);
+      expect(raw(["asks", "--done", "a1"]).status).toBe(0);
+      expect(raw(["asks"]).stdout).toBe("No open asks.\n");
+    });
+
+    it("refuses a --waits class, another choice, an ask verdict and a reuse", () => {
+      expect(raw(decided(decide(), "--waits")).stderr).toMatch(/--waits question is the user's/);
+      expect(raw(question("--decided", "--skeptic", decide(), "--chose", "drop")).stderr).toMatch(
+        /chose "keep"/,
+      );
+      expect(raw(decided(verdict())).stderr).toMatch(/isn't a decide verdict/);
+      expect(filed()).toBeNull();
+      const id = decide();
+      expect(raw(decided(id)).status).toBe(0);
+      expect(raw(decided(id)).stderr).toMatch(/already used/);
+    });
+
+    it("needs --skeptic and --chose, and --chose needs --decided", () => {
+      expect(raw(question("--decided", "--chose", "keep")).stderr).toMatch(/needs --skeptic/);
+      expect(raw(question("--decided", "--skeptic", "s1")).stderr).toMatch(/--chose/);
+      expect(raw(question("--chose", "keep", "--skeptic", "s1")).stderr).toMatch(/goes with --decided/);
+      expect(raw(question("--decided", "--skeptic", decide(), "--chose", "other")).stderr).toMatch(
+        /isn't one of the options/,
+      );
+    });
   });
 });
