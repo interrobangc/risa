@@ -19,6 +19,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { brakeNotice } from "../ci/blame.mjs";
+import { createNotice, withdrawNotice } from "./notices.mjs";
+
 const HERE = new URL(".", import.meta.url).pathname;
 let root, repo;
 const git = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -952,6 +955,144 @@ exit 0
       const r = go();
       expect(r.status, r.stdout + r.stderr).toBe(0);
       expect(r.stdout).toContain("landed on an unsynced tip");
+    });
+  });
+
+  describe("on a known dev brake", () => {
+    const board = () => join(root, "notices");
+    const failure = { key: "k1", job: "unit", file: "apps/web/x.test.ts", name: "fails" };
+    const ciVerdict = (sha, kind) => ({
+      version: 1,
+      commit: sha,
+      runId: "21",
+      tier: "components",
+      ranTier: "components",
+      kind,
+      flaky: [],
+      brake: { jobs: [], tests: [], files: [] },
+      failed: { tests: [], files: [], jobs: [], unnamedJobs: [] },
+    });
+    const runs = (verdicts) =>
+      writeFileSync(
+        join(root, "fixture.json"),
+        JSON.stringify({
+          byCommit: Object.fromEntries(
+            verdicts.map(([sha, kind], i) => [
+              sha,
+              [{ id: 21 + i, tier: "components", verdict: ciVerdict(sha, kind) }],
+            ]),
+          ),
+        }),
+      );
+    const drifted = (files) => {
+      started(files);
+      toDev({ "apps/web/dev.ts": "d" });
+      return git("rev-parse", "origin/dev");
+    };
+    const refused = (r, why) => {
+      expect(r.status, r.stdout + r.stderr).not.toBe(0);
+      expect(r.stderr).toContain("has moved since");
+      expect(r.stderr).toContain(why);
+      expect(r.stdout).not.toContain("landed on an unsynced tip");
+    };
+    const landed = (r) => {
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain("landed on an unsynced tip");
+    };
+
+    it("refuses a tier none branch when dev's tip reads brake", () => {
+      runs([[drifted(), "brake"]]);
+      refused(go(), "CI reads a brake on dev's tip");
+      expect(steps()).toEqual([]);
+    });
+
+    it("refuses a Markdown-only branch when dev's tip reads brake", () => {
+      runs([[drifted({ "docs/own.md": "own" }), "brake"]]);
+      refused(go(), "CI reads a brake on dev's tip");
+    });
+
+    it("refuses a tier none branch on a live dev-brake notice with no verdict on the tip", () => {
+      drifted();
+      createNotice(board(), { text: brakeNotice("B-9", failure), session: "ci", minutes: 60 });
+      refused(go(), "a dev-brake notice is live: dev brake B-9");
+      expect(steps()).toEqual([]);
+    });
+
+    it("refuses a gated branch with a clean verdict of its own when dev reads brake", () => {
+      const dev = drifted({ "apps/web/b.ts": "2" });
+      runs([
+        [git("rev-parse", "prd/throwaway-x"), "green"],
+        [dev, "brake"],
+      ]);
+      refused(go(), "CI reads a brake on dev's tip");
+      expect(steps()).toEqual([]);
+    });
+
+    it("reads the tip land measures against, not a local dev ahead of it", () => {
+      const measured = drifted();
+      commit({ "apps/web/local.ts": "l" }, "unpushed dev work");
+      runs([[measured, "brake"]]);
+      refused(go(), `CI reads a brake on dev's tip ${measured.slice(0, 8)}`);
+    });
+
+    it("refuses when a brake appears during the typecheck", () => {
+      drifted();
+      const later = join(root, "later.json");
+      const { id } = createNotice(board(), { text: brakeNotice("B-9", failure), session: "ci" });
+      cpSync(join(board(), `${id}.json`), later);
+      withdrawNotice(board(), id);
+      const r = go({ PNPM_ON_TYPECHECK: `cp "${later}" "${join(board(), `${id}.json`)}"` });
+      refused(r, "a dev-brake notice is live");
+      expect(steps()).toEqual(["typegen", "typecheck"]);
+      atTip();
+    });
+
+    it("lands with no verdict on dev", () => {
+      drifted();
+      landed(go());
+    });
+
+    it.each(["green", "file", "something-new"])("lands when dev's tip reads %s", (kind) => {
+      runs([[drifted(), kind]]);
+      landed(go());
+    });
+
+    it("lands when GitHub can't be reached", () => {
+      drifted();
+      landed(go({ GH_CI: join(root, "no-such-stub.mjs") }));
+    });
+
+    it("lands on an unreadable board, and says so", () => {
+      drifted();
+      writeFileSync(join(root, "a-file"), "x");
+      const r = go({ CARETOOK_NOTICES_DIR: join(root, "a-file", "notices") });
+      landed(r);
+      expect(r.stderr).toContain("couldn't read the dev-brake notices");
+    });
+
+    it("an expired brake notice doesn't refuse", () => {
+      drifted();
+      createNotice(board(), {
+        text: brakeNotice("B-9", failure),
+        session: "ci",
+        minutes: 60,
+        now: Date.now() - 2 * 3600_000,
+      });
+      landed(go());
+    });
+
+    it("a withdrawn brake notice doesn't refuse", () => {
+      drifted();
+      const { id } = createNotice(board(), { text: brakeNotice("B-9", failure), session: "ci" });
+      withdrawNotice(board(), id);
+      landed(go());
+    });
+
+    it("a notice that isn't a brake notice doesn't refuse", () => {
+      drifted();
+      createNotice(board(), { text: "landed prd/x in dev as abc1234: dev brake talk", session: "s" });
+      createNotice(board(), { text: "dev brake B-9 without its key", session: "s" });
+      landed(go());
     });
   });
 

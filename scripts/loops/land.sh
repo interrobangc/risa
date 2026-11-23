@@ -26,7 +26,9 @@
 # the branch and bring no risky one (dev-brought.mjs), land typechecks a temporary
 # merge in the branch's worktree (unsynced.sh, in a check lease; none for a
 # Markdown-only diff) and lands the unsynced tip, saying so in the merge body and
-# the report. Never with --force or --fixes, on a brake verdict, or with
+# the report. Never with --force or --fixes, on the branch's own brake verdict,
+# on a known dev brake (a brake verdict on the tip of dev it measures against, or
+# a live dev-brake notice; no verdict is not a brake), or with
 # CARETOOK_UNSYNCED=off: those keep the drift refusal.
 # --tier <t>: the tier to wait for; the default is what the diff proposes
 # (check-plan.mjs). Below the proposal it needs --why "<reason>", and the report
@@ -211,8 +213,13 @@ typecheck_merge() {
     *) drift_refusal "the typecheck stopped (exit $rc)" ;;
   esac
 }
-# land_unsynced → after the CI gate, before the merge: judge dev, typecheck, and
-# read dev again. If it moved, judge and typecheck once more, then refuse.
+# refuse_dev_brake SHA → the drift refusal when dev is known to be braked.
+refuse_dev_brake() {
+  unsynced_dev_brake "$1"
+  [[ -z $dev_brake ]] || drift_refusal "$dev_brake"
+}
+# land_unsynced → after the CI gate, before the merge: judge dev and its brake,
+# typecheck, and read both again. If dev moved, do it once more, then refuse.
 land_unsynced() {
   [[ -n $unsynced ]] || return 0
   [[ $gate_kind != brake ]] || drift_refusal "CI reads a brake, so it lands only synced"
@@ -221,6 +228,7 @@ land_unsynced() {
   for pass in 1 2; do
     IFS=$'\t' read -r go now base <<< "$(unsynced_verdict "$drift_ref" "$branch")"
     [[ $go == go ]] || drift_refusal "$now"
+    refuse_dev_brake "$now"
     [[ -z $unsynced_tc ]] || typecheck_merge "$now"
     if [[ $drift_ref == origin/* ]]; then
       git -C "$main" fetch --quiet origin "$trunk" || drift_refusal "couldn't read origin/$trunk again"
@@ -230,6 +238,7 @@ land_unsynced() {
       echo "$drift_ref moved during the typecheck: judging it once more"
       continue
     }
+    [[ -z $unsynced_tc ]] || refuse_dev_brake "$now"
     break
   done
   [[ $(git -C "$main" rev-parse "$branch") == "$tip0" ]] || die "$branch's tip moved during the typecheck: nothing landed"
