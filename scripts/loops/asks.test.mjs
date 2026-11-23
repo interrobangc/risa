@@ -13,6 +13,7 @@ import {
   createAsk,
   dismissAsk,
   formatAsks,
+  formatAsksShort,
   getAsk,
   isListed,
   listAsks,
@@ -176,6 +177,21 @@ describe("formatting", () => {
       ].join("\n"),
     );
     expect(formatAsks([])).toBe("No open asks.");
+    expect(formatAsksShort([])).toBe("No open asks.");
+    const q = (id, mins) => ({
+      id,
+      kind: "question",
+      topic: "t",
+      askedAt: new Date(now - mins * 60000).toISOString(),
+    });
+    expect(
+      formatAsksShort(
+        [q("a2", 5), q("a1", 60), { ...q("a3", 9), kind: "report" }, { ...q("a4", 9), defaulted: true }],
+        now,
+      ),
+    ).toBe(
+      `2 open questions (a1 t ${age(new Date(now - 3600000).toISOString(), now)}, a2 t ${age(new Date(now - 300000).toISOString(), now)}), 1 report, 1 decided for you.`,
+    );
   });
 
   it("ages and shortens", () => {

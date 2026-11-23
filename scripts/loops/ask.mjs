@@ -16,6 +16,7 @@
 //                                     It applies a due default (then says so on a second line)
 //   asks [--json]                     the open asks, oldest first (a defaulting one with its
 //                                     countdown), then the ones decided for you until dismissed
+//   asks --short                      one line: open questions, oldest first, and counts
 //   asks --done <id>                  dismiss one (a read report, a question no longer needed)
 //   answer <id> <option number or text…>   (refused on a defaulted ask)
 //
@@ -44,6 +45,7 @@ import {
   createAsk,
   dismissAsk,
   formatAsks,
+  formatAsksShort,
   getAsk,
   isDue,
   listAsks,
@@ -300,7 +302,7 @@ async function wait(dir, id, timeout) {
 }
 
 function asks(argv) {
-  const { opts, rest } = parse(argv, ["done"], ["json"]);
+  const { opts, rest } = parse(argv, ["done"], ["json", "short"]);
   if (rest.length) fail(`asks: unexpected ${rest.join(" ")}`);
   const dir = dirOf();
   if (opts.done != null) {
@@ -309,7 +311,8 @@ function asks(argv) {
     return;
   }
   const open = listAsks(dir);
-  console.log(opts.json ? JSON.stringify(open, null, 2) : formatAsks(open));
+  if (opts.short) console.log(formatAsksShort(open));
+  else console.log(opts.json ? JSON.stringify(open, null, 2) : formatAsks(open));
 }
 
 function answer(argv) {

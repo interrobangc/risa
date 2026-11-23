@@ -306,7 +306,7 @@ describe("plan and backlog", () => {
   });
 
   it("backlog without a dispatcher: as before, it prints start commands for the user", () => {
-    const text = ok("backlog");
+    const text = ok("backlog", "--guide");
     expect(text).not.toContain(".queue");
     expect(text).toContain("the dispatcher: none is running, so nothing starts a topic unless the user does");
     expect(text).toContain("What to run: start, queue or wait for each ready PRD.");
@@ -321,7 +321,7 @@ describe("plan and backlog", () => {
     mkdirSync(loops, { recursive: true });
     writeFileSync(lock, `${process.pid}\n`);
     try {
-      const text = ok("backlog");
+      const text = ok("backlog", "--guide");
       expect(text).toContain(`the dispatcher: it is running (pid ${process.pid})`);
       expect(text).toContain(
         "**The dispatcher is running, so deciding what runs next is moving and holding rows**",
@@ -339,7 +339,7 @@ describe("plan and backlog", () => {
     // A lock whose pid is gone is no running dispatcher.
     writeFileSync(lock, "999999\n");
     try {
-      expect(ok("backlog")).toContain("No dispatcher is running");
+      expect(ok("backlog", "--guide")).toContain("No dispatcher is running");
     } finally {
       rmSync(lock);
     }
@@ -443,7 +443,7 @@ describe("plan and backlog", () => {
   });
 
   it("backlog has the hand-off paragraph with both modes", () => {
-    const text = ok("backlog");
+    const text = ok("backlog", "--guide");
     expect(text).toContain('**When the user says "hand off"**');
     expect(text).toContain("**A short brief** (recommended");
     expect(text).toContain("at most about 40 lines");
@@ -454,7 +454,7 @@ describe("plan and backlog", () => {
   });
 
   it("backlog has the request paragraph: a brief, the request, the name, and no tab of its own", () => {
-    const text = ok("backlog");
+    const text = ok("backlog", "--guide");
     expect(text).toContain("**When the user asks for another backlog session for a task**");
     expect(text).toContain("`pnpm prd session request backlog <name> --brief <file>`");
     expect(text).toContain("`backlog - <name>`");
@@ -463,23 +463,23 @@ describe("plan and backlog", () => {
   });
 
   it("backlog reads the open asks and the PRD registry, and leads with what waits on the user", () => {
-    const text = ok("backlog");
+    const text = ok("backlog", "--guide");
     expect(text).toContain("`pnpm prd asks`");
     expect(text).toContain("`pnpm backlog prd list`");
     expect(text).toContain("what waits on the user");
   });
 
-  it("backlog asks one multi-select question first, then collects only for the picks", () => {
+  it("backlog asks one multi-select question first and loads the guide only after the picks", () => {
     const text = ok("backlog");
-    expect(text).toContain("**First, and nothing else:** run `pnpm prd asks`");
+    expect(text).toContain("**First, and nothing else:** run `pnpm prd asks --short`");
     expect(text).toMatch(/ask \*\*one\*\* AskUserQuestion, multi-select/);
-    expect(text).toContain("**Then collect for the picks only**");
-    expect(text.indexOf("AskUserQuestion, multi-select")).toBeLessThan(text.indexOf("`pnpm backlog ingest`"));
+    expect(text).toContain("**Then collect for the picks only:** run `pnpm prd prompt backlog --guide`");
+    expect(text).not.toContain("`pnpm backlog ingest`");
     expect(text).toContain("**Catch up**");
     expect(text).toContain("**Write a PRD**");
     expect(text).toContain("**Decide what to run next**");
     expect(text).toContain("**Triage a new issue or idea**");
-    expect(text).toContain("Never ask about a task they didn't pick");
+    expect(ok("backlog", "--guide")).toContain("Never ask about a task they didn't pick");
   });
 });
 
@@ -557,7 +557,7 @@ describe("fix categories", () => {
   const TOPICS = ["fixes-ui", "fixes-tooling", "fixes-perf", "fixes-bug", "fixes-nit"];
 
   it("the backlog and orchestrator prompts name the five topics, never prd=quick-fixes", () => {
-    for (const text of [ok("backlog"), ok("orchestrator", "T")]) {
+    for (const text of [ok("backlog", "--guide"), ok("orchestrator", "T")]) {
       for (const t of TOPICS) expect(text).toContain(`\`${t}\``);
       expect(text).toContain("`prd=fixes-<cat>` (never `quick-fixes`)");
       expect(text).toContain("a tie-break for triage only");
