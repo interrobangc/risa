@@ -202,6 +202,9 @@ function build() {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f.endsWith(".mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  mkdirSync(join(main, "scripts/backlog"));
+  for (const f of ["registry.mjs", "format.mjs"])
+    copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
   writeFileSync(join(main, "scripts/loops/serve.sh"), FAKE_SERVE);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n");
   git(main, "add", ".");
