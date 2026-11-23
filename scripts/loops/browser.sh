@@ -140,7 +140,7 @@ mkdir -p "$logdir"
 # The manifest: this tree's, else the one beside this script.
 manifest=$top/scripts/loops/checks
 [[ -f $manifest ]] || manifest=$(dirname "$0")/checks
-[[ -f $manifest ]] || die "no browser-check manifest (scripts/loops/checks): pnpm prd sync"
+[[ -f $manifest ]] || die "no browser-check manifest (scripts/loops/checks): pnpm prd sync --force"
 
 # check_name FILE → the check's name: sign-in for sign-in.spec.mjs.
 check_name() {

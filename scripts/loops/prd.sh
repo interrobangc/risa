@@ -131,7 +131,8 @@ pnpm prd <command>
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode, PRD and step, the ten most-failed test files); runs no check,
                               works from any checkout
-    sync                      merge dev into this PRD branch
+    sync [--force]            merge dev into this PRD branch when its changes need it (shared or risky
+                              files); --force merges anyway, when you need code another PRD landed
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
     browser --smoke …         any of these in smoke mode: each check's core path only (after a merge)
@@ -379,8 +380,16 @@ case $cmd in
     # shellcheck source=unsynced.sh
     source "$bin/unsynced.sh"
     unsynced_clear "$dir"
+    sync_force=""
+    case ${1:-} in
+      "") ;;
+      --force) sync_force=1 ;;
+      *) die "sync: unknown option $1 (--force merges even when dev's changes don't need it)" ;;
+    esac
     if [[ -z $(trunk_drift "$branch") ]]; then
       echo "$branch is up to date with $trunk (only backlog commits are newer, if any)"
+    elif [[ -z $sync_force ]] && unsynced_safe "$branch" "$trunk"; then
+      echo "$branch needs no merge: $trunk's changes share no file with it and bring nothing risky. No recheck needed (pnpm prd sync --force merges anyway, when you need that code)"
     else
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"
       echo "Merged $trunk into $branch. If seeds or migrations changed: pnpm datastore:reset. Then: pnpm prd check"

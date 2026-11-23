@@ -70,13 +70,16 @@ describe("devBrought", () => {
     expect(v.refusal).toBe("dev changed shared.ts, which the branch touches");
   });
 
-  it.each(["plans/backlog.md", "plans/inbox.md"])("doesn't count %s as shared", (file) => {
-    on("branch");
-    commit(file);
-    on("dev");
-    commit(file);
-    expect(devBrought(repo, "dev", "branch")).toMatchObject({ drift: false, shared: [], refusal: null });
-  });
+  it.each(["plans/backlog.md", "plans/inbox.md", "plans/backlog-archive.md"])(
+    "doesn't count %s as shared",
+    (file) => {
+      on("branch");
+      commit(file);
+      on("dev");
+      commit(file);
+      expect(devBrought(repo, "dev", "branch")).toMatchObject({ drift: false, shared: [], refusal: null });
+    },
+  );
 
   it.each([
     ["packages/data/src/db/migrations/0100_x.sql", "a migration"],

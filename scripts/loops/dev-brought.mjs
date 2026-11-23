@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { CI_LISTS, FULL } from "./check-plan.mjs";
 
 /** pnpm backlog commits these onto dev; two branches sharing them means nothing. */
-const BACKLOG = new Set(["plans/backlog.md", "plans/inbox.md"]);
+const BACKLOG = new Set(["plans/backlog.md", "plans/inbox.md", "plans/backlog-archive.md"]);
 
 /**
  * What reaches a branch's code without an import, beyond check-plan's forced-full
