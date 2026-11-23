@@ -361,23 +361,60 @@ describe("leftovers", () => {
 });
 
 describe("the backlog and the registry", () => {
-  it("finished items are one ask to archive; none when nothing is finished", () => {
-    const { ask } = one({
+  it("finished items are safe to archive, never an ask; none when nothing is finished", () => {
+    const { safe, ask } = one({
       items: [
-        { id: "B-1", status: "landed" },
+        { id: "B-1", status: "landed", prd: "old" },
         { id: "B-2", status: "dropped" },
-        { id: "B-3", status: "triaged" },
+        { id: "B-3", status: "triaged", prd: "old" },
       ],
+      prdWorktrees: [],
     });
-    expect(ask).toEqual([
+    expect(safe).toEqual([
       {
         kind: "archive",
         target: "2 items",
-        why: "finished, still in the backlog: pnpm backlog archive (B-1, B-2)",
+        why: "finished, still in the backlog (B-1, B-2)",
+        how: "pnpm backlog archive",
+        ids: ["B-1", "B-2"],
       },
     ]);
-    expect(one({ items: [{ id: "B-3", status: "in-progress" }] }).ask).toEqual([]);
-    expect(one({ items: null }).ask).toEqual([]);
+    expect(ask).toEqual([]);
+    expect(one({ items: [{ id: "B-3", status: "in-progress" }] }).safe).toEqual([]);
+    expect(one({ items: null }).safe).toEqual([]);
+  });
+
+  it("keeps a running topic's finished items, with why, but archives its dropped ones", () => {
+    const { safe, kept } = one({
+      items: [
+        { id: "B-1", status: "landed", prd: "busy" },
+        { id: "B-2", status: "live", prd: "busy" },
+        { id: "B-3", status: "dropped", prd: "busy" },
+        { id: "B-4", status: "staging", prd: "other" },
+      ],
+      prdWorktrees: ["busy"],
+    });
+    expect(safe.map((f) => f.ids)).toEqual([["B-3", "B-4"]]);
+    expect(kept).toEqual([
+      {
+        kind: "archive",
+        target: "busy: 2 items",
+        why: "finished, but prd/busy still has a worktree (B-1, B-2)",
+      },
+    ]);
+  });
+
+  it("unreadable worktrees keep every finished item with a topic", () => {
+    const { safe, kept } = one({
+      items: [
+        { id: "B-1", status: "landed", prd: "any" },
+        { id: "B-2", status: "dropped", prd: "any" },
+        { id: "B-3", status: "landed" },
+      ],
+      prdWorktrees: null,
+    });
+    expect(safe.map((f) => f.ids)).toEqual([["B-2", "B-3"]]);
+    expect(kept[0].why).toBe("finished, but the worktrees can't be read (B-1)");
   });
 
   it("registry rows that look done are asked about; done, hold, standing and running ones aren't", () => {

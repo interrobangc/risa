@@ -6,7 +6,8 @@
 //   --json   the lists as JSON ({ safe, ask, kept }); nothing changes
 //   --facts  the raw facts as JSON
 //   --yes    remove the safe ones (rm.sh, test-db.sh drop-db, git fetch --prune,
-//            docker volume rm, deleting tickets, logs and ended records), then
+//            docker volume rm, deleting tickets, logs and ended records,
+//            pnpm backlog archive for finished items), then
 //            file the ask list with `pnpm prd ask --report` (none when it's empty)
 //
 // Reading runs git, `docker info|volume ls`, `lsof` (processes' working
@@ -244,11 +245,16 @@ export function collectTidyFacts({
     };
   });
 
+  const listedWorktrees = git(main, ["worktree", "list", "--porcelain"]);
   const checkedOut = new Set(
-    lines(git(main, ["worktree", "list", "--porcelain"]).out)
+    lines(listedWorktrees.out)
       .filter((l) => l.startsWith("branch refs/heads/"))
       .map((l) => l.slice("branch refs/heads/".length)),
   );
+  // Unreadable is null, never "no PRD is running": their finished items stay.
+  const prdWorktrees = listedWorktrees.ok
+    ? [...checkedOut].filter((b) => b.startsWith("prd/")).map((b) => b.slice("prd/".length))
+    : null;
   const branches = lines(git(main, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]).out).map(
     (name) => {
       let parent = parentOf(name, trunk);
@@ -329,6 +335,8 @@ export function collectTidyFacts({
     }
   };
 
+  const allItems = json(["list", "--all", "--json"]);
+
   return {
     worktrees,
     sessions,
@@ -341,7 +349,9 @@ export function collectTidyFacts({
     volumes,
     usedProjects,
     hangLogs,
-    items: json(["list", "--json"]),
+    // --all: a plain list leaves out live and dropped items, which are what gets archived.
+    items: allItems && allItems.filter((/** @type {{ archived?: boolean }} */ i) => !i.archived),
+    prdWorktrees,
     registry: json(["prd", "list", "--json"]),
   };
 }
@@ -351,14 +361,14 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
   let failed = 0;
   let pruned = false;
   let unquarantined = false;
-  const step = (/** @type {string} */ label, /** @type {() => boolean} */ fn) => {
+  const step = (/** @type {string} */ label, /** @type {() => boolean} */ fn, done = "removed") => {
     let ok = false;
     try {
       ok = fn();
     } catch (e) {
       console.error(String(e));
     }
-    if (ok) console.log(`removed ${label}`);
+    if (ok) console.log(`${done} ${label}`);
     else {
       console.error(`couldn't remove ${label} (see above)`);
       failed++;
@@ -411,6 +421,20 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
               }).status === 0,
           );
         }
+        break;
+      case "archive":
+        // One backlog commit, and only the ids sorted as safe.
+        step(
+          f.target,
+          () =>
+            // No ids would mean "everything finished", which isn't what was sorted.
+            !!f.ids?.length &&
+            spawnSync(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "archive", ...f.ids], {
+              cwd: main,
+              stdio: ["ignore", "inherit", "inherit"],
+            }).status === 0,
+          "archived",
+        );
         break;
       case "volume":
         step(label, () => sh(["docker", "volume", "rm", f.target]));

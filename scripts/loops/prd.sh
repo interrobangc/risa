@@ -47,8 +47,9 @@ pnpm prd <command>
                               Vite caches, with sizes; frees them after a yes
     tidy [--yes] [--json]     leftovers sorted into safe (merged slice and landed plan worktrees, dead tickets,
                               orphan test databases, stale remote refs, dangling caretook volumes, old hang
-                              logs, ended records) and ask (finished-looking live sessions, branches without a
-                              worktree, items to archive, registry rows that look done); --yes removes the safe
+                              logs, ended records, finished items whose topic has no prd/ worktree) and ask
+                              (finished-looking live sessions, branches without a worktree, registry rows
+                              that look done); --yes removes the safe
                               ones and files the ask list as one report (prompt tidy: the haiku brief)
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover [--at HH:MM] [--wait] [--no-agent]   after a restart, crash or usage limit: Docker, stale locks,

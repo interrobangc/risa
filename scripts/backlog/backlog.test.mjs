@@ -546,3 +546,99 @@ describe("backlog ci-file", () => {
     expect(git(origin, "rev-parse", "dev")).toBe(theirs);
   });
 });
+
+// Look-alikes and archiving by id, in a repo of their own.
+describe("backlog CLI: look-alikes and archive by id", () => {
+  let r4, m4;
+  const f4 = (rel) => readFileSync(join(m4, rel), "utf8");
+  const raw = (...a) => {
+    try {
+      const out = execFileSync("node", [CLI, ...a], { cwd: m4, encoding: "utf8", env, stdio: "pipe" });
+      return { code: 0, out, err: "" };
+    } catch (e) {
+      return { code: e.status, out: String(e.stdout), err: String(e.stderr) };
+    }
+  };
+
+  beforeAll(() => {
+    r4 = realpathSync(mkdtempSync(join(tmpdir(), "backlog-test-")));
+    m4 = join(r4, "repo");
+    execFileSync("git", ["init", "-q", "-b", "dev", m4]);
+    git(m4, "config", "user.email", "test@example.com");
+    git(m4, "config", "user.name", "Test");
+    git(m4, "config", "commit.gpgsign", "false");
+    execFileSync("mkdir", ["-p", join(m4, "plans")]);
+    writeFileSync(join(m4, "plans/backlog.md"), "# Backlog\n\n## Items\n");
+    writeFileSync(join(m4, "plans/inbox.md"), "# Inbox\n\n## Bugs\n\n## Features\n");
+    git(m4, "add", ".");
+    git(m4, "commit", "-q", "-m", "init");
+    cli(m4, "add", "bug", "Login link can be clicked twice", "--prd", "auth"); // B-1
+    cli(m4, "add", "bug", "Calendar export drops the time zone"); // B-2
+    cli(m4, "add", "feature", "Weekly summary for the family"); // B-3
+    cli(m4, "set", "B-2", "status=dropped");
+    cli(m4, "archive", "B-2");
+  });
+  afterAll(() => rmSync(r4, { recursive: true, force: true }));
+
+  it("similar lists open and archived matches, and exits 0 with none", () => {
+    expect(raw("similar", "The", "login", "link", "gets", "clicked", "twice")).toMatchObject({
+      code: 0,
+      out: "B-1  triaged  auth  Login link can be clicked twice\n",
+    });
+    expect(raw("similar", "Calendar export drops time zones").out).toBe(
+      "B-2  dropped (archived)  no topic  Calendar export drops the time zone\n",
+    );
+    expect(raw("similar", "Something else entirely")).toMatchObject({ code: 0, out: "no look-alikes\n" });
+  });
+
+  it("add on a look-alike exits 3, names it and files nothing; --anyway files", () => {
+    const head = git(m4, "rev-parse", "HEAD");
+    const before = f4("plans/backlog.md");
+    const stopped = raw("add", "bug", "Login link gets clicked twice");
+    expect(stopped.code).toBe(3);
+    expect(stopped.err).toContain("B-1  triaged  auth  Login link can be clicked twice");
+    expect(stopped.err).toContain("--anyway");
+    expect(git(m4, "rev-parse", "HEAD")).toBe(head);
+    expect(f4("plans/backlog.md")).toBe(before);
+    expect(raw("add", "bug", "Calendar export drops time zones").code).toBe(3); // an archived match stops it too
+    expect(raw("add", "bug", "Login link gets clicked twice", "--anyway")).toMatchObject({
+      code: 0,
+      out: "added B-4\n",
+    });
+  });
+
+  it("ingest files a look-alike line, and its item's note names the match", () => {
+    writeFileSync(
+      join(m4, "plans/inbox.md"),
+      "# Inbox\n\n## Bugs\n\n- Weekly family summary\n- Nothing like the others\n\n## Features\n",
+    );
+    const { code, out } = raw("ingest");
+    expect(code).toBe(0);
+    expect(out).toMatch(/^B-5 +bug +Weekly family summary\n {2}looks like B-3 /m);
+    expect(out).toContain("filed 2");
+    expect(cli(m4, "show", "B-5")).toContain("Looks like: B-3 (inbox) Weekly summary for the family");
+    expect(cli(m4, "show", "B-6")).not.toContain("Looks like");
+  });
+
+  it("archive B-n moves only that item, and refuses one that isn't finished", () => {
+    cli(m4, "set", "B-4", "B-6", "status=dropped");
+    expect(raw("archive", "B-4")).toMatchObject({
+      code: 0,
+      out: "archived 1 to plans/backlog-archive.md: B-4\n",
+    });
+    expect(f4("plans/backlog-archive.md")).toMatch(/### B-4 /);
+    expect(f4("plans/backlog.md")).toMatch(/### B-6 /); // finished, but not named
+    const head = git(m4, "rev-parse", "HEAD");
+    const refused = raw("archive", "B-6", "B-3");
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain("B-3 is inbox, not finished; nothing archived");
+    expect(git(m4, "rev-parse", "HEAD")).toBe(head);
+    expect(f4("plans/backlog.md")).toMatch(/### B-6 /);
+  });
+
+  it("list --all --json marks archived items", () => {
+    const rows = JSON.parse(cli(m4, "list", "--all", "--json"));
+    expect(rows.find((r) => r.id === "B-2").archived).toBe(true);
+    expect(rows.find((r) => r.id === "B-1").archived).toBeUndefined();
+  });
+});

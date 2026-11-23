@@ -34,7 +34,10 @@
 //   pnpm backlog inbox                       show inbox bullets not filed yet
 //   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   pnpm backlog show B-n                    finds archived items too (list --all lists them)
-//   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT]
+//   pnpm backlog similar <text…>             open and archived items that look like it (read only)
+//   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT] [--anyway]
+//                                            a look-alike prints it and files nothing (exit 3)
+//                                            unless --anyway; ingest always files, and notes them
 //   pnpm backlog set B-n… key=value… [--archived]   keys: status type title prd owner commit
 //   pnpm backlog note B-n [B-n…] <text…> [--archived]   ids after the first need the B- prefix
 //                                            --archived: change archived items in place (they stay archived)
@@ -44,7 +47,8 @@
 //   pnpm backlog refresh [--no-fetch]        write the derived statuses (landed, staging, live)
 //   pnpm backlog commit [message]            commit hand edits of the files (backlog.md normalised)
 //   pnpm backlog doctor [--fix]              check the backlog; exit 1 on findings; --fix the safe ones
-//   pnpm backlog archive                     move landed, staging, live and dropped items to the archive
+//   pnpm backlog archive [B-n…]              move landed, staging, live and dropped items to the archive
+//                                            (with ids only those; one that isn't finished refuses all)
 //   pnpm backlog path
 //   pnpm backlog ci-file [--push]            pnpm prd ci's filing: JSON findings on stdin, one
 //                                            commit with scripts/ci/quarantine.txt (scripts/ci/filing.mjs)
@@ -124,9 +128,18 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last", "push"].includes(
-        key,
-      );
+      const flag = [
+        "all",
+        "anyway",
+        "archived",
+        "force",
+        "no-fetch",
+        "json",
+        "fix",
+        "first",
+        "last",
+        "push",
+      ].includes(key);
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -403,21 +416,57 @@ function write(tool, describe, change, opts = {}) {
   });
 }
 
-/** File every new inbox bullet as a tracker item (status inbox) and tag it with its id. */
+/** `add` stopped on look-alikes: nothing was filed (exit 3). */
+class LookAlikeStop extends Error {
+  /** @param {ReturnType<typeof fmt.similarItems>} matches */
+  constructor(matches) {
+    super("look-alikes");
+    this.matches = matches;
+  }
+}
+
+/**
+ * Open and archived items to compare a new line with, each with its status
+ * from git.
+ * @param {import("./format.mjs").Item[]} items
+ */
+function similarPool(items) {
+  const archived = readArchive({ lenient: true })?.items ?? [];
+  const status = containment(false);
+  status.prime([...items, ...archived]);
+  return [
+    ...items.map((i) => ({ ...i, status: status(i) })),
+    ...archived.map((i) => ({ ...i, status: status(i), archived: true })),
+  ];
+}
+
+/**
+ * File every new inbox bullet as a tracker item (status inbox) and tag it with
+ * its id. A line is always filed; one with look-alikes gets a note naming them.
+ */
 function ingest(b, inbox) {
-  if (inbox.text === null) return [];
-  const ctx = { by: who(), date: today() };
+  /** @type {{ item: import("./format.mjs").Item, similar: ReturnType<typeof fmt.similarItems> }[]} */
   const filed = [];
+  if (inbox.text === null) return filed;
+  const ctx = { by: who(), date: today() };
+  const pool = similarPool(b.items);
   // In file order. Tagging only appends to a line, so line numbers never shift.
   for (const e of fmt.newInboxEntries(inbox.text)) {
     const title = fmt.titleFromBullet(e.text);
     const asked = [title !== e.text.replace(/\s+/g, " ").trim() ? e.text : "", e.details]
       .filter(Boolean)
       .join("\n");
+    const similar = fmt.similarItems(e.text, pool);
     const it = fmt.add(b, { type: e.type, title, status: "inbox", ...ctx });
     if (asked) fmt.addNote(it, { text: `From the inbox: ${asked.replace(/\n/g, " / ")}`, ...ctx });
+    if (similar.length)
+      fmt.addNote(it, {
+        text: `Looks like: ${similar.map((m) => `${m.id} (${m.status}${m.archived ? ", archived" : ""}) ${m.title}`).join("; ")}`,
+        ...ctx,
+      });
     inbox.text = fmt.tagInboxLine(inbox.text, e.line, it.id);
-    filed.push(it);
+    pool.push({ ...it });
+    filed.push({ item: it, similar });
   }
   return filed;
 }
@@ -502,7 +551,10 @@ function refreshStatuses(b, fetch = false) {
 // ---- commands -------------------------------------------------------------
 
 function list(opts) {
-  const items = [...read().items, ...(opts.all ? (readArchive()?.items ?? []) : [])];
+  const items = [
+    ...read().items,
+    ...(opts.all ? (readArchive()?.items ?? []).map((i) => ({ ...i, archived: true })) : []),
+  ];
   const status = containment(false);
   status.prime(items);
   const rows = items
@@ -558,11 +610,18 @@ function show(id) {
 /**
  * Move finished items (landed, staging, live, dropped, by their status from
  * git) to the archive with their notes, and their bullets out of the inbox.
- * @param {import("./format.mjs").Backlog} b @param {WriteContext} ctx
+ * With `wanted` ids, only those; one that isn't finished refuses them all.
+ * @param {import("./format.mjs").Backlog} b @param {WriteContext} ctx @param {string[]} [wanted]
  */
-function archiveFinished(b, ctx) {
+function archiveFinished(b, ctx, wanted = []) {
   refreshStatuses(b);
-  const done = b.items.filter((i) => fmt.FINISHED.includes(i.status));
+  const named = wanted.map((id) => fmt.find(b, id));
+  const open = named.filter((i) => !fmt.FINISHED.includes(i.status));
+  if (open.length)
+    throw new fmt.BacklogError(
+      `${open.map((i) => `${i.id} is ${i.status}`).join(", ")}, not finished; nothing archived`,
+    );
+  const done = wanted.length ? named : b.items.filter((i) => fmt.FINISHED.includes(i.status));
   if (!done.length) return [];
   const archive = ctx.archive();
   for (const it of done) {
@@ -841,13 +900,24 @@ function main() {
       const filed = write(
         "ingest",
         (items) => {
-          const list = items.map((i) => i.id);
+          const list = items.map((f) => f.item.id);
           return { ids: list, text: `file ${amend.idList(list)} from the inbox` };
         },
         (b, ctx) => ingest(b, ctx.inbox),
       );
-      for (const it of filed) console.log(`${it.id}  ${it.type.padEnd(8)}  ${it.title}`);
+      for (const { item: it, similar } of filed) {
+        console.log(`${it.id}  ${it.type.padEnd(8)}  ${it.title}`);
+        for (const m of similar) console.log(`  looks like ${fmt.similarLine(m)}`);
+      }
       return console.log(filed.length ? `filed ${filed.length}` : "nothing new in the inbox");
+    }
+    case "similar": {
+      const text = pos.join(" ");
+      if (!text.trim()) throw new fmt.BacklogError("usage: similar <text…>");
+      const matches = fmt.similarItems(text, similarPool(read({ lenient: true }).items));
+      for (const m of matches) console.log(fmt.similarLine(m));
+      if (!matches.length) console.log("no look-alikes");
+      return;
     }
     case "add": {
       const [type, ...words] = pos;
@@ -855,15 +925,21 @@ function main() {
       const it = write(
         "add",
         (item) => ({ ids: [item.id], text: `add ${item.id} (${item.type}) ${item.title}` }),
-        (b) =>
-          fmt.add(b, {
+        (b) => {
+          // Under the lock, before anything is written: a stop leaves the backlog as it was.
+          if (!opts.anyway) {
+            const matches = fmt.similarItems(words.join(" "), similarPool(b.items));
+            if (matches.length) throw new LookAlikeStop(matches);
+          }
+          return fmt.add(b, {
             type,
             title: words.join(" "),
             prd: opts.prd,
             status: opts.status,
             note: opts.note,
             ...ctx(),
-          }),
+          });
+        },
       );
       return console.log(`added ${it.id}`);
     }
@@ -994,13 +1070,14 @@ function main() {
     case "prd":
       return prd(pos, opts);
     case "archive": {
+      const wanted = pos.length ? ids(pos) : [];
       const moved = write(
         "archive",
         (items) => ({
           ids: items.map((i) => i.id),
           text: `archive ${items.length} finished item${items.length === 1 ? "" : "s"}`,
         }),
-        (b, c) => archiveFinished(b, c),
+        (b, c) => archiveFinished(b, c, wanted),
       );
       return console.log(
         moved.length
@@ -1016,6 +1093,12 @@ function main() {
 try {
   main();
 } catch (e) {
+  if (e instanceof LookAlikeStop) {
+    console.error("backlog: this looks like what's already filed; nothing was added:");
+    for (const m of e.matches) console.error(`  ${fmt.similarLine(m)}`);
+    console.error("Note the existing item (pnpm backlog note B-<n> …), or rerun with --anyway.");
+    process.exit(3);
+  }
   if (e instanceof fmt.BacklogError) {
     console.error(`backlog: ${e.message}`);
     process.exit(1);

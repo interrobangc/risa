@@ -423,3 +423,60 @@ export function titleFromEntry(e, it) {
   const shared = [...title].filter((w) => source.has(w)).length;
   return shared >= 2 || shared / title.size >= 0.25;
 }
+
+// ---- look-alikes ------------------------------------------------------------
+
+/** How alike two texts must be (shared content words, 0 to 1) to count. */
+export const SIMILAR_THRESHOLD = 0.6;
+/** The most look-alikes shown for one text. */
+export const SIMILAR_MAX = 5;
+
+const foldedText = (/** @type {string} */ s) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/** Twice the shared content words over both sizes; under two shared words is no match. */
+function likeness(/** @type {Set<string>} */ a, /** @type {Set<string>} */ b) {
+  const shared = [...a].filter((w) => b.has(w)).length;
+  return shared < 2 ? 0 : (2 * shared) / (a.size + b.size);
+}
+
+/**
+ * The items most like `text`, best first: the same words, or at least two
+ * shared content words making up SIMILAR_THRESHOLD of both. A long bullet is
+ * also compared by the title it would be filed under.
+ * @param {string} text
+ * @param {(Pick<Item, "id" | "status" | "prd" | "title"> & { archived?: boolean })[]} items
+ * @returns {{ id: string, status: string, topic: string, title: string, archived: boolean, score: number }[]}
+ */
+export function similarItems(text, items) {
+  const exact = foldedText(text);
+  if (!exact) return [];
+  const words = contentWords(text);
+  const titleWords = contentWords(titleFromBullet(text));
+  return items
+    .map((it) => {
+      const other = contentWords(it.title);
+      const score =
+        foldedText(it.title) === exact ? 1 : Math.max(likeness(words, other), likeness(titleWords, other));
+      return {
+        id: it.id,
+        status: it.status,
+        topic: it.prd,
+        title: it.title,
+        archived: !!it.archived,
+        score,
+      };
+    })
+    .filter((m) => m.score >= SIMILAR_THRESHOLD)
+    .sort((a, b) => b.score - a.score || Number(a.id.slice(2)) - Number(b.id.slice(2)))
+    .slice(0, SIMILAR_MAX);
+}
+
+/** One look-alike as a line. @param {ReturnType<typeof similarItems>[number]} m */
+export const similarLine = (m) =>
+  `${m.id}  ${m.status}${m.archived ? " (archived)" : ""}  ${m.topic || "no topic"}  ${m.title}`;
