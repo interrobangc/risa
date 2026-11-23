@@ -95,6 +95,7 @@ describe("the tiers", () => {
       "ci/integration/slice-test-gates-2",
       "ci/components/slice-test-gates-2",
       "ci/full/slice-test-gates-2",
+      "ci/candidate/slice-test-gates-2",
     ]);
     expect(parseCiRef("ci/unit/slice-t-2")).toEqual({ tier: "unit", name: "slice-t-2" });
     expect(parseCiRef("ci/nope/x")).toBeNull();
@@ -115,6 +116,28 @@ describe("the tiers", () => {
       jobs: ["static", "unit", "integration", "components-1", "components-2", "build"],
       ranTier: "full",
     });
+    expect(jobsFor("candidate")).toEqual({
+      jobs: ["static", "unit", "integration", "components-1", "components-2", "build", "browser"],
+      ranTier: "candidate",
+    });
+  });
+
+  it("start the browser job only on a candidate run", () => {
+    expect(planOutputs("ci/full/x")).toContain("candidate=false");
+    expect(planOutputs("ci/candidate/x")).toContain("candidate=true");
+    expect(planOutputs("ci/candidate/x", ["scripts/ci/ci.test.mjs"])).toContain("candidate=false");
+  });
+
+  it("read a browser suite that failed as file, and one that never started as infra", () => {
+    const needs = Object.fromEntries(
+      ["plan", ...jobsFor("candidate").jobs].map((job) => [job, { result: "success" }]),
+    );
+    const run = { commit: SHA, runId: "1", tier: "candidate" };
+    expect(buildVerdict({ ...run, needs }).kind).toBe("green");
+    const failed = (outputs) => ({ ...needs, browser: { result: "failure", outputs } });
+    const ran = buildVerdict({ ...run, needs: failed({ started: "true" }) });
+    expect(ran).toMatchObject({ kind: "file", failed: { jobs: ["browser"], unnamedJobs: ["browser"] } });
+    expect(buildVerdict({ ...run, needs: failed({}) }).kind).toBe("infra");
   });
 
   it("give the plan job no integration on a unit run", () => {
@@ -125,6 +148,7 @@ describe("the tiers", () => {
       "integration=false",
       "components=false",
       "full=false",
+      "candidate=false",
       "components2=false",
       "narrowed=false",
     ]);
@@ -473,6 +497,7 @@ describe("a narrowed run", () => {
       "integration=true",
       "components=false",
       "full=false",
+      "candidate=false",
       "components2=false",
       "narrowed=true",
     ]);
