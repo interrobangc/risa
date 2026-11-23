@@ -199,12 +199,15 @@ beforeAll(() => {
     "load-gate.mjs",
     "rotate.mjs",
     "open-session.mjs",
+    "planner-model.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
   writeFileSync(scripts("open-session.sh"), OPEN_SH);
   writeFileSync(scripts("tidy-cli.mjs"), TIDY);
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), BACKLOG);
+  for (const f of ["registry.mjs", "format.mjs"])
+    copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
@@ -282,6 +285,12 @@ describe("one tick per action", () => {
       `cd ${join(loops, "plan-p")} && ${scripts("session.sh")} plan-p --auto --managed -- --model opus --remote-control plan-p "$(scripts/loops/prompt.sh plan p --auto)"`,
     );
     expect(open[1]).not.toMatch(/B-\d/);
+  });
+
+  it("plan: a design row's planner opens on Fable", () => {
+    setRows([{ topic: "pd", state: "to-write", waiting: 1, flags: ["design"] }]);
+    ok();
+    expect(openCalls()[0][1]).toContain('--model fable --remote-control plan-pd "$(');
   });
 
   it("the PRD cap defaults to four, and CARETOOK_MAX_PRDS overrides it", () => {

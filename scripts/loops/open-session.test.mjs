@@ -117,8 +117,18 @@ beforeAll(() => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of ["prd.sh", "lib.sh", "open-session.sh", "open-session.mjs", "sessions.mjs"])
+  for (const f of [
+    "prd.sh",
+    "lib.sh",
+    "open-session.sh",
+    "open-session.mjs",
+    "planner-model.mjs",
+    "sessions.mjs",
+  ])
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  mkdirSync(join(main, "scripts/backlog"));
+  for (const f of ["registry.mjs", "format.mjs"])
+    copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
@@ -476,6 +486,26 @@ describe("pnpm prd open", () => {
         '--model opus --remote-control plan-v "$(scripts/loops/prompt.sh plan v --auto)"',
       ),
     );
+  });
+
+  it("reopens a design row's planner on Fable, fresh or continued, and any other on opus", () => {
+    mkdirSync(join(main, "plans"), { recursive: true });
+    const table = (flags) =>
+      `# Backlog\n\n## PRDs\n\n| PRD | Flags | After | Hot files | Doc and notes |\n| --- | --- | --- | --- | --- |\n| \`v\` | ${flags} | — | — | — |\n`;
+    writeFileSync(join(main, "plans/backlog.md"), table("design"));
+    try {
+      ok(["plan-v"]);
+      expect(tabCommand()).toContain('--model fable --remote-control plan-v "$(');
+      saveConversation("plan-v");
+      ok(["plan-v"]);
+      expect(tabCommand()).toContain("--model fable --continue --remote-control plan-v");
+      writeFileSync(join(main, "plans/backlog.md"), table("—"));
+      ok(["plan-v"]);
+      expect(tabCommand()).toContain("--model opus --continue --remote-control plan-v");
+    } finally {
+      rmSync(join(main, "plans/backlog.md"), { force: true });
+      rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
+    }
   });
 
   it("leaves --auto off when _Status_ doesn't record run-through", () => {

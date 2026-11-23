@@ -16,8 +16,8 @@
 
 import { BacklogError } from "./format.mjs";
 
-/** hold: waits on the user; done: finished; standing: never finishes, runs while it has waiting items; alone: nothing else runs beside it. */
-export const FLAGS = ["hold", "done", "standing", "alone"];
+/** hold: waits on the user; done: finished; standing: never finishes, runs while it has waiting items; alone: nothing else runs beside it; design: its planner runs on Fable. */
+export const FLAGS = ["hold", "done", "standing", "alone", "design"];
 /** The worked-out states, as `prd list` prints them. */
 export const STATES = ["to-write", "planned", "running", "idle", "hold", "done"];
 /** Item statuses that mean "still to do" for a topic (doctor's "waiting items"). */
@@ -89,6 +89,9 @@ function locate(lines) {
   while (tableEnd < end && lines[tableEnd].trim().startsWith("|")) tableEnd++;
   return { start, end, tableStart, tableEnd };
 }
+
+/** The model a row's planner runs on: Fable when flagged `design`, else opus. @param {{ flags?: string[] } | undefined} row */
+export const plannerModel = (row) => (row?.flags?.includes("design") ? "fable" : "opus");
 
 /** @param {string} preamble @returns {Registry} */
 export function parseRegistry(preamble) {

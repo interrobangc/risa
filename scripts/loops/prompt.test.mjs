@@ -361,6 +361,23 @@ describe("plan and backlog", () => {
     expect(plan).toContain("report the decisions you assumed");
   });
 
+  it("both planner prompts run the skeptic from the plan brief, with send-back and one retry", () => {
+    for (const plan of [ok("plan", "T"), ok("plan", "T", "--auto")]) {
+      expect(plan).toContain("`pnpm prd prompt skeptic plan --evidence <file>`");
+      expect(plan).toContain('`model: "opus"`');
+      expect(plan).toContain("`pnpm prd skeptic record --kind plan --verdict go|send-back");
+      expect(plan).toContain("run a fresh skeptic **once more** (one retry)");
+      expect(plan).toContain("A second **send-back**");
+    }
+    expect(ok("plan", "T")).toMatch(
+      /second \*\*send-back\*\* is the user's: put it to them with AskUserQuestion/,
+    );
+    const auto = ok("plan", "T", "--auto");
+    expect(auto).toContain("`pnpm backlog prd set T flags=<its flags>,hold`");
+    expect(auto).toContain("`--waits` question with `--skeptic <that record's id>`");
+    expect(auto.indexOf("flags=<its flags>,hold")).toBeLessThan(auto.indexOf("`--waits` question with"));
+  });
+
   it("plan --auto: questions and the report through pnpm prd ask with a push, never AskUserQuestion", () => {
     for (const plan of [ok("plan", "T", "--auto", "B-1"), ok("plan", "T", "B-1", "--auto")]) {
       expect(plan).toContain('You are the planning agent for "T".');

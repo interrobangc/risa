@@ -219,8 +219,19 @@ beforeAll(() => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of ["prd.sh", "lib.sh", "session.sh", "sessions.mjs", "end-session.sh", "prompt.sh"])
+  for (const f of [
+    "prd.sh",
+    "lib.sh",
+    "session.sh",
+    "sessions.mjs",
+    "end-session.sh",
+    "prompt.sh",
+    "planner-model.mjs",
+  ])
     copyFileSync(join(HERE, f), scripts(f));
+  mkdirSync(join(main, "scripts/backlog"));
+  for (const f of ["registry.mjs", "format.mjs"])
+    copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/w-plan.md"), "# Plan: W\n\n## Status\n\nNot started.\n");
@@ -481,6 +492,24 @@ describe("sessions start through the wrapper", () => {
     expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
     expect(args.slice(0, 4)).toEqual(["--model", "opus", "--remote-control", "plan-v"]);
+  });
+
+  it("pnpm prd plan runs a design row's planner on Fable, and --model still overrides", () => {
+    writeFileSync(
+      join(main, "plans/backlog.md"),
+      "## PRDs\n\n| PRD | Flags | After | Hot files | Doc and notes |\n| --- | --- | --- | --- | --- |\n| `v` | design | — | — | — |\n",
+    );
+    try {
+      expect(run("prd.sh", ["plan", "v"]).stdout).toContain("-- --model fable --remote-control plan-v");
+      expect(run("prd.sh", ["plan", "v", "--model", "sonnet"]).stdout).toContain(
+        "-- --model sonnet --remote-control plan-v",
+      );
+      expect(run("prd.sh", ["plan", "v", "--open"]).status).toBe(0);
+      const args = readFileSync(join(state, "args"), "utf8").split("\n");
+      expect(args.slice(0, 2)).toEqual(["--model", "fable"]);
+    } finally {
+      rmSync(join(main, "plans/backlog.md"), { force: true });
+    }
   });
 
   it("pnpm prd plan with no topic is a recorded backlog session in the main checkout", () => {

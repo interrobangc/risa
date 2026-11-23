@@ -222,6 +222,11 @@ EOF
       ask_line="- **Decide, then report: no interview.** Read docs/agents/preferences.md and explore the code. Ask the user only what the handbook's _What to ask_ names (scope, who can see or change what, existing data, compliance, a new dependency, product direction you can't pick with confidence: what the product does, never how it looks), in one AskUserQuestion round of at most four questions, your recommendation first, and send no PushNotification for it or for the report; with nothing to ask, say so and carry on. Decide everything else yourself: the module sketch, the test choices and the slice breakdown need no approval. **Never ask about a UX or UI detail** (layout, where a control sits, icons or text, wording, colours, defaults, empty states): pick the smallest version that fits the item's words and the existing screens, and record it as assumed in the _Decisions_ table, where the user vetoes."
       report_line="\`pnpm prd rm plan-$topic\`, report the decisions you assumed (the costliest to change first) and how to start it"
     fi
+    if [[ -n $auto ]]; then
+      second_send_back="A second **send-back** holds the plan for the user: first flag the row \`hold\`, keeping its other flags (\`pnpm backlog prd add $topic\` if it has no row, then \`pnpm backlog prd set $topic flags=<its flags>,hold\`), so the dispatcher never starts a twice-rejected plan; then file it as a \`--waits\` question with \`--skeptic <that record's id>\`, push it and wait as above. Land nothing before the answer; rework as it says, land with \`hold\` still on, and say in the report that the topic is held and how to lift it."
+    else
+      second_send_back="A second **send-back** is the user's: put it to them with AskUserQuestion (its reasons, your recommendation first), and land nothing before they answer."
+    fi
     cat <<EOF
 You are the planning agent for "$topic".
 
@@ -230,7 +235,7 @@ You are the planning agent for "$topic".
 $ask_line
 - Write the PRD as plans/$topic-prd.md, opening with the handbook's _Decisions_ table and following _The PRD's shape_. Then cut it into tracer-bullet slices, saved as plans/$topic-plan.md, in the handbook's _The plan's shape_ (about six slices at most: cut a bigger one into follow-on topics), with each slice's fields line (_Slice fields_) and acceptance criteria that name the tests (_The test budget_).
 - **Don't load the \`write-a-prd\`, \`prd-to-plan\` or \`grill-me\` skills:** they make you interview the user and wait for approval. The handbook has their templates.
-- Run the handbook's _The skeptic pass_ with one fresh agent before landing, and act on what it finds.
+- Run the handbook's _The skeptic pass_ before landing: write an evidence file outside the repo naming the PRD, the plan and the items; \`pnpm prd prompt skeptic plan --evidence <file>\` prints the brief for one fresh agent on Opus (\`model: "opus"\`); record its answer with \`pnpm prd skeptic record --kind plan --verdict go|send-back --why "<its one line>" --topic $topic\`, which prints the id. On **go**, act on what it found. On **send-back**, rework the plan and run a fresh skeptic **once more** (one retry). $second_send_back
 - Don't file GitHub issues.
 - Commit both files on plan/$topic (\`docs($topic): …\`), triage the items, and give the topic its row in the PRD table: when \`pnpm backlog prd list\` already has a row for $topic, set it with \`pnpm backlog prd set $topic after=<topic> hot=<path prefixes>\`; when it has none, add it first with \`pnpm backlog prd add $topic\` (never a hand edit of the table and no \`pnpm backlog commit\`: those commands commit). Then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic -m "docs($topic): PRD and plan for … (B-<n>, …)"\` (plain: a plan branch never needs a forced landing), $report_line, and as your last step run \`cd $main && pnpm prd end\` (it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
 
