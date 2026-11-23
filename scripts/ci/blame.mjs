@@ -115,8 +115,8 @@ export function splitFailures(failures, dev, absent) {
     );
   const failsOnDev = (/** @type {Failure} */ f) => {
     if (!devFails || !f.file) return false;
-    if (!f.name && devFails.files.includes(f.file)) return true;
-    return devFails.tests.some((t) => t.file === f.file && (!f.name || t.name === f.name));
+    if (!f.name) return devFails.files.includes(f.file);
+    return devFails.tests.some((t) => t.file === f.file && t.name === f.name);
   };
   // A skipped quarantined test hasn't passed; a verdict with no list can't say.
   const quarantineUnproven = (/** @type {Failure} */ f) => {
@@ -129,9 +129,12 @@ export function splitFailures(failures, dev, absent) {
     );
     return !results.length || results.some((/** @type {{ status: string }} */ t) => t.status !== "passed");
   };
-  // Dev's file failed with no named test: this assertion never ran there.
-  const notCompared = (/** @type {Failure} */ f) =>
-    (!!f.name && !!f.file && !!devFails?.files.includes(f.file)) || quarantineUnproven(f);
+  // Dev failed this file at the other level: a load failure says nothing about an
+  // assertion, and a failed assertion says nothing about a branch's load failure.
+  const otherLevelOnDev = (/** @type {Failure} */ f) =>
+    !!f.file &&
+    (f.name ? !!devFails?.files.includes(f.file) : !!devFails?.tests.some((t) => t.file === f.file));
+  const notCompared = (/** @type {Failure} */ f) => otherLevelOnDev(f) || quarantineUnproven(f);
   const place = (/** @type {Failure} */ f) => {
     const key = findingKey(f);
     if (f.file && absent.includes(f.file)) split.branch.push({ ...f, key, brake: false, absent: true });

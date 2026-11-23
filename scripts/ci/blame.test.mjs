@@ -420,6 +420,29 @@ describe("blame never clears a failure it didn't compare", () => {
     expect(w.filings).toEqual([]);
   });
 
+  it("B-590: a branch load failure against dev's named failure stays unknown", async () => {
+    const branchVerdict = buildVerdict({
+      commit: SHA,
+      runId: "1",
+      tier: "unit",
+      needs: { plan: ok, static: ok, unit: job({ total: 0, files: [UNIT], tests: [] }) },
+    });
+    const dev = buildVerdict({
+      commit: NARROWED,
+      runId: "2",
+      tier: "unit",
+      needs: {
+        plan: ok,
+        unit: job({ total: 1, files: [UNIT], tests: [{ file: UNIT, name: "one" }] }),
+      },
+      narrowed: { target: DEV, files: [UNIT] },
+    });
+    const w = world({ branchVerdict, dev });
+    expect(await run(w)).toBe(EXIT.unknown);
+    expect(w.lines.some((l) => l.includes("unknown:") && l.includes(UNIT))).toBe(true);
+    expect(w.filings).toEqual([]);
+  });
+
   it("B-589: a file failure against a dev load failure is still dev's", async () => {
     const branchVerdict = verdict({ files: [UNIT], jobs: ["unit"] });
     expect(await run(world({ branchVerdict, dev: loadFailureOnDev() }))).toBe(0);
