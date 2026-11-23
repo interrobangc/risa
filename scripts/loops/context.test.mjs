@@ -128,9 +128,56 @@ describe("hookDecision", () => {
   it("starts clean for a new session under the name, and gives a loop its own words", () => {
     const old = { pid: 1, remindedAt: iso(NOW), keep: { reason: "x", until: iso(NOW + MIN) } };
     expect(hookDecision(old, { ...facts, size: 170_000 }).message).toContain("this session");
-    const loop = hookDecision(null, { ...facts, size: 170_000, loop: true });
+    const loop = hookDecision(null, { ...facts, size: 180_000, loop: true });
     expect(loop.message).toContain("this agent");
     expect(loop.message).toContain("fresh `--continue` agent");
+  });
+
+  describe("a subagent's soft and hard limits", () => {
+    const loop = (current, size, extra = {}) =>
+      hookDecision(current, { ...facts, size, loop: true, ...extra });
+
+    it("ignores the session limit, and is silent up to the soft limit", () => {
+      expect(loop(null, 175_000).message).toBeNull();
+      expect(loop(null, 100_000, { limit: 1000 }).message).toBeNull();
+    });
+
+    it("asks it to judge past soft, then only every further 25k, whatever the time", () => {
+      const first = loop(null, 180_000);
+      expect(first.message).toContain("soft limit of 175k");
+      expect(first.message).toContain("Say which you chose");
+      expect(first.message).toContain("commit any changes you were asked to make");
+      const quiet = loop(first.record, 204_999, { now: NOW + 60 * MIN });
+      expect(quiet.message).toBeNull();
+      expect(loop(quiet.record, 205_000).message).toContain("205k");
+    });
+
+    it("says hand off past hard on every call, even straight from under soft or with a keep", () => {
+      const first = loop({ pid: PID, size: 170_000 }, 310_000);
+      expect(first.message).toContain("hard limit of 300k");
+      expect(first.message).toContain("start no check");
+      expect(first.message).toContain("any unfinished fix");
+      expect(loop(first.record, 310_001).message).toContain("Hand off now");
+      const kept = { ...first.record, keep: { reason: "x", until: iso(NOW + MIN) } };
+      expect(loop(kept, 310_002).message).toContain("Hand off now");
+    });
+
+    it("lowers the mark on a shrink between the limits, and clears it under soft", () => {
+      const high = loop(null, 274_000);
+      const lower = loop(high.record, 200_000);
+      expect(lower.message).toBeNull();
+      expect(lower.record.remindedSize).toBe(200_000);
+      expect(loop(lower.record, 225_000).message).toContain("225k");
+      const under = loop(high.record, 95_000);
+      expect(under.record.remindedSize).toBeUndefined();
+      expect(loop(under.record, 180_000).message).toContain("soft limit");
+    });
+
+    it("handles a record from the old hook: no size mark, and no time throttle", () => {
+      const old = { pid: PID, firstOverAt: iso(NOW), remindedAt: iso(NOW) };
+      expect(loop(old, 180_000).message).toContain("soft limit");
+      expect(loop(old, 310_000).message).toContain("hard limit");
+    });
   });
 
   it("gives a backlog session the backlog words, for the reminder and the nudge", () => {
@@ -238,10 +285,10 @@ describe("the hook as a command", () => {
     mkdirSync(join(root, "s1", "subagents"), { recursive: true });
     writeFileSync(
       join(root, "s1", "subagents", "agent-a1.jsonl"),
-      assistant(1, 165_000, 0, { isSidechain: true }),
+      assistant(1, 180_000, 0, { isSidechain: true }),
     );
     const r = hook({ transcript_path: transcript, agent_id: "a1", agent_type: "general-purpose" });
-    expect(contextOf(r.stdout).additionalContext).toContain("this agent is at 165k");
+    expect(contextOf(r.stdout).additionalContext).toContain("this agent is at 180k");
     expect(sizeFile().size).toBe(40_001);
     // Its transcript missing: nothing, and never the session's transcript instead.
     expect(hook({ transcript_path: transcript, agent_id: "a2" }).stdout).toBe("");
