@@ -205,6 +205,9 @@ beforeAll(() => {
   const backlogDir = join(HERE, "../backlog");
   for (const f of readdirSync(backlogDir).filter((f) => f.endsWith(".mjs") && !f.includes(".test.")))
     copyFileSync(join(backlogDir, f), join(main, "scripts/backlog", f));
+  const ciDir = join(HERE, "../ci");
+  mkdirSync(join(main, "scripts/ci"), { recursive: true });
+  for (const f of ["outstanding.mjs", "tiers.mjs"]) copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/w-plan.md"), plan(`${MERGED}\n| 3 | 2 | not started | |`));
@@ -254,6 +257,42 @@ describe("pnpm prd rotate", () => {
     expect(stateFile("rotate.code").trim()).toBe("0");
     expect(out).toContain(`Rotating prd-w: pid ${stubPid()} (from the calling shell's ancestor claude).`);
     expect(printedLine(out)).toBe(`cd ${wt} && ${scripts("rotate-into.sh")} prd-w ${stubPid()}`);
+  });
+
+  it("refuses while a requested run has no verdict, naming it, and passes with --mid-wave", async () => {
+    const bare = join(root, "origin.git");
+    execFileSync("git", ["init", "-q", "--bare", bare]);
+    git(main, "remote", "add", "origin", bare);
+    const sha = git(main, "rev-parse", "dev");
+    git(main, "push", "-q", "origin", `${sha}:refs/heads/ci/integration/prd-w`);
+    const ghBin = join(root, "gh-bin");
+    mkdirSync(ghBin, { recursive: true });
+    const runs = JSON.stringify([
+      {
+        databaseId: 77,
+        headSha: sha,
+        status: "in_progress",
+        url: "https://ci.example/77",
+        workflowName: "CI",
+      },
+    ]);
+    writeFileSync(join(ghBin, "gh"), `#!/usr/bin/env bash\ncat <<'J'\n${runs}\nJ\n`);
+    chmodSync(join(ghBin, "gh"), 0o755);
+    const withGh = { PATH: `${ghBin}:${env.PATH}` };
+    try {
+      const { s, pid } = await liveSession();
+      let r = run("prd.sh", ["rotate", "w"], withGh);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain(
+        "has a requested run with no verdict: ci/integration/prd-w (https://ci.example/77)",
+      );
+      r = run("prd.sh", ["rotate", "w", "--mid-wave"], withGh);
+      expect(r.status).toBe(0);
+      process.kill(pid, "SIGTERM");
+      await s.done;
+    } finally {
+      git(main, "remote", "remove", "origin");
+    }
   });
 
   it("refuses an uncommitted plan, no session to end, and slice worktrees without --mid-wave", async () => {

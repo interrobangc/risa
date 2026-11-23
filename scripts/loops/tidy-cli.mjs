@@ -18,6 +18,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { describeRun, isTopicRun, outstandingRuns } from "../ci/outstanding.mjs";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, testDbOwner, tidy } from "./tidy.mjs";
@@ -158,6 +159,11 @@ export function collectTidyFacts({
     stdio: ["ignore", "pipe", "pipe"],
     env,
   }),
+  outstanding = () =>
+    outstandingRuns({
+      git: (args) => git(main, args),
+      gh: (args) => run("gh", args, { cwd: main, timeout: 15_000 }),
+    }),
 } = {}) {
   const trunk = env.TRUNK || "dev";
   const loops = join(main, ".loops");
@@ -203,6 +209,23 @@ export function collectTidyFacts({
     };
   });
   const byName = new Map(worktrees.map((w) => [w.name, w]));
+
+  // A merged slice stays until its wave lands and no run of its topic is out.
+  const merged = worktrees.filter((w) => w.merged && /^slice\/[^/]+\/[^/]+$/.test(w.branch));
+  const runs = merged.length ? outstanding() : [];
+  for (const w of merged) {
+    const topic = w.branch.split("/")[1] ?? "";
+    const out = runs?.filter((r) => isTopicRun(r.name, topic)) ?? [];
+    const held =
+      runs === null
+        ? "GitHub can't be read, so its wave's run is unknown"
+        : out.length
+          ? `its topic's run has no verdict: ${out.map(describeRun).join(", ")}`
+          : w.level
+            ? undefined
+            : "its wave hasn't landed";
+    if (held) Object.assign(w, { held });
+  }
 
   const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");
   const sessions = readRecords(sessionsDir).map(({ name, record }) => {

@@ -14,7 +14,7 @@ source "$(dirname "$0")/stack-lib.sh"
 fmt='%-22s %-4s %-28s %-22s %-6s %-10s %s\n'
 # shellcheck disable=SC2059
 printf "$fmt" NAME SLOT BRANCH "AHEAD OF" STATE CONTAINERS "DEV SERVER"
-found="" leftovers="" branches=()
+found="" leftovers="" branches=() slice_dirs=()
 limit=$(gc_stopped_after)
 for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
@@ -40,7 +40,13 @@ for dir in "$loops"/*/; do
   fi
   found=1
   [[ -z $branch ]] || branches+=("$branch")
-  slice_merged "$dir" && leftovers+="merged: $name ($branch is merged into $parent): pnpm prd gc"$'\n'
+  if [[ $branch == slice/*/* ]]; then
+    slice_dirs+=("$dir")
+    # Only what gc would take: a slice stays until its wave has landed.
+    if slice_merged "$dir" && git -C "$dir" merge-base --is-ancestor HEAD "$trunk" 2>/dev/null; then
+      leftovers+="merged: $name ($branch is merged into $parent): pnpm prd gc"$'\n'
+    fi
+  fi
   # shellcheck disable=SC2059
   printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
 done
@@ -57,9 +63,22 @@ notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(
 
 # Each live branch's latest whole-tier CI verdict (ci.mjs status; cached, and short when GitHub is away).
 # Never under Vitest: a test's fixture must not reach the real gh.
+ci=""
 if ((${#branches[@]})) && [[ -z ${VITEST:-} ]]; then
   ci=$(node "$(dirname "$0")/../ci/ci.mjs" status "${branches[@]}" 2>/dev/null || true)
   [[ -z $ci ]] || printf '\n%s\n' "${ci%$'\n'}"
+fi
+
+# Each slice's place in its wave; "waiting" reads the CI lines above, so it costs no extra call.
+if ((${#slice_dirs[@]})); then
+  echo
+  echo "Slices"
+  for dir in "${slice_dirs[@]}"; do
+    b=$(git -C "$dir" branch --show-current); t=${b#slice/}; t=${t%%/*}
+    going=0
+    grep -qE "^  prd/$t: (running|.*\(a run is going\))" <<<"$ci" && going=1
+    echo "  $(basename "$dir"): $(slice_state "$dir" "$going")"
+  done
 fi
 
 # Sections are separated by a blank line; stale leases only show when there are any.

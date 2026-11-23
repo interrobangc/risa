@@ -103,6 +103,9 @@ beforeAll(() => {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f === "slice-fields.mjs"))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  const ciDir = join(HERE, "../ci");
+  mkdirSync(join(main, "scripts/ci"), { recursive: true });
+  for (const f of ["outstanding.mjs", "tiers.mjs"]) copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/t-plan.md"), PLAN);
@@ -245,6 +248,11 @@ describe("status and gc", () => {
     ok("new.sh", ["slice", "t", "3"]);
     expect(ok("ls.sh", [])).not.toMatch(/merged:/);
     merge();
+    // Its wave hasn't landed: the worktree stays for a fix, and says so.
+    expect(ok("ls.sh", [])).not.toMatch(/merged: t-3/);
+    expect(ok("ls.sh", [])).toMatch(/^ {2}t-3: handed off$/m);
+    expect(ok("gc.sh", ["--list"])).toMatch(/^keep {8}t-3 \(merged, but its wave hasn't landed\)/m);
+    git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land", "prd/t");
     const status = ok("ls.sh", []);
     expect(status).toMatch(/merged: t-3 \(slice\/t\/3 is merged into prd\/t\): pnpm prd gc/);
     expect(status).not.toMatch(/merged: t-1/);
@@ -279,6 +287,50 @@ describe("status and gc", () => {
     expect(existsSync(join(loops, "t-2"))).toBe(true);
     expect(existsSync(join(loops, "t-2", ".env"))).toBe(false);
     expect(leases()).toEqual([]);
+  });
+});
+
+describe("a slice's place in its wave", () => {
+  const state = (dir, going) =>
+    execFileSync(
+      "bash",
+      ["-c", 'source "$1/stack-lib.sh"; slice_state "$2" "$3"', "x", join(main, "scripts/loops"), dir, going],
+      {
+        encoding: "utf8",
+        env,
+      },
+    ).trim();
+
+  it("reads working, handed off, waiting for the run, then fixing after a second commit", () => {
+    ok("new.sh", ["slice", "t", "6"]);
+    const dir = join(loops, "t-6");
+    writeFileSync(join(dir, "six.txt"), "1\n");
+    git(dir, "add", "six.txt");
+    git(dir, "commit", "-q", "-m", "feat(t): six");
+    expect(state(dir, "0")).toBe("working");
+    const prd = join(root, "prd-t");
+    if (!existsSync(prd)) git(main, "worktree", "add", "-q", prd, "prd/t");
+    git(prd, "merge", "--no-ff", "-q", "-m", "feat(t): merge slice 6", "slice/t/6");
+    expect(state(dir, "0")).toBe("handed off");
+    expect(state(dir, "1")).toBe("waiting for the run");
+    git(dir, "merge", "--no-ff", "-q", "-m", "chore(t): merge prd/t for a fix", "prd/t");
+    writeFileSync(join(dir, "six.txt"), "2\n");
+    git(dir, "commit", "-q", "-am", "fix(t): six");
+    expect(state(dir, "1")).toBe("fixing");
+    ok("rm.sh", ["t-6", "--force"]);
+  });
+
+  it("a hand-off leaves no stack up, and stack up takes it again for a fix", () => {
+    ok("new.sh", ["--stack", "slice", "t", "7"]);
+    const dir = join(loops, "t-7");
+    expect(read(dir, ".env.loop")).toMatch(/^SLOT=[0-9]/m);
+    ok("stack.sh", ["down"], { cwd: dir });
+    expect(read(dir, ".env.loop")).toMatch(/^SLOT=$/m);
+    expect(existsSync(join(dir, ".env"))).toBe(false);
+    expect(ok("stack.sh", ["down"], { cwd: dir })).toMatch(/has no stack/);
+    expect(ok("stack.sh", ["up"], { cwd: dir })).toMatch(/Stack up for t-7/);
+    ok("stack.sh", ["down"], { cwd: dir });
+    ok("rm.sh", ["t-7", "--force"]);
   });
 });
 

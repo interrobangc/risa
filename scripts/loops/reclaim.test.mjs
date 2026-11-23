@@ -129,6 +129,9 @@ beforeAll(() => {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f === "slice-fields.mjs"))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  mkdirSync(join(main, "scripts/ci"), { recursive: true });
+  for (const f of ["outstanding.mjs", "tiers.mjs"])
+    copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\nnode_modules/\nbuild/\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/t-plan.md"), PLAN);
@@ -149,6 +152,8 @@ beforeAll(() => {
     git(dir, "commit", "-q", "-m", `feat(t): slice ${n}`);
     git(prd, "merge", "--no-ff", "-q", "-m", `feat(t): merge slice ${n}`, `slice/t/${n}`);
   }
+  // Their wave has landed, so nothing holds them for a fix.
+  git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land the wave", "prd/t");
   writeFileSync(join(loops, "t-5", "work-5.txt"), "more, not committed\n");
   // Slice 1 is active, with a stack named caretook-loop7 (its volume is in use).
   writeFileSync(join(loops, "t-1", ".env"), "CARETOOK_STACK=caretook-loop7\n");
@@ -213,6 +218,26 @@ describe("reclaim --list", () => {
 });
 
 describe("reclaim --yes", () => {
+  it("keeps a merged slice whose wave hasn't landed", () => {
+    const dir = join(loops, "t-8");
+    git(main, "worktree", "add", "-q", "-b", "slice/t/8", dir, "prd/t");
+    writeFileSync(join(dir, "work-8.txt"), "done\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "feat(t): slice 8");
+    const prd = git(main, "worktree", "list", "--porcelain")
+      .split("\n\n")
+      .find((b) => b.includes("branch refs/heads/prd/t"))
+      .match(/^worktree (.+)$/m)[1];
+    git(prd, "merge", "--no-ff", "-q", "-m", "feat(t): merge slice 8", "slice/t/8");
+    try {
+      expect(ok(["--list"])).toMatch(/t-8: merged, but its wave hasn't landed/);
+    } finally {
+      git(main, "worktree", "remove", "--force", dir);
+      git(prd, "reset", "-q", "--hard", "HEAD~1");
+      git(main, "branch", "-q", "-D", "slice/t/8");
+    }
+  });
+
   it("frees what it listed, and keeps the rest", () => {
     const out = ok(["--yes"]);
     expect(out).toMatch(/^Freed 137\.4 MB\.$/m);
