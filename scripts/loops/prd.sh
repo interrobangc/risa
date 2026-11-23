@@ -143,11 +143,13 @@ pnpm prd <command>
 
   Land
     land <topic> [-m subject] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--no-review] [--local]
+                              [--force] [--skeptic <id>… | --by-user]
                               merge prd/<topic> into dev (only when the dev keeper says so) through its
                               PR: merged on GitHub once its head is the local tip and Codex's verdict is
                               clean and the CI gate passes, then dev-sync (--tier: the tier to wait for, by
                               default the diff's proposal; below it needs --why; --fixes: the dev brake
-                              this landing fixes; --no-review: skip the verdict, on the user's word only;
+                              this landing fixes; --force (skip the gate) and --no-review (skip the verdict)
+                              need a land skeptic's go for this tip or --by-user; out of credits needs neither;
                               --local: a local merge, the fallback, on their word)
     land hotfix/<name> --pr|--local [-m subject]   a hotfix: ask the user "PR or local?" each time
     land plan/<topic>         a plan branch: always a local merge

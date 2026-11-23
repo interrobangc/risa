@@ -92,8 +92,16 @@ describe("orchestrator", () => {
       expect(out).toContain("resolve each answered thread");
       expect(out).toContain("`review --again` until clean");
       expect(out).toContain("After about three rounds, ask the user");
-      expect(out).toContain("`--no-review` only when they say so");
-      expect(out).toContain('or when Codex is out of credits: `review` exits 4 with "codex: out of credits"');
+      expect(out).toContain(
+        "`--force` and `--no-review` each need a Fable land skeptic's `go` for this tip and action",
+      );
+      expect(out).toContain("on a brake or an unsynced tip `--force` needs `--by-user`");
+      expect(out).toContain("Before declining a finding");
+      expect(out).toContain('`--action "decline <thread>"`');
+      expect(out).toContain("a `no` makes it a backlog item");
+      expect(out).toContain(
+        'needs neither when Codex is out of credits: `review` exits 4 with "codex: out of credits"',
+      );
       expect(out).toContain(
         "When the wave's diff is docs only (Markdown files, nothing else), don't run or wait for `pnpm prd review`: open the PR with `pnpm prd pr T` and land.",
       );
@@ -131,13 +139,12 @@ describe("orchestrator", () => {
     expect(out).toContain("record the landing mode in the plan's _Status_, then start the first ready wave.");
   });
 
-  it("--auto: a landing declares its tier, and --force is never named", () => {
+  it("--auto: a landing declares its tier", () => {
     for (const flags of [["--auto"], ["--resume", "--auto"]]) {
       const out = ok("orchestrator", "T", ...flags);
       expect(out).toContain('`pnpm prd land T --tier <t> -m "<subject>"`');
       expect(out).toContain("land typechecks the merge and lands the unsynced tip");
       expect(out).toContain("the next wave syncs as usual");
-      expect(out).not.toContain("--force");
     }
   });
 
