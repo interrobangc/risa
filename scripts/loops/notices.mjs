@@ -200,12 +200,8 @@ export function gateLines(notices, self, { now = Date.now(), max = 5 } = {}) {
   return [...shown, `… and ${others.length - shown.length} more: pnpm prd notices`];
 }
 
-/** `pnpm prd status`'s part: every live notice under a heading, or "" when there are none. */
-export function statusPart(notices, now = Date.now()) {
+/** `pnpm prd status`'s part: the live notices' count, or "" when there are none. */
+export function statusPart(notices) {
   if (!notices.length) return "";
-  return [
-    `NOTICES: ${notices.length} (pnpm prd notices)`,
-    ...notices.map((n) => formatNotice(n, now)),
-    "",
-  ].join("\n");
+  return `NOTICES: ${notices.length} (pnpm prd notices)\n`;
 }
