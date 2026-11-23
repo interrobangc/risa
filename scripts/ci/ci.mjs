@@ -30,6 +30,9 @@
 //       key=value lines for land.sh; --peek reads only: no run, no blame, no filing.
 //   pnpm prd ci status <branch>…
 //       each branch's latest whole-tier verdict, cached, for pnpm prd status.
+//   pnpm prd ci candidate cut [<commit>] | fix <commit> | status
+//       a release candidate: an rc/ branch of a fixed dev commit, its PR into staging
+//       and its candidate run (candidate.mjs). Exit 6 is a refusal.
 //
 // An infra verdict is rerun once (--failed). A whole-tier run's final verdict is
 // written as the commit status caretook-ci/<tier>; a narrowed run gets none.
@@ -56,6 +59,7 @@ import {
   splitFailures,
   verdictFailures,
 } from "./blame.mjs";
+import { runCandidate } from "./candidate.mjs";
 import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
 import {
   FORCED_FLAKE_FILE,
@@ -935,6 +939,14 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
         io,
       );
     }
+    if (argv[0] === "candidate")
+      return await runCandidate(argv.slice(1), io, {
+        requestRun,
+        findVerdict,
+        deleteRef,
+        verdictLines,
+        exitFor,
+      });
     if (argv[0] === "status") return ciStatus(argv.slice(1), io);
     if (argv[0] === "blame" || argv[0] === "file") {
       const { ref, json, base, runId, noPush } = parseReadArgs(argv[0], argv.slice(1));
@@ -949,7 +961,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>…",
+        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status",
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {
