@@ -11,6 +11,7 @@ import {
   EXIT,
   exitFor,
   main,
+  forcedFlakeCommit,
   narrowedCommit,
   parseRunArgs,
   requestRun,
@@ -299,12 +300,14 @@ describe("ci run", () => {
       ref: null,
       waitMin: null,
       files: [],
+      forceFlake: null,
     });
     expect(parseRunArgs(["full", "--ref", "prd/t", "--wait"])).toEqual({
       tier: "full",
       ref: "prd/t",
       waitMin: 30,
       files: [],
+      forceFlake: null,
     });
     expect(parseRunArgs(["unit", "--wait", "5"]).waitMin).toBe(5);
     expect(() => parseRunArgs(["nope"])).toThrow(/needs a tier/);
@@ -484,6 +487,28 @@ describe("a narrowed run", () => {
     expect(() => narrowedCommit({ tier: "unit", sha: SHA, files: ["a.test.ts"] }, gone.io)).toThrow(
       /is not in/,
     );
+  });
+
+  it("a proof run adds its marker under .github, on its own ref, and is candidate only", async () => {
+    expect(parseRunArgs(["candidate", "--force-flake", "sign-in"]).forceFlake).toBe("sign-in");
+    expect(() => parseRunArgs(["full", "--force-flake", "sign-in"])).toThrow(/candidate tier/);
+    expect(() => parseRunArgs(["candidate", "--force-flake", "sign-in", "--files", "a.test.ts"])).toThrow(
+      /--files/,
+    );
+    const w = narrowing();
+    const real = w.io.git;
+    /** @type {string[]} */ const mktrees = [];
+    w.io.git = (/** @type {string[]} */ args, /** @type {string=} */ input) => {
+      if (args[0] === "mktree") mktrees.push(input ?? "");
+      if (args[0] === "cat-file") return { ok: true, out: "" };
+      return real(args, input);
+    };
+    expect(forcedFlakeCommit({ sha: SHA, check: "sign-in" }, w.io)).toBe(NARROWED);
+    expect(JSON.parse(w.inputs["hash-object"] ?? "")).toEqual({ check: "sign-in" });
+    expect(w.calls).toContain(`git ls-tree ${SHA}:.github`);
+    expect(mktrees[0]).toContain("100644 blob blob1\tci-force-flake.json");
+    expect(mktrees[1]).toContain("040000 tree tree1\t.github");
+    expect(() => forcedFlakeCommit({ sha: SHA, check: "../x" }, w.io)).toThrow(/no browser check/);
   });
 
   it("starts only its files' jobs, the components in one", () => {

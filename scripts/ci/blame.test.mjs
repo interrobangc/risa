@@ -272,6 +272,34 @@ describe("the split", () => {
   });
 });
 
+describe("a browser check's failure", () => {
+  const spec = "scripts/browser-checks/sign-in.spec.mjs";
+  const failed = {
+    afterRerun: { files: [spec], tests: [] },
+    failed: { jobs: ["browser"], files: [spec], tests: [], unnamedJobs: [] },
+  };
+
+  it("is named, so the verdict's list is whole", () => {
+    expect(verdictFailures(failed)).toMatchObject({ files: [spec], partial: false });
+  });
+
+  it("needs a whole candidate run on dev: a narrowed run has no browser job", () => {
+    expect(devRunPlan(verdictFailures(failed), () => true).run).toEqual({
+      tier: "candidate",
+      files: [spec],
+      whole: true,
+    });
+  });
+
+  it("files a flake with no quarantine entry", () => {
+    const { findings } = sortFlakes([{ job: "browser", file: spec, name: null, brake: false }], [], {
+      branch: "rc/1",
+    });
+    expect(findings[0]?.quarantine).toBeNull();
+    expect(findings[0]?.note).toContain("a browser check is filed, never quarantined");
+  });
+});
+
 describe("unknown is never green", () => {
   it.each([
     ["an infra dev run", onDev({ kind: "infra", infra: ["unit"] })],

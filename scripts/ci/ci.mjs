@@ -11,6 +11,9 @@
 //       --files narrows the run to those test files: a throwaway commit on top of
 //       the target adds the list, on its own ref, and its verdict never counts as
 //       the branch's.
+//       --force-flake <check> (candidate only) is the proof of the browser rerun: a
+//       throwaway commit makes that check fail once, on its own ref. Expect exit 3
+//       (flake); its verdict never counts as the branch's and writes no status.
 //   pnpm prd ci [<branch>]
 //       the latest whole-tier verdict for the branch's tip (exits by kind).
 //   pnpm prd ci blame [<branch>] [--json]
@@ -54,7 +57,16 @@ import {
   verdictFailures,
 } from "./blame.mjs";
 import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
-import { NARROWED_FILE, TIERS, ciRefName, fileTier, isTier, parseCiRef } from "./tiers.mjs";
+import {
+  FORCED_FLAKE_FILE,
+  NARROWED_FILE,
+  TIERS,
+  browserCheckFile,
+  ciRefName,
+  fileTier,
+  isTier,
+  parseCiRef,
+} from "./tiers.mjs";
 import { isVerdict } from "./verdict.mjs";
 
 /** The workflow's name. Runs are filtered by it: `gh run list --workflow` 404s until ci.yml is on the default branch. */
@@ -220,6 +232,7 @@ export const deleteRef = (/** @type {Io} */ io, /** @type {string} */ ref, /** @
 
 export function verdictLines(/** @type {any} */ v) {
   const lines = [`verdict: ${v.kind} · ${v.tier} · ${String(v.commit).slice(0, 8)} · run ${v.runId}`];
+  if (v.forcedFlake) lines.push(`  a proof run that forced ${v.forcedFlake} to fail once, never a gate`);
   if (v.narrowed)
     lines.push(
       `  narrowed run of ${String(v.target).slice(0, 8)}, never a gate: ${(v.narrowedFiles ?? []).join(", ")}`,
@@ -234,7 +247,15 @@ export function verdictLines(/** @type {any} */ v) {
   if (v.failed?.truncated) lines.push("  (more failures: see the run)");
   for (const t of v.flaky ?? [])
     lines.push(`  flaky${t.brake ? " (brake list)" : ""}: ${t.file}${t.name ? `: ${t.name}` : ""}`);
-  if (v.infra?.jobs?.length) lines.push(`  died before any test: ${v.infra.jobs.join(", ")}`);
+  if (v.infra?.notRun?.length) lines.push(`  browser checks not run: ${v.infra.notRun.join(", ")}`);
+  else if (v.infra?.jobs?.length) lines.push(`  died before any test: ${v.infra.jobs.join(", ")}`);
+  if (v.browser?.length) {
+    const count = (/** @type {string} */ result) =>
+      v.browser.filter((/** @type {{ result: string }} */ c) => c.result === result).length;
+    lines.push(
+      `  browser checks: ${count("pass")} passed, ${count("flake")} flaky, ${count("fail")} failed, ${count("not-run")} not run`,
+    );
+  }
   for (const t of v.quarantined ?? []) lines.push(`  quarantined (${t.status}): ${t.file}: ${t.name}`);
   return lines;
 }
@@ -246,7 +267,7 @@ const unknown = (/** @type {Io} */ io, /** @type {string} */ why) => {
 
 /** The commit status of a whole-tier run; a failed write only warns. */
 function writeCommitStatus(/** @type {Io} */ io, /** @type {any} */ v, /** @type {string=} */ url) {
-  if (v.narrowed) return;
+  if (v.narrowed || v.forcedFlake) return;
   const r = io.gh([
     "api",
     "-X",
@@ -395,7 +416,8 @@ function findVerdict({ sha, accept = () => true }, io) {
   for (const r of ours) {
     if (r.status !== "completed" || r.conclusion === "cancelled") continue;
     const verdict = readVerdict(io, r.databaseId);
-    if (!verdict || verdict.commit !== sha || verdict.narrowed || !accept(verdict)) continue;
+    if (!verdict || verdict.commit !== sha || verdict.narrowed || verdict.forcedFlake || !accept(verdict))
+      continue;
     return { verdict, run: r };
   }
   return { verdict: null, run: null };
@@ -716,7 +738,7 @@ export function ciStatus(branches, io) {
     const left = STATUS_TIMEOUT_MS - (io.now() - start);
     if (!v && left > 0) {
       const read = readVerdict(io, done.databaseId, left);
-      if (read && !read.narrowed) {
+      if (read && !read.narrowed && !read.forcedFlake) {
         v = { kind: read.kind, tier: read.tier, commit: read.commit };
         cache?.write(slot, JSON.stringify(v));
       }
@@ -746,17 +768,66 @@ export function narrowedCommit({ tier, sha, files }, io) {
     if (!io.git(["cat-file", "-e", `${sha}:${file}`]).ok)
       throw new Error(`${file} is not in ${sha.slice(0, 8)}`);
   }
+  return throwawayCommit(
+    io,
+    sha,
+    NARROWED_FILE,
+    { target: sha, files },
+    `chore(ci): narrowed run of ${sha.slice(0, 8)}`,
+  );
+}
+
+/** A commit on top of `sha` that adds one JSON file, at the root or one directory down. Plumbing only. */
+function throwawayCommit(
+  /** @type {Io} */ io,
+  /** @type {string} */ sha,
+  /** @type {string} */ path,
+  /** @type {unknown} */ content,
+  /** @type {string} */ message,
+) {
   const step = (/** @type {string[]} */ args, /** @type {string=} */ input) => {
     const r = io.git(args, input);
-    if (!r.ok || !r.out) throw new Error(`git ${args[0]} failed for the narrowed commit`);
+    if (!r.ok || !r.out) throw new Error(`git ${args[0]} failed for the throwaway commit`);
     return r.out;
   };
-  const blob = step(["hash-object", "-w", "--stdin"], `${JSON.stringify({ target: sha, files }, null, 2)}\n`);
-  const entries = step(["ls-tree", sha])
-    .split("\n")
-    .filter((line) => !line.endsWith(`\t${NARROWED_FILE}`));
-  const tree = step(["mktree"], `${[...entries, `100644 blob ${blob}\t${NARROWED_FILE}`].join("\n")}\n`);
-  return step(["commit-tree", tree, "-p", sha, "-m", `chore(ci): narrowed run of ${sha.slice(0, 8)}`]);
+  const blob = step(["hash-object", "-w", "--stdin"], `${JSON.stringify(content, null, 2)}\n`);
+  const withEntry = (
+    /** @type {string} */ treeish,
+    /** @type {string} */ name,
+    /** @type {string} */ entry,
+  ) => {
+    const kept = step(["ls-tree", treeish])
+      .split("\n")
+      .filter((line) => !line.endsWith(`\t${name}`));
+    return step(["mktree"], `${[...kept, `${entry}\t${name}`].join("\n")}\n`);
+  };
+  const [dir, name] = path.includes("/") ? path.split("/") : [null, path];
+  const tree = dir
+    ? withEntry(
+        sha,
+        dir,
+        `040000 tree ${withEntry(`${sha}:${dir}`, /** @type {string} */ (name), `100644 blob ${blob}`)}`,
+      )
+    : withEntry(sha, path, `100644 blob ${blob}`);
+  return step(["commit-tree", tree, "-p", sha, "-m", message]);
+}
+
+/**
+ * The throwaway commit of a proof run: the target plus the marker that makes one
+ * browser check fail once (browser-job.mjs).
+ * @param {{ sha: string, check: string }} request
+ * @param {Io} io
+ */
+export function forcedFlakeCommit({ sha, check }, io) {
+  if (!/^[a-z0-9-]+$/.test(check) || !io.git(["cat-file", "-e", `${sha}:${browserCheckFile(check)}`]).ok)
+    throw new Error(`--force-flake: no browser check ${check} in ${sha.slice(0, 8)}`);
+  return throwawayCommit(
+    io,
+    sha,
+    FORCED_FLAKE_FILE,
+    { check },
+    `chore(ci): proof run forcing ${check} to fail once on ${sha.slice(0, 8)}`,
+  );
 }
 
 /**
@@ -769,6 +840,7 @@ export function parseRunArgs(args) {
   /** @type {string | null} */ let ref = null;
   /** @type {number | null} */ let waitMin = null;
   /** @type {string[]} */ const files = [];
+  /** @type {string | null} */ let forceFlake = null;
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === "--ref") {
       ref = rest[++i] ?? null;
@@ -779,9 +851,14 @@ export function parseRunArgs(args) {
     } else if (rest[i] === "--files") {
       while (rest[i + 1] && !rest[i + 1]?.startsWith("-")) files.push(/** @type {string} */ (rest[++i]));
       if (!files.length) throw new Error("--files needs at least one test file");
+    } else if (rest[i] === "--force-flake") {
+      forceFlake = rest[++i] ?? null;
+      if (!forceFlake || forceFlake.startsWith("-")) throw new Error("--force-flake needs a browser check");
     } else throw new Error(`ci run: unknown argument ${rest[i]}`);
   }
-  return { tier, ref, waitMin, files };
+  if (forceFlake && tier !== "candidate") throw new Error("--force-flake needs the candidate tier");
+  if (forceFlake && files.length) throw new Error("--force-flake can't be narrowed with --files");
+  return { tier, ref, waitMin, files, forceFlake };
 }
 
 /** The arguments of `blame` and `file`. */
@@ -842,8 +919,15 @@ function resolve(/** @type {Io} */ io, /** @type {string | null} */ ref) {
 export async function main(/** @type {string[]} */ argv, io = realIo()) {
   try {
     if (argv[0] === "run") {
-      const { tier, ref, waitMin, files } = parseRunArgs(argv.slice(1));
+      const { tier, ref, waitMin, files, forceFlake } = parseRunArgs(argv.slice(1));
       const { branch, sha } = resolve(io, ref);
+      if (forceFlake) {
+        const forced = forcedFlakeCommit({ sha, check: forceFlake }, io);
+        return await requestRun(
+          { tier, branch: `${branch}-forced-${forced.slice(0, 8)}`, sha: forced, waitMin },
+          io,
+        );
+      }
       if (!files.length) return await requestRun({ tier, branch, sha, waitMin }, io);
       const narrowed = narrowedCommit({ tier, sha, files }, io);
       return await requestRun(
@@ -865,7 +949,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>…",
+        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>…",
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {

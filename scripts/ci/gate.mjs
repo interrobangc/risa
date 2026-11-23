@@ -7,13 +7,13 @@ import { TIERS } from "./tiers.mjs";
 const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
 
 /**
- * A whole-tier verdict that ran this tier or higher. `ranTier`, not `tier`: a
- * `full` request from before its jobs existed ran less than it asked for.
+ * A whole-tier verdict that ran this tier or higher, and not a proof run's. `ranTier`,
+ * not `tier`: a `full` request from before its jobs existed ran less than it asked for.
  * @param {any} v
  * @param {string} tier
  */
 export function verdictMeets(v, tier) {
-  if (!v || v.narrowed || typeof v.ranTier !== "string") return false;
+  if (!v || v.narrowed || v.forcedFlake || typeof v.ranTier !== "string") return false;
   const ran = TIERS.indexOf(v.ranTier);
   const needed = TIERS.indexOf(/** @type {any} */ (tier));
   return ran >= 0 && needed >= 0 && ran >= needed;

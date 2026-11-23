@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 
 import { findingKey, keyMark } from "./filing.mjs";
 import { isQuarantined } from "./lists.mjs";
-import { TIERS, fileTier } from "./tiers.mjs";
+import { TIERS, fileTier, isBrowserCheckFile } from "./tiers.mjs";
 
 /** The whole tier a failed check job needs on dev. */
 const CHECK_JOB_TIER = /** @type {const} */ ({ static: "static", build: "full" });
@@ -46,7 +46,7 @@ export function verdictFailures(v) {
   const explained = (/** @type {string} */ job) =>
     jobs.includes(job) ||
     tests.some((t) => t.job === job) ||
-    files.some((f) => job.startsWith(fileTier(f))) ||
+    files.some((f) => job.startsWith(isBrowserCheckFile(f) ? "browser" : fileTier(f))) ||
     flakeExplains(job);
   const unnamed = (v.failed?.jobs ?? []).some((/** @type {string} */ job) => !explained(job));
   return {
@@ -62,7 +62,8 @@ const higher = (/** @type {string} */ a, /** @type {string} */ b) =>
 
 /**
  * The run dev needs: the failed files at their highest tier, or the whole tier
- * when a static or build job failed. Null when dev has nothing to run.
+ * when a static or build job or a browser check failed (a narrowed run has no
+ * browser job). Null when dev has nothing to run.
  * @param {ReturnType<typeof verdictFailures>} failures
  * @param {(file: string) => boolean} onDev
  */
@@ -75,7 +76,7 @@ export function devRunPlan(failures, onDev) {
   for (const f of files) tier = higher(tier, fileTier(f));
   for (const job of failures.jobs)
     tier = higher(tier, CHECK_JOB_TIER[/** @type {keyof typeof CHECK_JOB_TIER} */ (job)] ?? "full");
-  return { run: { tier, files, whole: failures.jobs.length > 0 }, absent };
+  return { run: { tier, files, whole: failures.jobs.length > 0 || files.some(isBrowserCheckFile) }, absent };
 }
 
 /**
@@ -216,7 +217,11 @@ export function sortFlakes(flaky, touched, { branch, url }) {
       title: title(`CI flake: ${label(t)}`),
       prd: "fixes-tooling",
       note: `Flaked (passed on its rerun)${t.brake ? "; on the brake list, so not quarantined" : ""}${
-        t.name ? "" : "; a whole-file flake can't be quarantined by name"
+        isBrowserCheckFile(t.file)
+          ? "; a browser check is filed, never quarantined"
+          : t.name
+            ? ""
+            : "; a whole-file flake can't be quarantined by name"
       }; found by ${branch}${url ? ` in ${url}` : ""}.`,
       quarantine: listed ? { file: t.file, name: /** @type {string} */ (t.name) } : null,
     });

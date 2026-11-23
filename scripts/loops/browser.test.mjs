@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { FORCED_LINE } from "../ci/browser-job.mjs";
+
 const BROWSER = new URL("./browser.sh", import.meta.url).pathname;
 
 // Fake specs: they import the real fixtures (smoke mode lives there) and never
@@ -237,7 +239,28 @@ describe("one spec", SLOW, () => {
   });
 });
 
+describe("a proof run's forced failure", SLOW, () => {
+  it("fails a real spec on its first line, as a plain FAIL the runner doesn't call contention", () => {
+    const spec = join(repo, "scripts/browser-checks/specforced.spec.mjs");
+    writeFileSync(spec, `${FORCED_LINE}${SPECS.specpass}\n`);
+    try {
+      const { out, status } = run(["specforced"]);
+      expect(status).not.toBe(0);
+      expect(out).toMatch(/^■ specforced\.spec\.mjs: FAIL/m);
+      expect(out).toContain("not retried");
+    } finally {
+      rmSync(spec);
+    }
+  });
+});
+
 describe("a suite", SLOW, () => {
+  it("appends each check's result for CI's browser job", () => {
+    const results = join(root, "results.tsv");
+    run(["--suite", "--no-retry"], { CARETOOK_BROWSER_RESULTS: results });
+    expect(readFileSync(results, "utf8")).toBe("specpass\tpass\t0\nspecfail\tFAIL\t0\n");
+  });
+
   it("runs the manifest's e2e checks in order, then a table", () => {
     const { out, status } = run(["--suite"]);
     expect(status).toBe(1);

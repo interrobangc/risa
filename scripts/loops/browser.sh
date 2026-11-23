@@ -74,7 +74,9 @@
 # IP, and the fixtures give every device its own), CARETOOK_BROWSER_RETRY (0: no
 # retry), CARETOOK_BROWSER_BUSY (the load that counts as busy, default 40),
 # CARETOOK_BROWSER_LEASES and CARETOOK_BROWSER_FLAKES (the lease directory and
-# the flakes log; tests point them elsewhere).
+# the flakes log; tests point them elsewhere), CARETOOK_BROWSER_RESULTS (a file
+# that --suite and --changed append "<check><TAB><result><TAB><retried 0|1>" to,
+# for CI's browser job).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -435,6 +437,7 @@ looks_transient() {
 # run_check FILE [args…] → run_once, and once more if it failed on contention.
 run_check() {
   local file=$1 first_log first_elapsed waited=0 why
+  retried=0
   run_once "$@"
   [[ $verdict == pass || $verdict == ended ]] && return 0
   ((retry)) || return 0
@@ -453,6 +456,7 @@ run_check() {
   done
   sleep "$pause"
   echo "↻ retrying $(basename "$file") once ($why)"
+  retried=1
   run_once "$@"
   elapsed=$((elapsed + first_elapsed))
   if [[ $verdict == pass || $verdict == ended ]]; then
@@ -539,6 +543,13 @@ else
   read -r -a suite <<< "${CARETOOK_BROWSER_SUITE:-$suite_default}"
 fi
 
+# record_result CHECK RESULT RETRIED → one line for CI's browser job, when it asks.
+record_result() {
+  if [[ -n ${CARETOOK_BROWSER_RESULTS:-} ]]; then
+    printf '%s\t%s\t%s\n' "$(check_name "$1")" "$2" "$3" >> "$CARETOOK_BROWSER_RESULTS"
+  fi
+}
+
 # Both: one lease for the whole run, one check at a time, every check runs.
 suite=("${suite[@]//,/ }")
 read -r -a suite <<< "${suite[*]}"
@@ -556,14 +567,15 @@ echo "Running ${#suite[@]} checks (suite cap $(fmt_secs "$suite_cap")): ${suite[
 for c in "${suite[@]}"; do
   i=$((i + 1))
   if (($(date +%s) >= deadline)); then
-    rows+=("$(printf '%-24s %-8s %s' "$(basename "$(resolve_check "$c" || echo "$c")")" NOT-RUN "-")"); notrun=$((notrun + 1)); continue
+    rows+=("$(printf '%-24s %-8s %s' "$(basename "$(resolve_check "$c" || echo "$c")")" NOT-RUN "-")"); notrun=$((notrun + 1)); record_result "$c" NOT-RUN 0; continue
   fi
   if ! file=$(resolve_check "$c"); then
-    rows+=("$(printf '%-24s %-8s %s' "$c" MISSING "-")"); failed=$((failed + 1)); continue
+    rows+=("$(printf '%-24s %-8s %s' "$c" MISSING "-")"); failed=$((failed + 1)); record_result "$c" MISSING 0; continue
   fi
   ((i > 1)) && sleep "$pause"
   write_lease "$mode $i/${#suite[@]}: $(basename "$file")"
   run_check "$file"
+  record_result "$c" "$verdict" "$retried"
   [[ $verdict == pass || $verdict == ended || $verdict == FLAKY ]] || failed=$((failed + 1))
   rows+=("$(printf '%-24s %-8s %s' "$(basename "$file")" "$verdict" "$(fmt_secs "$elapsed")")")
 done

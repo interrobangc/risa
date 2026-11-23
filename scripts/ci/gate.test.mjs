@@ -8,6 +8,10 @@ const decide = (verdict, over = {}) =>
   decideGate({ verdict: { ranTier: "unit", ...verdict }, tier: "unit", branch: "b", touched: [], ...over });
 
 describe("verdictMeets", () => {
+  it("never takes a proof run's verdict", () => {
+    expect(verdictMeets({ ranTier: "candidate", forcedFlake: "sign-in" }, "unit")).toBe(false);
+  });
+
   it.each([
     [{ ranTier: "components" }, "components", true],
     [{ ranTier: "full" }, "components", true],
