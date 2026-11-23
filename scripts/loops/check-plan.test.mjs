@@ -3,32 +3,26 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { planCheck, planToolingLint } from "./check-plan.mjs";
+import { declaredStatus, keepsVerdict, planCheck, planToolingLint, proposeTier } from "./check-plan.mjs";
 
 const ROOT = join(import.meta.dirname, "../..");
 
 describe("planCheck", () => {
   it.each([
-    ["packages/data/src/db/migrations/0042_x.sql", "a migration"],
-    ["packages/data/scripts/seed.ts", "seeds"],
-    ["powersync/sync-config.yaml", "the sync config"],
-    ["pnpm-lock.yaml", "the lockfile"],
-    ["package.json", "a package.json"],
-    ["apps/web/package.json", "a package.json"],
-    ["vitest.config.ts", "the Vitest config"],
-  ])("forces a full check for %s", (file, what) => {
-    const plan = planCheck(["apps/web/app/a.ts", file], "quick");
-    expect(plan.mode).toBe("full");
-    expect(plan.reason).toContain(what);
-    expect(plan.reason).toContain(file);
-    expect(plan.ownTests).toEqual([]);
-    // A slice hand-off is never forced: the orchestrator's checks cover the rest.
-    expect(planCheck(["apps/web/app/a.ts", file], "slice")).toMatchObject({ mode: "slice", reason: "" });
+    "packages/data/src/db/migrations/0042_x.sql",
+    "packages/data/scripts/seed.ts",
+    "powersync/sync-config.yaml",
+    "pnpm-lock.yaml",
+    "package.json",
+    "vitest.config.ts",
+  ])("a quick check on %s stays quick", (file) => {
+    expect(planCheck(["apps/web/app/a.ts", file], "quick")).toMatchObject({ mode: "quick" });
+    expect(planCheck(["apps/web/app/a.ts", file], "slice")).toMatchObject({ mode: "slice" });
   });
 
   it("keeps a plain app diff quick, with no test files of its own", () => {
     const plan = planCheck(["apps/web/app/routes/a.tsx", "docs/x.md"], "quick");
-    expect(plan).toEqual({ mode: "quick", reason: "", tooling: false, ownTests: [] });
+    expect(plan).toEqual({ mode: "quick", tooling: false, ownTests: [] });
   });
 
   it.each(["slice", "quick"])("names the diff's own integration and component tests (%s)", (asked) => {
@@ -74,25 +68,81 @@ describe("planCheck", () => {
     expect(planCheck([], "quick")).toMatchObject({ mode: "quick", tooling: false, ownTests: [] });
     expect(planCheck([], "full")).toMatchObject({ mode: "full", tooling: false });
   });
+});
 
-  it("names a forced full even when the asked mode is full", () => {
-    expect(planCheck(["pnpm-lock.yaml"], "full").mode).toBe("full");
+describe("proposeTier", () => {
+  it.each([
+    [["docs/a.md", "plans/b.md", "AGENTS.md"], "none"],
+    [["scripts/loops/prd.sh", "scripts/backlog/b.mjs", ".githooks/commit-msg"], "none"],
+    [["packages/data/src/seed-notes.md"], "none"],
+    [["scripts/loops/browser.sh"], "integration"],
+    [["scripts/loops/lib.sh", "docs/a.md"], "integration"],
+    [["scripts/browser-checks/a.spec.mjs"], "integration"],
+    [["apps/web/app/a.tsx"], "components"],
+    [["packages/api/src/a.ts"], "integration"],
+    [["packages/api/src/a.ts", "apps/web/app/a.tsx"], "components"],
+    [["packages/data/src/db/migrations/0042_x.sql"], "full"],
+    [["packages/data/scripts/seed.ts"], "full"],
+    [["powersync/sync-config.yaml"], "full"],
+    [["pnpm-lock.yaml"], "full"],
+    [["apps/web/package.json"], "full"],
+    [["vitest.config.ts"], "full"],
+    [[".github/workflows/ci.yml"], "full"],
+    [["scripts/ci/ci.mjs"], "full"],
+    [["eslint.config.js"], "full"],
+    [["apps/web/app/a.tsx", "pnpm-lock.yaml"], "full"],
+    [[], "none"],
+  ])("%j proposes %s", (files, tier) => {
+    expect(proposeTier(files).tier).toBe(tier);
+  });
+
+  it("names the file behind the proposal", () => {
+    const { reason } = proposeTier(["docs/a.md", "packages/data/src/db/migrations/0042_x.sql"]);
+    expect(reason).toContain("a migration");
+    expect(reason).toContain("0042_x.sql");
   });
 });
 
-describe("planCheck on a package.json's contents", () => {
+describe("keepsVerdict", () => {
+  it.each([
+    [["docs/a.md"], true],
+    [["scripts/loops/prd.sh", "plans/a.md"], true],
+    [["scripts/ci/quarantine.txt", "scripts/ci/brake-list.txt"], true],
+    [["scripts/loops/browser.sh"], false],
+    [["scripts/ci/ci.mjs"], false],
+    [["apps/web/app/a.tsx"], false],
+  ])("%j: %s", (files, kept) => {
+    expect(keepsVerdict(files)).toBe(kept);
+  });
+});
+
+describe("declaredStatus", () => {
+  it.each([
+    ["components", undefined, "ok"],
+    ["components", "components", "ok"],
+    ["components", "full", "ok"],
+    ["components", "integration", "below"],
+    ["components", "none", "refused"],
+    ["none", "none", "ok"],
+    ["none", "unit", "ok"],
+  ])("proposal %s, declared %s: %s", (proposed, declared, status) => {
+    expect(declaredStatus(proposed, declared)).toBe(status);
+  });
+});
+
+describe("proposeTier on a package.json's contents", () => {
   const manifest = (fields) => `${JSON.stringify({ name: "a", version: "1.0.0", ...fields }, null, 2)}\n`;
   const plan = (file, base, head, others = []) =>
-    planCheck([...others, file], "quick", new Map([[file, { base, head }]]));
+    proposeTier([...others, file], new Map([[file, { base, head }]]));
 
   it.each([
     ["added", manifest({}), manifest({ scripts: { dev: "vite" } })],
     ["edited", manifest({ scripts: { dev: "vite" } }), manifest({ scripts: { dev: "vite --host" } })],
     ["removed", manifest({ scripts: { dev: "vite" } }), manifest({})],
     ["a lifecycle hook", manifest({ scripts: {} }), manifest({ scripts: { postinstall: "node x.mjs" } })],
-  ])("a scripts-only change stays quick: %s", (_, base, head) => {
-    expect(plan("package.json", base, head)).toMatchObject({ mode: "quick", reason: "" });
-    expect(plan("packages/data/package.json", base, head).mode).toBe("quick");
+  ])("a scripts-only change asks for nothing: %s", (_, base, head) => {
+    expect(plan("package.json", base, head).tier).toBe("none");
+    expect(plan("packages/data/package.json", base, head).tier).toBe("none");
   });
 
   it.each([
@@ -113,19 +163,19 @@ describe("planCheck on a package.json's contents", () => {
     ["an unparseable base", "{ nope", manifest({})],
     ["an unparseable head", manifest({}), "{ nope"],
     ["a manifest that isn't an object", "[]", "[]"],
-  ])("forces full: %s", (_, base, head) => {
+  ])("proposes full: %s", (_, base, head) => {
     const forced = plan("apps/web/package.json", base, head);
-    expect(forced.mode).toBe("full");
+    expect(forced.tier).toBe("full");
     expect(forced.reason).toContain("a package.json");
   });
 
-  it("forces full for a package.json whose contents it wasn't given", () => {
-    expect(planCheck(["package.json"], "quick", new Map()).mode).toBe("full");
+  it("proposes full for a package.json whose contents it wasn't given", () => {
+    expect(proposeTier(["package.json"], new Map()).tier).toBe("full");
   });
 
-  it("a scripts-only change beside a lockfile change still forces full", () => {
+  it("a scripts-only change beside a lockfile change still proposes full", () => {
     const forced = plan("package.json", manifest({}), manifest({ scripts: { a: "x" } }), ["pnpm-lock.yaml"]);
-    expect(forced.mode).toBe("full");
+    expect(forced.tier).toBe("full");
     expect(forced.reason).toContain("the lockfile");
   });
 
@@ -134,8 +184,8 @@ describe("planCheck on a package.json's contents", () => {
       ["package.json", { base: manifest({}), head: manifest({ scripts: { a: "x" } }) }],
       ["apps/web/package.json", { base: manifest({}), head: manifest({ private: true }) }],
     ]);
-    const forced = planCheck(["package.json", "apps/web/package.json"], "quick", packages);
-    expect(forced.mode).toBe("full");
+    const forced = proposeTier(["package.json", "apps/web/package.json"], packages);
+    expect(forced.tier).toBe("full");
     expect(forced.reason).toContain("apps/web/package.json");
   });
 });
@@ -177,28 +227,25 @@ describe("check-plan.mjs CLI", () => {
       encoding: "utf8",
     }).stdout.split("\n");
 
-  it("a quick check asked on a migration diff is a full one, with its reason", () => {
-    const [mode, reason, tooling, always] = cli("quick", ["packages/data/src/db/migrations/0009_a.sql"]);
-    expect(mode).toBe("full");
-    expect(reason).toContain("a migration");
-    expect([tooling, always]).toEqual(["0", ""]);
+  it("a quick check asked on a migration diff stays quick", () => {
+    const [mode, tooling, own] = cli("quick", ["packages/data/src/db/migrations/0009_a.sql"]);
+    expect([mode, tooling, own]).toEqual(["quick", "0", ""]);
   });
 
   it("a quick check on a tooling diff joins the tooling tests and lists the diff's own test files", () => {
-    const [mode, , tooling, own] = cli("quick", ["scripts/loops/prd.sh", "packages/api/src/a.int.test.ts"]);
+    const [mode, tooling, own] = cli("quick", ["scripts/loops/prd.sh", "packages/api/src/a.int.test.ts"]);
     expect([mode, tooling, own]).toEqual(["quick", "1", "packages/api/src/a.int.test.ts"]);
   });
 
   it("a slice check asked on a migration diff stays a slice check", () => {
-    const [mode, reason] = cli("slice", ["packages/data/src/db/migrations/0009_a.sql"]);
-    expect([mode, reason]).toEqual(["slice", ""]);
+    expect(cli("slice", ["packages/data/src/db/migrations/0009_a.sql"])[0]).toBe("slice");
   });
 
   it("an unknown mode is a full check", () => {
     expect(cli("other", ["apps/web/app/a.ts"])[0]).toBe("full");
   });
 
-  it("reads --base and --head from git, and without them any package.json forces full", () => {
+  it("--propose reads --base and --head from git, and without them any package.json proposes full", () => {
     const repo = mkdtempSync(join(tmpdir(), "check-plan-"));
     const git = (...args) =>
       execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
@@ -216,8 +263,7 @@ describe("check-plan.mjs CLI", () => {
         "node",
         [
           join(ROOT, "scripts/loops/check-plan.mjs"),
-          "--mode",
-          "quick",
+          "--propose",
           "--repo",
           repo,
           "--base",
@@ -233,9 +279,13 @@ describe("check-plan.mjs CLI", () => {
       const first = commit(file, '{"name":"a","scripts":{"x":"1"}}\n');
       const scripts = commit(file, '{"name":"a","scripts":{"x":"2"}}\n');
       const version = commit(file, '{"name":"a","version":"2.0.0","scripts":{"x":"2"}}\n');
-      expect(withRefs(first, scripts, file)).toBe("quick");
+      expect(withRefs(first, scripts, file)).toBe("none");
       expect(withRefs(scripts, version, file)).toBe("full");
-      expect(cli("quick", [file])[0]).toBe("full");
+      const bare = spawnSync("node", [join(ROOT, "scripts/loops/check-plan.mjs"), "--propose"], {
+        input: file,
+        encoding: "utf8",
+      });
+      expect(bare.stdout.split("\n")[0]).toBe("full");
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

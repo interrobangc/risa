@@ -320,18 +320,16 @@ case $cmd in
     done
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
     record=$(checked_file "$dir")
-    # The mode comes from the plan (check-plan.mjs): a quick check on a diff that
-    # touches a migration, seeds, the sync config, a lockfile, a package.json
-    # (beyond its scripts) or the Vitest config is a full one, and the tooling tests join when it touches
-    # the tooling. A slice's --quick is the slice check: its own test files only,
-    # never forced to full.
+    # The plan (check-plan.mjs) names the diff's own tests, and the tooling tests
+    # join when it touches the tooling. A quick check stays quick: what a diff needs
+    # beyond it is the landing's tier. A slice's --quick is the slice check.
     asked=full
     if ((quick)); then
       asked=quick
       [[ $(git -C "$dir" branch --show-current) == slice/* ]] && asked=slice
     fi
     base=$(check_base "$dir" "$asked")
-    { read -r pmode; read -r preason; read -r ptooling; read -r pown; } < <(
+    { read -r pmode; read -r ptooling; read -r pown; } < <(
       git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD)
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
@@ -340,13 +338,11 @@ case $cmd in
       echo "Slice check against ${base:0:7}: typecheck, lint, format, every unit test, and the integration and component tests this diff adds or edits ($why)"
     elif [[ $pmode == quick ]]; then
       echo "Quick check against ${base:0:7}: typecheck, lint, format, every unit test, the integration tests related to the diff, and the component tests it adds or edits ($why)"
-    elif ((quick)); then
-      echo "$preason"; why=""
     fi
     [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
     # shellcheck disable=SC2086
     (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
-      "$bin/check-run.sh" "$pmode" "${why:-$preason}" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
+      "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
