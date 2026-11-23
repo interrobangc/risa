@@ -21,8 +21,8 @@ import { TIERS } from "../ci/tiers.mjs";
 /** Integration and component test files: the only tests a slice or quick check picks by name. */
 const OWN_TEST = /\.(int\.test\.ts|browser\.test\.tsx)$/;
 
-/** What only the whole suite can vouch for. */
-const FULL = [
+/** What only the whole suite can vouch for. dev-brought.mjs reads it too. */
+export const FULL = [
   [/^packages\/data\/src\/db\/migrations\//, "a migration"],
   [/^packages\/data\/(scripts|src)\/.*seed/i, "seeds"],
   [/^powersync\/sync-config\.yaml$/, "the sync config"],
@@ -34,7 +34,7 @@ const FULL = [
 ];
 
 /** CI's two committed lists: filing a flake changes them, and that keeps a verdict. */
-const CI_LISTS = new Set(["scripts/ci/brake-list.txt", "scripts/ci/quarantine.txt"]);
+export const CI_LISTS = new Set(["scripts/ci/brake-list.txt", "scripts/ci/quarantine.txt"]);
 
 const TOOLING = /^(scripts\/loops\/|scripts\/backlog\/|\.githooks\/|scripts\/hooks\.test\.mjs$)/;
 
