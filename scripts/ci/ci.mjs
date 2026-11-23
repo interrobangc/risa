@@ -33,6 +33,10 @@
 //   pnpm prd ci candidate cut [<commit>] | fix <commit> | status
 //       a release candidate: an rc/ branch of a fixed dev commit, its PR into staging
 //       and its candidate run (candidate.mjs). Exit 6 is a refusal.
+//   pnpm prd ci promote
+//       merges the open candidate into staging when the newest candidate verdict on
+//       its exact tip passes (promote.mjs), then deletes its rc/ and ci/ refs. Exit 6
+//       is a refusal; exit 5 means the merge couldn't be confirmed.
 //
 // An infra verdict is rerun once (--failed). A whole-tier run's final verdict is
 // written as the commit status caretook-ci/<tier>; a narrowed run gets none.
@@ -61,6 +65,7 @@ import {
 } from "./blame.mjs";
 import { runCandidate } from "./candidate.mjs";
 import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
+import { runPromote } from "./promote.mjs";
 import {
   FORCED_FLAKE_FILE,
   NARROWED_FILE,
@@ -425,6 +430,31 @@ function findVerdict({ sha, accept = () => true }, io) {
     return { verdict, run: r };
   }
   return { verdict: null, run: null };
+}
+
+/**
+ * What a release gate reads: the newest finished run of this tier or higher on the
+ * commit, and only that one. Unlike findVerdict, an unreadable newest verdict never
+ * falls back to an older run's, and a run still going is reported. Null when GitHub
+ * can't be read.
+ * @param {{ sha: string, tier: string }} request
+ * @param {Io} io
+ * @returns {{ verdict: any, run: Run | null, going: Run | null } | null}
+ */
+export function findTipVerdict({ sha, tier }, io) {
+  const runs = listRuns(io, ["--commit", sha]);
+  if (runs === null) return null;
+  const needed = TIERS.indexOf(/** @type {any} */ (tier));
+  const ours = runs
+    .filter((r) => {
+      const ref = parseCiRef(r.headBranch ?? "");
+      return r.headSha === sha && !!ref && TIERS.indexOf(/** @type {any} */ (ref.tier)) >= needed;
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const going = ours.find((r) => r.status !== "completed") ?? null;
+  if (going) return { verdict: null, run: null, going };
+  const run = ours.find((r) => r.conclusion !== "cancelled") ?? null;
+  return { verdict: run ? readVerdict(io, run.databaseId) : null, run, going: null };
 }
 
 /** The merges on a branch since dev, with the files each changed. */
@@ -947,6 +977,8 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
         verdictLines,
         exitFor,
       });
+    if (argv[0] === "promote")
+      return runPromote(argv.slice(1), io, { findTipVerdict, deleteRef, remoteSha, verdictLines });
     if (argv[0] === "status") return ciStatus(argv.slice(1), io);
     if (argv[0] === "blame" || argv[0] === "file") {
       const { ref, json, base, runId, noPush } = parseReadArgs(argv[0], argv.slice(1));
@@ -961,7 +993,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status",
+        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote",
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {

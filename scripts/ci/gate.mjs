@@ -19,6 +19,34 @@ export function verdictMeets(v, tier) {
   return ran >= 0 && needed >= 0 && ran >= needed;
 }
 
+/**
+ * Whether a verdict lets this exact commit through a release gate: a whole-tier run
+ * of the tier or higher that is `green`, or a `flake` with nothing on the brake list.
+ * A flake that can't show its list doesn't pass.
+ * @param {any} v
+ * @param {string} tier
+ * @param {string} sha
+ * @returns {{ pass: boolean, why: string }}
+ */
+export function releasePasses(v, tier, sha) {
+  const no = (/** @type {string} */ why) => ({ pass: false, why });
+  if (!v) return no(`no ${tier} verdict`);
+  if (v.commit !== sha) return no(`the verdict is for another commit (${String(v.commit).slice(0, 8)})`);
+  if (v.narrowed) return no("the verdict is from a narrowed run");
+  if (v.forcedFlake) return no("the verdict is from a proof run");
+  if (!verdictMeets(v, tier)) return no(`the run reached ${v.ranTier ?? "no tier"}, below ${tier}`);
+  if (v.kind !== "green" && v.kind !== "flake") return no(`the verdict is ${v.kind}`);
+  const flaky = v.flaky ?? [];
+  if (!Array.isArray(flaky)) return no("the verdict's flaky list can't be read");
+  const braked = flaky.filter((/** @type {{ brake?: unknown }} */ t) => t.brake !== false);
+  if (braked.length)
+    return no(
+      `flaky on the brake list: ${braked.map((/** @type {{ file: string }} */ t) => t.file).join(", ")}`,
+    );
+  if (v.kind === "flake" && !flaky.length) return no("a flake verdict that names no flaky test");
+  return { pass: true, why: v.kind };
+}
+
 /** Blame is worth running only on a failure that a flake in the branch's files hasn't already refused. */
 export const needsBlame = (/** @type {any} */ v, /** @type {string[]} */ touched) =>
   (v.kind === "file" || v.kind === "brake") && !touchedFlakes(v, touched).length;
