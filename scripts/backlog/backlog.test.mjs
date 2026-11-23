@@ -524,7 +524,7 @@ describe("backlog ci-file", () => {
   });
 
   it("a done item's entry leaves on the next write", () => {
-    cli(repo, "set", "B-1", "--status", "dropped");
+    cli(repo, "set", "B-1", "status=dropped");
     expect(file([]).removed).toEqual([`${FILE}\tone\tB-1`]);
     expect(list()).not.toContain("B-1");
     expect(readFileSync(join(repo, LIST), "utf8")).not.toContain("B-1");
