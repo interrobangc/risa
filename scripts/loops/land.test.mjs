@@ -525,6 +525,17 @@ describe("land.sh's CI gate", () => {
     expect(merged()).toBe(false);
   });
 
+  it.each([
+    ["infra", 4],
+    ["something new", 5],
+  ])("a %s verdict refuses with how to retry", (kind, code) => {
+    const r = land(on(verdict(kind)));
+    expect(r.status, out(r)).toBe(code);
+    expect(out(r)).toContain("Retry: pnpm prd ci run components --ref prd/throwaway-x --wait");
+    expect(merged()).toBe(false);
+    expect(filed()).toEqual([]);
+  });
+
   it("a dev brake refuses naming its item, and --fixes with that item lands", () => {
     const brake = { jobs: [], tests: [failing], files: [] };
     const fixture = { ...on(verdict("brake", { failed, brake })), devFails: [failing] };
