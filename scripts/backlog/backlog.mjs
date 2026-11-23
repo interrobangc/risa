@@ -985,7 +985,7 @@ function main() {
           },
         },
       );
-      return console.log(JSON.stringify({ filed: out.filed, removed: out.removed, pushed }));
+      return console.log(JSON.stringify({ filed: out.filed, removed: out.removed, pushed, missed: out.missed }));
     }
     case "doctor":
       return doctor(!!opts.fix);
