@@ -583,7 +583,11 @@ describe("ci gate and ci file", () => {
     Object.assign(w.io, {
       fileFindings(/** @type {{ key: string }[]} */ findings, /** @type {boolean} */ push) {
         filings.push({ keys: findings.map((f) => f.key), push });
-        return { filed: findings.map((f) => ({ id: "B-77", created: true })), removed: [], pushed };
+        return {
+          filed: findings.map((f) => ({ key: f.key, id: "B-77", created: true })),
+          removed: [],
+          pushed,
+        };
       },
     });
     return { ...w, filings };
