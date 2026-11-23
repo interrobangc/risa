@@ -37,6 +37,16 @@
 //       merges the open candidate into staging when the newest candidate verdict on
 //       its exact tip passes (promote.mjs), then deletes its rc/ and ci/ refs. Exit 6
 //       is a refusal; exit 5 means the merge couldn't be confirmed.
+//   pnpm prd ci release [--wait <min>] [--rerun]
+//       the main gate: the release tier on the head of the open staging to main PR
+//       (its finished verdict if it has one), written as the release-gate status, and
+//       its second-zone failures filed (release-gate.mjs). Exit 6 is a refusal.
+//   pnpm prd ci override <commit> --reason "…"
+//       the user's recorded way through the main gate: a real terminal, never an agent
+//       session, and the typed short commit. Writes a PR comment, the status and a notice.
+//   pnpm prd ci release-test <commit>
+//       proves the release-gate write on a throwaway commit: always `error`, never a
+//       pass, and refused for any commit reachable from staging or main.
 //
 // An infra verdict is rerun once (--failed). A whole-tier run's final verdict is
 // written as the commit status caretook-ci/<tier>; a narrowed run gets none.
@@ -47,6 +57,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { keepsVerdict } from "../loops/check-plan.mjs";
@@ -66,6 +77,7 @@ import {
 import { runCandidate } from "./candidate.mjs";
 import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
 import { runPromote } from "./promote.mjs";
+import { runOverride, runRelease, runReleaseTest } from "./release-gate.mjs";
 import { zoneFindings } from "./release.mjs";
 import {
   FORCED_FLAKE_FILE,
@@ -111,7 +123,7 @@ const COMMIT_STATE = /** @type {Record<string, string>} */ ({
  * @typedef {{ databaseId: number, headSha: string, headBranch?: string, status: string, conclusion?: string, createdAt: string, url?: string, workflowName?: string, attempt?: number }} Run
  * @typedef {{ list: () => { id: string, text: string }[], post: (text: string) => void, withdraw: (id: string) => void }} Board
  * @typedef {{ read: (name: string) => string | null, write: (name: string, text: string) => void }} Cache
- * @typedef {{ git: (args: string[], input?: string) => Result, gh: (args: string[], timeoutMs?: number) => Result, sleep: (ms: number) => Promise<void>, now: () => number, log: (line: string) => void, pollMs: number, fileFindings?: (findings: any[], push: boolean) => { filed: { key: string, id: string, created: boolean }[], removed: string[], pushed: boolean | null, missed?: string[] } | null, board?: () => Board, cache?: () => Cache }} Io
+ * @typedef {{ git: (args: string[], input?: string) => Result, gh: (args: string[], timeoutMs?: number) => Result, sleep: (ms: number) => Promise<void>, now: () => number, log: (line: string) => void, pollMs: number, fileFindings?: (findings: any[], push: boolean) => { filed: { key: string, id: string, created: boolean }[], removed: string[], pushed: boolean | null, missed?: string[] } | null, board?: () => Board, cache?: () => Cache, session?: () => string, terminal?: () => boolean, ask?: (question: string) => Promise<string> }} Io
  */
 
 const command = (
@@ -187,6 +199,16 @@ function fileFindings(/** @type {any[]} */ findings, /** @type {boolean} */ push
   }
 }
 
+/** One line from the terminal. */
+async function askTerminal(/** @type {string} */ question) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
 /** @returns {Io} */
 export const realIo = () => ({
   git: (args, input) => command("git", args, input),
@@ -194,6 +216,9 @@ export const realIo = () => ({
   fileFindings,
   board: noticeBoard,
   cache: statusCache,
+  session: () => process.env.CARETOOK_SESSION_NAME ?? "",
+  terminal: () => !!process.stdin.isTTY && !!process.stdout.isTTY,
+  ask: askTerminal,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   log: (line) => console.log(line),
@@ -739,7 +764,17 @@ export function fileSecondZone({ sha, runId = null }, io) {
   const found = given ? { verdict: given, run: null } : findVerdict({ sha, accept: isRelease }, io);
   if (found === null) return unknown(io, "GitHub can't be reached");
   if (!found.verdict) return unknown(io, `no release verdict for ${sha.slice(0, 8)}`);
-  const findings = zoneFindings(found.verdict, found.run?.url ? { url: found.run.url } : {});
+  return fileZoneVerdict(found.verdict, found.run, io);
+}
+
+/**
+ * File one release verdict's second-zone failures.
+ * @param {any} verdict
+ * @param {Run | null} run
+ * @param {Io} io
+ */
+export function fileZoneVerdict(verdict, run, io) {
+  const findings = zoneFindings(verdict, run?.url ? { url: run.url } : {});
   if (!findings.length) {
     io.log("no second-zone failures to file");
     return EXIT.green;
@@ -1005,6 +1040,16 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
       });
     if (argv[0] === "promote")
       return runPromote(argv.slice(1), io, { findTipVerdict, deleteRef, remoteSha, verdictLines });
+    if (argv[0] === "release")
+      return await runRelease(argv.slice(1), io, {
+        findTipVerdict,
+        requestRun,
+        fileZoneVerdict,
+        verdictLines,
+        exitFor,
+      });
+    if (argv[0] === "override") return await runOverride(argv.slice(1), io);
+    if (argv[0] === "release-test") return await runReleaseTest(argv.slice(1), io);
     if (argv[0] === "status") return ciStatus(argv.slice(1), io);
     if (argv[0] === "zone-file") {
       const { ref, runId } = parseReadArgs("file", argv.slice(1));
@@ -1023,7 +1068,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote | ci zone-file [<branch>] [--run <id>]",
+        'usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote | ci release [--wait <min>] [--rerun] | ci override <commit> --reason "…" | ci release-test <commit> | ci zone-file [<branch>] [--run <id>]',
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {
