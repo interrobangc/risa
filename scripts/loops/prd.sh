@@ -165,7 +165,7 @@ pnpm prd <command>
                               dev, or update the open one (title: the landing subject; body: backlog items,
                               the check pass); plan/ branches are refused
     dev-sync [branch]         bring the main checkout's dev up to origin/dev after a GitHub merge (land runs
-                              it): fast-forward, rebase backlog-only commits, or merge
+                              it): fast-forward, replay unshared backlog commits, or merge; never stops on the inbox
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
