@@ -45,7 +45,7 @@ const ID_FILE = /^a(\d+)\.json$/;
 export const DEFAULT_WAIT_MIN = 30;
 /** The questions that never default: they take --waits. */
 export const NEVER_DEFAULT =
-  "money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), a new dependency (AGENTS.md: the user's approval), and compliance";
+  "money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push), a new dependency (AGENTS.md: the user's approval), and compliance";
 /** How long answering, settling or dismissing waits for another one's lock on the same ask. */
 export const LOCK_WAIT_MS = 5000;
 /** The dispatcher's own sessions: code, so their questions need no skeptic (the honor system). */
