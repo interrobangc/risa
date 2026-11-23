@@ -7,7 +7,7 @@ main=$(git -C "$(dirname "${BASH_SOURCE[0]}")" worktree list --porcelain | awk '
 loops=$main/.loops
 leases=$loops/.slots
 trunk=${TRUNK:-dev}
-max_prds=${CARETOOK_MAX_PRDS:-3}
+max_prds=${CARETOOK_MAX_PRDS:-4}
 
 # dispatch_pid → the running dispatcher's pid (pnpm prd dispatch: its lock,
 # .loops/.dispatch.lock), or nothing and false when none runs.

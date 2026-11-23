@@ -283,4 +283,25 @@ describe("the scripts that wait or warn", () => {
     r = await run("prd.sh", ["status"]);
     expect(r.out).toContain("load gate: 5-minute load 1 against 4 (CARETOOK_LOAD_BUSY): not busy");
   });
+
+  it("pnpm prd start and status default to a cap of four, and CARETOOK_MAX_PRDS overrides it", async () => {
+    fresh("w");
+    for (const n of ["c1", "c2", "c3"])
+      git(main, "worktree", "add", "-q", "-b", `prd/${n}`, join(loops, n), "dev");
+    expect((await run("prd.sh", ["status"])).out).toContain("PRD worktrees: 3 of 4");
+    const low = await run("prd.sh", ["start", "e"], { CARETOOK_MAX_PRDS: "3" });
+    expect(low.status).toBe(1);
+    expect(low.out).toContain("already 3 PRD worktrees (cap 3;");
+    const fourth = await run("prd.sh", ["start", "d"]);
+    expect(fourth.status, fourth.out).toBe(0);
+    expect(existsSync(join(loops, "d"))).toBe(true);
+    expect((await run("prd.sh", ["status"])).out).toContain("PRD worktrees: 4 of 4");
+    const fifth = await run("prd.sh", ["start", "e"]);
+    expect(fifth.status).toBe(1);
+    expect(fifth.out).toContain("already 4 PRD worktrees (cap 4;");
+    expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
+      "PRD worktrees: 4 of 5",
+    );
+    for (const n of ["c1", "c2", "c3", "d"]) fresh(n);
+  });
 });

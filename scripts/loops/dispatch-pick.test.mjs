@@ -3,6 +3,7 @@
 // action and its reasons out.
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_CAPS,
   DISPATCH_SESSION,
   KEEP_SESSION,
   MAX_REOPENS,
@@ -241,6 +242,19 @@ describe("rule 4: starts", () => {
     expect(p.action).toBe("none");
     expect(whyOf(p, "a")).toBe("no free slot (2 of 2 running)");
     expect(go({ rows: [row("x", "running"), row("a", "planned")], ...runningFacts(["x"]) }).topic).toBe("a");
+  });
+
+  it("the default cap is four", () => {
+    const names = ["w", "x", "y"];
+    const rows = [...names.map((n) => row(n, "running")), row("a", "planned")];
+    expect(DEFAULT_CAPS.prds).toBe(4);
+    expect(go({ rows, ...runningFacts(names) }).topic).toBe("a");
+    const full = go({
+      rows: [row("z", "running"), ...rows],
+      ...runningFacts([...names, "z"]),
+    });
+    expect(full.action).toBe("none");
+    expect(whyOf(full, "a")).toBe("no free slot (4 of 4 running)");
   });
 
   it("an After topic not done", () => {

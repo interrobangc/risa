@@ -17,7 +17,7 @@
 # (slot_ports in lib.sh) and Compose project (caretook-loopN). Secrets
 # are copied from the main checkout's env files. If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most CARETOOK_MAX_PRDS
-# (default 3) PRD worktrees exist at once. Tear down with rm.sh <name>.
+# (default 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
 # (pnpm prd start|slice|plan|hotfix wrap this.)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
