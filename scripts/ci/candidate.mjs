@@ -19,22 +19,22 @@ export const REFUSED = 6;
 const USAGE =
   "usage: pnpm prd ci candidate cut [<commit>] [--wait [min]] | fix <commit> [--wait [min]] | status";
 const DEV = "refs/remotes/origin/dev";
-const STAGING = "refs/remotes/origin/staging";
+export const STAGING = "refs/remotes/origin/staging";
 const DEFAULT_WAIT_MIN = 30;
 /** How far back the first-parent walk looks for the dev commit under a candidate's fixes. */
 const BASE_WALK = 100;
 const FIX_SUBJECT = /^fix(\([^)]+\))?!?: /;
 
-class Refusal extends Error {}
-const refuse = (/** @type {string} */ why) => {
+export class Refusal extends Error {}
+export const refuse = (/** @type {string} */ why) => {
   throw new Refusal(why);
 };
-const short = (/** @type {string} */ sha) => sha.slice(0, 8);
+export const short = (/** @type {string} */ sha) => sha.slice(0, 8);
 
 /**
  * @typedef {import("./ci.mjs").Io} Io
  * @typedef {{ requestRun: (r: any, io: Io) => Promise<number>, findVerdict: (r: any, io: Io) => { verdict: any, run: any } | null, deleteRef: (io: Io, ref: string, sha: string) => boolean, verdictLines: (v: any) => string[], exitFor: (kind: string) => number }} Deps
- * @typedef {{ number: number, url: string, headRefName: string, isCrossRepository?: boolean }} Pr
+ * @typedef {{ number: number, url: string, headRefName: string, headRefOid?: string, isCrossRepository?: boolean }} Pr
  */
 
 /** Only this repository's rc/ heads are candidates: PR #115's `dev` and a fork's rc/ aren't. */
@@ -47,7 +47,7 @@ export function candidateName(/** @type {number} */ ms) {
   return `rc/${iso.slice(0, 10).replaceAll("-", "")}-${iso.slice(11, 16).replace(":", "")}`;
 }
 
-function fetchRefs(/** @type {Io} */ io) {
+export function fetchRefs(/** @type {Io} */ io) {
   const r = io.git([
     "fetch",
     "--quiet",
@@ -72,7 +72,7 @@ function openCandidates(/** @type {Io} */ io) {
     "--limit",
     "100",
     "--json",
-    "number,url,headRefName,isCrossRepository",
+    "number,url,headRefName,headRefOid,isCrossRepository",
   ]);
   if (!r.ok) refuse("could not read the open PRs into staging");
   try {
@@ -83,7 +83,7 @@ function openCandidates(/** @type {Io} */ io) {
 }
 
 /** The one open candidate and its tip, or null. */
-function currentCandidate(/** @type {Io} */ io) {
+export function currentCandidate(/** @type {Io} */ io) {
   const open = openCandidates(io);
   if (open.length > 1)
     refuse(
@@ -96,7 +96,7 @@ function currentCandidate(/** @type {Io} */ io) {
   return { pr, branch: pr.headRefName, tip: tip.out };
 }
 
-const isAncestor = (/** @type {Io} */ io, /** @type {string} */ a, /** @type {string} */ b) =>
+export const isAncestor = (/** @type {Io} */ io, /** @type {string} */ a, /** @type {string} */ b) =>
   io.git(["merge-base", "--is-ancestor", a, b]).ok;
 
 function resolveCommit(/** @type {Io} */ io, /** @type {string} */ name) {
