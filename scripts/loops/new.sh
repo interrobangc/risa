@@ -62,7 +62,7 @@ git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branc
 # The load gate (load-gate.mjs): a slice waits while the machine is busy (at
 # most CARETOOK_LOAD_WAIT, then it goes ahead); a PRD started by hand only warns.
 if [[ $kind == slice ]]; then
-  load_gate_wait "slice $topic-$n"
+  CARETOOK_LOAD_LANE=light load_gate_wait "slice $topic-$n"
 elif [[ $kind == prd ]]; then
   read -r gstate gload gthr _ <<< "$(load_gate)"
   [[ $gstate != busy ]] ||

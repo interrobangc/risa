@@ -543,6 +543,8 @@ fi
 suite=("${suite[@]//,/ }")
 read -r -a suite <<< "${suite[*]}"
 start_server
+# The load gate (load-gate.mjs, limit 20), before the lease so a wait blocks no one.
+load_gate_wait "the browser checks"
 acquire "$mode"
 rows=() failed=0 notrun=0 i=0 suite_start=$(date +%s)
 if [[ -z $suite_cap ]]; then

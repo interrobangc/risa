@@ -1,5 +1,6 @@
 // The load gate: is the machine too busy to start more work? Busy is the
-// 5-minute load above CARETOOK_LOAD_BUSY (default twice the core count);
+// 5-minute load above CARETOOK_LOAD_BUSY (default twice the core count, or
+// LIGHT_BUSY with CARETOOK_LOAD_LANE=light: quick and slice checks, slice starts);
 // CARETOOK_LOAD_GATE=off is never busy, and a load that can't be read isn't
 // busy either. A check (check-run.sh, inside its lease) and a slice worktree's
 // creation (new.sh) wait while it's busy, for at most CARETOOK_LOAD_WAIT
@@ -19,6 +20,9 @@ import { pathToFileURL } from "node:url";
 /** @typedef {{ busy: boolean, off: boolean, load: number | null, threshold: number, cores: number,
  *   setting: boolean }} Gate */
 
+/** The load quick and slice checks and slice starts wait above: they are short. */
+export const LIGHT_BUSY = 30;
+
 const positive = (s) =>
   s !== undefined && s !== "" && Number.isFinite(Number(s)) && Number(s) > 0 ? Number(s) : null;
 
@@ -30,7 +34,7 @@ const positive = (s) =>
 export function loadGate({ load, cores, env = {} }) {
   const off = env.CARETOOK_LOAD_GATE === "off";
   const set = positive(env.CARETOOK_LOAD_BUSY);
-  const threshold = set ?? 2 * cores;
+  const threshold = set ?? (env.CARETOOK_LOAD_LANE === "light" ? LIGHT_BUSY : 2 * cores);
   const readable = typeof load === "number" && Number.isFinite(load);
   return {
     busy: !off && readable && load > threshold,
@@ -80,8 +84,11 @@ export function sayGate(g, env = {}) {
   if (g.off) return "load gate: off (CARETOOK_LOAD_GATE=off)";
   if (g.load === null) return `load gate: can't read the load; not busy (threshold ${against})`;
   const wait = positive(env.CARETOOK_LOAD_WAIT) ?? 600;
+  const waiting = g.setting
+    ? "checks and slice starts wait"
+    : `full checks wait (quick checks and slices above ${LIGHT_BUSY})`;
   return g.busy
-    ? `load gate: 5-minute load ${fmt(g.load)} over ${against}: BUSY, checks and slice starts wait up to ${wait}s`
+    ? `load gate: 5-minute load ${fmt(g.load)} over ${against}: BUSY, ${waiting} up to ${wait}s`
     : `load gate: 5-minute load ${fmt(g.load)} against ${against}: not busy`;
 }
 

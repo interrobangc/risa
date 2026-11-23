@@ -54,7 +54,8 @@ stop_tree() {
   return 0
 }
 
-load_gate_wait "the check"
+# Quick and slice checks are short: they wait only above the light limit (30).
+if [[ $mode == full ]]; then load_gate_wait "the check"; else CARETOOK_LOAD_LANE=light load_gate_wait "the check"; fi
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ); t0=$(date +%s); l0=$(load5)
 counts=$(mktemp); export CARETOOK_CHECK_COUNTS=$counts
 state=$(mktemp -d); export CARETOOK_CHECK_STATE=$state

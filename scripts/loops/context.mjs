@@ -10,20 +10,24 @@
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
 // session's. A backlog session's subagents get no reminder: they have no
-// orchestrator to hand off to.
+// orchestrator to hand off to. Any other subagent has two fixed limits: past
+// the soft one a reminder asks it to judge, again every further 25k; past the
+// hard one it is told to hand off, on every tool call.
 //
 // Records, in .context beside the sessions folder (the main checkout's .loops):
 //   <name>.json            pid, size, readAt, firstOverAt, remindedAt, nudgeAt
 //                          (a nudge is waiting), nudgeDeliveredAt, keep
 //                          { reason, until }. One whose pid isn't the live
 //                          session's is stale and ignored.
-//   .agents/<name>/<id>.json   the same for one subagent of that session
+//   .agents/<name>/<id>.json   the same for one subagent of that session, with
+//                          remindedSize (where its next soft reminder counts from)
 //
 //   pnpm prd context                the calling session's size and the limit
 //   pnpm prd context --keep "<why>" leave it alone for CARETOOK_CONTEXT_KEEP_MIN (30)
 //   pnpm prd context --all [--json] every live session
 //
-// CARETOOK_CONTEXT_LIMIT (160000 tokens), CARETOOK_CONTEXT_REMIND_MIN (10).
+// CARETOOK_CONTEXT_LIMIT (160000 tokens) and CARETOOK_CONTEXT_REMIND_MIN (10)
+// are for orchestrators and backlog sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -47,6 +51,9 @@ const MIN_MS = 60_000;
 const TAIL_BYTES = 256 * 1024;
 const LOCK_WAIT_MS = 1000;
 const LOCK_STALE_MS = 5000;
+const LOOP_SOFT = 175_000;
+const LOOP_HARD = 300_000;
+const LOOP_REPEAT = 25_000;
 
 const positive = (/** @type {string | undefined} */ value, /** @type {number} */ fallback) => {
   const n = Number(value);
@@ -132,8 +139,29 @@ export function backlogNudge(/** @type {number} */ size, /** @type {number} */ l
   return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, never in the middle of a question, write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`. If a step can't be picked up from a brief, run \`pnpm prd context --keep "<why>"\`. Otherwise the user is asked next, and the session is rotated if they don't answer: a brief written from now on goes with it, and without one nothing is handed over.`;
 }
 
-export function loopReminder(/** @type {number} */ size, /** @type {number} */ limit) {
-  return `Context watch: this agent is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. Commit your work, write your hand-off so far as your final message and tell your orchestrator to continue this slice with a fresh \`--continue\` agent.`;
+export function loopSoftReminder(/** @type {number} */ size) {
+  return `Context watch: this agent is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(LOOP_SOFT)} (the hard limit is ${kilo(LOOP_HARD)}; \`pnpm prd context\` shows your orchestrator's size, not yours). Judge whether to go on: continue if you are mid-change or hold understanding a fresh agent would pay to rebuild; otherwise hand off at the next natural boundary. Say which you chose and why in your hand-off. To hand off, commit any changes you were asked to make and write your hand-off as your final message; if this is a slice, tell your orchestrator to continue it with a fresh \`--continue\` agent.`;
+}
+
+export function loopHardReminder(/** @type {number} */ size) {
+  return `Context watch: this agent is at ${kilo(size)} tokens of context, past the hard limit of ${kilo(LOOP_HARD)} (\`pnpm prd context\` shows your orchestrator's size, not yours). Hand off now: commit any changes you were asked to make, start no check, and write your hand-off as your final message, with your size, which checks did not run and any unfinished fix. If this is a slice, tell your orchestrator to continue it with a fresh \`--continue\` agent.`;
+}
+
+/** A subagent's reminder for its size, or null; updates its record. */
+function loopMessage(/** @type {any} */ record, /** @type {number} */ size, /** @type {string} */ at) {
+  if (size <= LOOP_SOFT) {
+    for (const k of ["firstOverAt", "remindedAt", "remindedSize"]) delete record[k];
+    return null;
+  }
+  record.firstOverAt ??= at;
+  if (size <= LOOP_HARD && record.remindedSize !== undefined && size < record.remindedSize + LOOP_REPEAT) {
+    // Shrunk between the limits: the next reminder counts from here.
+    record.remindedSize = Math.min(record.remindedSize, size);
+    return null;
+  }
+  record.remindedAt = at;
+  record.remindedSize = size;
+  return size > LOOP_HARD ? loopHardReminder(size) : loopSoftReminder(size);
 }
 
 /**
@@ -147,20 +175,21 @@ export function hookDecision(current, { pid, size, now, limit, remindMs, loop = 
   const at = new Date(now).toISOString();
   const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
   if (record.keep && !(Date.parse(record.keep.until) > now)) delete record.keep;
+  if (loop) return { record, message: loopMessage(record, size, at) };
   if (size <= limit) {
     for (const k of ["firstOverAt", "remindedAt", "nudgeAt", "nudgeDeliveredAt"]) delete record[k];
     return { record, message: null };
   }
   record.firstOverAt ??= at;
   if (record.keep) return { record, message: null };
-  if (!loop && record.nudgeAt && !record.nudgeDeliveredAt) {
+  if (record.nudgeAt && !record.nudgeDeliveredAt) {
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
     return { record, message: (backlog ? backlogNudge : orchestratorNudge)(size, limit) };
   }
   if (record.remindedAt && now - Date.parse(record.remindedAt) < remindMs) return { record, message: null };
   record.remindedAt = at;
-  const remind = loop ? loopReminder : backlog ? backlogReminder : orchestratorReminder;
+  const remind = backlog ? backlogReminder : orchestratorReminder;
   return { record, message: remind(size, limit) };
 }
 
