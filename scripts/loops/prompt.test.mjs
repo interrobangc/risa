@@ -225,7 +225,7 @@ describe("slice", () => {
     expect(out).toContain("never a bare `pnpm check`");
     expect(out).not.toContain("`pnpm check` still runs everything");
     expect(out).not.toContain(CONTINUE);
-    expect(out.trimEnd()).toMatch(/your orchestrator does that\.$/);
+    expect(out.trimEnd()).toMatch(/Your orchestrator merges it again\.$/);
   });
 
   it("--continue: the slice prompt with its fields, then the continue text", () => {
@@ -247,6 +247,32 @@ describe("slice", () => {
     const r = prompt("slice", "T", "1", "--resume");
     expect(r.code).toBe(1);
     expect(r.err).toContain("--resume");
+  });
+});
+
+describe("sending failures back", () => {
+  it("the orchestrator's prompt names the merge check, tier, blame, send-back, late rm and rotation rule", () => {
+    const out = ok("orchestrator", "T");
+    expect(out).toContain('`pnpm prd check --quick "slice <n> merged"`, and again after each dev sync');
+    expect(out).toContain("`pnpm prd ci run <tier> --wait` in the background");
+    expect(out).toContain("the tier the check plan proposes unless you have a reason");
+    expect(out).toContain("run `pnpm prd ci blame`");
+    expect(out).toContain(
+      "to the agent whose slice it names (SendMessage), with the failing tests and the run link",
+    );
+    expect(out).toContain("an agent idle past an hour, gets a fresh fix agent in that slice's worktree");
+    expect(out).toContain("run `pnpm prd rm T-<n>` then, not at the merge");
+    expect(out).toContain("**No rotation while a wave's run is out or a fix is in flight**");
+  });
+
+  it("the slice's prompt names its own tests, the stack release, the wait and the fix steps", () => {
+    const out = ok("slice", "T", "1");
+    expect(out).toContain("only the integration and component test files you added or edited");
+    expect(out).toContain("run `pnpm prd stack down` before your final message");
+    expect(out).toContain("then wait");
+    expect(out).toContain("**A fix request is these steps and nothing else:**");
+    expect(out).toContain('git merge --no-ff -m "chore(T): merge prd/T for a fix" prd/T');
+    expect(out).toContain('`pnpm prd check --quick "slice fix"`');
   });
 });
 

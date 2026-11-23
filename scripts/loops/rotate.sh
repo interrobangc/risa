@@ -97,6 +97,17 @@ plan=plans/$topic-plan.md
 [[ -z $(git -C "$dir" status --porcelain -- "$plan" 2>/dev/null) ]] ||
   die "rotate: $plan has uncommitted changes: commit _Status_ first, so the fresh session reads where you are"
 
+# A wave's run decides whether its slices have more to do: no new session until it's back.
+if [[ -z $mid_wave ]]; then
+  rc=0
+  out=$(node "$bin/../ci/outstanding.mjs" "$topic" "$dir" 2>/dev/null) || rc=$?
+  case $rc in
+    0) ;;
+    10) die "rotate: $topic has a requested run with no verdict: ${out//$'\n'/, }. Wait for it, or pass --mid-wave on the user's word" ;;
+    *) die "rotate: can't tell whether $topic has a requested run out (GitHub can't be read). Try again, or pass --mid-wave on the user's word" ;;
+  esac
+fi
+
 slices=""
 for d in "$loops"/*/; do
   [[ $(git -C "$d" branch --show-current 2>/dev/null) == "slice/$topic/"* ]] && slices+="${slices:+ }$(basename "$d")"
