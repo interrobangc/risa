@@ -44,7 +44,9 @@ const GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "repo view") echo o/r ;;
   "pr list") echo 7 ;;
-  "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev ;;
+  "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev; [[ -z "$GH_BREAK_SYNC" ]] || touch "$(git rev-parse --absolute-git-dir)/REVERT_HEAD" ;;
+  "pr edit") while (($#)); do [[ $1 != --body ]] || printf '%s' "$2" > "$GH_PR_BODY"; shift; done ;;
+  "pr view") echo https://example.test/pr/7 ;;
   "run list" | "run view" | "run download" | "api -X") exec node "$GH_CI" "$@" ;;
   "api graphql") printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":%s},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" "\${PR_COMMENTS:-[]}" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
@@ -61,7 +63,7 @@ if (process.argv[2] === "ci-file") {
   const merged = spawnSync("git", ["merge-base", "--is-ancestor", "prd/throwaway-x", "dev"]).status === 0;
   if (process.env.CI_FILE_LOG)
     appendFileSync(process.env.CI_FILE_LOG, JSON.stringify({ merged, push: process.argv.includes("--push"), keys: findings.map((f) => f.key) }) + "\\n");
-  console.log(JSON.stringify({ filed: findings.map((f) => ({ key: f.key, id: "B-77", created: true })), removed: [], pushed: true }));
+  console.log(JSON.stringify({ filed: findings.map((f) => ({ key: f.key, id: "B-77", created: true })), removed: [], pushed: !(process.env.CI_FILE_UNPUSHED && process.argv.includes("--push")) }));
 } else process.stdout.write(${JSON.stringify(JSON.stringify(items))});
 `;
 
@@ -338,7 +340,14 @@ describe("land.sh's CI gate", () => {
     writeFileSync(join(root, "fixture.json"), JSON.stringify({ byCommit: {}, ...fixture }));
     return spawnSync(
       "bash",
-      ["scripts/loops/land.sh", "throwaway-x", "-m", "feat(throwaway-x): t", "--no-review", ...args],
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "-m",
+        "feat(throwaway-x): t",
+        ...(args.includes("--local") ? [] : ["--no-review"]),
+        ...args,
+      ],
       {
         cwd: repo,
         encoding: "utf8",
@@ -389,6 +398,109 @@ describe("land.sh's CI gate", () => {
     expect(r.status).toBe(5);
     expect(merged()).toBe(true);
     expect(r.stderr).toContain("pnpm prd ci file prd/throwaway-x --base");
+  });
+
+  it("a local landing files its flakes without pushing, and its retry says so", () => {
+    const flaky = [{ job: "unit", file: TEST, name: "wobbles", brake: false }];
+    const r = land(on(verdict("flake", { flaky })), ["--local"]);
+    expect(r.status, out(r)).toBe(0);
+    expect(filed()).toEqual([expect.objectContaining({ merged: true, push: false })]);
+    expect(git("ls-remote", "origin", "refs/heads/dev").split("\t")[0]).not.toBe(git("rev-parse", "dev"));
+
+    git("reset", "-q", "--hard", "HEAD^1");
+    const again = land(on(verdict("flake", { flaky })), ["--local"], { CI_FILE_FAIL: "1" });
+    expect(again.status).toBe(5);
+    expect(again.stderr).toMatch(/pnpm prd ci file prd\/throwaway-x --base \w+ --run 11 --no-push/);
+  });
+
+  it("a quarantine push refused after the merge finishes the landing, prints the retry and exits 5", () => {
+    const flaky = [{ job: "unit", file: TEST, name: "wobbles", brake: false }];
+    const r = land(on(verdict("flake", { flaky })), [], { CI_FILE_UNPUSHED: "1" });
+    expect(r.status, out(r)).toBe(5);
+    expect(merged()).toBe(true);
+    expect(filed()).toEqual([expect.objectContaining({ merged: true, push: true })]);
+    expect(r.stdout).toContain("through PR #7");
+    expect(out(r)).toContain("wasn't pushed");
+    expect(r.stderr).toMatch(/Retry: pnpm prd ci file prd\/throwaway-x --base \w+ --run 11$/m);
+  });
+
+  it("a dev-sync failure's message carries the flake filing's retry", () => {
+    const flaky = [{ job: "unit", file: TEST, name: "wobbles", brake: false }];
+    const r = land(on(verdict("flake", { flaky })), [], { GH_BREAK_SYNC: "1" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("dev-sync stopped");
+    expect(r.stderr).toMatch(/then file the flakes: `pnpm prd ci file prd\/throwaway-x --base \w+ --run 11`/);
+    expect(filed()).toEqual([]);
+  });
+
+  describe("pr.sh's tier", () => {
+    const body = () => join(root, "pr-body.md");
+    const pr = (...args) =>
+      spawnSync("bash", ["scripts/loops/pr.sh", "throwaway-x", "-m", "feat(throwaway-x): t", ...args], {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${join(root, "bin")}:${process.env.PATH}`,
+          CARETOOK_PR_THROWAWAY: "1",
+          GH_PR_BODY: body(),
+        },
+      });
+
+    it("puts the tier and the proposal in the PR body", () => {
+      const r = pr();
+      expect(r.status, out(r)).toBe(0);
+      expect(readFileSync(body(), "utf8")).toContain("**Tier:** components (proposed components: app code");
+    });
+
+    it("refuses a tier below the proposal without --why, before anything is written", () => {
+      const r = pr("--tier", "unit");
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("below the proposal, components");
+      expect(existsSync(body())).toBe(false);
+    });
+
+    it("names the reason in the body for a tier below the proposal", () => {
+      const r = pr("--tier", "unit", "--why", "only a copy change");
+      expect(r.status, out(r)).toBe(0);
+      expect(readFileSync(body(), "utf8")).toMatch(
+        /\*\*Tier:\*\* unit \(proposed components: .*\); below the proposal because: only a copy change/,
+      );
+    });
+  });
+
+  describe("ready.sh's proposal", () => {
+    const ready = (fixture) => {
+      writeFileSync(join(root, "fixture.json"), JSON.stringify({ byCommit: {}, ...fixture }));
+      return spawnSync("bash", ["scripts/loops/ready.sh", "throwaway-x"], {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${join(root, "bin")}:${process.env.PATH}`,
+          GH_CI: join(root, "gh-ci.mjs"),
+          GH_CI_FIXTURE: join(root, "fixture.json"),
+          PR_HEAD: tip,
+        },
+      });
+    };
+    beforeEach(() => git("worktree", "add", "-q", join(repo, ".loops", "throwaway-x"), "prd/throwaway-x"));
+
+    it("shows the proposal and the verdict it peeked at", () => {
+      const r = ready(on(verdict("green")));
+      expect(r.status, out(r)).toBe(0);
+      expect(r.stdout).toContain("Proposed tier: **components** (app code");
+      expect(r.stdout).toContain(`CI: verdict: green · components · ${tip.slice(0, 8)}`);
+    });
+
+    it("says the landing will request a run, and requests none", () => {
+      const r = ready({});
+      expect(r.status, out(r)).toBe(0);
+      expect(r.stdout).toContain(
+        `CI: no components verdict for ${tip.slice(0, 8)}: the landing will request one`,
+      );
+      expect(git("ls-remote", "origin", "refs/heads/ci/*")).toBe("");
+    });
   });
 
   it("a flake in a file the branch touched refuses, names it and files nothing", () => {
