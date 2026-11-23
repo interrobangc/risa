@@ -20,7 +20,9 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { brakeNotice } from "../ci/blame.mjs";
+import { declinesSince, markLanded } from "./land-skeptic.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
+import { recordVerdict } from "./skeptics.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root, repo;
@@ -242,7 +244,7 @@ describe("land.sh on the PR path", () => {
 
   it("still refuses a code PR without a clean verdict", () => {
     branch({ "docs/x.md": "d", "scripts/loops/t.mjs": "x" });
-    const r = land("--force");
+    const r = land("--force", "--by-user");
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/Codex's verdict on PR #7 isn't clean/);
   });
@@ -289,7 +291,7 @@ describe("land.sh on the PR path", () => {
   it("lands on a clean verdict carried over a dev merge, pinned to the merged tip", () => {
     const reviewed = reviewedThenSynced();
     const tip = git("rev-parse", "prd/throwaway-x");
-    const r = landWith(reviewedClean(reviewed), "--force");
+    const r = landWith(reviewedClean(reviewed), "--force", "--by-user");
     expect(r.stdout).toContain(`codex: clean on ${tip.slice(0, 7)} (carried from ${reviewed.slice(0, 7)}`);
     expect(r.stdout).toContain(`--match-head-commit ${tip}`);
     expect(r.status).toBe(0);
@@ -300,7 +302,7 @@ describe("land.sh on the PR path", () => {
     git("checkout", "-q", "prd/throwaway-x");
     commit({ "apps/web/b.ts": "3" }, "more work");
     git("checkout", "-q", "dev");
-    const r = landWith(reviewedClean(reviewed), "--force");
+    const r = landWith(reviewedClean(reviewed), "--force", "--by-user");
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(
       /Codex's verdict on PR #7 isn't clean \(codex: stale .*not carried: .* isn't a merge of/,
@@ -348,7 +350,7 @@ describe("land.sh's CI gate", () => {
         "throwaway-x",
         "-m",
         "feat(throwaway-x): t",
-        ...(args.includes("--local") ? [] : ["--no-review"]),
+        ...(args.includes("--local") ? [] : ["--no-review", "--by-user"]),
         ...args,
       ],
       {
@@ -645,7 +647,15 @@ describe("land.sh writes a to-test file", () => {
   const landFor = (mergeFails = false) =>
     spawnSync(
       "bash",
-      ["scripts/loops/land.sh", "throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review"],
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "-m",
+        "feat(throwaway-x): t (B-1)",
+        "--force",
+        "--no-review",
+        "--by-user",
+      ],
       {
         cwd: repo,
         encoding: "utf8",
@@ -699,7 +709,7 @@ describe("land.sh writes a to-test file", () => {
     git("checkout", "-q", "dev");
     const r = spawnSync(
       "bash",
-      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--force", "-m", "fix(web): c"],
+      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"],
       { cwd: repo, encoding: "utf8" },
     );
     expect(r.status, r.stderr + r.stdout).toBe(0);
@@ -743,7 +753,10 @@ describe("land.sh posts a landing notice", () => {
       },
     });
   const prdLand = (extra) =>
-    landFor(["throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review"], extra);
+    landFor(
+      ["throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review", "--by-user"],
+      extra,
+    );
 
   it("posts one for a code landing, with the topic and the commit, for six hours", () => {
     branch({ "apps/web/b.ts": "2" });
@@ -762,7 +775,7 @@ describe("land.sh posts a landing notice", () => {
     git("checkout", "-qb", "hotfix/throwaway-y");
     commit({ "apps/web/c.ts": "3" }, "fix it");
     git("checkout", "-q", "dev");
-    const r = landFor(["hotfix/throwaway-y", "--local", "--force", "-m", "fix(web): c"]);
+    const r = landFor(["hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"]);
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(notices()).toMatchObject([{ session: "hotfix-throwaway-y", topic: "throwaway-y" }]);
     expect(notices()[0].text).toContain(`as ${git("rev-parse", "--short", "dev")}`);
@@ -807,7 +820,7 @@ describe("land.sh on an unsynced tip", () => {
     CARETOOK_LOAD_GATE: "off",
     PNPM_LOG: join(root, "pnpm.log"),
   });
-  const go = (extra = {}, ...args) => landWith({ ...env(), ...extra }, "--no-review", ...args);
+  const go = (extra = {}, ...args) => landWith({ ...env(), ...extra }, "--no-review", "--by-user", ...args);
   const toDev = (files) => {
     commit(files, "dev work");
     git("push", "-q", "origin", "dev");
@@ -896,10 +909,10 @@ exit 0
     expect(steps()).toEqual([]);
   });
 
-  it("keeps the drift refusal with --fixes, with --force, and with CARETOOK_UNSYNCED=off", () => {
+  it("keeps the drift refusal with --fixes and with CARETOOK_UNSYNCED=off", () => {
     started();
     toDev({ "apps/web/dev.ts": "d" });
-    const refused = [go({}, "--fixes", "B-9"), go({}, "--force"), go({ CARETOOK_UNSYNCED: "off" })];
+    const refused = [go({}, "--fixes", "B-9"), go({ CARETOOK_UNSYNCED: "off" })];
     for (const r of refused) {
       expect(r.status).not.toBe(0);
       expect(r.stderr).toContain("has moved since");
@@ -1125,7 +1138,7 @@ exit 0
     const hung = join(root, "hung");
     const child = spawn(
       "bash",
-      ["scripts/loops/land.sh", "throwaway-x", "-m", "docs(throwaway-x): t", "--no-review"],
+      ["scripts/loops/land.sh", "throwaway-x", "-m", "docs(throwaway-x): t", "--no-review", "--by-user"],
       {
         cwd: repo,
         stdio: "ignore",
@@ -1299,5 +1312,202 @@ exit 0
     );
     const [file] = readdirSync(join(repo, "to-test"));
     expect(readFileSync(join(repo, "to-test", file), "utf8")).toContain("landed on an unsynced tip");
+  });
+});
+
+// A skeptic's go in place of the user's word, on real records in a temporary store.
+describe("land.sh's --force and --no-review", () => {
+  const store = () => join(root, "skeptic");
+  let tip;
+  const record = (over = {}) =>
+    recordVerdict(store(), {
+      kind: "land",
+      verdict: "go",
+      why: "the failure is unrelated",
+      topic: "throwaway-x",
+      tip,
+      action: "force",
+      ...over,
+    }).id;
+  const ciEnv = (byCommit = {}) => {
+    writeFileSync(join(root, "gh-ci.mjs"), GH_CI);
+    writeFileSync(join(root, "fixture.json"), JSON.stringify({ byCommit }));
+    return {
+      GH_CI: join(root, "gh-ci.mjs"),
+      GH_CI_FIXTURE: join(root, "fixture.json"),
+      CARETOOK_CI_POLL: "0",
+      CARETOOK_LOAD_GATE: "off",
+      CARETOOK_NOTICES_DIR: join(root, "notices"),
+      CARETOOK_SKEPTIC_DIR: store(),
+    };
+  };
+  const seam = (args, byCommit, extra = {}) => landWith({ ...ciEnv(byCommit), ...extra }, ...args);
+  const brakeOn = (sha) => ({
+    [sha]: [
+      {
+        id: 11,
+        tier: "components",
+        verdict: {
+          version: 1,
+          commit: sha,
+          runId: "11",
+          tier: "components",
+          ranTier: "components",
+          kind: "brake",
+          flaky: [],
+          brake: { jobs: ["unit"], tests: [], files: [] },
+          failed: { tests: [], files: [], jobs: ["unit"] },
+        },
+      },
+    ],
+  });
+  const outOfCredits = {
+    PR_COMMENTS: JSON.stringify([
+      {
+        author: { login: "chatgpt-codex-connector" },
+        body: "You have reached your Codex usage limits for code reviews.",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      },
+    ]),
+  };
+  const report = () => {
+    const [file] = readdirSync(join(repo, "to-test"));
+    return readFileSync(join(repo, "to-test", file), "utf8");
+  };
+
+  beforeEach(() => {
+    writeFileSync(join(repo, ".git", "info", "exclude"), ".loops/\nto-test/\n");
+    branch({ "docs/x.md": "d" });
+    tip = git("rev-parse", "prd/throwaway-x");
+  });
+
+  it("--force with neither is refused, naming both", () => {
+    const r = seam(["--force"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("--skeptic <id>");
+    expect(r.stderr).toContain("--by-user");
+  });
+
+  it("--force lands on a go for the tip, and says whose word it was", () => {
+    const r = seam(["--force", "--skeptic", record()]);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain("--force: skeptic s1 go: the failure is unrelated");
+    const byUser = seam(["--force", "--by-user"]);
+    expect(byUser.status, byUser.stderr).toBe(0);
+    expect(byUser.stdout).toContain("on the user's word");
+  });
+
+  it.each([
+    ["an older tip", () => ({ tip: "0".repeat(40) }), "judged 0000000"],
+    ["another topic", () => ({ topic: "other" }), "is for other"],
+    ["another action", () => ({ action: "no-review" }), 'judged "no-review"'],
+    ["an old record", () => ({ now: Date.now() - 2 * 3600_000 }), "minutes old"],
+    ["a no", () => ({ verdict: "no", why: "a real bug" }), "the skeptic said no: a real bug"],
+  ])("--force is refused on %s", (_name, over, reason) => {
+    const r = seam(["--force", "--skeptic", record(over())]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(reason);
+  });
+
+  it("a no beside a go still refuses", () => {
+    const go = record();
+    const no = record({ verdict: "no", why: "a real bug" });
+    const r = seam(["--force", "--skeptic", go, "--skeptic", no]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("a real bug");
+  });
+
+  it("--skeptic and --by-user need a flag to cover, and not both", () => {
+    expect(seam(["--by-user"]).stderr).toContain("go with --force or --no-review");
+    expect(seam(["--force", "--by-user", "--skeptic", "s1"]).stderr).toContain("not both");
+  });
+
+  describe("--no-review on a code diff", () => {
+    beforeEach(() => {
+      git("checkout", "-q", "prd/throwaway-x");
+      commit({ "scripts/loops/own.sh": "own" }, "code");
+      git("checkout", "-q", "dev");
+      tip = git("rev-parse", "prd/throwaway-x");
+    });
+
+    it("is refused with neither, and on another action's go", () => {
+      for (const args of [["--no-review"], ["--no-review", "--skeptic", record()]]) {
+        const r = seam(args);
+        expect(r.status).not.toBe(0);
+        expect(r.stderr).toContain("--no-review");
+      }
+    });
+
+    it("lands on a go or the user's word", () => {
+      const go = seam(["--no-review", "--skeptic", record({ action: "no-review" })]);
+      expect(go.status, go.stdout + go.stderr).toBe(0);
+      expect(go.stdout).toContain("--no-review: skeptic");
+      const byUser = seam(["--no-review", "--by-user"]);
+      expect(byUser.status, byUser.stderr).toBe(0);
+    });
+
+    it("needs neither when Codex is out of credits", () => {
+      const r = seam(["--no-review"], {}, outOfCredits);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain("Codex is out of credits");
+    });
+  });
+
+  describe("where a go doesn't reach", () => {
+    it("a brake on the branch's tip needs --by-user", () => {
+      const refused = seam(["--force", "--skeptic", record()], brakeOn(tip));
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain("doesn't cover a brake");
+      const r = seam(["--force", "--by-user"], brakeOn(tip));
+      expect(r.status, r.stderr).toBe(0);
+    });
+
+    it("a brake on dev's tip needs --by-user", () => {
+      const dev = git("rev-parse", "dev");
+      const refused = seam(["--force", "--skeptic", record()], brakeOn(dev));
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain("doesn't cover a brake");
+    });
+
+    it("an unsynced tip needs --by-user", () => {
+      commit({ "apps/web/dev.ts": "d" }, "dev work");
+      git("push", "-q", "origin", "dev");
+      const refused = seam(["--force", "--skeptic", record()]);
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain("doesn't cover an unsynced tip");
+      const r = seam(["--force", "--by-user"]);
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(r.stdout).toContain("landed on an unsynced tip");
+    });
+  });
+
+  it("the report has the verdict and the declines since the last landing, once", () => {
+    git("checkout", "-q", "prd/throwaway-x");
+    commit({ "apps/web/b.ts": "2" }, "code");
+    git("checkout", "-q", "dev");
+    tip = git("rev-parse", "prd/throwaway-x");
+    markLanded(store(), "throwaway-x", Date.now() - 60_000);
+    record({ action: "decline T_old", why: "before the last landing", now: Date.now() - 120_000 });
+    record({ action: "decline T_1", why: "the guard is above it" });
+    record({ action: "decline T_2", verdict: "no", why: "a real bug" });
+    const ids = [record(), record({ action: "no-review", why: "Codex is stuck" })];
+    const r = seam(
+      ["--force", "--no-review", "--skeptic", ids[0], "--skeptic", ids[1]],
+      {},
+      {
+        CARETOOK_PR_THROWAWAY: "",
+      },
+    );
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const text = report();
+    expect(text).toContain("## What the skeptic said");
+    expect(text).toContain("the failure is unrelated");
+    expect(text).toContain("Codex is stuck");
+    expect(text).toContain("declining Codex thread T_1: s");
+    expect(text).toContain("declining Codex thread T_2: s");
+    expect(text).not.toContain("before the last landing");
+    expect(r.stdout).toContain("for the landing and run-through reports");
+    expect(declinesSince(store(), "throwaway-x")).toEqual([]);
   });
 });
