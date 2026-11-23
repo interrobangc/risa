@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { devRunPlan, slicesNear, sortFlakes, splitFailures, verdictFailures } from "./blame.mjs";
 import { EXIT, blame, ciStatus, fileFlakes, main, requestRun } from "./ci.mjs";
 import { applyFindings, findingKey, keyMark, pruneQuarantine } from "./filing.mjs";
+import { buildVerdict } from "./verdict.mjs";
 
 const SHA = "a".repeat(40);
 const DEV = "d".repeat(40);
@@ -36,12 +37,14 @@ const verdict = (/** @type {any} */ o = {}) => {
       files,
       tests,
       truncated: !!o.truncated,
+      unnamedJobs: o.unnamedJobs ?? [],
     },
     afterRerun: o.afterRerun ?? null,
     flaky: o.flaky ?? [],
     brake: { jobs: o.brakeJobs ?? [], tests: o.brakeTests ?? [], files: o.brakeFiles ?? [] },
     infra: { jobs: o.infra ?? [] },
-    quarantined: [],
+    quarantined: o.quarantined ?? [],
+    quarantineList: o.quarantineList ?? [],
   };
 };
 /** A narrowed result on dev's tip for these files. */
@@ -309,6 +312,117 @@ describe("unknown is never green", () => {
     const s = splitFailures(verdictFailures(verdict({ tests: [test1] })), null, []);
     expect(s).toMatchObject({ dev: [], branch: [] });
     expect(s.unknown).toHaveLength(1);
+  });
+});
+
+describe("blame never clears a failure it didn't compare", () => {
+  const ok = { result: "success" };
+  const job = (/** @type {any} */ failures, result = "failure") => ({
+    result,
+    outputs: { failures: JSON.stringify({ reported: true, quarantined: [], ...failures }) },
+  });
+  const listed = [{ file: UNIT, name: "one", item: "B-1" }];
+  /** A real narrowed dev verdict: the unit job passed, with test1 on dev's quarantine. */
+  const quarantinedOnDev = (/** @type {any[]} */ quarantined) =>
+    buildVerdict({
+      commit: NARROWED,
+      runId: "2",
+      tier: "unit",
+      needs: { plan: ok, unit: job({ total: 1, files: [], tests: [], quarantined }, "success") },
+      quarantine: listed,
+      narrowed: { target: DEV, files: [UNIT] },
+    });
+
+  it("B-587: a test dev skipped as quarantined stays unknown", async () => {
+    const w = world({ dev: quarantinedOnDev([]) });
+    expect(await run(w)).toBe(EXIT.unknown);
+    expect(w.lines.some((l) => l.includes("unknown:") && l.includes(UNIT))).toBe(true);
+    expect(w.filings).toEqual([]);
+  });
+
+  it("B-587: a quarantined test that failed in dev's quarantine step stays unknown", async () => {
+    const w = world({ dev: quarantinedOnDev([{ file: UNIT, name: "one", status: "failed" }]) });
+    expect(await run(w)).toBe(EXIT.unknown);
+  });
+
+  it("B-587: a quarantined test that passed in dev's quarantine step is the branch's", async () => {
+    const w = world({ dev: quarantinedOnDev([{ file: UNIT, name: "one", status: "passed" }]) });
+    expect(await run(w)).toBe(2);
+  });
+
+  it("B-587: a dev verdict with no quarantine list can't clear a named test", async () => {
+    const { quarantineList: _gone, ...older } = onDev();
+    expect(await run(world({ dev: older }))).toBe(EXIT.unknown);
+  });
+
+  it("B-588: a flake doesn't explain a failed job", async () => {
+    const branchVerdict = buildVerdict({
+      commit: SHA,
+      runId: "1",
+      tier: "unit",
+      needs: {
+        plan: ok,
+        static: ok,
+        unit: job({
+          total: 2,
+          files: [UNIT],
+          tests: [{ file: UNIT, name: "one" }],
+          rerun: { files: [], tests: [] },
+        }),
+      },
+    });
+    expect(branchVerdict.kind).toBe("file");
+    const w = world({ branchVerdict });
+    expect(await run(w)).toBe(EXIT.unknown);
+    expect(w.filings).toEqual([]);
+  });
+
+  /** The unit job's flake, beside an integration failure dev has too. */
+  const flakeBeside = (/** @type {string} */ unitResult) =>
+    buildVerdict({
+      commit: SHA,
+      runId: "1",
+      tier: "integration",
+      needs: {
+        plan: ok,
+        static: ok,
+        unit: job(
+          { total: 2, files: [UNIT], tests: [{ file: UNIT, name: "one" }], rerun: { files: [], tests: [] } },
+          unitResult,
+        ),
+        integration: job({ total: 1, files: [INT], tests: [{ file: INT, name: "n" }], rerun: null }),
+      },
+    });
+  const intOnDev = () =>
+    onDev({ kind: "file", tests: [{ job: "integration", file: INT, name: "n" }] }, [INT]);
+
+  it("B-588: an unexplained job beside a failure dev has too isn't all dev's", async () => {
+    expect(await run(world({ branchVerdict: flakeBeside("failure"), dev: intOnDev() }))).toBe(EXIT.unknown);
+  });
+
+  it("B-588: a job that passed on its rerun still leaves the rest all dev's", async () => {
+    expect(await run(world({ branchVerdict: flakeBeside("success"), dev: intOnDev() }))).toBe(0);
+  });
+
+  /** A real narrowed dev verdict whose unit job failed to load the file. */
+  const loadFailureOnDev = () =>
+    buildVerdict({
+      commit: NARROWED,
+      runId: "2",
+      tier: "unit",
+      needs: { plan: ok, unit: job({ total: 0, files: [UNIT], tests: [] }) },
+      narrowed: { target: DEV, files: [UNIT] },
+    });
+
+  it("B-589: a named failure against a dev load failure stays unknown", async () => {
+    const w = world({ dev: loadFailureOnDev() });
+    expect(await run(w)).toBe(EXIT.unknown);
+    expect(w.filings).toEqual([]);
+  });
+
+  it("B-589: a file failure against a dev load failure is still dev's", async () => {
+    const branchVerdict = verdict({ files: [UNIT], jobs: ["unit"] });
+    expect(await run(world({ branchVerdict, dev: loadFailureOnDev() }))).toBe(0);
   });
 });
 

@@ -4,10 +4,12 @@
 // A branch's failures are compared with a run on dev's tip. Failing there too is
 // dev's; passing there is the branch's; a test file dev doesn't have is the
 // branch's. A dev result that can't prove either (infra, cut short, a flake on
-// dev) leaves the failure unknown: it is never assigned, and never green.
+// dev, a quarantined test that didn't pass there, a named test in a file dev
+// couldn't load) leaves the failure unknown: it is never assigned, and never green.
 import { dirname } from "node:path";
 
 import { findingKey, keyMark } from "./filing.mjs";
+import { isQuarantined } from "./lists.mjs";
 import { TIERS, fileTier } from "./tiers.mjs";
 
 /** The whole tier a failed check job needs on dev. */
@@ -34,11 +36,18 @@ export function verdictFailures(v) {
     (/** @type {string} */ f) => !named.has(f),
   );
   /** @type {string[]} */ const jobs = v.brake?.jobs ?? [];
+  // A flake explains a job only when the verdict says the job has no unnamed
+  // failure: a job can fail for something else after its flake passed the rerun.
+  /** @type {string[] | undefined} */ const unnamedJobs = v.failed?.unnamedJobs;
+  const flakeExplains = (/** @type {string} */ job) =>
+    !!unnamedJobs &&
+    !unnamedJobs.includes(job) &&
+    (v.flaky ?? []).some((/** @type {{ job?: string }} */ t) => t.job === job);
   const explained = (/** @type {string} */ job) =>
     jobs.includes(job) ||
     tests.some((t) => t.job === job) ||
     files.some((f) => job.startsWith(fileTier(f))) ||
-    (v.flaky ?? []).some((/** @type {{ job?: string }} */ t) => t.job === job);
+    flakeExplains(job);
   const unnamed = (v.failed?.jobs ?? []).some((/** @type {string} */ job) => !explained(job));
   return {
     tests,
@@ -106,9 +115,23 @@ export function splitFailures(failures, dev, absent) {
     );
   const failsOnDev = (/** @type {Failure} */ f) => {
     if (!devFails || !f.file) return false;
-    if (devFails.files.includes(f.file)) return true;
+    if (!f.name && devFails.files.includes(f.file)) return true;
     return devFails.tests.some((t) => t.file === f.file && (!f.name || t.name === f.name));
   };
+  // A skipped quarantined test hasn't passed; a verdict with no list can't say.
+  const quarantineUnproven = (/** @type {Failure} */ f) => {
+    if (!f.file || !f.name) return false;
+    const { file, name } = f;
+    if (!Array.isArray(dev?.quarantineList)) return true;
+    if (!isQuarantined(dev.quarantineList, file, name)) return false;
+    const results = (dev.quarantined ?? []).filter(
+      (/** @type {Failure & { status: string }} */ t) => t.file === file && t.name === name,
+    );
+    return !results.length || results.some((/** @type {{ status: string }} */ t) => t.status !== "passed");
+  };
+  // Dev's file failed with no named test: this assertion never ran there.
+  const notCompared = (/** @type {Failure} */ f) =>
+    (!!f.name && !!f.file && !!devFails?.files.includes(f.file)) || quarantineUnproven(f);
   const place = (/** @type {Failure} */ f) => {
     const key = findingKey(f);
     if (f.file && absent.includes(f.file)) split.branch.push({ ...f, key, brake: false, absent: true });
@@ -116,7 +139,7 @@ export function splitFailures(failures, dev, absent) {
     else if (f.job && !f.file)
       (devFails?.jobs.includes(f.job) ? split.dev : split.branch).push({ ...f, key, brake: braked(f) });
     else if (failsOnDev(f)) split.dev.push({ ...f, key, brake: braked(f) });
-    else if (flakyOnDev(f)) split.unknown.push({ ...f, key, brake: false });
+    else if (flakyOnDev(f) || notCompared(f)) split.unknown.push({ ...f, key, brake: false });
     else split.branch.push({ ...f, key, brake: false });
   };
   for (const t of failures.tests) place({ job: t.job, file: t.file, name: t.name });

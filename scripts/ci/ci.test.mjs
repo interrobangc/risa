@@ -164,6 +164,7 @@ describe("the verdict", () => {
       files: ["a.test.ts"],
       tests: [{ job: "unit", file: "a.test.ts", name: "breaks" }],
       truncated: false,
+      unnamedJobs: [],
     });
     expect(
       buildVerdict({ ...base, tier: "unit", needs: { plan: ok, static: ok, unit: { result: "skipped" } } })
