@@ -61,7 +61,6 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as amend from "./amend.mjs";
-import { applyFindings } from "../ci/filing.mjs";
 import * as fmt from "./format.mjs";
 import * as reg from "./registry.mjs";
 
@@ -71,6 +70,8 @@ const REL = "plans/backlog.md";
 const INBOX_REL = "plans/inbox.md";
 const ARCHIVE_REL = "plans/backlog-archive.md";
 const QUARANTINE_REL = "scripts/ci/quarantine.txt";
+// Loaded only for ci-file: every other command works without scripts/ci/.
+const filing = process.argv[2] === "ci-file" ? await import("../ci/filing.mjs") : null;
 
 // A git child that stalls (seen once: hash-object waiting on stdin under heavy
 // load) fails the write after this long instead of hanging it; the ref update
@@ -958,7 +959,8 @@ function main() {
         },
         (b, c) => {
           refreshStatuses(b);
-          const r = applyFindings(b, headText(QUARANTINE_REL), findings, {
+          const apply = /** @type {NonNullable<typeof filing>} */ (filing).applyFindings;
+          const r = apply(b, headText(QUARANTINE_REL), findings, {
             add: (f) =>
               fmt.add(b, {
                 type: "bug",

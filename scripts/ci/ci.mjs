@@ -555,6 +555,15 @@ export function fileFlakes({ branch, sha, base = null }, io) {
   return sorted.branch.length ? EXIT.file : EXIT.green;
 }
 
+/** A cached JSON file, or null when it's missing or broken. */
+function cachedJson(/** @type {Cache | undefined} */ cache, /** @type {string} */ name) {
+  try {
+    return JSON.parse(cache?.read(name) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * `ci status`: one line per branch with a whole-tier verdict. One `gh run list`,
  * cached; verdicts cached by run and attempt. Prints nothing when GitHub is away.
@@ -564,13 +573,8 @@ export function fileFlakes({ branch, sha, base = null }, io) {
 export function ciStatus(branches, io) {
   const cache = io.cache?.();
   const start = io.now();
-  /** @type {Run[] | null} */ let runs = null;
-  try {
-    const held = JSON.parse(cache?.read("runs.json") ?? "null");
-    if (held && start - held.at < STATUS_TTL_MS) runs = held.runs;
-  } catch {
-    runs = null;
-  }
+  const held = cachedJson(cache, "runs.json");
+  /** @type {Run[] | null} */ let runs = held && start - held.at < STATUS_TTL_MS ? held.runs : null;
   if (!runs) {
     const r = io.gh(["run", "list", "--limit", "100", "--json", RUN_FIELDS], STATUS_TIMEOUT_MS);
     if (!r.ok) return EXIT.green;
@@ -594,12 +598,7 @@ export function ciStatus(branches, io) {
       continue;
     }
     const slot = `v-${done.databaseId}-${done.attempt ?? 1}.json`;
-    /** @type {any} */ let v = null;
-    try {
-      v = JSON.parse(cache?.read(slot) ?? "null");
-    } catch {
-      v = null;
-    }
+    let v = cachedJson(cache, slot);
     const left = STATUS_TIMEOUT_MS - (io.now() - start);
     if (!v && left > 0) {
       const read = readVerdict(io, done.databaseId, left);
