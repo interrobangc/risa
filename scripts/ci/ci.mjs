@@ -66,6 +66,7 @@ import {
 import { runCandidate } from "./candidate.mjs";
 import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
 import { runPromote } from "./promote.mjs";
+import { zoneFindings } from "./release.mjs";
 import {
   FORCED_FLAKE_FILE,
   NARROWED_FILE,
@@ -110,7 +111,7 @@ const COMMIT_STATE = /** @type {Record<string, string>} */ ({
  * @typedef {{ databaseId: number, headSha: string, headBranch?: string, status: string, conclusion?: string, createdAt: string, url?: string, workflowName?: string, attempt?: number }} Run
  * @typedef {{ list: () => { id: string, text: string }[], post: (text: string) => void, withdraw: (id: string) => void }} Board
  * @typedef {{ read: (name: string) => string | null, write: (name: string, text: string) => void }} Cache
- * @typedef {{ git: (args: string[], input?: string) => Result, gh: (args: string[], timeoutMs?: number) => Result, sleep: (ms: number) => Promise<void>, now: () => number, log: (line: string) => void, pollMs: number, fileFindings?: (findings: any[], push: boolean) => { filed: { key: string, id: string, created: boolean }[], removed: string[], pushed: boolean | null } | null, board?: () => Board, cache?: () => Cache }} Io
+ * @typedef {{ git: (args: string[], input?: string) => Result, gh: (args: string[], timeoutMs?: number) => Result, sleep: (ms: number) => Promise<void>, now: () => number, log: (line: string) => void, pollMs: number, fileFindings?: (findings: any[], push: boolean) => { filed: { key: string, id: string, created: boolean }[], removed: string[], pushed: boolean | null, missed?: string[] } | null, board?: () => Board, cache?: () => Cache }} Io
  */
 
 const command = (
@@ -725,6 +726,31 @@ export function fileFlakes({ branch, sha, base = null, runId = null, noPush = fa
   return sorted.branch.length ? EXIT.file : EXIT.green;
 }
 
+/**
+ * `ci zone-file`: file a release verdict's second-zone failures. Safe to rerun: a
+ * file's key is stable and each item takes one note per commit.
+ * @param {{ sha: string, runId?: string | null }} request
+ * @param {Io} io
+ */
+export function fileSecondZone({ sha, runId = null }, io) {
+  const isRelease = (/** @type {any} */ v) => v?.ranTier === "release" && !v.narrowed && !v.forcedFlake;
+  const given = runId ? readVerdict(io, Number(runId)) : null;
+  if (runId && !isRelease(given)) return unknown(io, `no whole release verdict in run ${runId}`);
+  const found = given ? { verdict: given, run: null } : findVerdict({ sha, accept: isRelease }, io);
+  if (found === null) return unknown(io, "GitHub can't be reached");
+  if (!found.verdict) return unknown(io, `no release verdict for ${sha.slice(0, 8)}`);
+  const findings = zoneFindings(found.verdict, found.run?.url ? { url: found.run.url } : {});
+  if (!findings.length) {
+    io.log("no second-zone failures to file");
+    return EXIT.green;
+  }
+  const out = io.fileFindings?.(findings, false) ?? null;
+  if (!out) return unknown(io, "could not file the second-zone failures");
+  for (const f of out.filed) io.log(`  ${f.created ? "filed" : "on"} ${f.id}`);
+  if (out.missed?.length) return unknown(io, `no such item for the overflow: ${out.missed.join(", ")}`);
+  return EXIT.green;
+}
+
 /** A cached JSON file, or null when it's missing or broken. */
 function cachedJson(/** @type {Cache | undefined} */ cache, /** @type {string} */ name) {
   try {
@@ -980,6 +1006,10 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     if (argv[0] === "promote")
       return runPromote(argv.slice(1), io, { findTipVerdict, deleteRef, remoteSha, verdictLines });
     if (argv[0] === "status") return ciStatus(argv.slice(1), io);
+    if (argv[0] === "zone-file") {
+      const { ref, runId } = parseReadArgs("file", argv.slice(1));
+      return fileSecondZone({ sha: resolve(io, ref).sha, runId }, io);
+    }
     if (argv[0] === "blame" || argv[0] === "file") {
       const { ref, json, base, runId, noPush } = parseReadArgs(argv[0], argv.slice(1));
       const { branch, sha } = resolve(io, ref);
@@ -993,7 +1023,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote",
+        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote | ci zone-file [<branch>] [--run <id>]",
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {

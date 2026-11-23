@@ -97,6 +97,7 @@ describe("the tiers", () => {
       "ci/components/slice-test-gates-2",
       "ci/full/slice-test-gates-2",
       "ci/candidate/slice-test-gates-2",
+      "ci/release/slice-test-gates-2",
     ]);
     expect(parseCiRef("ci/unit/slice-t-2")).toEqual({ tier: "unit", name: "slice-t-2" });
     expect(parseCiRef("ci/nope/x")).toBeNull();
@@ -150,6 +151,7 @@ describe("the tiers", () => {
       "components=false",
       "full=false",
       "candidate=false",
+      "release=false",
       "components2=false",
       "narrowed=false",
     ]);
@@ -523,6 +525,7 @@ describe("a narrowed run", () => {
       "components=false",
       "full=false",
       "candidate=false",
+      "release=false",
       "components2=false",
       "narrowed=true",
     ]);

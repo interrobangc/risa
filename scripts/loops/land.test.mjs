@@ -1178,14 +1178,46 @@ exit 0
     started();
     toDev({ "apps/web/dev.ts": "d" });
     leftover();
-    const r = spawnSync("bash", [join(wt(), "scripts/loops/prd.sh"), "sync"], {
+    const r = syncIt("--force");
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain("aborted a temporary merge");
+    expect(r.stdout).toContain("Merged dev into prd/throwaway-x");
+  });
+
+  const syncIt = (/** @type {string[]} */ ...args) =>
+    spawnSync("bash", [join(wt(), "scripts/loops/prd.sh"), "sync", ...args], {
       cwd: wt(),
       encoding: "utf8",
       env: { ...process.env, ...env() },
     });
+
+  it("sync skips a merge dev's changes don't need, and --force merges them", () => {
+    started();
+    toDev({ "apps/web/dev.ts": "d" });
+    const before = inWt("rev-parse", "HEAD");
+    const skip = syncIt();
+    expect(skip.status, skip.stdout + skip.stderr).toBe(0);
+    expect(skip.stdout).toContain("needs no merge");
+    expect(inWt("rev-parse", "HEAD")).toBe(before);
+    const forced = syncIt("--force");
+    expect(forced.status, forced.stdout + forced.stderr).toBe(0);
+    expect(forced.stdout).toContain("Merged dev into prd/throwaway-x");
+  });
+
+  it("sync merges when dev brings something risky", () => {
+    started();
+    toDev({ "eslint.config.js": "export default [];" });
+    const r = syncIt();
     expect(r.status, r.stdout + r.stderr).toBe(0);
-    expect(r.stdout).toContain("aborted a temporary merge");
     expect(r.stdout).toContain("Merged dev into prd/throwaway-x");
+  });
+
+  it("sync treats a backlog archive commit as no drift", () => {
+    started();
+    toDev({ "plans/backlog-archive.md": "archived" });
+    const r = syncIt();
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain("up to date");
   });
 
   it("leaves a merge that isn't the marked one alone", () => {

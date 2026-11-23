@@ -179,7 +179,7 @@ if [[ -n $force ]]; then
 fi
 # drift_refusal [WHY] → today's refusal, with why it couldn't land unsynced.
 drift_refusal() {
-  die "$drift_ref has moved since $branch last synced${1:+ ($1)}: run \`pnpm prd sync\` and \`pnpm prd check\` in $dir first"
+  die "$drift_ref has moved since $branch last synced${1:+ ($1)}: run \`pnpm prd sync --force\` and \`pnpm prd check\` in $dir first"
 }
 # judge_unsynced → the refusals that need no CI: sets unsynced, or refuses.
 judge_unsynced() {

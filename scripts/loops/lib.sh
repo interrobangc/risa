@@ -251,7 +251,7 @@ node_is() {
 # Empty means BRANCH is up to date with dev.
 trunk_drift() {
   git -C "$main" diff --name-only "$1...${2:-$trunk}" |
-    grep -vxF -e plans/backlog.md -e plans/inbox.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt || true
+    grep -vxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt || true
 }
 
 # Machine-wide leases (browser checks, pnpm prd check) live in lease.sh.

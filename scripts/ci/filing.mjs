@@ -14,7 +14,9 @@ const FINISHED = new Set(["landed", "staging", "live", "dropped"]);
 const MAX_QUARANTINE_NAME = 299;
 
 /**
- * @typedef {{ key: string, title: string, prd: string, note: string, quarantine?: { file: string, name: string } | null }} Finding
+ * `item` notes that item instead of filing one; `once` skips the note on an item
+ * that already carries that mark, so a rerun of one commit writes nothing new.
+ * @typedef {{ key: string, title: string, prd: string, note: string, quarantine?: { file: string, name: string } | null, item?: string, once?: string }} Finding
  * @typedef {{ id: string, title: string, status: string, notes: string }} Item
  */
 
@@ -72,9 +74,21 @@ export function applyFindings(backlog, quarantineText, findings, write) {
       ? { text: null, removed: /** @type {string[]} */ ([]) }
       : pruneQuarantine(quarantineText, backlog.items, backlog.archived ?? []);
   let text = pruned.text;
+  /** @type {string[]} */ const missed = [];
+  const noted = (/** @type {Item} */ item, /** @type {Finding} */ f) =>
+    !!f.once && (item.notes ?? "").includes(f.once);
   for (const f of findings) {
+    if (f.item) {
+      const target = backlog.items.find((i) => i.id === f.item);
+      if (!target) missed.push(f.item);
+      else {
+        if (!noted(target, f)) write.note(target, f.note);
+        filed.push({ key: f.key, id: target.id, created: false });
+      }
+      continue;
+    }
     const open = openItem(backlog.items, f.key);
-    if (open) write.note(open, f.note);
+    if (open && !noted(open, f)) write.note(open, f.note);
     const item = open ?? write.add({ ...f, note: `${keyMark(f.key)} ${f.note}` });
     filed.push({ key: f.key, id: item.id, created: !open });
     if (text !== null && f.quarantine && canQuarantine(f.quarantine.name)) {
@@ -83,5 +97,5 @@ export function applyFindings(backlog, quarantineText, findings, write) {
         text = `${text.replace(/\n*$/, "\n")}${file}\t${name}\t${item.id}\n`;
     }
   }
-  return { filed, removed: pruned.removed, quarantine: text };
+  return { filed, removed: pruned.removed, quarantine: text, missed };
 }

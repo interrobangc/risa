@@ -64,6 +64,16 @@ unsynced_verdict() {
   ' <<< "$out"
 }
 
+# unsynced_safe BRANCH DEV → true when dev's drift needs no merge: land could take
+# BRANCH unsynced (its files miss dev's and dev brought nothing risky). `sync`, `pr`
+# and `ready` share this, so a skipped sync never blocks the next step.
+unsynced_safe() {
+  local go
+  [[ ${CARETOOK_UNSYNCED:-} != off ]] || return 1
+  IFS=$'\t' read -r go _ <<< "$(unsynced_verdict "$2" "$1")"
+  [[ $go == go ]]
+}
+
 # unsynced_dev_brake SHA → sets dev_brake to why dev is known to be braked, or
 # empty: SHA's latest whole-tier verdict is a brake, or a dev-brake notice is live
 # (a brake on an earlier commit stays in force through it). Read only: `ci <sha>`
@@ -104,7 +114,7 @@ unsynced_commits() {
   local c n=0
   for c in $(git -C "$main" rev-list --first-parent "$1..$2"); do
     if [[ -n $(git -C "$main" diff --name-only --no-renames "$c^1" "$c" |
-      grep -vxF -e plans/backlog.md -e plans/inbox.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt) ]]; then
+      grep -vxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt) ]]; then
       n=$((n + 1))
     fi
   done

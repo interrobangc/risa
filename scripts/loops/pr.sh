@@ -5,7 +5,8 @@
 #
 # For prd/ and hotfix/ branches; plan/ branches land locally and are refused.
 # It refuses a branch that isn't synced with dev (trunk_drift, as land does;
-# backlog-only commits on dev don't count), then:
+# backlog-only commits on dev don't count, nor drift that needs no merge:
+# unsynced_safe), then:
 #   1. pushes the main checkout's dev to origin/dev, fast-forward only, so the
 #      PR's base is the dev the branch last synced with; it stops when
 #      origin/dev has diverged (lib.sh, push_trunk);
@@ -23,6 +24,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
+# shellcheck source=unsynced.sh
+source "$(dirname "$0")/unsynced.sh"
 use_node || true
 
 what="" msg="" tier="" why=""
@@ -49,7 +52,7 @@ pr_seam "$branch"
 
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
 (($(git -C "$main" rev-list --count "$drift_ref..$branch") > 0)) || die "nothing to review: $branch has no commits that $drift_ref lacks"
-[[ -z $(trunk_drift "$branch" "$drift_ref") ]] ||
+[[ -z $(trunk_drift "$branch" "$drift_ref") ]] || unsynced_safe "$branch" "$drift_ref" ||
   die "$drift_ref has moved since $branch last synced: run \`pnpm prd sync\` (and the check) in $dir first"
 [[ ! -d $dir || -z $(git -C "$dir" status --porcelain) ]] ||
   echo "note: $dir has uncommitted changes; only the commits go up"
