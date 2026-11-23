@@ -18,6 +18,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pruneQuarantine } from "../ci/filing.mjs";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, testDbOwner, tidy } from "./tidy.mjs";
@@ -114,6 +115,28 @@ export function collectCiRefs(
       },
     ];
   });
+}
+
+/**
+ * The quarantine entries on dev whose item is finished or archived. Anything
+ * unreadable lists nothing, so tidy never removes an entry on a guess.
+ */
+export function collectQuarantineDone(/** @type {string} */ main) {
+  const text = git(main, ["show", "HEAD:scripts/ci/quarantine.txt"]);
+  const listed = run(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "list", "--all", "--json"], {
+    cwd: main,
+    timeout: 15_000,
+  });
+  if (!text.ok || !listed.ok) return [];
+  try {
+    const items = JSON.parse(listed.out).map((/** @type {any} */ i) => ({ ...i, notes: "" }));
+    return pruneQuarantine(text.out, items).removed.map((line) => {
+      const [file = "", name = "", item = ""] = line.split("\t");
+      return { file, name, item };
+    });
+  } catch {
+    return [];
+  }
 }
 
 /** The facts tidy() sorts, for the main checkout MAIN. */
@@ -280,6 +303,7 @@ export function collectTidyFacts({
     branches,
     staleRemotes,
     ciRefs,
+    quarantineDone: collectQuarantineDone(main),
     locks,
     testDbs,
     volumes,
@@ -294,6 +318,7 @@ export function collectTidyFacts({
 function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {string} */ main) {
   let failed = 0;
   let pruned = false;
+  let unquarantined = false;
   const step = (/** @type {string} */ label, /** @type {() => boolean} */ fn) => {
     let ok = false;
     try {
@@ -339,6 +364,19 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
             `:refs/heads/${f.target}`,
           ]),
         );
+        break;
+      case "quarantine":
+        // One write removes every finished entry; the others are then already gone.
+        if (!unquarantined) {
+          unquarantined = true;
+          step("quarantine entries whose item is done", () =>
+            spawnSync(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "ci-file"], {
+              cwd: main,
+              input: '{"findings":[]}',
+              stdio: ["pipe", "ignore", "inherit"],
+            }).status === 0,
+          );
+        }
         break;
       case "volume":
         step(label, () => sh(["docker", "volume", "rm", f.target]));

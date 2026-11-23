@@ -14,7 +14,7 @@ source "$(dirname "$0")/stack-lib.sh"
 fmt='%-22s %-4s %-28s %-22s %-6s %-10s %s\n'
 # shellcheck disable=SC2059
 printf "$fmt" NAME SLOT BRANCH "AHEAD OF" STATE CONTAINERS "DEV SERVER"
-found="" leftovers=""
+found="" leftovers="" branches=()
 limit=$(gc_stopped_after)
 for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
@@ -39,6 +39,7 @@ for dir in "$loops"/*/; do
     slot=- stack=none web=-
   fi
   found=1
+  [[ -z $branch ]] || branches+=("$branch")
   slice_merged "$dir" && leftovers+="merged: $name ($branch is merged into $parent): pnpm prd gc"$'\n'
   # shellcheck disable=SC2059
   printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
@@ -53,6 +54,12 @@ extra=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOO
 # The live notices (notice.mjs status): nothing, heading included, when there are none.
 notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
 [[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
+
+# Each live branch's latest whole-tier CI verdict (ci.mjs status; cached, and short when GitHub is away).
+if ((${#branches[@]})); then
+  ci=$(node "$(dirname "$0")/../ci/ci.mjs" status "${branches[@]}" 2>/dev/null || true)
+  [[ -z $ci ]] || printf '\n%s\n' "${ci%$'\n'}"
+fi
 
 # Sections are separated by a blank line; stale leases only show when there are any.
 stale=""

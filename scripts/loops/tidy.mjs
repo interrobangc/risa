@@ -16,6 +16,7 @@
 //         - .loops/.browser-hangs logs older than a week;
 //         - ended session records whose worktree is gone;
 //         - ci/ refs on origin older than a day with no run going
+//         - quarantine entries whose backlog item is done
 //           (git push --delete, only while still at the same commit).
 //   ask   reported only (one `pnpm prd ask --report`):
 //         - a live session whose worktree is gone or whose branch landed in dev
@@ -123,6 +124,7 @@ export function testDbOwner(db, worktrees) {
  * @property {TidySession[]} [sessions]
  * @property {TidyBranch[]} [branches]
  * @property {string[]} [staleRemotes]   remote-tracking refs `git fetch --prune` would drop
+ * @property {{ file: string, name: string, item: string }[]} [quarantineDone]   quarantine entries whose item is done
  * @property {{ ref: string, sha: string, ageSecs: number | null, running: boolean }[]} [ciRefs]   ci/ refs on origin; a null age is unknown
  * @property {TidyLock[]} [locks]
  * @property {{ db: string, worktree: string|null }[]} [testDbs]
@@ -225,6 +227,14 @@ export function tidy(facts) {
       sha: c.sha,
     });
   }
+
+  for (const q of facts.quarantineDone ?? [])
+    safe.push({
+      kind: "quarantine",
+      target: `${q.file}: ${q.name}`,
+      why: `its item ${q.item} is done`,
+      how: "pnpm backlog ci-file",
+    });
 
   for (const l of facts.locks ?? []) {
     if (!["slot", "lease"].includes(l.kind) || l.alive) continue;

@@ -46,6 +46,8 @@
 //   pnpm backlog doctor [--fix]              check the backlog; exit 1 on findings; --fix the safe ones
 //   pnpm backlog archive                     move landed, staging, live and dropped items to the archive
 //   pnpm backlog path
+//   pnpm backlog ci-file [--push]            pnpm prd ci's filing: JSON findings on stdin, one
+//                                            commit with scripts/ci/quarantine.txt (scripts/ci/filing.mjs)
 //
 // The PRD registry (the "## PRDs" table; row order is the priority; scripts/backlog/registry.mjs):
 //   pnpm backlog prd list [--json]           each topic with its worked-out state
@@ -59,6 +61,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as amend from "./amend.mjs";
+import { applyFindings } from "../ci/filing.mjs";
 import * as fmt from "./format.mjs";
 import * as reg from "./registry.mjs";
 
@@ -67,6 +70,7 @@ const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = "plans/backlog.md";
 const INBOX_REL = "plans/inbox.md";
 const ARCHIVE_REL = "plans/backlog-archive.md";
+const QUARANTINE_REL = "scripts/ci/quarantine.txt";
 
 // A git child that stalls (seen once: hash-object waiting on stdin under heavy
 // load) fails the write after this long instead of hanging it; the ref update
@@ -119,7 +123,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last"].includes(key);
+      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last", "push"].includes(key);
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -259,7 +263,10 @@ function commitContents(contents, w, readHead, commits) {
     const tree = gitRaw(mainCheckout, ["write-tree"], { env }).trim();
     if (tree === git(mainCheckout, "rev-parse", "HEAD^{tree}")) return false;
     const headRaw = gitRaw(mainCheckout, ["log", "-1", "--format=%B", head]);
-    const amending = amend.shouldAmend(amendFacts(head, readHead, headRaw, commits)) === "amend";
+    // A commit carrying more than the backlog's files never folds into an earlier one.
+    const onlyBacklog = Object.keys(contents).every((rel) => BACKLOG_FILES.includes(rel));
+    const amending =
+      onlyBacklog && amend.shouldAmend(amendFacts(head, readHead, headRaw, commits)) === "amend";
     const parent = amending ? git(mainCheckout, "rev-parse", `${head}^`) : head;
     const message = amending ? amend.amendedMessage(headRaw, w) : amend.writeMessage(w);
     const commit = gitRaw(mainCheckout, ["commit-tree", tree, "-p", parent, "-F", "-"], {
@@ -288,6 +295,7 @@ function commitContents(contents, w, readHead, commits) {
  *   inbox: { text: string | null, edit?: (text: string) => string, commitAsIs?: boolean },
  *   archive: () => import("./format.mjs").Backlog,
  *   commitHandEdits?: boolean,
+ *   quarantine?: string | null,
  * }} WriteContext
  */
 
@@ -309,7 +317,7 @@ function commitContents(contents, w, readHead, commits) {
  * @param {string} tool
  * @param {Describe | ((result: any) => Describe)} describe
  * @param {(b: import("./format.mjs").Backlog, ctx: WriteContext) => any} change
- * @param {{ lenient?: boolean }} [opts]
+ * @param {{ lenient?: boolean, afterCommit?: (committed: boolean) => void }} [opts]
  */
 function write(tool, describe, change, opts = {}) {
   return withLock(() => {
@@ -371,6 +379,13 @@ function write(tool, describe, change, opts = {}) {
         !(rel === INBOX_REL && ctx.inbox.edit) && before[rel] !== null && before[rel] !== headText(rel),
     );
 
+    // The quarantine: committed from HEAD's copy; the working copy follows unless it has hand edits.
+    if (typeof ctx.quarantine === "string" && ctx.quarantine !== headText(QUARANTINE_REL)) {
+      commit[QUARANTINE_REL] = ctx.quarantine;
+      if (readText(join(mainCheckout, QUARANTINE_REL)) === headText(QUARANTINE_REL))
+        disk[QUARANTINE_REL] = ctx.quarantine;
+    }
+
     for (const [rel, text] of Object.entries(disk)) writeFileSync(join(mainCheckout, rel), text);
     const { ids: covered, text } = typeof describe === "function" ? describe(result) : describe;
     const lines = [
@@ -379,7 +394,8 @@ function write(tool, describe, change, opts = {}) {
       ...(refreshed.length ? [`Statuses from git: ${refreshed.join(", ")}.`] : []),
     ];
     const commits = [...b.items, ...(archive?.items ?? [])].map((i) => i.commit).filter(Boolean);
-    commitContents(commit, { tool, ids: covered, text, lines }, readHead, commits);
+    const committed = commitContents(commit, { tool, ids: covered, text, lines }, readHead, commits);
+    opts.afterCommit?.(committed);
     return result;
   });
 }
@@ -926,6 +942,34 @@ function main() {
         c.commitHandEdits = true;
       });
       return console.log("committed");
+    case "ci-file": {
+      const { findings = [] } = JSON.parse(readFileSync(0, "utf8") || "{}");
+      let pushed = null;
+      const out = write(
+        "ci-file",
+        (r) => {
+          const list = r.filed.map((f) => f.id);
+          return { ids: list, text: list.length ? `${amend.idList(list)}: filed from CI` : "tidy the quarantine" };
+        },
+        (b, c) => {
+          refreshStatuses(b);
+          const r = applyFindings(b, headText(QUARANTINE_REL), findings, {
+            add: (f) => fmt.add(b, { type: "bug", title: f.title, prd: f.prd, status: "triaged", note: f.note, ...ctx() }),
+            note: (it, text) => fmt.addNote(it, { text, ...ctx() }),
+          });
+          c.quarantine = r.quarantine;
+          return r;
+        },
+        {
+          // Under the lock: never forced, so a diverged origin only leaves it for the next landing.
+          afterCommit: (committed) => {
+            if (!opts.push || !committed) return;
+            pushed = tryGit(mainCheckout, "push", "--quiet", REMOTE, `refs/heads/${TRUNK}:refs/heads/${TRUNK}`) !== null;
+          },
+        },
+      );
+      return console.log(JSON.stringify({ filed: out.filed, removed: out.removed, pushed }));
+    }
     case "doctor":
       return doctor(!!opts.fix);
     case "prd":

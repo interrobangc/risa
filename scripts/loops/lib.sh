@@ -158,6 +158,14 @@ exempt_only() {
   [[ -z $(git -C "$1" diff --name-only --no-renames $range | grep -Ev "$exempt_re") ]]
 }
 
+# keeps_check DIR FROM TO → succeeds when every file changed from FROM to TO is
+# exempt or one of CI's two lists: such commits keep a recorded pass. The lists
+# aren't exempt themselves, so a branch that changes only them still needs a check.
+keeps_check() {
+  [[ -z $(git -C "$1" diff --name-only --no-renames "$2" "$3" |
+    grep -Ev "$exempt_re" | grep -vxF -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt) ]]
+}
+
 # docs_only BASE TIP → succeeds when BASE...TIP changes something and every
 # file it changes is Markdown (`*.md` anywhere). Tooling scripts are code: they
 # keep the Codex review. An empty diff is not docs only. --no-renames lists both
@@ -169,7 +177,7 @@ docs_only() {
 }
 
 # checked_ok DIR REV → succeeds when `pnpm prd check` (full or --quick) passed
-# on REV, or on an ancestor of it with only exempt files changed since; or when
+# on REV, or on an ancestor of it with only exempt files or CI's lists changed since; or when
 # REV's own changes against dev (dev...REV) are all exempt, so it needs none.
 checked_ok() {
   local checked tip
@@ -177,7 +185,7 @@ checked_ok() {
   tip=$(git -C "$1" rev-parse "$2")
   if [[ -n $checked ]]; then
     [[ $checked == "$tip" ]] && return 0
-    git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null && exempt_only "$1" "$checked" "$tip" && return 0
+    git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null && keeps_check "$1" "$checked" "$tip" && return 0
   fi
   exempt_only "$1" "$trunk...$tip"
 }
@@ -190,7 +198,7 @@ checked_how() {
   read -r sha mode _ why <<< "$line"
   tip=$(git -C "$1" rev-parse "$2")
   if [[ -n $sha ]] && { [[ $sha == "$tip" ]] ||
-    { git -C "$1" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null && exempt_only "$1" "$sha" "$tip"; }; }; then
+    { git -C "$1" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null && keeps_check "$1" "$sha" "$tip"; }; }; then
     if [[ $mode == quick ]]; then echo "quick on ${sha:0:7} ($why)"; else echo "full on ${sha:0:7}"; fi
   elif exempt_only "$1" "$trunk...$tip"; then
     echo "none needed (docs and tooling only)"
@@ -228,11 +236,12 @@ node_is() {
 }
 
 # trunk_drift BRANCH [REF] → the files dev (or REF) changed since BRANCH last
-# merged it, other than the backlog files (pnpm backlog commits those onto dev
-# all day, and they never affect a branch's code). Empty means BRANCH is up to
-# date with dev.
+# merged it, other than the backlog files and CI's two lists (pnpm backlog and
+# pnpm prd ci commit those onto dev, and they never affect a branch's code).
+# Empty means BRANCH is up to date with dev.
 trunk_drift() {
-  git -C "$main" diff --name-only "$1...${2:-$trunk}" | grep -vxF -e plans/backlog.md -e plans/inbox.md || true
+  git -C "$main" diff --name-only "$1...${2:-$trunk}" |
+    grep -vxF -e plans/backlog.md -e plans/inbox.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt || true
 }
 
 # Machine-wide leases (browser checks, pnpm prd check) live in lease.sh.
