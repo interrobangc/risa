@@ -135,6 +135,8 @@ describe("orchestrator", () => {
     for (const flags of [["--auto"], ["--resume", "--auto"]]) {
       const out = ok("orchestrator", "T", ...flags);
       expect(out).toContain('`pnpm prd land T --tier <t> -m "<subject>"`');
+      expect(out).toContain("land typechecks the merge and lands the unsynced tip");
+      expect(out).toContain("the next wave syncs as usual");
       expect(out).not.toContain("--force");
     }
   });

@@ -22,6 +22,12 @@
 # It refuses unless the branch already contains dev's work (`pnpm prd sync`;
 # backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
 # a CI verdict for its tier (scripts/ci/ci.mjs gate, gate.mjs).
+# The unsynced landing: when dev's commits since the last sync share no file with
+# the branch and bring no risky one (dev-brought.mjs), land typechecks a temporary
+# merge in the branch's worktree (unsynced.sh, in a check lease; none for a
+# Markdown-only diff) and lands the unsynced tip, saying so in the merge body and
+# the report. Never with --force or --fixes, on a brake verdict, or with
+# CARETOOK_UNSYNCED=off: those keep the drift refusal.
 # --tier <t>: the tier to wait for; the default is what the diff proposes
 # (check-plan.mjs). Below the proposal it needs --why "<reason>", and the report
 # names both; `none` under a real proposal is --force, the user's word. The gate
@@ -57,10 +63,13 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
+# shellcheck source=unsynced.sh
+source "$(dirname "$0")/unsynced.sh"
 use_node || true
 
 what="" msg="" force="" path="" noreview="" tier="" why="" fixes=""
-proposal="" proposal_why="" tierline="" gate_base="" gate_run="" gate_flakes="" to_test_file=""
+proposal="" proposal_why="" tierline="" gate_base="" gate_run="" gate_flakes="" gate_kind="" to_test_file=""
+unsynced="" unsynced_tc="" unsynced_line="" unsynced_report=""
 while (($#)); do
   case $1 in
     -m) msg=${2:?-m "subject"}; shift 2 ;;
@@ -112,8 +121,30 @@ git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch
 [[ $(git -C "$main" branch --show-current) == "$trunk" ]] || die "the main checkout isn't on $trunk"
 [[ ! -e $(git -C "$main" rev-parse --absolute-git-dir)/MERGE_HEAD ]] || die "the main checkout is in the middle of a merge"
 (($(git -C "$main" rev-list --count "$drift_ref..$branch") > 0)) || die "nothing to land: $branch has no commits that $drift_ref lacks"
-[[ -z $(trunk_drift "$branch" "$drift_ref") ]] ||
-  die "$drift_ref has moved since $branch last synced: run \`pnpm prd sync\` and \`pnpm prd check\` in $dir first"
+# drift_refusal [WHY] → today's refusal, with why it couldn't land unsynced.
+drift_refusal() {
+  die "$drift_ref has moved since $branch last synced${1:+ ($1)}: run \`pnpm prd sync\` and \`pnpm prd check\` in $dir first"
+}
+# judge_unsynced → the refusals that need no CI: sets unsynced, or refuses.
+judge_unsynced() {
+  local go why
+  [[ ${CARETOOK_UNSYNCED:-} != off ]] || drift_refusal "CARETOOK_UNSYNCED=off"
+  [[ -z $force ]] || drift_refusal "a forced landing has no CI verdict, so it lands only synced"
+  [[ -z $fixes ]] || drift_refusal "a landing with --fixes lands only synced"
+  IFS=$'\t' read -r go why _ <<< "$(unsynced_verdict "$drift_ref" "$branch")"
+  [[ $go == go ]] || drift_refusal "$why"
+  if ! docs_only "$drift_ref" "$branch"; then
+    unsynced_tc=1
+    [[ -d $dir ]] || drift_refusal "no worktree to typecheck the merge in"
+    [[ $(git -C "$dir" rev-parse HEAD) == $(git -C "$main" rev-parse "$branch") ]] ||
+      drift_refusal "$dir isn't at $branch's tip"
+    [[ -z $(git -C "$dir" status --porcelain) ]] || drift_refusal "uncommitted changes in $dir"
+  fi
+  unsynced=1
+}
+# A merge a killed landing left would read as uncommitted changes.
+if [[ -d $dir ]]; then unsynced_clear "$dir"; fi
+if [[ -n $(trunk_drift "$branch" "$drift_ref") ]]; then judge_unsynced; fi
 if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || die "uncommitted changes in $dir"
 fi
@@ -154,8 +185,61 @@ run_gate() {
     exit "$((code == 0 ? 5 : code))"
   fi
   [[ $(git -C "$main" rev-parse "$branch") == "$tip0" ]] || die "$branch's tip moved during the gate: nothing landed"
+  gate_kind=$kind
   checkline="CI $kind at $ran on ${at:0:7} (run $gate_run)"
   echo "check: $checkline"
+}
+# typecheck_merge DEV → the temporary merge's typecheck, in a check lease taken
+# from the main checkout (so the worktree's own leases can be told apart). TERM
+# and INT reach it: a background job ignores INT, so both go on as TERM.
+typecheck_merge() {
+  local here pid rc=0
+  here=$(cd "$(dirname "$0")" && pwd)
+  (cd "$main" && exec "$here/lease.sh" run check --label "unsynced typecheck of $branch" -- \
+    "$here/unsynced.sh" typecheck "$dir" "$(git -C "$main" rev-parse "$branch")" "$1") &
+  pid=$!
+  trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; exit 143' TERM INT
+  wait "$pid" || rc=$?
+  trap - TERM INT
+  case $rc in
+    0) ;;
+    3) drift_refusal "the merge with $drift_ref conflicts" ;;
+    4) drift_refusal "the merged result doesn't typecheck" ;;
+    5) drift_refusal "its worktree holds a check or browser lease" ;;
+    6) drift_refusal "$dir isn't clean at $branch's tip" ;;
+    75) drift_refusal "no check lease came free for the typecheck" ;;
+    *) drift_refusal "the typecheck stopped (exit $rc)" ;;
+  esac
+}
+# land_unsynced → after the CI gate, before the merge: judge dev, typecheck, and
+# read dev again. If it moved, judge and typecheck once more, then refuse.
+land_unsynced() {
+  [[ -n $unsynced ]] || return 0
+  [[ $gate_kind != brake ]] || drift_refusal "CI reads a brake, so it lands only synced"
+  local tip0 pass go now base n ran
+  tip0=$(git -C "$main" rev-parse "$branch")
+  for pass in 1 2; do
+    IFS=$'\t' read -r go now base <<< "$(unsynced_verdict "$drift_ref" "$branch")"
+    [[ $go == go ]] || drift_refusal "$now"
+    [[ -z $unsynced_tc ]] || typecheck_merge "$now"
+    if [[ $drift_ref == origin/* ]]; then
+      git -C "$main" fetch --quiet origin "$trunk" || drift_refusal "couldn't read origin/$trunk again"
+    fi
+    [[ $(git -C "$main" rev-parse "$drift_ref") != "$now" ]] && {
+      ((pass == 1)) || drift_refusal "it moved again during the typecheck"
+      echo "$drift_ref moved during the typecheck: judging it once more"
+      continue
+    }
+    break
+  done
+  [[ $(git -C "$main" rev-parse "$branch") == "$tip0" ]] || die "$branch's tip moved during the typecheck: nothing landed"
+  n=$(unsynced_commits "$base" "$now")
+  ran="only the merged result's typecheck ran"
+  [[ -n $unsynced_tc ]] || ran="Markdown only, so no typecheck ran"
+  ((n == 1)) && n="1 commit" || n="$n commits"
+  unsynced_line="Landed on an unsynced tip: $trunk had $n since the last sync, sharing no file with it"
+  unsynced_report="landed on an unsynced tip: \`$trunk\` had $n since the last sync, sharing no file with it; $ran"
+  echo "$unsynced_report"
 }
 # flake_args → the `ci file` arguments for this landing. A local landing never
 # pushes: publishing dev stays the keeper's.
@@ -207,6 +291,7 @@ write_to_test() {
   [[ -z $force ]] || unchecked+=("the check was skipped (--force)")
   [[ -z $noreview ]] || unchecked+=("merged without a clean Codex verdict (--no-review)")
   [[ $path != local ]] || unchecked+=("landed locally: no PR and no Codex review")
+  [[ -z $unsynced_report ]] || unchecked+=("$unsynced_report")
   [[ $checkline != "none needed"* ]] || unchecked+=("no check ran: $checkline")
   unchecked+=("browser checks: land can't see which ran; the landing report says")
   # The topic's plain title: its PRD's (or plan's) first heading, on the branch.
@@ -294,7 +379,8 @@ next_steps() {
 
 if [[ $path == local ]]; then
   run_gate
-  git -C "$main" merge --no-ff -m "$msg" "$branch"
+  land_unsynced
+  git -C "$main" merge --no-ff -m "$msg" ${unsynced_line:+-m "$unsynced_line"} "$branch"
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
   [[ -z $tierline ]] || echo "Landed at $tierline"
@@ -329,6 +415,8 @@ fi
 repo=$(gh_repo) || die "gh couldn't name origin's repository"
 merge=(gh pr merge "$number" -R "$repo" --merge --subject "$msg" --match-head-commit "$tip" --delete-branch)
 run_gate
+land_unsynced
+[[ -z $unsynced_line ]] || merge+=(--body "$unsynced_line")
 if [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]]; then
   echo "CARETOOK_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push $trunk, then run:"
   printf ' %q' "${merge[@]}"; echo
