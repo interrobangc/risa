@@ -18,7 +18,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { pruneQuarantine } from "../ci/filing.mjs";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, testDbOwner, tidy } from "./tidy.mjs";
@@ -129,11 +128,21 @@ export function collectQuarantineDone(/** @type {string} */ main) {
   });
   if (!text.ok || !listed.ok) return [];
   try {
-    const items = JSON.parse(listed.out).map((/** @type {any} */ i) => ({ ...i, notes: "" }));
-    return pruneQuarantine(text.out, items).removed.map((line) => {
-      const [file = "", name = "", item = ""] = line.split("\t");
-      return { file, name, item };
-    });
+    // `list --all` includes archived items, each with its worked-out status.
+    const finished = new Set(
+      JSON.parse(listed.out)
+        .filter((/** @type {{ status: string }} */ i) =>
+          ["landed", "staging", "live", "dropped"].includes(i.status),
+        )
+        .map((/** @type {{ id: string }} */ i) => i.id),
+    );
+    return lines(text.out)
+      .filter((line) => !line.startsWith("#"))
+      .map((line) => {
+        const [file = "", name = "", item = ""] = line.split("\t");
+        return { file, name, item };
+      })
+      .filter((entry) => finished.has(entry.item));
   } catch {
     return [];
   }
@@ -369,12 +378,14 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
         // One write removes every finished entry; the others are then already gone.
         if (!unquarantined) {
           unquarantined = true;
-          step("quarantine entries whose item is done", () =>
-            spawnSync(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "ci-file"], {
-              cwd: main,
-              input: '{"findings":[]}',
-              stdio: ["pipe", "ignore", "inherit"],
-            }).status === 0,
+          step(
+            "quarantine entries whose item is done",
+            () =>
+              spawnSync(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "ci-file"], {
+                cwd: main,
+                input: '{"findings":[]}',
+                stdio: ["pipe", "ignore", "inherit"],
+              }).status === 0,
           );
         }
         break;

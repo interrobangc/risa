@@ -123,7 +123,9 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last", "push"].includes(key);
+      const flag = ["all", "archived", "force", "no-fetch", "json", "fix", "first", "last", "push"].includes(
+        key,
+      );
       opts[key] = flag ? true : argv[++i];
       if (!flag && opts[key] === undefined) throw new fmt.BacklogError(`${a} needs a value`);
     } else pos.push(a);
@@ -949,12 +951,23 @@ function main() {
         "ci-file",
         (r) => {
           const list = r.filed.map((f) => f.id);
-          return { ids: list, text: list.length ? `${amend.idList(list)}: filed from CI` : "tidy the quarantine" };
+          return {
+            ids: list,
+            text: list.length ? `${amend.idList(list)}: filed from CI` : "tidy the quarantine",
+          };
         },
         (b, c) => {
           refreshStatuses(b);
           const r = applyFindings(b, headText(QUARANTINE_REL), findings, {
-            add: (f) => fmt.add(b, { type: "bug", title: f.title, prd: f.prd, status: "triaged", note: f.note, ...ctx() }),
+            add: (f) =>
+              fmt.add(b, {
+                type: "bug",
+                title: f.title,
+                prd: f.prd,
+                status: "triaged",
+                note: f.note,
+                ...ctx(),
+              }),
             note: (it, text) => fmt.addNote(it, { text, ...ctx() }),
           });
           c.quarantine = r.quarantine;
@@ -964,7 +977,9 @@ function main() {
           // Under the lock: never forced, so a diverged origin only leaves it for the next landing.
           afterCommit: (committed) => {
             if (!opts.push || !committed) return;
-            pushed = tryGit(mainCheckout, "push", "--quiet", REMOTE, `refs/heads/${TRUNK}:refs/heads/${TRUNK}`) !== null;
+            pushed =
+              tryGit(mainCheckout, "push", "--quiet", REMOTE, `refs/heads/${TRUNK}:refs/heads/${TRUNK}`) !==
+              null;
           },
         },
       );
