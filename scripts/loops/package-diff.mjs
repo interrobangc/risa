@@ -1,5 +1,5 @@
 // Whether a changed package.json changed only its `scripts` field (B-572). Such
-// a change asks for no CI tier (check-plan.mjs) nor the browser lean set
+// a change asks for neither a CI tier (check-plan.mjs) nor the browser lean set
 // (check-areas.mjs). Anything this can't prove is scripts-only still forces them.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

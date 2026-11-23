@@ -155,7 +155,7 @@ export function splitFailures(failures, dev, absent) {
 export const blameExit = (/** @type {Split} */ s, partial = false) =>
   s.branch.length ? 2 : s.unknown.length || partial ? 5 : 0;
 
-const label = (/** @type {Failure} */ f) =>
+export const label = (/** @type {Failure} */ f) =>
   f.file ? `${f.file}${f.name ? `: ${f.name}` : ""}` : `the ${f.job} job`;
 
 /** A backlog title is one line and can't hold the heading's separator. */
