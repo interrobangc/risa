@@ -262,7 +262,8 @@ describe("slice", () => {
 describe("sending failures back", () => {
   it("the orchestrator's prompt names the merge check, tier, blame, send-back, late rm and rotation rule", () => {
     const out = ok("orchestrator", "T");
-    expect(out).toContain('`pnpm prd check --quick "slice <n> merged"`, and again after each dev sync');
+    expect(out).toContain("no local quick check after a merge or dev sync when a CI run follows");
+    expect(out).not.toContain('`pnpm prd check --quick "slice <n> merged"`');
     expect(out).toContain("`pnpm prd ci run <tier> --wait` in the background");
     expect(out).toContain("the tier the check plan proposes unless you have a reason");
     expect(out).toContain("run `pnpm prd ci blame`");
