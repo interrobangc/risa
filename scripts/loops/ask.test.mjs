@@ -239,7 +239,9 @@ describe("defaults on silence", () => {
     askDefaulting(0.001);
     await new Promise((r) => setTimeout(r, 200));
     const listed = prd(["asks"]).stdout;
-    expect(listed).toMatch(/^a2 {2}question {2}demo {2}\d+s ago, takes "yes": due \(still answerable\)$/m);
+    expect(listed).toMatch(
+      /^a2 {2}question {2}demo {2}\d+s ago, dispatch, takes "yes": due \(still answerable\)$/m,
+    );
     expect(stored("a2")).toMatchObject({ answeredAt: null, defaulted: false });
     expect(prd(["asks", "--json"]).status).toBe(0);
     expect(stored("a2").answeredAt).toBe(null);
