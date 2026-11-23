@@ -133,7 +133,8 @@ fi
 recheck() {
   local tip0 plan mode reason pnpm=${CARETOOK_PNPM_BIN:-pnpm}
   tip0=$(git -C "$main" rev-parse "$branch")
-  plan=$(git -C "$main" diff --name-only "$trunk...$branch" | node "$(dirname "$0")/check-plan.mjs" --mode quick)
+  plan=$(git -C "$main" diff --name-only "$trunk...$branch" |
+    node "$(dirname "$0")/check-plan.mjs" --mode quick --repo "$main" --base "$(git -C "$main" merge-base "$trunk" "$branch")" --head "$branch")
   mode=$(sed -n 1p <<< "$plan") reason=$(sed -n 2p <<< "$plan")
   if [[ $mode == full ]]; then
     echo "recheck: $reason, so \`pnpm prd check\` in $dir ($recheck)"

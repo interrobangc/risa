@@ -6,8 +6,17 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { EXIT, main, parseRunArgs, requestRun, latestVerdict, verdictLines } from "./ci.mjs";
-import { TIERS, ciRefName, jobsFor, parseCiRef, planOutputs } from "./tiers.mjs";
+import {
+  EXIT,
+  exitFor,
+  main,
+  narrowedCommit,
+  parseRunArgs,
+  requestRun,
+  latestVerdict,
+  verdictLines,
+} from "./ci.mjs";
+import { TIERS, ciRefName, jobsFor, narrowedJobs, parseCiRef, planOutputs } from "./tiers.mjs";
 import { buildVerdict, mergeSummaries, summarizeVitest } from "./verdict.mjs";
 
 const SHA = "a".repeat(40);
@@ -115,6 +124,8 @@ describe("the tiers", () => {
       "integration=false",
       "components=false",
       "full=false",
+      "components2=false",
+      "narrowed=false",
     ]);
     expect(planOutputs("ci/components/x")).toContain("components=true");
     expect(planOutputs("ci/components/x")).toContain("full=false");
@@ -136,7 +147,7 @@ describe("the verdict", () => {
     expect(v).toMatchObject({ version: 1, kind: "green", tier: "unit", ranTier: "unit", narrowed: false });
   });
 
-  it("is file for a failed or skipped job of the tier, naming the tests", () => {
+  it("is file for a failed test job, naming the tests", () => {
     const failures = JSON.stringify({
       files: ["a.test.ts"],
       tests: [{ file: "a.test.ts", name: "breaks" }],
@@ -157,7 +168,7 @@ describe("the verdict", () => {
     expect(
       buildVerdict({ ...base, tier: "unit", needs: { plan: ok, static: ok, unit: { result: "skipped" } } })
         .kind,
-    ).toBe("file");
+    ).toBe("infra");
     expect(
       buildVerdict({ ...base, tier: "static", needs: { plan: { result: "failure" } } }).failed.jobs,
     ).toEqual(["plan", "static"]);
@@ -181,12 +192,12 @@ describe("the verdict", () => {
     const noBuild = buildVerdict({
       ...base,
       tier: "full",
-      needs: { ...needs, build: { result: "failure" } },
+      needs: { ...needs, build: { result: "failure", outputs: { started: "true" } } },
     });
-    expect(noBuild).toMatchObject({ kind: "file", failed: { jobs: ["build"] } });
+    expect(noBuild).toMatchObject({ kind: "brake", failed: { jobs: ["build"] } });
     const oneShard = { ...needs, "components-2": { result: "failure" } };
     expect(buildVerdict({ ...base, tier: "components", needs: oneShard })).toMatchObject({
-      kind: "file",
+      kind: "infra",
       failed: { jobs: ["components-2"] },
     });
     const skipped = { ...needs, build: { result: "skipped" } };
@@ -219,6 +230,7 @@ describe("the verdict", () => {
     );
     expect(summary).toEqual({
       reported: true,
+      total: 3,
       files: ["a.test.ts", "b.test.ts"],
       tests: [{ file: "a.test.ts", name: "a breaks" }],
       truncated: false,
@@ -230,6 +242,7 @@ describe("the verdict", () => {
 describe("a job's reports", () => {
   const one = (/** @type {string} */ file) => ({
     reported: true,
+    total: 1,
     files: [file],
     tests: [{ file, name: "breaks" }],
     truncated: false,
@@ -238,6 +251,7 @@ describe("a job's reports", () => {
   it("merge into one summary", () => {
     expect(mergeSummaries([one("a"), one("b")])).toEqual({
       reported: true,
+      total: 2,
       files: ["a", "b"],
       tests: [
         { file: "a", name: "breaks" },
@@ -254,11 +268,17 @@ describe("a job's reports", () => {
 
 describe("ci run", () => {
   it("parses its arguments", () => {
-    expect(parseRunArgs(["unit"])).toEqual({ tier: "unit", ref: null, waitMin: null });
+    expect(parseRunArgs(["unit"])).toEqual({
+      tier: "unit",
+      ref: null,
+      waitMin: null,
+      files: [],
+    });
     expect(parseRunArgs(["full", "--ref", "prd/t", "--wait"])).toEqual({
       tier: "full",
       ref: "prd/t",
       waitMin: 30,
+      files: [],
     });
     expect(parseRunArgs(["unit", "--wait", "5"]).waitMin).toBe(5);
     expect(() => parseRunArgs(["nope"])).toThrow(/needs a tier/);
@@ -275,12 +295,12 @@ describe("ci run", () => {
     expect(w.lines.join("\n")).toMatch(/verdict: green/);
   });
 
-  it("exits 1 on a failed verdict, and still deletes the ref", async () => {
+  it("exits by kind on a failed verdict, and still deletes the ref", async () => {
     const w = world({
       verdict: { ...green, kind: "file", failed: { jobs: ["unit"], files: [], tests: [] } },
       view: { status: "completed", conclusion: "failure" },
     });
-    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(await request(w)).toBe(EXIT.file);
     expect(w.pushes().at(-1)).toContain(`origin :refs/heads/${REF}`);
   });
 
@@ -331,7 +351,7 @@ describe("ci run", () => {
     ["a verdict for another commit", { verdict: { ...green, commit: OTHER } }, /another commit/],
   ])("reads %s as unknown and keeps the ref", async (_name, opts, why) => {
     const w = world(/** @type {any} */ (opts));
-    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(await request(w)).toBe(EXIT.unknown);
     expect(w.lines.at(-1)).toMatch(/^verdict: unknown/);
     expect(w.lines.at(-1)).toMatch(why);
     expect(w.pushes()).toHaveLength(1);
@@ -339,7 +359,7 @@ describe("ci run", () => {
 
   it("reads an unreachable GitHub as unknown and pushes nothing", async () => {
     const w = world({ reachable: false });
-    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(await request(w)).toBe(EXIT.unknown);
     expect(w.lines).toEqual(["verdict: unknown (GitHub can't be reached)"]);
     expect(w.pushes()).toEqual([]);
   });
@@ -348,7 +368,7 @@ describe("ci run", () => {
     const w = world();
     const gh = w.io.gh;
     w.io.gh = (args) => (args[1] === "view" ? { ok: false, out: "" } : gh(args));
-    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(await request(w)).toBe(EXIT.unknown);
     expect(w.lines.at(-1)).toMatch(/can't be reached; the ref is kept/);
     expect(w.pushes()).toHaveLength(1);
   });
@@ -362,8 +382,134 @@ describe("ci run", () => {
 
   it("reads a push that starts no run as unknown", async () => {
     const w = world({ afterPush: [] });
-    expect(await request(w)).toBe(EXIT.notGreen);
+    expect(await request(w)).toBe(EXIT.unknown);
     expect(w.lines.at(-1)).toMatch(/no run started/);
+  });
+});
+
+describe("a narrowed run", () => {
+  const NARROWED = "e".repeat(40);
+  /** A git that builds the throwaway commit, on top of the fake world. */
+  function narrowing(/** @type {any} */ opts = {}) {
+    const w = world({
+      afterPush: [{ ...running, headSha: NARROWED, headBranch: "x" }],
+      verdict: {
+        ...green,
+        commit: NARROWED,
+        target: SHA,
+        narrowed: true,
+        narrowedFiles: ["a.test.ts"],
+      },
+      ...opts,
+    });
+    const git = w.io.git;
+    /** @type {Record<string, string>} */ const inputs = {};
+    w.io.git = (args, input) => {
+      if (input !== undefined) inputs[args[0] ?? ""] = input;
+      const plumbing = {
+        "cat-file": "",
+        "hash-object": "blob1",
+        "ls-tree": "100644 blob old\tREADME.md\n100644 blob stale\t.ci-narrowed.json",
+        mktree: "tree1",
+        "commit-tree": NARROWED,
+      };
+      const out = plumbing[/** @type {keyof typeof plumbing} */ (args[0])];
+      if (out !== undefined) {
+        w.calls.push(`git ${args.join(" ")}`);
+        return { ok: true, out };
+      }
+      return git(args);
+    };
+    return { ...w, inputs };
+  }
+
+  it("parses --files", () => {
+    expect(parseRunArgs(["unit", "--files", "a.test.ts", "b.test.ts", "--wait"])).toMatchObject({
+      files: ["a.test.ts", "b.test.ts"],
+      waitMin: 30,
+    });
+    expect(() => parseRunArgs(["unit", "--files"])).toThrow(/at least one/);
+  });
+
+  it("commits the list on top of the target and pushes it to its own ref", () => {
+    const w = narrowing();
+    expect(narrowedCommit({ tier: "unit", sha: SHA, files: ["a.test.ts"] }, w.io)).toBe(NARROWED);
+    expect(JSON.parse(w.inputs["hash-object"] ?? "")).toEqual({ target: SHA, files: ["a.test.ts"] });
+    expect(w.inputs.mktree).toBe("100644 blob old\tREADME.md\n100644 blob blob1\t.ci-narrowed.json\n");
+    expect(w.calls.at(-1)).toContain(`commit-tree tree1 -p ${SHA}`);
+  });
+
+  it("runs on a ref of its own and prints that it is narrowed", async () => {
+    const w = narrowing();
+    expect(await main(["run", "unit", "--files", "a.test.ts", "--wait", "5"], w.io)).toBe(EXIT.green);
+    const ref = `ci/unit/slice-t-2-narrowed-${NARROWED.slice(0, 8)}`;
+    expect(w.pushes()[0]).toContain(`${NARROWED}:refs/heads/${ref}`);
+    expect(w.lines.join("\n")).toMatch(/narrowed run of aaaaaaaa, never a gate: a\.test\.ts/);
+  });
+
+  it("refuses a file above the tier, a non-test file and a file the target lacks", () => {
+    const w = narrowing();
+    const commit = (/** @type {string} */ tier, /** @type {string} */ file) =>
+      narrowedCommit({ tier, sha: SHA, files: [file] }, w.io);
+    expect(() => commit("unit", "a.int.test.ts")).toThrow(/needs the integration tier/);
+    expect(() => commit("integration", "a.browser.test.tsx")).toThrow(/needs the components tier/);
+    expect(() => commit("unit", "README.md")).toThrow(/test files/);
+    const gone = world();
+    expect(() => narrowedCommit({ tier: "unit", sha: SHA, files: ["a.test.ts"] }, gone.io)).toThrow(
+      /is not in/,
+    );
+  });
+
+  it("starts only its files' jobs, the components in one", () => {
+    expect(narrowedJobs(["a.test.ts", "b.browser.test.tsx"])).toEqual(["unit", "components-1"]);
+    expect(narrowedJobs(["scripts/loops/browser.test.mjs"])).toEqual(["integration"]);
+    const plan = planOutputs("ci/full/x", ["a.int.test.ts"]);
+    expect(plan).toEqual([
+      "tier=full",
+      "static=false",
+      "unit=false",
+      "integration=true",
+      "components=false",
+      "full=false",
+      "components2=false",
+      "narrowed=true",
+    ]);
+  });
+
+  it("is never printed as the branch's verdict", () => {
+    const run = { ...running, status: "completed", conclusion: "success" };
+    const w = world({ runs: [run], verdict: { ...green, narrowed: true, kind: "green" } });
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.unknown);
+    expect(w.lines.join("\n")).not.toMatch(/verdict: green/);
+  });
+});
+
+describe("the exit codes", () => {
+  it.each([
+    ["green", 0],
+    ["brake", 1],
+    ["file", 2],
+    ["flake", 3],
+    ["infra", 4],
+    ["something new", 5],
+    ["usage", 5],
+    ["timeout", 5],
+  ])("%s exits %i", (kind, code) => {
+    expect(exitFor(kind)).toBe(code);
+  });
+
+  it.each([
+    ["brake", EXIT.brake],
+    ["flake", EXIT.flake],
+    ["infra", EXIT.infra],
+  ])("a %s verdict exits by its kind from --wait", async (kind, code) => {
+    const w = world({ verdict: { ...green, kind } });
+    expect(await request(w)).toBe(code);
+  });
+
+  it("keeps 75 for the timeout and 5 for unknown", () => {
+    expect(EXIT.timeout).toBe(75);
+    expect(EXIT.unknown).toBe(5);
   });
 });
 
@@ -385,15 +531,15 @@ describe("ci [<branch>]", () => {
 
   it("skips a cancelled run and a narrowed verdict", () => {
     const w = world({ runs: [done(2, "2026-11-22T10:00:00Z", { conclusion: "cancelled" })] });
-    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.notGreen);
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.unknown);
     const n = world({ runs: [done(1, "2026-11-22T09:00:00Z")], verdict: { ...green, narrowed: true } });
-    expect(latestVerdict({ sha: SHA }, n.io)).toBe(EXIT.notGreen);
+    expect(latestVerdict({ sha: SHA }, n.io)).toBe(EXIT.unknown);
     expect(n.lines.at(-1)).toMatch(/no verdict/);
   });
 
   it("reads an unreachable GitHub as unknown", () => {
     const w = world({ reachable: false });
-    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.notGreen);
+    expect(latestVerdict({ sha: SHA }, w.io)).toBe(EXIT.unknown);
     expect(w.lines).toEqual(["verdict: unknown (GitHub can't be reached)"]);
   });
 

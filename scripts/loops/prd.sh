@@ -111,7 +111,7 @@ pnpm prd <command>
                               reason. On a slice/ branch that is all (the slice check, against its prd/
                               branch). On a prd/ or hotfix/ branch it adds the integration tests related to
                               the diff since the last full pass, and a diff touching a migration, seeds, the
-                              sync config, a lockfile, a package.json or the Vitest config makes it a full
+                              sync config, a lockfile, a package.json (beyond its scripts) or the Vitest config makes it a full
                               check; the tooling tests join when the diff touches the tooling
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
     wait [check|browser|<kind>] [--timeout <s>]   block until this worktree's check (or that lease kind's
@@ -127,7 +127,7 @@ pnpm prd <command>
     browser --suite           the lean end-to-end set, with a table (--timeout S; one retry on contention)
 
   CI (runs only on request; nothing starts it on a push to dev, staging or main, or on a PR)
-    ci run <tier> [--ref <branch>] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier
+    ci run <tier> [--ref <branch>] [--files <file>…] [--wait [min]]   push the commit to ci/<tier>/<branch>, which runs that tier (--files: only those test files, a verdict that is never a gate)
                               (static, unit, integration, components, full; each includes the ones before);
                               --wait blocks for the verdict (0 green, 1 not green, 75 at the timeout)
     ci [<branch>]             the latest whole-tier verdict for the branch's tip
@@ -321,8 +321,8 @@ case $cmd in
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
     record=$(checked_file "$dir")
     # The mode comes from the plan (check-plan.mjs): a quick check on a diff that
-    # touches a migration, seeds, the sync config, a lockfile, a package.json or
-    # the Vitest config is a full one, and the tooling tests join when it touches
+    # touches a migration, seeds, the sync config, a lockfile, a package.json
+    # (beyond its scripts) or the Vitest config is a full one, and the tooling tests join when it touches
     # the tooling. A slice's --quick is the slice check: its own test files only,
     # never forced to full.
     asked=full
@@ -332,7 +332,7 @@ case $cmd in
     fi
     base=$(check_base "$dir" "$asked")
     { read -r pmode; read -r preason; read -r ptooling; read -r pown; } < <(
-      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked")
+      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD)
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.

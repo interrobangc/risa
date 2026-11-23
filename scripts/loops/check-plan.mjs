@@ -1,7 +1,8 @@
 // What `pnpm prd check` runs: the mode, why, the test files the diff itself
 // adds or edits, and whether the tooling tests join. Pure: changed files and the
 // asked mode in, a plan out. The CLI at the bottom reads the changed files from stdin.
-//   node check-plan.mjs --mode slice|quick|full   → four lines: mode, reason,
+//   node check-plan.mjs --mode slice|quick|full [--repo DIR --base REF --head REF]
+//   → four lines: mode, reason,
 //   tooling (2 with the browser harness test, 1 without, 0 for none), the diff's own integration and component test files
 //   (space-separated)
 // The three modes (check-body.sh runs them):
@@ -11,6 +12,10 @@
 //   quick  a prd/ or hotfix/ branch: the same, plus the integration tests related
 //          to the diff; forced to full by the files below.
 //   full   pnpm check and the build budget.
+// A package.json that changed only its `scripts` forces nothing (package-diff.mjs).
+// The CLI needs --base to tell: without it, any package.json still forces full.
+
+import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
 
 /** Integration and component test files: the only tests a slice or quick check picks by name. */
 const OWN_TEST = /\.(int\.test\.ts|browser\.test\.tsx)$/;
@@ -42,15 +47,18 @@ export const needsBrowserHarness = (changed) => changed.some((f) => BROWSER_HARN
 /**
  * @param {string[]} changed files changed against the base
  * @param {"slice" | "quick" | "full"} asked
+ * @param {Map<string, { base: string | null, head: string | null }>} [packages] both
+ *   versions of each changed package.json; one missing here still forces full
  * @returns {{ mode: "slice" | "quick" | "full", reason: string, ownTests: string[], tooling: boolean }}
  */
-export function planCheck(changed, asked) {
+export function planCheck(changed, asked, packages = new Map()) {
   const tooling = changed.some((f) => TOOLING.test(f));
   if (asked === "full") return { mode: "full", reason: "", ownTests: [], tooling };
   const ownTests = [...new Set(changed.filter((f) => OWN_TEST.test(f)))];
   if (asked === "slice") return { mode: "slice", reason: "", ownTests, tooling };
+  const scriptsOnly = scriptsOnlyFiles(packages);
   for (const [re, what] of FORCED) {
-    const file = changed.find((f) => re.test(f));
+    const file = changed.find((f) => re.test(f) && !scriptsOnly.has(f));
     if (file)
       return { mode: "full", reason: `${what} changed (${file}): a full check`, ownTests: [], tooling };
   }
@@ -77,7 +85,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   let text = "";
   for await (const chunk of process.stdin) text += chunk;
   const changed = text.split("\n").filter(Boolean);
-  const plan = planCheck(changed, asked);
+  const flag = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : "");
+  const from = { repo: flag("--repo") || ".", base: flag("--base"), head: flag("--head") };
+  const plan = planCheck(changed, asked, readPackages(changed, from));
   const tooling = plan.tooling ? (needsBrowserHarness(changed) ? 2 : 1) : 0;
   console.log([plan.mode, plan.reason, tooling, plan.ownTests.join(" ")].join("\n"));
 }
