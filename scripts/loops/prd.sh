@@ -93,6 +93,15 @@ pnpm prd <command>
     answer <id> <n|text>      answer a question by its option's number or in words (wakes its --wait;
                               refused once defaulted)
 
+  Skeptic (a fresh subagent's verdict before an ask or a risky landing, in the main checkout's .loops/.skeptic)
+    prompt skeptic ask|land|plan --evidence <file>   print its brief: the rules and the evidence
+    skeptic record --kind ask|land|plan --verdict <v> --why "<one line>" [--option <a>]
+                              [--question <text> [--offer <a>]… --defaults|--waits]
+                              [--tip <full sha> --action force|no-review|"decline <thread>"]
+                              record its answer (ask: decide, ask; land: go, no; plan: go, send-back);
+                              prints the id; counts for \$CARETOOK_SKEPTIC_MAX_MIN (60) min
+    skeptic [list] [--topic <t>] [--json]   the verdicts, oldest first
+
   Notices (one-way lines for other sessions, in the main checkout's .loops/.notices; nothing waits on them)
     notice "<text>" [--for <min>] [--topic <t>]   post one line (200 characters at most); prints its id;
                               it lives 60 minutes, --for up to 1440 (24 hours)
@@ -156,6 +165,7 @@ pnpm prd <command>
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
                      tidy: the cleanup brief for a cheap session (haiku), repeated with /loop
+                     skeptic ask|land|plan --evidence <file>: the brief for a fresh skeptic
                      orchestrator <topic> --resume [--auto]: take over after an interruption
                      slice <topic> <n> --continue: pick up an interrupted slice
 USAGE
@@ -377,6 +387,16 @@ case $cmd in
       else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
     fi
     exec node "$bin/ask.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
+    ;;
+  skeptic)
+    # The recording session and topic default to the worktree's, as for ask.
+    export CARETOOK_SKEPTIC_DIR=${CARETOOK_SKEPTIC_DIR:-$loops/.skeptic}
+    here=$(here_name) here_args=()
+    if [[ ${1:-} == record && -n $here ]]; then
+      if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
+      else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
+    fi
+    exec node "$bin/skeptic.mjs" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
   notice | notices)
     # The posting session and topic default to the worktree's, as for ask.

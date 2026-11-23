@@ -19,11 +19,12 @@
 #     --no-brief says at the top that the context watch rotated the last session with none
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
+#   prompt.sh skeptic ask|land|plan --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover or tidy}
+kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover, tidy or skeptic}
 # What silence means for an unattended session's question (run-through orchestrators, --auto planners).
 default_rule="**Every question with a recommendation says what silence means.** Pass \`--defaults\` on it: if no one answers within 30 minutes, the tool takes your recommendation, and \`--wait\` prints it like any answer, with a second line saying it was defaulted; carry on with it as with any answer. Pass \`--waits\` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push or landing), a new dependency (AGENTS.md: the user's approval), and compliance; those wait however long it takes. When unsure which, \`--waits\`. The tool, never you, puts the recommendation in place of an answer: never decide that silence means yes yourself."
 if [[ $kind == backlog ]]; then
@@ -97,6 +98,9 @@ You are the cleanup agent: a short, cheap session (run it on haiku) that clears 
 Start with \`pnpm prd tidy --yes\`.
 EOF
   exit 0
+fi
+if [[ $kind == skeptic ]]; then
+  exec node "$(dirname "$0")/skeptic.mjs" brief "${@:2}"
 fi
 topic=${2:?topic}
 items=${*:3}
