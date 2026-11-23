@@ -16,18 +16,19 @@
 //         - .loops/.browser-hangs logs older than a week;
 //         - ended session records whose worktree is gone;
 //         - ci/ refs on origin older than a day with no run going
-//         - quarantine entries whose backlog item is done
-//           (git push --delete, only while still at the same commit).
+//           (git push --delete, only while still at the same commit);
+//         - quarantine entries whose backlog item is done;
+//         - finished backlog items: dropped ones always, others once their
+//           topic has no prd/ worktree (pnpm backlog archive <ids>).
 //   ask   reported only (one `pnpm prd ask --report`):
 //         - a live session whose worktree is gone or whose branch landed in dev
 //           (it looks finished: ask it, then the user closes it);
 //         - a local branch with no worktree: merged ones are named for
 //           deletion, unmerged ones are never deleted;
-//         - backlog items to archive (pnpm backlog archive);
 //         - PRD registry rows that look done (not on hold, standing or running).
 //   kept  a safe candidate held back, with why: a dirty worktree, one with
 //         something running, a plan worktree with a live session, a ticket
-//         just taken.
+//         just taken, finished items of a topic with a prd/ worktree.
 //
 // Never, whatever the facts: a dirty worktree, any build or Vite cache (unlike
 // `reclaim --yes`), the main checkout, an unmerged branch, a session itself.
@@ -132,10 +133,11 @@ export function testDbOwner(db, worktrees) {
  * @property {{ name: string, project: string }[]} [volumes]   dangling volumes
  * @property {string[]} [usedProjects]   Compose projects still in use
  * @property {{ path: string, ageSecs: number }[]} [hangLogs]
- * @property {{ id: string, title?: string, status: string }[] | null} [items]   backlog items
+ * @property {{ id: string, title?: string, status: string, prd?: string }[] | null} [items]   backlog items, archived ones left out
+ * @property {string[] | null} [prdWorktrees]   topics with a prd/ worktree; null when unreadable (a topic's finished items stay)
  * @property {{ topic: string, flags: string[], state: string, waiting: number, notes?: string }[] | null} [registry]
  *
- * @typedef {{ kind: string, target: string, why: string, how?: string, path?: string, sha?: string }} Finding
+ * @typedef {{ kind: string, target: string, why: string, how?: string, path?: string, sha?: string, ids?: string[] }} Finding
  */
 
 /**
@@ -276,15 +278,36 @@ export function tidy(facts) {
         how: "delete it",
       });
 
-  const archivable = (facts.items ?? []).filter((i) => ARCHIVABLE.includes(i.status));
-  if (archivable.length) {
-    const ids = archivable.map((i) => i.id);
-    ask.push({
-      kind: "archive",
-      target: `${ids.length} item${ids.length === 1 ? "" : "s"}`,
-      why: `finished, still in the backlog: pnpm backlog archive (${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ", …" : ""})`,
-    });
+  const countOf = (/** @type {string[]} */ ids) => `${ids.length} item${ids.length === 1 ? "" : "s"}`;
+  const someOf = (/** @type {string[]} */ ids) =>
+    `${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ", …" : ""}`;
+  const running = facts.prdWorktrees === null ? null : new Set(facts.prdWorktrees ?? []);
+  /** @type {string[]} */ const archive = [];
+  /** @type {Map<string, string[]>} */ const held = new Map();
+  for (const i of facts.items ?? []) {
+    if (!ARCHIVABLE.includes(i.status)) continue;
+    const topic = i.prd ?? "";
+    if (i.status !== "dropped" && topic && (running === null || running.has(topic)))
+      held.set(topic, [...(held.get(topic) ?? []), i.id]);
+    else archive.push(i.id);
   }
+  if (archive.length)
+    safe.push({
+      kind: "archive",
+      target: countOf(archive),
+      why: `finished, still in the backlog (${someOf(archive)})`,
+      how: "pnpm backlog archive",
+      ids: archive,
+    });
+  for (const [topic, ids] of held)
+    kept.push({
+      kind: "archive",
+      target: `${topic}: ${countOf(ids)}`,
+      why:
+        running === null
+          ? `finished, but the worktrees can't be read (${someOf(ids)})`
+          : `finished, but prd/${topic} still has a worktree (${someOf(ids)})`,
+    });
 
   for (const r of facts.registry ?? []) {
     // done is done; standing never finishes; hold waits on the user; running has a worktree.

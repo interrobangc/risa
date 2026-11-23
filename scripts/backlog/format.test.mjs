@@ -248,3 +248,48 @@ describe("archive and doctor helpers", () => {
     expect(fmt.nextId({ preamble: "", items: [item("x")], reserved: ["B-7", "B-3"] })).toBe("B-8");
   });
 });
+
+describe("similarItems", () => {
+  const it_ = (id, title, extra = {}) => ({ id, title, status: "triaged", prd: "topic", ...extra });
+
+  it("matches the same title reworded lightly", () => {
+    const items = [it_("B-1", "Login link can be clicked twice")];
+    expect(fmt.similarItems("The login link gets clicked twice", items).map((m) => m.id)).toEqual(["B-1"]);
+  });
+
+  it("finds an archived match and marks it, with status and topic", () => {
+    const items = [it_("B-2", "Calendar export drops the time zone", { status: "live", archived: true })];
+    expect(fmt.similarItems("Calendar export drops time zones", items)).toEqual([
+      expect.objectContaining({ id: "B-2", status: "live", topic: "topic", archived: true }),
+    ]);
+    expect(fmt.similarLine(fmt.similarItems("Calendar export drops time zones", items)[0])).toBe(
+      "B-2  live (archived)  topic  Calendar export drops the time zone",
+    );
+  });
+
+  it("doesn't match unrelated titles that share only common words", () => {
+    const items = [it_("B-1", "Add a button to the timeline"), it_("B-2", "The medication list is slow")];
+    expect(fmt.similarItems("Add a filter to the calendar", items)).toEqual([]);
+  });
+
+  it("puts the best match first", () => {
+    const items = [
+      it_("B-1", "Dose reminder email arrives late on weekends"),
+      it_("B-2", "Dose reminder email arrives late"),
+    ];
+    expect(fmt.similarItems("Dose reminder email arrives late", items).map((m) => m.id)).toEqual([
+      "B-2",
+      "B-1",
+    ]);
+  });
+
+  it("matches identical short titles, but not ones that differ only by a number", () => {
+    expect(fmt.similarItems("Dates", [it_("B-1", "dates")])).toHaveLength(1);
+    expect(fmt.similarItems("Parallel 1", [it_("B-1", "Parallel 2")])).toEqual([]);
+  });
+
+  it("returns nothing for an empty backlog or empty text", () => {
+    expect(fmt.similarItems("Anything at all", [])).toEqual([]);
+    expect(fmt.similarItems("  ", [it_("B-1", "Anything")])).toEqual([]);
+  });
+});
