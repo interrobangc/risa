@@ -16,9 +16,15 @@
 //   pnpm prd ci blame [<branch>] [--json]
 //       splits a file or brake verdict against a run on dev's tip and files dev's
 //       failures: exit 0 all dev's, 2 some the branch's, 5 unknown.
-//   pnpm prd ci file [<branch>] [--base <sha>]
-//       files the verdict's flakes; a file the branch touched (against --base, else
-//       origin/dev) is the branch's and writes nothing: exit 0, 2 some the branch's, 5 unknown.
+//   pnpm prd ci file [<branch>] [--base <sha>] [--run <id>] [--no-push]
+//       files the verdict's flakes (--run: that run's); a file the branch touched
+//       (against --base, else origin/dev) is the branch's and writes nothing: exit 0,
+//       2 some the branch's, 5 unknown. --no-push leaves a quarantine commit on local dev.
+//   pnpm prd ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek]
+//       the landing gate: finds a whole-tier verdict for <t> or higher on the tip (or
+//       behind only docs and tooling commits), requests the run when there is none, and
+//       decides (gate.mjs). Exit 0 lands; else the verdict kind's code. --out writes
+//       key=value lines for land.sh; --peek reads only: no run, no blame, no filing.
 //   pnpm prd ci status <branch>…
 //       each branch's latest whole-tier verdict, cached, for pnpm prd status.
 //
@@ -33,6 +39,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { keepsVerdict } from "../loops/check-plan.mjs";
 import { createNotice, listNotices, withdrawNotice } from "../loops/notices.mjs";
 import {
   blameExit,
@@ -46,6 +53,7 @@ import {
   splitFailures,
   verdictFailures,
 } from "./blame.mjs";
+import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
 import { NARROWED_FILE, TIERS, ciRefName, fileTier, isTier, parseCiRef } from "./tiers.mjs";
 import { isVerdict } from "./verdict.mjs";
 
@@ -58,6 +66,8 @@ export const exitFor = (/** @type {string} */ kind) =>
     ? EXIT[/** @type {keyof typeof EXIT} */ (kind)]
     : EXIT.unknown;
 const DEFAULT_WAIT_MIN = 30;
+/** How many first-parent commits the gate looks back for a verdict that still holds. */
+const GATE_WALK = 20;
 /** How long a pushed ref gets to show a run before it reads as unknown. */
 const START_WAIT_MS = 120_000;
 /** Polls in a row GitHub may fail before the run reads as unknown. */
@@ -368,12 +378,13 @@ export function latestVerdict({ sha }, io) {
 }
 
 /**
- * The newest whole-tier verdict of a commit and its run; null when GitHub can't be read.
- * @param {{ sha: string }} request
+ * The newest whole-tier verdict of a commit that `accept` takes, and its run; null
+ * when GitHub can't be read.
+ * @param {{ sha: string, accept?: (v: any) => boolean }} request
  * @param {Io} io
  * @returns {{ verdict: any, run: Run | null } | null}
  */
-function findVerdict({ sha }, io) {
+function findVerdict({ sha, accept = () => true }, io) {
   const runs = listRuns(io, ["--commit", sha]);
   if (runs === null) return null;
   const ours = runs
@@ -384,7 +395,7 @@ function findVerdict({ sha }, io) {
   for (const r of ours) {
     if (r.status !== "completed" || r.conclusion === "cancelled") continue;
     const verdict = readVerdict(io, r.databaseId);
-    if (!verdict || verdict.commit !== sha || verdict.narrowed) continue;
+    if (!verdict || verdict.commit !== sha || verdict.narrowed || !accept(verdict)) continue;
     return { verdict, run: r };
   }
   return { verdict: null, run: null };
@@ -439,21 +450,15 @@ function fileDevFailures(
 }
 
 /**
- * `ci blame`: split the latest file or brake verdict against dev's tip.
- * @param {{ branch: string, sha: string, json?: boolean, waitMin?: number }} request
- * @param {Io} realLog
+ * Split a found file or brake verdict against a run on dev's tip, and file dev's
+ * failures. A string is why it couldn't.
+ * @param {{ branch: string, verdict: any, run: Run | null, waitMin: number }} request
+ * @param {Io} io
  */
-export async function blame({ branch, sha, json = false, waitMin = DEFAULT_WAIT_MIN }, realLog) {
-  const io = json ? { ...realLog, log: () => {} } : realLog;
-  const found = findVerdict({ sha }, io);
-  if (found === null) return unknown(realLog, "GitHub can't be reached");
-  const { verdict, run } = found;
-  if (!verdict) return unknown(realLog, `no verdict for ${sha.slice(0, 8)}`);
-  if (verdict.kind !== "file" && verdict.kind !== "brake")
-    return unknown(realLog, `blame reads a file or brake verdict; this one is ${verdict.kind}`);
-  if (!io.git(["fetch", "--quiet", "origin", "dev"]).ok) return unknown(realLog, "could not fetch dev");
+async function splitAgainstDev({ branch, verdict, run, waitMin }, io) {
+  if (!io.git(["fetch", "--quiet", "origin", "dev"]).ok) return "could not fetch dev";
   const devSha = io.git(["rev-parse", "--verify", "--quiet", "refs/remotes/origin/dev^{commit}"]).out;
-  if (!devSha) return unknown(realLog, "no origin/dev");
+  if (!devSha) return "no origin/dev";
 
   const failures = verdictFailures(verdict);
   const { run: plan, absent } = devRunPlan(
@@ -485,10 +490,28 @@ export async function blame({ branch, sha, json = false, waitMin = DEFAULT_WAIT_
   const split = splitFailures(failures, dev, absent);
   const from = { branch, ...(run?.url ? { url: run.url } : {}) };
   const ids = fileDevFailures(io, split, from);
+  return { devSha, failures, split, ids, code: blameExit(split, failures.partial) };
+}
+
+/**
+ * `ci blame`: split the latest file or brake verdict against dev's tip.
+ * @param {{ branch: string, sha: string, json?: boolean, waitMin?: number }} request
+ * @param {Io} realLog
+ */
+export async function blame({ branch, sha, json = false, waitMin = DEFAULT_WAIT_MIN }, realLog) {
+  const io = json ? { ...realLog, log: () => {} } : realLog;
+  const found = findVerdict({ sha }, io);
+  if (found === null) return unknown(realLog, "GitHub can't be reached");
+  const { verdict, run } = found;
+  if (!verdict) return unknown(realLog, `no verdict for ${sha.slice(0, 8)}`);
+  if (verdict.kind !== "file" && verdict.kind !== "brake")
+    return unknown(realLog, `blame reads a file or brake verdict; this one is ${verdict.kind}`);
+  const result = await splitAgainstDev({ branch, verdict, run, waitMin }, io);
+  if (typeof result === "string") return unknown(realLog, result);
+  const { devSha, failures, split, ids, code } = result;
   const merges = split.branch.length ? branchMerges(io, devSha, sha) : [];
   const slices = (/** @type {import("./blame.mjs").Placed} */ f) =>
     f.file ? slicesNear(merges, f.file) : [];
-  const code = blameExit(split, failures.partial);
 
   if (json)
     realLog.log(
@@ -523,13 +546,104 @@ export async function blame({ branch, sha, json = false, waitMin = DEFAULT_WAIT_
 }
 
 /**
- * `ci file`: file the latest verdict's flakes. Slice 6 passes --base (dev before
- * its merge), since after the merge the branch's diff is empty.
- * @param {{ branch: string, sha: string, base?: string | null }} request
+ * The newest verdict that still vouches for the tip at this tier: on the tip, or on
+ * a first-parent ancestor with only docs, tooling or CI's lists changed since.
+ * @param {{ sha: string, base: string, tier: string }} request
+ * @param {Io} io
+ * @returns {{ verdict: any, run: Run | null } | null} null when git or GitHub can't be read
+ */
+function findGateVerdict({ sha, base, tier }, io) {
+  const log = io.git(["rev-list", "--first-parent", `--max-count=${GATE_WALK}`, `${base}..${sha}`]);
+  if (!log.ok) return null;
+  for (const commit of log.out ? log.out.split("\n") : []) {
+    const found = findVerdict({ sha: commit, accept: (v) => verdictMeets(v, tier) }, io);
+    if (found === null || found.verdict) return found;
+    const diff = io.git(["diff", "--name-only", "--no-renames", `${commit}^1`, commit]);
+    if (!diff.ok || !keepsVerdict(diff.out ? diff.out.split("\n") : [])) break;
+  }
+  return { verdict: null, run: null };
+}
+
+/**
+ * `ci gate`: whether this branch's tip may land at this tier.
+ * @param {{ branch: string, sha: string, tier: string, base: string, fixes?: string[], out?: string | null, peek?: boolean, waitMin?: number }} request
  * @param {Io} io
  */
-export function fileFlakes({ branch, sha, base = null }, io) {
-  const found = findVerdict({ sha }, io);
+export async function gate(
+  { branch, sha, tier, base, fixes = [], out = null, peek = false, waitMin = DEFAULT_WAIT_MIN },
+  io,
+) {
+  const diff = io.git(["diff", "--name-only", "--no-renames", `${base}...${sha}`]);
+  if (!diff.ok) return unknown(io, "could not read what the branch changed");
+  const touched = diff.out ? diff.out.split("\n") : [];
+  const found = findGateVerdict({ sha, base, tier }, io);
+  if (found === null) return unknown(io, "GitHub can't be reached");
+  let { verdict, run } = found;
+  if (!verdict && peek) {
+    io.log(`no ${tier} verdict for ${sha.slice(0, 8)}: the landing will request one`);
+    return EXIT.unknown;
+  }
+  if (!verdict) {
+    io.log(`no ${tier} verdict for ${sha.slice(0, 8)}: requesting one`);
+    const code = await requestRun(
+      {
+        tier,
+        branch,
+        sha,
+        waitMin,
+        onVerdict: (v, r) => {
+          verdict = v;
+          run = r;
+        },
+      },
+      io,
+    );
+    if (!verdict) {
+      io.log(`no verdict came back. Retry: pnpm prd ci run ${tier} --ref ${branch} --wait`);
+      return code || EXIT.unknown;
+    }
+  }
+  for (const line of verdictLines(verdict)) io.log(line);
+  if (!verdictMeets(verdict, tier)) {
+    io.log(`the run reached ${verdict.ranTier ?? "no tier"}, below ${tier}: refused`);
+    return EXIT.unknown;
+  }
+  if (peek) return exitFor(verdict.kind);
+
+  /** @type {import("./gate.mjs").Blamed | null} */ let blamed = null;
+  if (needsBlame(verdict, touched)) {
+    const result = await splitAgainstDev({ branch, verdict, run, waitMin }, io);
+    if (typeof result === "string") io.log(`blame: ${result}`);
+    else blamed = result;
+  }
+  const decision = decideGate({ verdict, tier, branch, touched, blamed, fixes });
+  for (const line of decision.lines) io.log(line);
+  if (out)
+    writeFileSync(
+      out,
+      `${[
+        `land=${decision.land ? 1 : 0}`,
+        `kind=${verdict.kind}`,
+        `ranTier=${verdict.ranTier}`,
+        `commit=${verdict.commit}`,
+        `run=${verdict.runId}`,
+        `flakes=${decision.fileFlakes ? 1 : 0}`,
+      ].join("\n")}\n`,
+    );
+  return decision.code;
+}
+
+/**
+ * `ci file`: file a verdict's flakes: the given run's, else the commit's latest. The
+ * landing passes --run and --base (dev before its merge), since after the merge the
+ * branch's diff is empty, and --no-push on a local landing.
+ * @param {{ branch: string, sha: string, base?: string | null, runId?: string | null, noPush?: boolean }} request
+ * @param {Io} io
+ */
+export function fileFlakes({ branch, sha, base = null, runId = null, noPush = false }, io) {
+  const given = runId ? readVerdict(io, Number(runId)) : null;
+  if (runId && (!given || given.narrowed)) return unknown(io, `no whole-tier verdict in run ${runId}`);
+  const found = given ? { verdict: given, run: null } : findVerdict({ sha }, io);
   if (found === null) return unknown(io, "GitHub can't be reached");
   if (!found.verdict) return unknown(io, `no verdict for ${sha.slice(0, 8)}`);
   const flaky = found.verdict.flaky ?? [];
@@ -545,7 +659,7 @@ export function fileFlakes({ branch, sha, base = null }, io) {
   const sorted = sortFlakes(flaky, touched, { branch, ...(found.run?.url ? { url: found.run.url } : {}) });
   for (const t of sorted.branch) io.log(`  the branch's flake: ${failureLabel(t)}`);
   if (sorted.findings.length) {
-    const push = sorted.findings.some((f) => f.quarantine);
+    const push = !noPush && sorted.findings.some((f) => f.quarantine);
     const out = io.fileFindings?.(sorted.findings, push) ?? null;
     if (!out) return unknown(io, "could not file the flakes");
     for (const f of out.filed) io.log(`  ${f.created ? "filed" : "noted on"} ${f.id}`);
@@ -674,17 +788,46 @@ export function parseRunArgs(args) {
 function parseReadArgs(/** @type {string} */ command, /** @type {string[]} */ args) {
   /** @type {string | null} */ let ref = null;
   /** @type {string | null} */ let base = null;
+  /** @type {string | null} */ let runId = null;
   let json = false;
+  let noPush = false;
   for (let i = 0; i < args.length; i++) {
     const a = /** @type {string} */ (args[i]);
     if (a === "--json" && command === "blame") json = true;
-    else if (a === "--base" && command === "file") {
+    else if (a === "--no-push" && command === "file") noPush = true;
+    else if (a === "--run" && command === "file") {
+      runId = args[++i] ?? null;
+      if (!runId || !/^\d+$/.test(runId)) throw new Error("--run needs a run id");
+    } else if (a === "--base" && command === "file") {
       base = args[++i] ?? null;
       if (!base || base.startsWith("-")) throw new Error("--base needs a commit");
     } else if (!a.startsWith("-") && !ref) ref = a;
     else throw new Error(`ci ${command}: unknown argument ${a}`);
   }
-  return { ref, json, base };
+  return { ref, json, base, runId, noPush };
+}
+
+function parseGateArgs(/** @type {string[]} */ args) {
+  /** @type {string | null} */ let ref = null;
+  let tier = "";
+  let base = "";
+  /** @type {string[]} */ let fixes = [];
+  /** @type {string | null} */ let out = null;
+  let peek = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = /** @type {string} */ (args[i]);
+    if (a === "--tier") tier = args[++i] ?? "";
+    else if (a === "--base") base = args[++i] ?? "";
+    else if (a === "--out") out = args[++i] ?? null;
+    else if (a === "--peek") peek = true;
+    else if (a === "--fixes") fixes = (args[++i] ?? "").split(",").filter(Boolean);
+    else if (!a.startsWith("-") && !ref) ref = a;
+    else throw new Error(`ci gate: unknown argument ${a}`);
+  }
+  if (!isTier(tier)) throw new Error(`ci gate: --tier needs one of ${TIERS.join(", ")}`);
+  if (!base || base.startsWith("-")) throw new Error("ci gate: --base needs a commit");
+  if (fixes.some((f) => !/^B-\d+$/.test(f))) throw new Error("ci gate: --fixes takes B-n,B-m");
+  return { ref, tier, base, fixes, out, peek };
 }
 
 /** The branch name and commit a request means. */
@@ -710,15 +853,19 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv[0] === "status") return ciStatus(argv.slice(1), io);
     if (argv[0] === "blame" || argv[0] === "file") {
-      const { ref, json, base } = parseReadArgs(argv[0], argv.slice(1));
+      const { ref, json, base, runId, noPush } = parseReadArgs(argv[0], argv.slice(1));
       const { branch, sha } = resolve(io, ref);
       return argv[0] === "blame"
         ? await blame({ branch, sha, json }, io)
-        : fileFlakes({ branch, sha, base }, io);
+        : fileFlakes({ branch, sha, base, runId, noPush }, io);
+    }
+    if (argv[0] === "gate") {
+      const { ref, ...request } = parseGateArgs(argv.slice(1));
+      return await gate({ ...resolve(io, ref), ...request }, io);
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] | ci status <branch>…",
+        "usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>…",
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {
