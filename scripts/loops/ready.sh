@@ -28,8 +28,6 @@ blockers=()
 [[ -z $drift ]] || blockers+=("$trunk has newer work ($(wc -l <<< "$drift" | tr -d ' ') file(s) changed): run \`pnpm prd sync\` in $dir, then check again")
 if [[ -d $dir ]]; then
   [[ -z $(git -C "$dir" status --porcelain) ]] || blockers+=("uncommitted changes in $dir")
-  checked_ok "$dir" "$branch" ||
-    blockers+=("\`pnpm check\` hasn't passed on $tip (or on an earlier commit with only docs and tooling changed since): run \`pnpm prd check\` (or \`--quick \"<why>\"\`) in $dir")
 else
   blockers+=("no worktree at $dir, so the checks can't be confirmed (pnpm prd start $topic)")
 fi
@@ -42,6 +40,16 @@ else
   echo "# $branch is ready to land"
   echo
   echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, up to date with it. Check: $(checked_how "$dir" "$branch")."
+  if proposed=$(propose_tier "$trunk" "$branch" 2>/dev/null); then
+    { read -r ptier; read -r pwhy; } <<< "$proposed"
+    echo
+    echo "Proposed tier: **$ptier** ($pwhy)."
+    if [[ $ptier != none ]]; then
+      peek=$(cd "$main" && node "$(cd "$(dirname "$0")/.." && pwd)/ci/ci.mjs" gate "$branch" --tier "$ptier" \
+        --base "$(git -C "$main" rev-parse "$trunk")" --peek 2>&1 | grep -m1 -E '^(verdict|no )' || true)
+      echo "CI: ${peek:-no verdict read}"
+    fi
+  fi
 fi
 
 echo

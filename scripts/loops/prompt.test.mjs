@@ -131,10 +131,10 @@ describe("orchestrator", () => {
     expect(out).toContain("record the landing mode in the plan's _Status_, then start the first ready wave.");
   });
 
-  it("--auto: a stale check lands with --recheck, and --force is never named", () => {
+  it("--auto: a landing declares its tier, and --force is never named", () => {
     for (const flags of [["--auto"], ["--resume", "--auto"]]) {
       const out = ok("orchestrator", "T", ...flags);
-      expect(out).toContain('`pnpm prd land T --recheck "<why>" -m "<subject>"`');
+      expect(out).toContain('`pnpm prd land T --tier <t> -m "<subject>"`');
       expect(out).not.toContain("--force");
     }
   });

@@ -133,13 +133,13 @@ pnpm prd <command>
     ci [<branch>]             the latest whole-tier verdict for the branch's tip
 
   Land
-    land <topic> [-m subject] [--recheck "<why>"] [--no-review] [--local]
+    land <topic> [-m subject] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--no-review] [--local]
                               merge prd/<topic> into dev (only when the dev keeper says so) through its
                               PR: merged on GitHub once its head is the local tip and Codex's verdict is
-                              clean, then dev-sync (--recheck: when the last check is stale, run it on the
-                              tip in the branch's worktree and land on a pass; --no-review: skip the
-                              verdict, on the user's word only; --local: a local merge, the fallback, on
-                              their word)
+                              clean and the CI gate passes, then dev-sync (--tier: the tier to wait for, by
+                              default the diff's proposal; below it needs --why; --fixes: the dev brake
+                              this landing fixes; --no-review: skip the verdict, on the user's word only;
+                              --local: a local merge, the fallback, on their word)
     land hotfix/<name> --pr|--local [-m subject]   a hotfix: ask the user "PR or local?" each time
     land plan/<topic>         a plan branch: always a local merge
     review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
@@ -147,7 +147,7 @@ pnpm prd <command>
                               stale) and its findings; --again asks Codex again, --resolve closes a declined
                               thread, --wait polls until Codex answers on the head (exit 0/1/2, 4 out of credits, 75 timed out);
                               a clean verdict carries over a plain dev merge
-    pr <topic|hotfix/name> [-m subject]   push dev (fast-forward only) and the branch, then open its PR into
+    pr <topic|hotfix/name> [-m subject] [--tier <t> [--why "<reason>"]]   push dev (fast-forward only) and the branch, then open its PR into
                               dev, or update the open one (title: the landing subject; body: backlog items,
                               the check pass); plan/ branches are refused
     dev-sync [branch]         bring the main checkout's dev up to origin/dev after a GitHub merge (land runs

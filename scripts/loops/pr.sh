@@ -25,11 +25,13 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 use_node || true
 
-what="" msg=""
+what="" msg="" tier="" why=""
 while (($#)); do
   case $1 in
     -m) msg=${2:?-m "subject"}; shift 2 ;;
-    -*) die "pr: unknown option $1 (-m \"<subject>\")" ;;
+    --tier) tier=${2:-}; [[ -n $tier && $tier != -* ]] || die "--tier needs a tier"; shift 2 ;;
+    --why) why=${2:-}; [[ -n $why && $why != -* ]] || die "--why needs a reason"; shift 2 ;;
+    -*) die "pr: unknown option $1 (-m \"<subject>\", --tier <t>, --why \"<reason>\")" ;;
     *) [[ -z $what ]] || die "pr: one branch or topic"; what=$1; shift ;;
   esac
 done
@@ -52,6 +54,15 @@ git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch
 [[ ! -d $dir || -z $(git -C "$dir" status --porcelain) ]] ||
   echo "note: $dir has uncommitted changes; only the commits go up"
 
+proposed=$(propose_tier "$drift_ref" "$branch" "$tier") || die "unknown tier $tier (none, static, unit, integration, components, full)"
+{ read -r proposal; read -r proposal_why; read -r tier_status; } <<< "$proposed"
+tier=${tier:-$proposal}
+[[ $tier_status != refused ]] || die "--tier none skips the gate, and this diff proposes $proposal ($proposal_why)"
+[[ $tier_status != below || -n $why ]] ||
+  die "--tier $tier is below the proposal, $proposal ($proposal_why): add --why \"<reason>\", or declare $proposal"
+tierline="$tier (proposed $proposal: $proposal_why)"
+[[ $tier_status != below ]] || tierline+="; below the proposal because: $why"
+
 repo=$(gh_repo) || die "gh couldn't name origin's repository (gh auth status?)"
 if [[ ${CARETOOK_PR_THROWAWAY:-} != 1 ]]; then push_trunk; fi
 git -C "$main" push --quiet origin "refs/heads/$branch:refs/heads/$branch" ||
@@ -71,6 +82,8 @@ Lands \`$branch\` in \`$trunk\` ($tip).
 
 **Backlog items:**
 $items
+
+**Tier:** $tierline
 
 **Check:** $(checked_how "$gate" "$branch")
 

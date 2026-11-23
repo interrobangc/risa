@@ -176,6 +176,16 @@ docs_only() {
   [[ -n $files ]] && ! grep -qv '\.md$' <<< "$files"
 }
 
+# propose_tier BASE TIP [DECLARED] → three lines from check-plan.mjs: the tier this
+# diff should wait for, why, and ok | below | refused for the declared tier.
+propose_tier() {
+  local from
+  from=$(git -C "$main" merge-base "$1" "$2") || return 1
+  git -C "$main" diff --name-only --no-renames "$from" "$2" |
+    node "$(dirname "${BASH_SOURCE[0]}")/check-plan.mjs" --propose --repo "$main" --base "$from" --head "$2" \
+      ${3:+--declared "$3"}
+}
+
 # checked_ok DIR REV → succeeds when `pnpm prd check` (full or --quick) passed
 # on REV, or on an ancestor of it with only exempt files or CI's lists changed since; or when
 # REV's own changes against dev (dev...REV) are all exempt, so it needs none.

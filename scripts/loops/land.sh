@@ -2,8 +2,8 @@
 # Land a PRD, hotfix or planning branch in dev. Run it only on the dev keeper's
 # say-so for that landing.
 #
-#   land.sh <topic> [-m "feat(<topic>): what it adds (B-1, B-2)"] [--recheck "<why>"|--force] [--no-review] [--local]
-#   land.sh hotfix/<name> --pr|--local [-m "fix(<area>): …"] [--recheck "<why>"|--force] [--no-review]
+#   land.sh <topic> [-m "feat(<topic>): what it adds (B-1, B-2)"] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--force] [--no-review] [--local]
+#   land.sh hotfix/<name> --pr|--local [-m "fix(<area>): …"] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--force] [--no-review]
 #   land.sh plan/<topic> [-m "docs(<topic>): …"]
 #
 # Two paths:
@@ -21,15 +21,16 @@
 #
 # It refuses unless the branch already contains dev's work (`pnpm prd sync`;
 # backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
-# `pnpm prd check` (full or --quick) passed on its tip, or on an earlier commit
-# with only docs and tooling changed since, or the branch changes only docs and
-# tooling (lib.sh, checked_ok). It prints which, so the call is on record.
-# --recheck "<why>": when that gate would refuse the tip, land runs the check
-# the plan (check-plan.mjs on dev...tip) asks for, `pnpm prd check` or
-# `pnpm prd check --quick`, in the branch's worktree, just before the merge
-# (after every other refusal), and lands only on a pass with the tip unmoved. A
-# branch with no worktree (a pushed hotfix) is refused. When the gate already
-# accepts the tip it runs nothing. The reason goes into the landing report.
+# a CI verdict for its tier (scripts/ci/ci.mjs gate, gate.mjs).
+# --tier <t>: the tier to wait for; the default is what the diff proposes
+# (check-plan.mjs). Below the proposal it needs --why "<reason>", and the report
+# names both; `none` under a real proposal is --force, the user's word. The gate
+# runs just before the merge (after every other refusal): it reads a whole-tier
+# verdict for that tier or higher on the tip, or behind only docs and tooling
+# commits, and requests the run when there is none. Green lands; a flake outside
+# the branch's files lands and is filed after the merge; a failure lands only when
+# blame gives all of it to dev, and a dev brake only with --fixes <its item>.
+# Infra and unknown refuse with how to retry; a refusal exits with the verdict's code.
 # --force (the user's word only) skips the check requirement, not the sync, and not the doc budget:
 # it also refuses (doc-budget.mjs) when the branch grows a doc that is already
 # over its budget, for every kind of branch (a plan branch lands docs).
@@ -52,21 +53,31 @@
 # Test seam: CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) measures the sync against origin/dev instead of dev, and stops the PR
 # path after its refusals, printing the merge it would run: nothing is pushed
-# or merged. CARETOOK_PNPM_BIN replaces `pnpm` for the recheck (a stub in tests).
+# or merged.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 use_node || true
 
-what="" msg="" force="" path="" noreview="" recheck="" need_recheck=""
+what="" msg="" force="" path="" noreview="" tier="" why="" fixes=""
+proposal="" proposal_why="" tierline="" gate_base="" gate_run="" gate_flakes="" to_test_file=""
 while (($#)); do
   case $1 in
     -m) msg=${2:?-m "subject"}; shift 2 ;;
     --force) force=1; shift ;;
-    --recheck)
-      recheck=${2:-}
-      [[ -n $recheck && $recheck != -* ]] || die "--recheck needs a reason: --recheck \"<why>\""
+    --tier)
+      tier=${2:-}
+      [[ -n $tier && $tier != -* ]] || die "--tier needs a tier (none, static, unit, integration, components, full)"
       shift 2 ;;
+    --why)
+      why=${2:-}
+      [[ -n $why && $why != -* ]] || die "--why needs a reason: --why \"<reason>\""
+      shift 2 ;;
+    --fixes)
+      fixes=${2:-}
+      [[ $fixes =~ ^B-[0-9]+(,B-[0-9]+)*$ ]] || die "--fixes takes backlog ids: --fixes B-1,B-2"
+      shift 2 ;;
+    --recheck) die "--recheck is gone: land waits for the CI tier itself (--tier <t>)" ;;
     --pr) path=pr; shift ;;
     --local) path=local; shift ;;
     --no-review) noreview=1; shift ;;
@@ -93,8 +104,8 @@ case $branch in
     ;;
 esac
 [[ -z $noreview || $path == pr ]] || die "--no-review is for the PR path only"
-[[ -z $recheck || -z $force ]] || die "--recheck and --force: pass one (--force only on the user's word)"
-[[ -z $recheck || $branch != plan/* ]] || die "a plan/ branch has no check gate: drop --recheck"
+[[ -z $tier$why$fixes || -z $force ]] || die "--force skips the gate: drop --tier, --why and --fixes (--force only on the user's word)"
+[[ -z $tier$why$fixes || $branch != plan/* ]] || die "a plan/ branch has no check gate: drop --tier, --why and --fixes"
 pr_seam "$branch"
 
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
@@ -109,46 +120,68 @@ fi
 node "$(dirname "$0")/doc-budget.mjs" land "$trunk" --head "$branch" --repo "$main" ||
   die "$branch grows a doc that is over its budget (scripts/loops/doc-budget.config.mjs): trim it, then land"
 if [[ ($branch == prd/* || $branch == hotfix/*) && -z $force ]]; then
-  # A branch with no worktree left (a pushed hotfix) can still pass as docs and
-  # tooling only: the main checkout holds no check record.
-  gate=$dir; [[ -d $dir ]] || gate=$main
-  if checked_ok "$gate" "$branch"; then
-    checkline=$(checked_how "$gate" "$branch")
-    echo "check: $checkline"
-    [[ -z $recheck ]] || echo "--recheck: the gate already accepts the tip, so nothing is rechecked"
-  elif [[ -n $recheck ]]; then
-    [[ -d $dir ]] ||
-      die "--recheck runs \`pnpm prd check\` in $branch's worktree, and it has none ($dir): it can't be rechecked here"
-    [[ $(git -C "$dir" rev-parse HEAD) == $(git -C "$main" rev-parse "$branch") ]] ||
-      die "$dir isn't at $branch's tip: check out $branch there, then land"
-    need_recheck=1
-    echo "check: stale on $branch's tip; --recheck runs it before the merge: $recheck"
-  else
-    die "\`pnpm check\` hasn't passed on $branch's tip (or on an earlier commit with only docs and tooling changed since): run \`pnpm prd check\` (or \`--quick \"<why>\"\`) in $dir, or land with --recheck \"<why>\" (it runs that check on the tip and lands on a pass)"
-  fi
+  proposed=$(propose_tier "$drift_ref" "$branch" "$tier") || die "unknown tier $tier (none, static, unit, integration, components, full)"
+  { read -r proposal; read -r proposal_why; read -r tier_status; } <<< "$proposed"
+  tier=${tier:-$proposal}
+  [[ $tier_status != refused ]] ||
+    die "--tier none skips the gate, and this diff proposes $proposal ($proposal_why): declare a tier, or --force on the user's word"
+  [[ $tier_status != below || -n $why ]] ||
+    die "--tier $tier is below the proposal, $proposal ($proposal_why): add --why \"<reason>\", or declare $proposal"
+  tierline="tier $tier (proposed $proposal: $proposal_why)"
+  [[ $tier_status != below ]] || tierline+="; below the proposal because: $why"
+  echo "tier: $tierline"
+  [[ $tier != none ]] || checkline="none needed (docs and tooling only)"
 fi
-# recheck → run the check the plan asks for on the tip, in the branch's
-# worktree (so in a check lease, timed like any check); refuse unless it passed
-# and the tip didn't move. Sets checkline to how the tip passed.
-recheck() {
-  local tip0 plan mode reason pnpm=${CARETOOK_PNPM_BIN:-pnpm}
+# run_gate → the CI gate on the tip, just before the merge. A refusal exits with
+# the verdict's code; nothing has landed.
+run_gate() {
+  [[ -n $tier && $tier != none ]] || return 0
+  local out code=0 tip0 key value land_ok="" kind="" ran="" at=""
   tip0=$(git -C "$main" rev-parse "$branch")
-  plan=$(git -C "$main" diff --name-only "$trunk...$branch" |
-    node "$(dirname "$0")/check-plan.mjs" --mode quick --repo "$main" --base "$(git -C "$main" merge-base "$trunk" "$branch")" --head "$branch")
-  mode=$(sed -n 1p <<< "$plan") reason=$(sed -n 2p <<< "$plan")
-  if [[ $mode == full ]]; then
-    echo "recheck: $reason, so \`pnpm prd check\` in $dir ($recheck)"
-    (cd "$dir" && "$pnpm" prd check) || die "the recheck failed on $branch's tip: nothing landed"
-  else
-    echo "recheck: \`pnpm prd check --quick\` in $dir ($recheck)"
-    (cd "$dir" && "$pnpm" prd check --quick "recheck at landing: $recheck") ||
-      die "the recheck failed on $branch's tip: nothing landed"
+  gate_base=$(git -C "$main" rev-parse "$drift_ref")
+  out=$(mktemp)
+  (cd "$main" && node "$ci_bin" gate "$branch" --tier "$tier" --base "$gate_base" --out "$out" \
+    ${fixes:+--fixes "$fixes"}) || code=$?
+  while IFS='=' read -r key value; do
+    case $key in
+      land) land_ok=$value ;; kind) kind=$value ;; ranTier) ran=$value ;;
+      commit) at=$value ;; run) gate_run=$value ;; flakes) gate_flakes=$value ;;
+    esac
+  done < "$out"
+  rm -f "$out"
+  if ((code != 0)) || [[ $land_ok != 1 ]]; then
+    echo "the $tier gate refused $branch: nothing landed" >&2
+    exit "$((code == 0 ? 5 : code))"
   fi
-  [[ $(git -C "$main" rev-parse "$branch") == "$tip0" ]] || die "$branch's tip moved during the recheck: nothing landed"
-  checked_ok "$dir" "$branch" || die "the recheck passed, but $branch's tip still isn't recorded as checked: nothing landed"
-  checkline="$(checked_how "$dir" "$branch"), rechecked at landing: $recheck"
+  [[ $(git -C "$main" rev-parse "$branch") == "$tip0" ]] || die "$branch's tip moved during the gate: nothing landed"
+  checkline="CI $kind at $ran on ${at:0:7} (run $gate_run)"
   echo "check: $checkline"
 }
+# flake_args → the `ci file` arguments for this landing. A local landing never
+# pushes: publishing dev stays the keeper's.
+flake_args() {
+  printf '%s\n' file "$branch" --base "$gate_base" --run "$gate_run"
+  if [[ $path == local ]]; then echo --no-push; fi
+}
+flake_retry() {
+  [[ $gate_flakes == 1 ]] || return 0
+  local args=()
+  while read -r line; do args+=("$line"); done < <(flake_args)
+  echo "pnpm prd ci ${args[*]}"
+}
+# file_flakes → file the verdict's flakes, after the merge. It can't undo the
+# landing: a failure is reported, added to the to-test file, and returned as 5.
+file_flakes() {
+  [[ $gate_flakes == 1 ]] || return 0
+  local args=() retry
+  while read -r line; do args+=("$line"); done < <(flake_args)
+  retry=$(flake_retry)
+  (cd "$main" && node "$ci_bin" "${args[@]}") && return 0
+  echo "landed, but the flakes weren't all filed. Retry: $retry" >&2
+  if [[ -n $to_test_file ]]; then echo "- The flakes weren't all filed. Retry: \`$retry\`" >> "$to_test_file"; fi
+  return 5
+}
+ci_bin="$(cd "$(dirname "$0")/.." && pwd)/ci/ci.mjs"
 
 [[ -n $msg ]] || msg=$(land_subject "$branch")
 # Decided before the merge, while the diff against dev still exists.
@@ -172,8 +205,6 @@ write_to_test() {
     commit=$(git -C "$main" rev-parse --short "$trunk")
   fi
   [[ -z $force ]] || unchecked+=("the check was skipped (--force)")
-  [[ -z $need_recheck ]] || unchecked+=("the last check was stale; the tip was rechecked at landing ($recheck)")
-  [[ $checkline != quick* ]] || unchecked+=("only a quick check ran: $checkline")
   [[ -z $noreview ]] || unchecked+=("merged without a clean Codex verdict (--no-review)")
   [[ $path != local ]] || unchecked+=("landed locally: no PR and no Codex review")
   [[ $checkline != "none needed"* ]] || unchecked+=("no check ran: $checkline")
@@ -217,6 +248,7 @@ write_to_test() {
     echo "## What wasn't checked"
     echo
     [[ -z $checkline ]] || echo "- The check that ran: $checkline."
+    [[ -z $tierline ]] || echo "- The landing's $tierline."
     printf -- '- %s\n' "${unchecked[@]}"
     echo
     echo "## Follow-ups and still open"
@@ -227,6 +259,7 @@ write_to_test() {
     echo
     next_steps | sed 's/^  /- /'
   } > "$file" || { echo "couldn't write $file"; return 0; }
+  to_test_file=$file
   echo "to-test file: $file"
 }
 # post_landed → after a code landing (the same test as the to-test file's: a
@@ -260,14 +293,17 @@ next_steps() {
 }
 
 if [[ $path == local ]]; then
-  [[ -z $need_recheck ]] || recheck
+  run_gate
   git -C "$main" merge --no-ff -m "$msg" "$branch"
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
+  [[ -z $tierline ]] || echo "Landed at $tierline"
   write_to_test || echo "couldn't write the to-test file"
   post_landed || true
+  filed=0
+  file_flakes || filed=$?
   next_steps
-  exit 0
+  exit "$filed"
 fi
 
 # The PR path.
@@ -292,7 +328,7 @@ else
 fi
 repo=$(gh_repo) || die "gh couldn't name origin's repository"
 merge=(gh pr merge "$number" -R "$repo" --merge --subject "$msg" --match-head-commit "$tip" --delete-branch)
-[[ -z $need_recheck ]] || recheck
+run_gate
 if [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]]; then
   echo "CARETOOK_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push $trunk, then run:"
   printf ' %q' "${merge[@]}"; echo
@@ -303,8 +339,13 @@ push_trunk
 "${merge[@]}" || die "gh couldn't merge PR #$number ($url): nothing landed; see the PR"
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"
+[[ -z $tierline ]] || echo "Landed at $tierline"
 write_to_test "$url" || echo "couldn't write the to-test file"
 post_landed || true
+retry=$(flake_retry)
 (dev_sync "$branch") ||
-  die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`pnpm prd dev-sync $branch\`"
+  die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`pnpm prd dev-sync $branch\`${retry:+, then file the flakes: \`$retry\`}"
+filed=0
+file_flakes || filed=$?
 next_steps
+exit "$filed"
