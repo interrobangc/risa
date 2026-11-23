@@ -196,6 +196,7 @@ beforeAll(() => {
     "rotate.mjs",
     "open-session.sh",
     "open-session.mjs",
+    "planner-model.mjs",
     "prompt.sh",
     "rm.sh",
     "stack-lib.sh",

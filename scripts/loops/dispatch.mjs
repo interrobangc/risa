@@ -16,7 +16,7 @@
 //     (session.sh prd-<t> --auto --managed, prompt.sh orchestrator <t> --auto)
 //     in a background iTerm2 tab (the opener's --command … --background);
 //   - plan: `new.sh plan <topic>`, then a managed, run-through planner
-//     (session.sh plan-<t> --auto --managed, --model opus, prompt.sh plan <t>
+//     (session.sh plan-<t> --auto --managed, --model opus or fable for a `design` row, prompt.sh plan <t>
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
 //   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
 //   - keep-alive (keep-alive.mjs), beside the pick and outside the PRD slots:
@@ -77,6 +77,7 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
+import { plannerModel } from "./planner-model.mjs";
 import {
   DEFAULT_MAX_BACKLOG_SESSIONS,
   readRequests,
@@ -124,12 +125,12 @@ export const sh = (/** @type {string} */ s) =>
 
 /** The command a new managed, run-through session's tab runs. */
 export function sessionLine(
-  /** @type {{ kind: "prd" | "plan", topic: string, dir: string, wrapper: string }} */ s,
+  /** @type {{ kind: "prd" | "plan", topic: string, dir: string, wrapper: string, model?: string }} */ s,
 ) {
   const name = `${s.kind}-${s.topic}`;
   const head = `cd ${sh(s.dir)} && ${sh(s.wrapper)} ${name} --auto --managed -- `;
   return s.kind === "plan"
-    ? `${head}--model opus --remote-control ${name} "$(scripts/loops/prompt.sh plan ${sh(s.topic)} --auto)"`
+    ? `${head}--model ${sh(s.model ?? "opus")} --remote-control ${name} "$(scripts/loops/prompt.sh plan ${sh(s.topic)} --auto)"`
     : `${head}--remote-control ${name} "$(scripts/loops/prompt.sh orchestrator ${sh(s.topic)} --auto)"`;
 }
 
@@ -846,7 +847,11 @@ export function tick(
         if (!made.ok) break;
       }
       writeRecord(p.sessions, session, { kind, topic, managed: true, auto: true });
-      const opened = openTab(sessionLine({ kind, topic, dir, wrapper: join(bin, "session.sh") }), session);
+      const model = plannerModel(facts.rows.find((r) => r.topic === topic));
+      const opened = openTab(
+        sessionLine({ kind, topic, dir, wrapper: join(bin, "session.sh"), model }),
+        session,
+      );
       out(`  ${session}: ${result(opened)}`);
       break;
     }

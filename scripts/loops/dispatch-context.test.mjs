@@ -378,11 +378,14 @@ describe("the tick", () => {
       "load-gate.mjs",
       "rotate.mjs",
       "open-session.mjs",
+      "planner-model.mjs",
     ])
       copyFileSync(join(HERE, f), scripts(f));
     writeFileSync(scripts("open-session.sh"), OPEN_SH);
     writeFileSync(scripts("rotate.sh"), ROTATE_SH);
     writeFileSync(join(main, "scripts/backlog/backlog.mjs"), BACKLOG);
+    for (const f of ["registry.mjs", "format.mjs"])
+      copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
     writeFileSync(join(root, "load"), "1 1 1");
     env = {
       ...process.env,

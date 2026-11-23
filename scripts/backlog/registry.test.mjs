@@ -145,9 +145,18 @@ describe("findings", () => {
     ).toEqual([]);
   });
 
+  it("accepts the design flag: set, listed, and no finding", () => {
+    const set = reg.setRow(row("a"), ["flags=design,hold"]);
+    expect(set.flags).toEqual(["design", "hold"]);
+    expect(problems([set])).toEqual([]);
+    expect(reg.plannerModel(set)).toBe("fable");
+    expect(reg.plannerModel(row("b"))).toBe("opus");
+    expect(reg.plannerModel(undefined)).toBe("opus");
+  });
+
   it("finds an After topic with no row, and an unknown flag", () => {
     expect(problems([row("a", { after: ["ghost"], flags: ["paused"] })])).toEqual([
-      'a: has an unknown flag "paused" (flags: hold, done, standing, alone)',
+      'a: has an unknown flag "paused" (flags: hold, done, standing, alone, design)',
       'a: comes after "ghost", which has no row in the PRD table',
     ]);
   });

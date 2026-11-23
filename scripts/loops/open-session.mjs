@@ -8,7 +8,7 @@
 //   - otherwise a fresh session with the resume prompt:
 //       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] [--managed] -- --remote-control prd-<topic> \
 //               "$(scripts/loops/prompt.sh orchestrator <topic> --resume [--auto])"
-//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> [--auto] [--managed] -- --model opus --remote-control plan-<topic> \
+//       plan: cd <dir> && scripts/loops/session.sh plan-<topic> [--auto] [--managed] -- --model <opus, or fable for a `design` row> --remote-control plan-<topic> \
 //               "$(scripts/loops/prompt.sh plan <topic> [--auto])"
 //       hotfix: cd <dir> && scripts/loops/session.sh hotfix-<name> -- --model <recorded> --remote-control hotfix-<name> \
 //               "$(scripts/loops/prompt.sh hotfix <name>)"
@@ -38,6 +38,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { plannerModelFor } from "./planner-model.mjs";
 import { isLive, processOf, readRecord } from "./sessions.mjs";
 
 /** Claude Code's projects folder name for a working directory. */
@@ -71,7 +72,8 @@ const MAIN_PROMPTS = /** @type {Record<string, string>} */ ({ backlog: "backlog"
 
 /**
  * @param {{ dir: string, branch: string, conversation: boolean, runThrough: boolean,
- *   record?: { auto?: boolean, managed?: boolean, rotating?: boolean, model?: string } | null, wrapper?: string }} w
+ *   record?: { auto?: boolean, managed?: boolean, rotating?: boolean, model?: string } | null, wrapper?: string,
+ *   plannerModel?: string }} w
  * @returns {{ session: string, kind: "prd" | "plan" | "hotfix", topic: string, mode: "continue" | "fresh", auto: boolean,
  *   managed: boolean, command: string }}
  */
@@ -82,6 +84,7 @@ export function chooseCommand({
   runThrough: statusAuto,
   record = null,
   wrapper = ownSessionSh,
+  plannerModel = DEFAULT_MODEL,
 }) {
   const m = /^(prd|plan|hotfix)\/(.+)$/.exec(branch);
   if (!m)
@@ -94,7 +97,13 @@ export function chooseCommand({
   const auto = statusAuto || record?.auto === true;
   const managed = record?.managed === true;
   // A hotfix keeps the model it was started on (prd.sh's default when none is recorded).
-  const hotfixModel = kind === "hotfix" ? `--model ${sh(record?.model ?? DEFAULT_MODEL)} ` : "";
+  // A planner runs on its row's model, continued or fresh (opus, or Fable for a `design` row).
+  const modelArg =
+    kind === "hotfix"
+      ? `--model ${sh(record?.model ?? DEFAULT_MODEL)} `
+      : kind === "plan"
+        ? `--model ${sh(plannerModel)} `
+        : "";
   const wrap = `cd ${sh(dir)} && ${sh(wrapper)} ${session}${auto ? " --auto" : ""}${managed ? " --managed" : ""} -- `;
   if (conversation && !record?.rotating)
     return {
@@ -104,7 +113,7 @@ export function chooseCommand({
       mode: "continue",
       auto,
       managed,
-      command: `${wrap}${hotfixModel}--continue --remote-control ${session}`,
+      command: `${wrap}${modelArg}--continue --remote-control ${session}`,
     };
   const prompt =
     kind === "prd"
@@ -119,8 +128,7 @@ export function chooseCommand({
     mode: "fresh",
     auto,
     managed,
-    // A fresh planner runs on opus, as `pnpm prd plan` starts it (prd.sh's agent_model).
-    command: `${wrap}${kind === "plan" ? "--model opus " : hotfixModel}--remote-control ${session} "$(${prompt})"`,
+    command: `${wrap}${modelArg}--remote-control ${session} "$(${prompt})"`,
   };
 }
 
@@ -172,6 +180,12 @@ export function chooseMainFor(
   return chooseMainCommand({ name, main, record });
 }
 
+/** The main checkout of DIR's repository: its first worktree. */
+const mainOf = (/** @type {string} */ dir) =>
+  execFileSync("git", ["-C", dir, "worktree", "list", "--porcelain"], { encoding: "utf8" })
+    .split("\n")[0]
+    .replace(/^worktree /, "");
+
 /** Reads the worktree's facts (branch, transcript, plan, session record) and chooses. */
 export function chooseFor(
   /** @type {string} */ dir,
@@ -190,6 +204,7 @@ export function chooseFor(
     conversation: hasConversation(dir, projects),
     runThrough: existsSync(plan) && runThrough(readFileSync(plan, "utf8")),
     record,
+    plannerModel: kind === "plan" ? plannerModelFor(topic, mainOf(dir)) : DEFAULT_MODEL,
   });
 }
 
