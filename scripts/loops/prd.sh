@@ -110,7 +110,7 @@ pnpm prd <command>
     notices [--json]          the live ones, oldest first: session, topic, age, time left
     notices --done <id>       withdraw one
                               check, sync, slice, browser, pr, ready and land print other sessions' live
-                              notices first (stderr, five lines at most); status prints them all; a code
+                              notices first (stderr, five lines at most); status prints the count; a code
                               landing posts "landed …: sync at your next wave boundary" for six hours
 
   Inside a worktree (name or topic defaults to the one you're in)

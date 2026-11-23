@@ -57,7 +57,7 @@ echo "PRD worktrees: $(prd_count) of $max_prds"
 # heading included, when there are none.
 extra=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$(dirname "$0")/status-extra.mjs" 2>/dev/null || true)
 [[ -z $extra ]] || printf '\n%s\n' "${extra%$'\n'}"
-# The live notices (notice.mjs status): nothing, heading included, when there are none.
+# The live notices' count (notice.mjs status): nothing when there are none.
 notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
 [[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
 
