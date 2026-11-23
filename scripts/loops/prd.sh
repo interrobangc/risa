@@ -5,6 +5,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
+# shellcheck source=unsynced.sh
+source "$(dirname "$0")/unsynced.sh"
 bin=$(dirname "$0")
 # The model plan, backlog and hotfix sessions run on unless --model names another.
 agent_model=opus
@@ -318,6 +320,7 @@ case $cmd in
       esac
       shift
     done
+    unsynced_clear "$dir"
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "commit your changes first: the check is recorded against a commit"
     record=$(checked_file "$dir")
     # The plan (check-plan.mjs) names the diff's own tests, and the tooling tests
@@ -355,6 +358,7 @@ case $cmd in
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd sync inside a PRD's worktree"
     dir=$loops/$name; branch=$(git -C "$dir" branch --show-current)
     [[ $branch == prd/* || $branch == plan/* || $branch == hotfix/* ]] || die "$branch isn't a prd/, plan/ or hotfix/ branch"
+    unsynced_clear "$dir"
     if [[ -z $(trunk_drift "$branch") ]]; then
       echo "$branch is up to date with $trunk (only backlog commits are newer, if any)"
     else
