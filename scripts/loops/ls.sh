@@ -56,7 +56,8 @@ notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(
 [[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
 
 # Each live branch's latest whole-tier CI verdict (ci.mjs status; cached, and short when GitHub is away).
-if ((${#branches[@]})); then
+# Never under Vitest: a test's fixture must not reach the real gh.
+if ((${#branches[@]})) && [[ -z ${VITEST:-} ]]; then
   ci=$(node "$(dirname "$0")/../ci/ci.mjs" status "${branches[@]}" 2>/dev/null || true)
   [[ -z $ci ]] || printf '\n%s\n' "${ci%$'\n'}"
 fi
