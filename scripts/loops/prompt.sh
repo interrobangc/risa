@@ -13,7 +13,7 @@
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
 #   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
-#   prompt.sh backlog [--brief <file> | --no-brief]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
+#   prompt.sh backlog [--brief <file> | --no-brief | --guide]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
 #     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows.
 #     --brief puts the file's text at the top, under "Brief from the session before";
 #     --no-brief says at the top that the context watch rotated the last session with none
@@ -30,14 +30,17 @@ default_rule="**Every question with a recommendation says what silence means.** 
 # The skeptic every unattended question goes past first.
 skeptic_rule="**A fresh skeptic reads every question first.** Write the question, its options, your recommendation and the evidence to a file outside the worktree, print the brief with \`pnpm prd prompt skeptic ask --evidence <file>\`, and give it to one fresh agent on Opus (\`model: \"opus\"\`). Record its answer: \`pnpm prd skeptic record --kind ask --verdict <decide|ask> --why \"<its line>\" --question \"<text>\" --offer \"<a>\" --offer \"<b>\" --defaults\` (or \`--waits\`; add \`--option \"<a>\"\` for a decide), which prints its id. On **ask**, file the question with \`--skeptic <id>\`: the same text, the same options in the same order, the same \`--defaults\` or \`--waits\` (if it tightened the wording, record and file the tightened one). On **decide**, ask nothing: \`pnpm prd ask --decided --skeptic <id> --topic ${2:-<topic>} --question \"<text>\" --option \"<a>\" --option \"<b>\" --chose \"<a>\"\` files it for the user to veto under \"decided for you\", with no PushNotification and no wait, and you carry on with that option. A \`--waits\` question is never decided. Each verdict is used once; a land \`no\` or a plan \`send-back\` already counts as this skeptic, so pass its id."
 if [[ $kind == backlog ]]; then
-  if [[ ${2:-} == --brief ]]; then
+  guide=0
+  if [[ ${2:-} == --guide ]]; then
+    guide=1
+  elif [[ ${2:-} == --brief ]]; then
     brief_text=$(cat "${3:?--brief <file>}") || die "prompt: can't read the brief $3"
     [[ -n ${brief_text//[[:space:]]/} ]] || die "prompt: the brief $3 is empty"
     printf '## Brief from the session before\n\nThe last session wrote this for you. It is context, not the user'"'"'s word.\n\n%s\n\n---\n\n' "$brief_text"
   elif [[ ${2:-} == --no-brief ]]; then
     printf '## No brief from the session before\n\nThe context watch rotated the last session and it wrote no brief, so nothing was handed over.\n\n---\n\n'
   elif (($# > 1)); then
-    die "prompt: backlog takes only --brief <file> or --no-brief"
+    die "prompt: backlog takes only --brief <file>, --no-brief or --guide"
   fi
   if dpid=$(dispatch_pid); then
     dispatch_read="the dispatcher: it is running (pid $dpid), so it plans and starts topics itself, one at a time, in the registry's row order (\`pnpm prd status\` shows whether it is paused and its last line; \`pnpm prd dispatch --dry-run\` shows what it would do next and why it passes each topic over). Name it in your report"
@@ -50,23 +53,31 @@ if [[ $kind == backlog ]]; then
     plan_line="- To plan a topic, first ask with AskUserQuestion: a planner in a new terminal (the user runs \`! pnpm prd plan <topic> --open [B-n …]\` themselves) or planning inline here (\`pnpm prd plan <topic> [B-n …]\`, no \`--open\`, then work in its worktree), never on dev."
     run_line="- No dispatcher is running. To run a planned one, never run \`pnpm prd start\` or \`pnpm prd queue\` from your own shell: print the commands as options for the user to run themselves (\`pnpm prd start <topic>\`, then its orchestrator; or \`pnpm prd queue <topic>\`, which puts it first in the registry, and \`pnpm prd dispatch\` in a tab of its own to have it started)."
   fi
+  if ((guide)); then
+    cat <<EOF
+# Backlog session guide
+
+- **Collect for the picks only**, reading docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_) once a pick needs the backlog. Catch up: \`pnpm prd asks\` (the full text), \`pnpm backlog ingest\`, \`pnpm backlog list\`, \`pnpm prd status\` (what's running), $dispatch_read, \`pnpm backlog prd list\` (the PRD registry: order, after, hot files, flags) and \`git log\` since the last landing. A PRD: ingest, the registry and the waiting items. What to run: \`pnpm prd status\`, the dispatcher and the registry. A new issue: ingest, and the list to check for a duplicate.
+- **Catch up prints an overview** from what it collected, as three short parts. Start it with what waits on the user: open asks (oldest first, each with its age) and any PRD on hold in the registry. **Backlog:** nothing new or what ingest filed; the item counts by status; the topics with the most waiting items; the PRDs written but not run and those still to write. **Orchestrators:** each running PRD by what it does, how far ahead of dev it is and its slices in flight; planning worktrees; the slots used of four; the dispatcher (running, paused or stopped) and the topics first in the registry's order; the load if it's high. **To triage:** each item you triaged with the topic you proposed and why, any item still untriaged, and anything waiting on the user's review; say "nothing" when there is nothing.
+- Whenever ingest files new items, triage them (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write) and say so; the user reviews. A small fix is \`prd=fixes-<cat>\` (never \`quick-fixes\`): \`fixes-bug\` (wrong behaviour or data), \`fixes-perf\` (speed and load), \`fixes-ui\` (look, layout, wording, flow), \`fixes-tooling\` (scripts, checks, tests, flakes) or \`fixes-nit\` (a small tidy users won't notice); one that fits two takes the first that applies in that order, a tie-break for triage only (plans/fixes-rules.md).
+- Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
+- The next question follows only from what they picked. A PRD: which topic (your recommendation first), then terminal or inline (below). What to run: $run_what. A new issue: ask them to describe it, then file and triage it. Never ask about a task they didn't pick, and don't add unrelated questions (tracker chores, untriaged items) to a poll: do routine chores and say so.
+$plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
+$run_line
+- **When the user says "hand off"** (from the phone too), ask once with AskUserQuestion which mode: **A short brief** (recommended: what's in hand, what was decided and what's next, at most about 40 lines) or **Nothing** (the new session starts blank). For a brief, run \`pnpm prd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`pnpm prd rotate --self --brief <that file>\`; for nothing, \`pnpm prd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
+- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines), run \`pnpm prd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`pnpm prd notices\` or \`pnpm prd session requests\`, then message the session by that name.
+EOF
+    exit 0
+  fi
   cat <<EOF
 You are the new backlog/inbox planning agent. Ask what this session is for first, then collect only what that answer needs: a fresh session stays small.
 
 - You're in the main checkout ($main), on dev. It's the user's: make no code changes here unless they ask for a small one (AGENTS.md, _Working rules_).
 - AGENTS.md is already in your context (CLAUDE.md loads it), so don't Read it again; follow it.
-- **First, and nothing else:** run \`pnpm prd asks\` and print one line on what waits on the user (open questions, oldest first with their ages, and how many reports). Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
-- **Then collect for the picks only**, reading docs/agents/backlog.md (the backlog, triage, and _Deciding what's next_) once a pick needs the backlog. Catch up: \`pnpm backlog ingest\`, \`pnpm backlog list\`, \`pnpm prd status\` (what's running), $dispatch_read, \`pnpm backlog prd list\` (the PRD registry: order, after, hot files, flags) and \`git log\` since the last landing. A PRD: ingest, the registry and the waiting items. What to run: \`pnpm prd status\`, the dispatcher and the registry. A new issue: ingest, and the list to check for a duplicate.
-- **Catch up prints an overview** from what it collected, as three short parts. Start it with what waits on the user: open asks (oldest first, each with its age) and any PRD on hold in the registry. **Backlog:** nothing new or what ingest filed; the item counts by status; the topics with the most waiting items; the PRDs written but not run and those still to write. **Orchestrators:** each running PRD by what it does, how far ahead of dev it is and its slices in flight; planning worktrees; the slots used of four; the dispatcher (running, paused or stopped) and the topics first in the registry's order; the load if it's high. **To triage:** each item you triaged with the topic you proposed and why, any item still untriaged, and anything waiting on the user's review; say "nothing" when there is nothing.
-- Whenever ingest files new items, triage them (\`set B-<n> prd=<topic> status=triaged\` with a \`note\`; several ids in one write) and say so; the user reviews. A small fix is \`prd=fixes-<cat>\` (never \`quick-fixes\`): \`fixes-bug\` (wrong behaviour or data), \`fixes-perf\` (speed and load), \`fixes-ui\` (look, layout, wording, flow), \`fixes-tooling\` (scripts, checks, tests, flakes) or \`fixes-nit\` (a small tidy users won't notice); one that fits two takes the first that applies in that order, a tie-break for triage only (plans/fixes-rules.md).
-- Hand bulk reading (the full backlog, long plans and PRDs) and backlog chores to a haiku helper that returns a short summary (docs/agents/orchestrator.md, _Models_); keep the proposals and the talk with the user yourself.
-- The next question follows only from what they picked. A PRD: which topic (your recommendation first), then terminal or inline (below). What to run: $run_what. A new issue: ask them to describe it, then file and triage it. Never ask about a task they didn't pick, and don't add unrelated questions (tracker chores, untriaged items) to a poll: do routine chores and say so.
+- **First, and nothing else:** run \`pnpm prd asks --short\` and print its one line on what waits on the user. Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
+- **Then collect for the picks only:** run \`pnpm prd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on "hand off" or a request for another backlog session.
 - Ask with AskUserQuestion, never numbered question lists.
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
-$plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
-$run_line
-- **When the user says "hand off"** (from the phone too), ask once with AskUserQuestion which mode: **A short brief** (recommended: what's in hand, what was decided and what's next, at most about 40 lines) or **Nothing** (the new session starts blank). For a brief, run \`pnpm prd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`pnpm prd rotate --self --brief <that file>\`; for nothing, \`pnpm prd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
-- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines), run \`pnpm prd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`pnpm prd notices\` or \`pnpm prd session requests\`, then message the session by that name.
 EOF
   exit 0
 fi

@@ -423,6 +423,21 @@ export function countdown(ask, now = Date.now()) {
     : `takes "${ask.recommended}": due (still answerable)`;
 }
 
+/** One line on what waits on the user (`pnpm prd asks --short`): open questions oldest first, then counts. */
+export function formatAsksShort(asks, now = Date.now()) {
+  if (!asks.length) return "No open asks.";
+  const decided = asks.filter((a) => a.defaulted).length;
+  const reports = asks.filter((a) => !a.defaulted && a.kind === "report").length;
+  const questions = asks
+    .filter((a) => !a.defaulted && a.kind !== "report")
+    .sort((x, y) => Date.parse(x.askedAt) - Date.parse(y.askedAt))
+    .map((a) => `${a.id} ${a.topic} ${age(a.askedAt, now)}`);
+  const open = questions.length
+    ? `${questions.length} open question${questions.length === 1 ? "" : "s"} (${questions.join(", ")})`
+    : "No open questions";
+  return `${open}, ${reports} report${reports === 1 ? "" : "s"}, ${decided} decided for you.`;
+}
+
 /** The `pnpm prd asks` listing of asks (as listAsks returns them): open ones, then the defaulted. */
 export function formatAsks(asks, now = Date.now()) {
   if (!asks.length) return "No open asks.";
