@@ -461,7 +461,11 @@ export function clock(iso) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-/** When an awaiting, defaulting question takes its recommendation: `takes "<a>" in 18m`, or due. */
+/**
+ * When an awaiting, defaulting question takes its recommendation: `takes "<a>" in 18m`, or due.
+ * The time left is span's: to the nearest second, then whole minutes rounded down (29m59s
+ * left reads "29m"); the clock time beside it is exact.
+ */
 export function countdown(ask, now = Date.now()) {
   const left = Date.parse(ask.defaultAt ?? "") - now;
   return left > 0

@@ -32,8 +32,12 @@
 // <topic> <text>` when that is set (a command line, run by sh), bounded by
 // CARETOOK_ASK_NOTIFY_TIMEOUT seconds (default 10); either one failing is only
 // a warning. `--wait` polls every CARETOOK_ASK_POLL seconds (default 2).
+//
+// CARETOOK_CLOCK_FILE (tests, and the dispatcher's own under test): a file
+// holding epoch seconds that `ask` files at and `asks` lists from, so a
+// countdown or an age reads from a fixed now; `--wait` keeps the real clock.
 import { spawn } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import {
   AskError,
@@ -61,6 +65,16 @@ const TIMED_OUT = 75;
 const fail = (msg, code = 1) => {
   console.error(`pnpm prd: ${msg}`);
   process.exit(code);
+};
+
+/** Now, ms: CARETOOK_CLOCK_FILE's epoch seconds when set (as dispatch.mjs reads it), else the real clock. */
+const nowOf = () => {
+  const file = process.env.CARETOOK_CLOCK_FILE;
+  if (file) {
+    const s = Number(readFileSync(file, "utf8").trim());
+    if (Number.isFinite(s)) return s * 1000;
+  }
+  return Date.now();
 };
 
 const dirOf = () =>
@@ -217,6 +231,7 @@ async function ask(argv) {
     ...input,
     session: opts.session || process.env.CARETOOK_SESSION || opts["here-session"] || null,
     skeptic,
+    now: nowOf(),
   });
   console.log(record.id);
   if (opts.decided) {
@@ -311,8 +326,9 @@ function asks(argv) {
     return;
   }
   const open = listAsks(dir);
-  if (opts.short) console.log(formatAsksShort(open));
-  else console.log(opts.json ? JSON.stringify(open, null, 2) : formatAsks(open));
+  const now = nowOf();
+  if (opts.short) console.log(formatAsksShort(open, now));
+  else console.log(opts.json ? JSON.stringify(open, null, 2) : formatAsks(open, now));
 }
 
 function answer(argv) {
