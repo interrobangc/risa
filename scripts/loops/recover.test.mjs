@@ -2,9 +2,9 @@
 // inventory-facts.mjs, inventory.mjs) against a throwaway repo with these
 // scripts copied in, real git worktrees, and fake docker, lsof, open, sleep,
 // claude, pnpm, nvm, osascript (with CARETOOK_ITERM_APP a folder here) and serve.sh:
-// nothing here touches real containers, servers, slots, sessions, tabs or worktrees,
+// nothing here touches real containers, servers, slots, sessions, tabs, asks or worktrees,
 // and the dry run must change nothing on disk. The dispatcher is a node process that
-// only sleeps, its pid in the lock.
+// only sleeps, its pid in the lock; the fake tab for it starts one (a minute at most).
 // The fakes keep their state (running projects, listening ports) in FAKE_STATE.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -57,6 +57,8 @@ case $1 in
     [[ -z $proj && $file == 1 ]] && proj=\${CARETOOK_SHARED_TEST_PROJECT:-}
     [[ -n $proj ]] || proj=$(sed -n 's/^CARETOOK_STACK=//p' .env 2>/dev/null)
     echo "compose $1 $proj$rec" >> "$FAKE_LOG"
+    # FAKE_COMPOSE_FAIL: projects whose compose up fails.
+    [[ $1 == up && " \${FAKE_COMPOSE_FAIL:-} " == *" $proj "* ]] && exit 1
     case $1 in
       up | start) is_running "$proj" || echo "$proj" >> "$st/running" ;;
       stop | down) grep -vx "$proj" "$st/running" > "$st/r" || true; mv "$st/r" "$st/running" ;;
@@ -75,16 +77,26 @@ exit 1
 const FAKE_SERVE = `#!/usr/bin/env bash
 ${MARK}
 echo "serve $*$rec" >> "$FAKE_LOG"
+[[ " \${FAKE_SERVE_FAIL:-} " == *" $1 "* ]] && exit 1
 port=$(sed -n 's/^WEB_PORT=//p' "$(dirname "$0")/../../.loops/$1/apps/web/.env")
 touch "$FAKE_STATE/listen"
 if [[ \${2:-} == --stop ]]; then grep -vx "$port" "$FAKE_STATE/listen" > "$FAKE_STATE/l" || true; mv "$FAKE_STATE/l" "$FAKE_STATE/listen"
 else echo "$port" >> "$FAKE_STATE/listen"; echo "$1 is running at http://localhost:$port"; fi
 `;
 const FAKES = {
-  // The opener's tab: logs its title, and keeps the line the tab would run.
+  // The opener's tab: logs its title (and " [dispatcher locked]" when a live
+  // dispatcher holds its lock then), and keeps the line the tab would run, per
+  // title. The dispatcher's tab starts a stand-in dispatcher that takes the lock,
+  // unless $FAKE_STATE/dispatch-fails exists. A notification (-e) logs only that.
   osascript: `#!/usr/bin/env bash
 cat >/dev/null
-echo "osascript $3" >> "$FAKE_LOG"; printf '%s\\n' "$2" > "$FAKE_STATE/tab-line"
+[[ $1 == - ]] || { echo "osascript notify" >> "$FAKE_LOG"; exit 0; }
+lk=""; p=$(cat "$FAKE_DISPATCH_LOCK" 2>/dev/null) && kill -0 "$p" 2>/dev/null && lk=" [dispatcher locked]"
+echo "osascript $3$lk" >> "$FAKE_LOG"; printf '%s\\n' "$2" > "$FAKE_STATE/tab-line"; printf '%s\\n' "$2" > "$FAKE_STATE/tab-$3"
+if [[ $3 == dispatch && ! -f $FAKE_STATE/dispatch-fails ]]; then
+  node -e "setTimeout(() => {}, 60000)" </dev/null >/dev/null 2>&1 &
+  echo $! >> "$FAKE_STATE/dispatchers"; echo $! > "$FAKE_DISPATCH_LOCK"
+fi
 `,
   open: `#!/usr/bin/env bash
 echo "open $*" >> "$FAKE_LOG"; touch "$FAKE_STATE/docker-started"
@@ -99,7 +111,8 @@ echo "sleep $*" >> "$FAKE_LOG"
   // $FAKE_STATE/claude-fails times, then answers.
   claude: `#!/usr/bin/env bash
 if [[ $1 == --remote-control ]]; then
-  echo "claude --remote-control $2 (agent)" >> "$FAKE_LOG"
+  lk=""; p=$(cat "$FAKE_DISPATCH_LOCK" 2>/dev/null) && kill -0 "$p" 2>/dev/null && lk=" [dispatcher locked]"
+  echo "claude --remote-control $2 (agent)$lk" >> "$FAKE_LOG"
   printf '%s\\n' "$PWD" "$@" > "$FAKE_STATE/agent-args"
   exit 0
 fi
@@ -108,12 +121,14 @@ n=$(cat "$FAKE_STATE/claude-fails" 2>/dev/null || echo 0)
 ((n > 0)) && { echo $((n - 1)) > "$FAKE_STATE/claude-fails"; exit 1; }
 exit 0
 `,
-  // Fails once for each worktree named in $FAKE_STATE/migrate-fail.
+  // Fails once for each line naming the worktree in $FAKE_STATE/migrate-fail.
+  // Notes in $FAKE_STATE/marked each worktree whose migrate marker stood then.
   pnpm: `#!/usr/bin/env bash
 w=$(basename "$PWD")
 echo "pnpm $* [$w]" >> "$FAKE_LOG"
+[[ -f ../.migrate/$w ]] && echo "$w" >> "$FAKE_STATE/marked"
 if grep -qx "$w" "$FAKE_STATE/migrate-fail" 2>/dev/null; then
-  grep -vx "$w" "$FAKE_STATE/migrate-fail" > "$FAKE_STATE/m" || true; mv "$FAKE_STATE/m" "$FAKE_STATE/migrate-fail"; exit 1
+  awk -v w="$w" '!done && $0 == w { done = 1; next } 1' "$FAKE_STATE/migrate-fail" > "$FAKE_STATE/m"; mv "$FAKE_STATE/m" "$FAKE_STATE/migrate-fail"; exit 1
 fi
 `,
 };
@@ -177,6 +192,7 @@ function build() {
     FAKE_LOG: log,
     FAKE_STATE: state,
     FAKE_RECORD: join(root, "repo/.loops/.down.json"),
+    FAKE_DISPATCH_LOCK: join(root, "repo/.loops/.dispatch.lock"),
     NVM_DIR: join(root, "nvm"),
     TZ: "UTC",
     TRUNK: "dev",
@@ -195,6 +211,9 @@ function build() {
     "CARETOOK_DOCKER_WAIT_SECS",
     "CARETOOK_RECOVER_PG_SECS",
     "CARETOOK_RECOVER_STEP_SECS",
+    "CARETOOK_RECOVER_DISPATCH_SECS",
+    "FAKE_COMPOSE_FAIL",
+    "FAKE_SERVE_FAIL",
   ])
     delete env[k];
 
@@ -243,9 +262,24 @@ function build() {
   writeFileSync(join(loops, ".slots/9/name"), "gone-7\n");
 }
 const BUILD_MS = 60_000; // dozens of git commands, slow when pnpm check runs beside it
+/** End the stand-in dispatchers the fake tab started. */
+const endDispatchers = () => {
+  const f = join(state, "dispatchers");
+  if (!existsSync(f)) return;
+  for (const pid of readFileSync(f, "utf8").split("\n").filter(Boolean))
+    try {
+      process.kill(Number(pid));
+    } catch {
+      /* already gone */
+    }
+  rmSync(f);
+};
 const fresh = () => {
   beforeAll(build, BUILD_MS);
-  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  afterAll(() => {
+    endDispatchers();
+    rmSync(root, { recursive: true, force: true });
+  });
   beforeEach(() => rmSync(log, { force: true }));
 };
 
@@ -314,7 +348,7 @@ describe("recover --dry-run", () => {
       expect(inv.locks.live.map((l) => l.kind)).toEqual(expect.arrayContaining(["dispatch", "backlog"]));
       expect(steps(inv)).not.toContain(`clear-lock ${lock}`);
       expect(steps(inv)).not.toContain("dispatch");
-      expect(inv.dispatcher).toEqual({ running: true, pid: process.pid, reopen: false });
+      expect(inv.dispatcher).toEqual({ running: true, pid: process.pid, reopen: false, intent: null });
       const old = (Date.now() - 120_000) / 1000;
       utimesSync(backlogLock, old, old);
       inv = json();
@@ -332,7 +366,7 @@ describe("recover --dry-run", () => {
       const inv = json();
       expect(steps(inv)).toEqual(expect.arrayContaining([`clear-lock ${lock}`, "dispatch"]));
       expect(steps(inv).indexOf("dispatch")).toBe(steps(inv).indexOf("serve t") + 1);
-      expect(inv.dispatcher).toEqual({ running: false, pid: null, reopen: true });
+      expect(inv.dispatcher).toEqual({ running: false, pid: null, reopen: true, intent: null });
       expect(okRecover(["--dry-run"])).toMatch(/^dispatcher: not running \(recover reopens it\)$/m);
     } finally {
       rmSync(lock);
@@ -714,26 +748,32 @@ describe("down and recover with the dispatcher", () => {
     expect(gone(pid)).toBe(true);
   });
 
-  it("recover clears the stale lock, reopens it in a background tab, then opens the agent", () => {
+  it("recover clears the stale lock, reopens it in a background tab, waits for its lock, then opens the agent", () => {
     const out = okRecover([]);
     expect(out).toMatch(/• cleared stale lock \.loops\/\.dispatch\.lock/);
     expect(out).toMatch(
-      /• the dispatcher \(it was running\)\n {2}Opened dispatch in a new background iTerm2 tab/,
+      /• the dispatcher \(it was running\)\n {2}Opened dispatch in a new background iTerm2 tab[^\n]*\n {2}running \(pid \d+\)/,
     );
     expect(tabs()).toEqual(["osascript dispatch"]);
     const e = effects();
     expect(e.indexOf("osascript dispatch")).toBeGreaterThan(e.indexOf("compose up caretook-shared-test"));
-    expect(e.at(-1)).toBe("claude --remote-control recover (agent)");
+    // The agent opened only once the new dispatcher held its lock.
+    expect(e.at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
     expect(readFileSync(join(state, "tab-line"), "utf8").trim()).toBe(
       `cd ${main} && exec scripts/loops/prd.sh dispatch`,
     );
-    expect(existsSync(lock())).toBe(false);
+    const started = readFileSync(join(state, "dispatchers"), "utf8").trim().split("\n").at(-1);
+    expect(readFileSync(lock(), "utf8").trim()).toBe(started);
     expect(existsSync(record())).toBe(false);
+    expect(existsSync(join(loops, ".dispatch-intent.json"))).toBe(false);
+    expect(existsSync(join(loops, ".recover.lock"))).toBe(false);
   });
 
-  it("a second recover doesn't reopen it (it wasn't running)", () => {
+  it("a second recover doesn't reopen it (it runs now)", () => {
     okRecover(["--no-agent"]);
     expect(tabs()).toEqual([]);
+    endDispatchers();
+    rmSync(lock(), { force: true });
   });
 
   it("recover leaves a running dispatcher alone", () => {
@@ -746,5 +786,202 @@ describe("down and recover with the dispatcher", () => {
       process.kill(pid);
       rmSync(lock(), { force: true });
     }
+  });
+});
+
+describe("recover unattended: the lock, the gated dispatcher, its intent, the migrate marker", () => {
+  fresh();
+  const lock = () => join(loops, ".dispatch.lock");
+  const intent = () => join(loops, ".dispatch-intent.json");
+  const recoverLock = () => join(loops, ".recover.lock");
+  const asks = () => join(loops, ".asks");
+  const put = (file, text) => writeFileSync(join(state, file), text);
+  const effects = () =>
+    calls()
+      .split("\n")
+      .filter((l) => /^(compose|serve|pnpm|open|osascript|claude) /.test(l));
+  const tabs = () => effects().filter((l) => l.startsWith("osascript") && l !== "osascript notify");
+  const reports = () =>
+    existsSync(asks())
+      ? readdirSync(asks())
+          .filter((f) => f.endsWith(".json"))
+          .map((f) => JSON.parse(readFileSync(join(asks(), f), "utf8")))
+      : [];
+  /** A cold boot after a crash: nothing up, the dispatcher's lock left by a dead pid. */
+  const crashed = () => {
+    put("running", "");
+    put("listen", "");
+    endDispatchers();
+    writeFileSync(lock(), `${DEAD_PID}\n`);
+    for (const f of [intent(), join(state, "dispatch-fails"), join(state, "agent-args")])
+      rmSync(f, { force: true });
+    rmSync(asks(), { recursive: true, force: true });
+  };
+
+  it.each([
+    ["test-Postgres", { FAKE_COMPOSE_FAIL: "caretook-shared-test" }, /test Postgres/],
+    ["stack", { FAKE_COMPOSE_FAIL: "caretook-loop2" }, /stack t-2/],
+    ["server", { FAKE_SERVE_FAIL: "t" }, /server t/],
+  ])("a failed %s step leaves the dispatcher closed with its intent kept", (_, extra, failure) => {
+    crashed();
+    const r = recover(["--no-agent"], extra);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/Didn't recover:/);
+    expect(r.stderr).toMatch(failure);
+    expect(r.stdout).toMatch(
+      /the dispatcher: not reopened while something above didn't recover \(its intent is kept\)/,
+    );
+    expect(tabs()).toEqual([]);
+    expect(existsSync(lock())).toBe(false); // the stale lock went, but only after the intent was kept
+    expect(JSON.parse(readFileSync(intent(), "utf8"))).toMatchObject({ at: expect.any(String) });
+    expect(json().dispatcher).toMatchObject({ running: false, reopen: true });
+  });
+
+  it("a failed reopen keeps the intent and opens no agent; the next run retries it", () => {
+    crashed();
+    put("dispatch-fails", "");
+    let r = recover([], { CARETOOK_RECOVER_DISPATCH_SECS: "0" });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/didn't take its lock within 0s; its intent is kept/);
+    expect(r.stderr).toMatch(/Didn't recover:\n {2}dispatcher/);
+    expect(tabs()).toEqual(["osascript dispatch"]);
+    expect(effects().some((l) => l.startsWith("claude"))).toBe(false);
+    expect(existsSync(intent())).toBe(true);
+    expect(existsSync(lock())).toBe(false);
+
+    // The lock is gone and there's no down record: the intent alone brings it back.
+    rmSync(join(state, "dispatch-fails"));
+    rmSync(log);
+    r = recover([]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/• the dispatcher \(it was running\)/);
+    expect(tabs()).toEqual(["osascript dispatch"]);
+    expect(effects().at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
+    expect(existsSync(intent())).toBe(false);
+  });
+
+  it("drops a kept intent when the dispatcher already runs", () => {
+    writeFileSync(intent(), '{ "at": "2026-11-20T08:00:00Z" }\n');
+    const out = okRecover(["--no-agent"]);
+    expect(out).toMatch(/• the dispatcher runs: dropped its kept intent/);
+    expect(tabs()).toEqual([]);
+    expect(existsSync(intent())).toBe(false);
+  });
+
+  it("a second recover exits without acting; a dead holder's lock is taken over and released", () => {
+    writeFileSync(recoverLock(), `${process.pid}\n`);
+    try {
+      const r = recover(["--unattended"]);
+      expect(r.status).toBe(75);
+      expect(r.stderr).toMatch(
+        new RegExp(`another recover is running \\(pid ${process.pid}\\): nothing done`),
+      );
+      expect(calls()).toBe(""); // not even the inventory's docker info, nor a report
+      expect(reports()).toEqual([]);
+      expect(readFileSync(recoverLock(), "utf8").trim()).toBe(String(process.pid));
+      expect(okRecover(["--dry-run"])).toMatch(
+        new RegExp(`^recover: running \\(pid ${process.pid}\\)$`, "m"),
+      );
+    } finally {
+      rmSync(recoverLock(), { force: true });
+    }
+
+    writeFileSync(recoverLock(), `${DEAD_PID}\n`);
+    okRecover(["--no-agent"]);
+    expect(existsSync(recoverLock())).toBe(false);
+  });
+
+  it("--unattended needs no terminal: the agent opens in a background tab after the dispatcher holds its lock", () => {
+    crashed();
+    const r = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "recover", "--unattended"], {
+      cwd: main,
+      encoding: "utf8",
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(
+      /Opening the recovery agent \(claude --remote-control recover\) in a background tab/,
+    );
+    expect(tabs()).toEqual(["osascript dispatch", "osascript recover [dispatcher locked]"]);
+    expect(effects().some((l) => l.startsWith("claude"))).toBe(false); // not in this process
+    const line = readFileSync(join(state, "tab-recover"), "utf8");
+    expect(line).toMatch(
+      new RegExp(
+        `^cd ${main} && exec \\S+/session\\.sh recover --kind recovery -- --remote-control recover `,
+      ),
+    );
+    expect(line).toMatch(/You\\ are\\ the\\ recovery\\ agent|You are the recovery agent/);
+    expect(reports()).toEqual([]);
+    expect(existsSync(recoverLock())).toBe(false);
+  });
+
+  it("--unattended files one report on failure", () => {
+    crashed();
+    put("pg-slow", "1"); // t's Postgres refuses once, with no time left to wait
+    const failed = recover(["--unattended"], { CARETOOK_RECOVER_PG_SECS: "0" });
+    expect(failed.status).toBe(1);
+    expect(tabs()).not.toContain("osascript recover");
+    const got = reports();
+    expect(got).toHaveLength(1);
+    expect(got[0]).toMatchObject({ kind: "report", topic: "recover" });
+    expect(got[0].text).toMatch(/recover --unattended stopped: didn't recover: stack t/);
+    expect(existsSync(recoverLock())).toBe(false);
+  });
+
+  it("--unattended reports a step that gives up, like Docker never answering", () => {
+    crashed();
+    rmSync(join(state, "docker-started"), { force: true });
+    put("boot", "1000");
+    put("clock", "1000000");
+    const r = recover(["--unattended"], {
+      FAKE_DOCKER_DOWN: "1",
+      CARETOOK_CLOCK_FILE: join(state, "clock"),
+      CARETOOK_DOCKER_WAIT_SECS: "10",
+    });
+    expect(r.status).toBe(1);
+    const got = reports();
+    expect(got).toHaveLength(1);
+    expect(got[0].text).toMatch(/stopped: recover: Docker didn't answer within 10s/);
+    rmSync(join(state, "boot"));
+  });
+
+  it("a migrate marker left behind is reported and rerun, and cleared once it passes", () => {
+    endDispatchers();
+    rmSync(lock(), { force: true });
+    rmSync(intent(), { force: true });
+    put("running", "caretook-loop1\ncaretook-loop2\ncaretook-shared-test\n");
+    put("listen", "6173\n");
+    rmSync(join(state, "marked"), { force: true });
+    mkdirSync(join(loops, ".migrate"), { recursive: true });
+    writeFileSync(join(loops, ".migrate/t"), "2026-11-20T08:00:00Z\n");
+    writeFileSync(join(loops, ".migrate/gone-5"), "2026-11-20T08:00:00Z\n");
+    const extra = {};
+    const inv = json(extra);
+    expect(inv.warnings.join("\n")).toMatch(
+      /t: a migrate was cut off \(started 2026-11-20T08:00:00Z\); the stack step reruns it/,
+    );
+    expect(steps(inv)).toEqual(
+      expect.arrayContaining(["stack up t", `clear-lock ${join(loops, ".migrate/gone-5")}`]),
+    );
+    expect(steps(inv)).not.toContain("stack up t-2");
+
+    // A migrate that fails twice leaves its marker for the next run.
+    put("migrate-fail", "t\nt\n");
+    const r = recover(["--no-agent"], extra);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toMatch(/a migrate here was cut off \(started 2026-11-20T08:00:00Z\): rerunning it/);
+    expect(existsSync(join(loops, ".migrate/t"))).toBe(true);
+    expect(existsSync(join(loops, ".migrate/gone-5"))).toBe(false);
+
+    rmSync(log);
+    okRecover(["--no-agent"], extra);
+    expect(effects().filter((l) => /^(compose up|pnpm)/.test(l))).toEqual([
+      "compose up caretook-loop1",
+      "pnpm -s datastore:migrate [t]",
+    ]);
+    expect(readFileSync(join(state, "marked"), "utf8").split("\n").filter(Boolean)).toEqual(["t", "t", "t"]);
+    expect(existsSync(join(loops, ".migrate/t"))).toBe(false);
+    expect(json(extra).warnings.join("\n")).not.toMatch(/migrate was cut off/);
   });
 });

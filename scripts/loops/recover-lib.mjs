@@ -12,6 +12,10 @@
 //   node recover-lib.mjs until HH:MM <now-epoch-secs>
 //       Prints the epoch second of the next HH:MM local time after now (today's,
 //       or tomorrow's when it has passed).
+//   node recover-lib.mjs lock <path> <pid>
+//       Takes recover's single-instance lock for <pid> (the dispatcher's
+//       takeLock: atomic, a dead holder's taken over). Exit 0 when <pid> holds
+//       it; else prints the live holder's pid and exits 75.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -73,10 +77,21 @@ const readJson = (/** @type {string} */ p) => {
   }
 };
 
-function main() {
+async function main() {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === "until") {
     console.log(nextTime(args[0] ?? "", Number(args[1])));
+    return;
+  }
+  if (cmd === "lock") {
+    const [path, pid] = args;
+    if (!path || !(Number(pid) > 0)) throw new Error("lock: give the lock's path and the holder's pid");
+    const { takeLock } = await import("./dispatch.mjs");
+    const r = takeLock(path, { pid: Number(pid) });
+    if (!r.ok) {
+      console.log(r.pid ?? 0);
+      process.exit(75);
+    }
     return;
   }
   const inv = JSON.parse(readFileSync(0, "utf8"));
@@ -96,9 +111,9 @@ function main() {
     if (now.testDb) console.log("test-db\t");
     if (now.dispatcher) console.log(`dispatcher\t${inv.dispatcher.pid ?? ""}`);
   } else {
-    console.error(`recover-lib: unknown command ${cmd} (record, actions, until)`);
+    console.error(`recover-lib: unknown command ${cmd} (record, actions, until, lock)`);
     process.exit(2);
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();

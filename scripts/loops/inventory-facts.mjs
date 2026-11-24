@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Collects the facts inventory.mjs classifies: every .loops worktree (git), its
 // stack and containers (docker), its dev server (lsof), the locks and their
-// holders, the dispatcher, which sessions it manages, the down record and
-// free disk. Read-only: it runs only git, `docker info|ps|inspect`, `lsof` and
+// holders, the dispatcher and its restart intent, which sessions it manages,
+// a running recover, migrates cut off, the down record and free disk. Read-only: it runs only git, `docker info|ps|inspect`, `lsof` and
 // `df`, and writes nothing (git runs with --no-optional-locks, so not even the
 // index is refreshed).
 //
@@ -35,11 +35,30 @@ const run = (
 const git = (/** @type {string} */ cwd, /** @type {string[]} */ args, /** @type {NodeJS.ProcessEnv} */ env) =>
   run("git", ["--no-optional-locks", "-C", cwd, ...args], env);
 const lines = (/** @type {string} */ s) => s.split("\n").filter(Boolean);
+/** A JSON object file's contents, or null (missing, unreadable, not an object). */
+const readObject = (/** @type {string} */ p) => {
+  try {
+    const v = JSON.parse(readFileSync(p, "utf8"));
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+};
 const readOr = (/** @type {string} */ p, fallback = "") => {
   try {
     return readFileSync(p, "utf8");
   } catch {
     return fallback;
+  }
+};
+const files = (/** @type {string} */ p) => {
+  try {
+    return readdirSync(p, { withFileTypes: true })
+      .filter((d) => d.isFile())
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
   }
 };
 const dirs = (/** @type {string} */ p) => {
@@ -157,6 +176,11 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
   const loops = join(main, ".loops");
   const dockerUp = run("docker", ["info"], env).ok;
 
+  // Migrates recover's stack step started and never finished (.loops/.migrate/<name>,
+  // holding when it started): a crash cut them off.
+  const migrateDir = join(loops, ".migrate");
+  const migrating = new Map(files(migrateDir).map((n) => [n, readOr(join(migrateDir, n)).trim() || "?"]));
+
   const worktrees = [];
   for (const name of dirs(loops)) {
     const dir = join(loops, name);
@@ -178,6 +202,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       stoppedSecs: stack && dockerUp && up.length === 0 ? stoppedSecs(all, env, now) : null,
       webPort: port,
       serverRunning: port ? listening(port, env) : false,
+      ...(migrating.has(name) ? { migrating: migrating.get(name) } : {}),
     });
   }
   const names = new Set(worktrees.map((w) => w.name));
@@ -215,6 +240,23 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       why: alive ? `the dispatcher, pid ${pid}, is running` : `the dispatcher's pid ${pid ?? "?"} is gone`,
     });
   }
+  // Migrate markers whose worktree is gone: nothing to rerun, so the marker is stale.
+  for (const [n, at] of migrating)
+    if (!names.has(n))
+      locks.push({
+        kind: "migrate",
+        path: join(migrateDir, n),
+        holder: n,
+        pid: null,
+        alive: false,
+        why: `a migrate of ${n} cut off at ${at}, and ${n} has no worktree now`,
+      });
+  // The dispatcher's restart intent (.loops/.dispatch-intent.json): recover writes it
+  // before clearing a stale lock and deletes it once the new dispatcher holds its lock.
+  const dispatchIntent = readObject(join(loops, ".dispatch-intent.json"));
+  // A running recover (.loops/.recover.lock, its pid): one at a time.
+  const recoverPid = Number(readOr(join(loops, ".recover.lock")).trim()) || null;
+  const recover = { running: pidAlive(recoverPid), pid: recoverPid };
   // The backlog lock: no pid; backlog.mjs takes over one older than 30 s.
   const common = git(main, ["rev-parse", "--git-common-dir"], env);
   if (common.ok) {
@@ -305,6 +347,8 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     worktrees,
     locks,
     dispatcher,
+    dispatchIntent,
+    recover,
     managed,
     docker: { running: dockerUp },
     testDb: { running: testDbRunning },

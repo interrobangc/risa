@@ -176,7 +176,7 @@ describe("the dispatcher", () => {
 
   it("does nothing about a dispatcher that never ran, or one still running", () => {
     expect(reopen(COLD)).toEqual([]);
-    expect(inventory(COLD).dispatcher).toEqual({ running: false, pid: null, reopen: false });
+    expect(inventory(COLD).dispatcher).toEqual({ running: false, pid: null, reopen: false, intent: null });
     const f = clone(COLD);
     f.dispatcher = { running: true, pid: 42 };
     f.locks = [{ kind: "dispatch", path: "/l/.dispatch.lock", pid: 42, alive: true }];
@@ -185,7 +185,7 @@ describe("the dispatcher", () => {
     expect(reopen(f)).toEqual([]);
     expect(lines(inv)).not.toContain("clear-lock /l/.dispatch.lock");
     expect(inv.locks.live.map((l) => l.path)).toEqual(["/l/.dispatch.lock"]);
-    expect(inv.dispatcher).toEqual({ running: true, pid: 42, reopen: false });
+    expect(inv.dispatcher).toEqual({ running: true, pid: 42, reopen: false, intent: null });
   });
 
   it("clears a stale lock (its pid is gone: a crash) and reopens it, after the servers", () => {
@@ -194,11 +194,40 @@ describe("the dispatcher", () => {
     f.locks = [{ kind: "dispatch", path: "/l/.dispatch.lock", pid: 99, alive: false }];
     const inv = inventory(f);
     const l = lines(inv);
-    expect(l[0]).toBe("clear-lock /l/.dispatch.lock");
+    // Its intent is kept before the lock goes, so a reopen that fails isn't forgotten.
+    expect(l.slice(0, 2)).toEqual(["keep-dispatch-intent", "clear-lock /l/.dispatch.lock"]);
     expect(l.indexOf("dispatch")).toBe(l.indexOf("serve a") + 2);
     expect(l[l.indexOf("dispatch") + 1]).toBe("offer-gc t-1");
     expect(inv.actions.find((a) => a.step === "dispatch")?.why).toMatch(/stale \(pid 99 is gone\)/);
-    expect(inv.dispatcher).toEqual({ running: false, pid: null, reopen: true });
+    expect(inv.dispatcher).toEqual({ running: false, pid: null, reopen: true, intent: null });
+  });
+
+  it("reopens it from a kept intent alone (an earlier reopen failed), without keeping it twice", () => {
+    const f = clone(COLD);
+    f.dispatchIntent = { at: "2026-11-20T08:00:00Z", why: "recover reopens the dispatcher" };
+    const inv = inventory(f);
+    expect(reopen(f)).toEqual(["dispatch"]);
+    expect(lines(inv)).not.toContain("keep-dispatch-intent");
+    expect(inv.actions.find((a) => a.step === "dispatch")?.why).toMatch(
+      /kept its intent.*2026-11-20T08:00:00Z/,
+    );
+    expect(formatInventory(inv)).toMatch(/^dispatcher: not running \(recover reopens it\) · intent kept$/m);
+  });
+
+  it("drops a kept intent once the dispatcher runs", () => {
+    const f = clone(COLD);
+    f.dispatchIntent = { at: "2026-11-20T08:00:00Z" };
+    f.dispatcher = { running: true, pid: 42 };
+    const l = lines(inventory(f));
+    expect(l).not.toContain("dispatch");
+    expect(l).toContain("drop-dispatch-intent");
+    expect(l.indexOf("drop-dispatch-intent")).toBe(l.indexOf("serve t") + 1);
+  });
+
+  it("keeps the intent first even with a down record that keeps it too", () => {
+    const f = clone(COLD);
+    f.downRecord = { stacks: [], servers: [], testDb: false, dispatcher: true };
+    expect(lines(inventory(f))[0]).toBe("keep-dispatch-intent");
   });
 
   it("reopens it when the down record had it running, and not when it hadn't", () => {
@@ -266,6 +295,60 @@ describe("with a down record", () => {
   });
 });
 
+describe("the migrate marker", () => {
+  it("reruns a cut-off migrate even when its stack is up, and warns", () => {
+    const f = clone(COLD);
+    f.testDb.running = true;
+    for (const w of f.worktrees) w.containersUp = w.containersAll;
+    f.worktrees.find((w) => w.name === "t").migrating = "2026-11-20T08:00:00Z";
+    f.worktrees.find((w) => w.name === "t").serverRunning = true;
+    f.worktrees.find((w) => w.name === "a").serverRunning = true;
+    const inv = inventory(f);
+    expect(lines(inv).filter((l) => l.startsWith("stack up"))).toEqual(["stack up t"]);
+    expect(inv.actions.find((a) => a.step === "stack up")?.why).toMatch(
+      /cut off \(started 2026-11-20T08:00:00Z\)/,
+    );
+    expect(inv.warnings.join("\n")).toMatch(/t: a migrate was cut off.*reruns it/);
+    expect(inv.worktrees.find((w) => w.name === "t")?.migrating).toBe("2026-11-20T08:00:00Z");
+    expect(inv.worktrees.find((w) => w.name === "a")?.migrating).toBeNull();
+  });
+
+  it("reruns one a down record doesn't list, once, and one it does, in its place", () => {
+    const f = clone(COLD);
+    f.downRecord = { stacks: ["t"], servers: [], testDb: false };
+    f.worktrees.find((w) => w.name === "t-2").migrating = "x";
+    f.worktrees.find((w) => w.name === "t").migrating = "y";
+    expect(lines(inventory(f)).filter((l) => l.startsWith("stack up"))).toEqual([
+      "stack up t",
+      "stack up t-2",
+    ]);
+  });
+
+  it("clears a marker whose worktree is gone, and only warns for one with no stack", () => {
+    const f = clone(COLD);
+    f.locks = [{ kind: "migrate", path: "/l/.migrate/gone-3", alive: false }];
+    f.worktrees.find((w) => w.name === "t-3").migrating = "z";
+    const inv = inventory(f);
+    expect(lines(inv)).toContain("clear-lock /l/.migrate/gone-3");
+    expect(lines(inv)).not.toContain("stack up t-3");
+    expect(inv.warnings.join("\n")).toMatch(
+      /t-3: a migrate was cut off \(started z\), and it has no stack now/,
+    );
+  });
+});
+
+describe("a running recover", () => {
+  it("is reported, and nothing else changes", () => {
+    const f = clone(COLD);
+    f.recover = { running: true, pid: 77 };
+    const inv = inventory(f);
+    expect(inv.recover).toEqual({ running: true, pid: 77 });
+    expect(lines(inv)).toEqual(lines(inventory(COLD)));
+    expect(formatInventory(inv)).toMatch(/^recover: running \(pid 77\)$/m);
+    expect(inventory(COLD).recover).toEqual({ running: false, pid: null });
+  });
+});
+
 describe("order and disk", () => {
   it("keeps the fixed order: Docker, locks, test Postgres, stacks, servers, gc, sessions, record", () => {
     const f = clone(COLD);
@@ -273,10 +356,13 @@ describe("order and disk", () => {
     f.locks = [{ kind: "slot", path: "/l/.slots/7", alive: false }];
     f.downRecord = { stacks: ["t"], servers: ["t"], dispatcher: true };
     f.downRecordPath = "/l/.down.json";
+    f.worktrees[0].migrating = "2026-11-20T08:00:00Z";
+    f.locks.push({ kind: "migrate", path: "/l/.migrate/gone", alive: false });
     const steps = inventory(f).actions.map((a) => a.step);
     const ranks = steps.map((s) => STEPS.indexOf(s));
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
-    expect([...new Set(steps)]).toEqual(STEPS);
+    // All but dropping the intent, which needs the dispatcher running (and so no dispatch).
+    expect([...new Set(steps)]).toEqual(STEPS.filter((s) => s !== "drop-dispatch-intent"));
   });
 
   it("flags low disk with a warning and keeps the actions", () => {

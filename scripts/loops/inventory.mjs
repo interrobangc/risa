@@ -13,15 +13,24 @@
 //
 // Actions, in this fixed order (`recover` runs them top to bottom):
 //   docker start          Docker doesn't answer
-//   clear-lock <path>     a lock whose holder is gone (never a live one)
+//   keep-dispatch-intent  the dispatch action is planned and its intent isn't
+//                         kept yet: written before the stale lock is cleared, so
+//                         a reopen that fails is retried by the next recover
+//   clear-lock <path>     a lock whose holder is gone (never a live one), or a
+//                         migrate marker whose worktree is gone
 //   test-db up            the shared test Postgres isn't running
 //   stack up <name>       one at a time: without a down record, prd and active
-//                         worktrees whose stack isn't up; with one, its stacks
+//                         worktrees whose stack isn't up; with one, its stacks;
+//                         and any stack whose migrate was cut off (its marker in
+//                         .loops/.migrate/), up or not: the migrate reruns
 //   serve <name>          without a record, prd worktrees whose server is down;
 //                         with one, its servers
 //   dispatch              the dispatcher isn't running but was: the down record
-//                         says so, or its lock's pid is gone (a crash); recover
-//                         reopens it in a background tab
+//                         says so, its lock's pid is gone (a crash), or a kept
+//                         intent says so (an earlier reopen failed); recover
+//                         reopens it in a background tab only when every step
+//                         above succeeded, and waits for it to hold its lock
+//   drop-dispatch-intent  a kept intent while the dispatcher runs: done with
 //   offer-gc <name>       merged slices (a dirty one is offered, and gc keeps it)
 //   open-session <name>   every prd and plan worktree (the recovery agent skips
 //                         the ones with a live session, and managed ones while
@@ -39,11 +48,13 @@
 export const CLASSES = ["prd", "plan", "active", "merged", "stackless"];
 export const STEPS = [
   "docker start",
+  "keep-dispatch-intent",
   "clear-lock",
   "test-db up",
   "stack up",
   "serve",
   "dispatch",
+  "drop-dispatch-intent",
   "offer-gc",
   "open-session",
   "delete-down-record",
@@ -63,12 +74,14 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @property {number|null} [stoppedSecs]  how long ago the stack stopped
  * @property {number|null} [webPort]
  * @property {boolean} [serverRunning]
+ * @property {string} [migrating]  a migrate recover started there never finished: since when
  *
  * @typedef {object} LockFacts
- * @property {"slot"|"dispatch"|"backlog"|"lease"} kind
+ * @property {"slot"|"dispatch"|"backlog"|"lease"|"migrate"} kind
  *   slot: .loops/.slots/<N>; dispatch: .loops/.dispatch.lock (the dispatcher's pid);
  *   backlog: the backlog lock; lease: a machine-wide lease (reported, never cleared:
- *   lease.sh takes over a dead holder by itself)
+ *   lease.sh takes over a dead holder by itself); migrate: a migrate marker whose
+ *   worktree is gone (always stale)
  * @property {string} path
  * @property {boolean} alive        its holder is still there
  * @property {number|null} [pid]
@@ -79,6 +92,8 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @property {WorktreeFacts[]} worktrees
  * @property {LockFacts[]} [locks]
  * @property {{ running: boolean, pid?: number|null }} [dispatcher]
+ * @property {{ at?: string, why?: string } | null} [dispatchIntent]  recover's kept intent to reopen it
+ * @property {{ running: boolean, pid?: number|null }} [recover]  a recover holding its lock
  * @property {string[]} [managed]   session names whose record the dispatcher manages
  * @property {{ running: boolean }} [docker]
  * @property {{ running: boolean }} [testDb]
@@ -153,6 +168,10 @@ export function inventory(facts) {
   if (facts.downRecordError) warnings.push(`can't read the down record: ${facts.downRecordError} (ignored)`);
   for (const l of takenOver)
     warnings.push(`${l.path}: ${l.holder ?? "its holder"} is gone; lease.sh takes it over by itself`);
+  for (const w of worktrees.filter((w) => w.migrating))
+    warnings.push(
+      `${w.name}: a migrate was cut off (started ${w.migrating})${w.stack ? "; the stack step reruns it" : ", and it has no stack now"}`,
+    );
 
   /** @type {Action[]} */
   const actions = [];
@@ -189,17 +208,25 @@ export function inventory(facts) {
     stacks = recoveryOrder(worktrees.filter((w) => (w.class === "prd" || w.class === "active") && w.stack));
     servers = recoveryOrder(worktrees.filter((w) => w.class === "prd" && w.stack));
   }
-  for (const w of stacks) {
+  // A cut-off migrate reruns whether or not its stack is listed or up.
+  const cutOff = recoveryOrder(worktrees.filter((w) => w.migrating && w.stack && !stacks.includes(w)));
+  for (const w of [...stacks, ...cutOff]) {
     if (!w.stack) {
       warnings.push(`the down record lists stack ${w.name}, which has no stack now: skipped`);
       continue;
     }
-    if (dockerUp && stackIsUp(w)) continue;
-    add({
-      step: "stack up",
-      target: w.name,
-      why: record ? `the down record had ${w.stack} up` : `${w.class}: ${w.stack} is down`,
-    });
+    if (w.migrating)
+      add({
+        step: "stack up",
+        target: w.name,
+        why: `a migrate was cut off (started ${w.migrating}): rerun it`,
+      });
+    else if (!(dockerUp && stackIsUp(w)))
+      add({
+        step: "stack up",
+        target: w.name,
+        why: record ? `the down record had ${w.stack} up` : `${w.class}: ${w.stack} is down`,
+      });
   }
   for (const w of servers) {
     if (!w.webPort) {
@@ -215,14 +242,19 @@ export function inventory(facts) {
   }
   const dispatcherUp = facts.dispatcher?.running === true;
   const lockGone = stale.some((l) => l.kind === "dispatch");
-  if (!dispatcherUp && (record?.dispatcher === true || lockGone))
-    add({
-      step: "dispatch",
-      why:
-        record?.dispatcher === true
-          ? "the down record had the dispatcher running"
-          : `the dispatcher's lock is stale (pid ${facts.dispatcher?.pid ?? "?"} is gone): it was running`,
-    });
+  const intent = facts.dispatchIntent ?? null;
+  if (!dispatcherUp && (record?.dispatcher === true || lockGone || intent)) {
+    const why =
+      record?.dispatcher === true
+        ? "the down record had the dispatcher running"
+        : lockGone
+          ? `the dispatcher's lock is stale (pid ${facts.dispatcher?.pid ?? "?"} is gone): it was running`
+          : `an earlier recover kept its intent to reopen it${intent?.at ? ` (${intent.at})` : ""}`;
+    if (!intent) add({ step: "keep-dispatch-intent", why: `before any lock is cleared: ${why}` });
+    add({ step: "dispatch", why });
+  }
+  if (dispatcherUp && intent)
+    add({ step: "drop-dispatch-intent", why: "the dispatcher runs: the kept intent is done with" });
   const managed = new Set(facts.managed ?? []);
   for (const w of worktrees.filter((w) => w.class === "merged"))
     add({
@@ -256,6 +288,7 @@ export function inventory(facts) {
       containersUp: w.containersUp ?? 0,
       webPort: w.webPort ?? null,
       serverRunning: !!w.serverRunning,
+      migrating: w.migrating ?? null,
     })),
     locks: { stale, live, takenOver },
     docker: { running: dockerUp },
@@ -265,6 +298,11 @@ export function inventory(facts) {
       running: dispatcherUp,
       pid: dispatcherUp ? (facts.dispatcher?.pid ?? null) : null,
       reopen: actions.some((a) => a.step === "dispatch"),
+      intent,
+    },
+    recover: {
+      running: facts.recover?.running === true,
+      pid: facts.recover?.running ? (facts.recover.pid ?? null) : null,
     },
     disk,
     warnings,
@@ -309,8 +347,9 @@ export function formatInventory(inv) {
   );
   out.push(`down record: ${inv.downRecord ? `from ${inv.downRecord.at ?? "an unknown time"}` : "none"}`);
   out.push(
-    `dispatcher: ${inv.dispatcher.running ? `running (pid ${inv.dispatcher.pid})` : inv.dispatcher.reopen ? "not running (recover reopens it)" : "not running"}`,
+    `dispatcher: ${inv.dispatcher.running ? `running (pid ${inv.dispatcher.pid})` : inv.dispatcher.reopen ? "not running (recover reopens it)" : "not running"}${inv.dispatcher.intent ? " · intent kept" : ""}`,
   );
+  out.push(`recover: ${inv.recover?.running ? `running (pid ${inv.recover.pid})` : "not running"}`);
 
   const lockLine = (/** @type {LockFacts} */ l) =>
     `  ${l.kind.padEnd(7)} ${l.path}${l.holder ? ` (${l.holder})` : ""}${l.why ? `: ${l.why}` : ""}`;
