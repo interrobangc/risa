@@ -1,6 +1,8 @@
 // check-run.sh (what prd.sh check runs inside the lease): one log line per run,
 // pass or fail, with a stub command; the load gate's wait before it (a stubbed
-// load: a file the tests write). And the lease's default of two check slots.
+// load: a file the tests write); the budget and the silence limit, and a
+// machine sleep (a fake clock) that counts against neither. And the lease's
+// default of two check slots.
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -40,6 +42,10 @@ const run = (mode, why, cmd, extra = {}) =>
       CARETOOK_LOAD_POLL: "0.2",
       CARETOOK_LOAD_GATE: "",
       CARETOOK_LEASES: "",
+      CARETOOK_CHECK_LIMIT: "",
+      CARETOOK_CHECK_SILENCE: "",
+      CARETOOK_CHECK_BUDGET_LOAD: "1",
+      CARETOOK_CLOCK_FILE: "",
       ...extra,
     },
   });
@@ -106,21 +112,107 @@ describe("check-run.sh failure fields", () => {
   });
 });
 
-describe("check-run.sh time limit", () => {
+describe("check-run.sh budget and silence limit", () => {
   const alive = (pid) => spawnSync("kill", ["-0", pid]).status === 0;
+  // A step, a line of output, then a grandchild that ignores TERM and hangs.
+  const hang = (pidFile) =>
+    `echo unit > "$CARETOOK_CHECK_STATE/step"; echo "last words"; sh -c 'trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 1; done' & wait`;
+  const lastRun = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
 
-  it("stops past its limit, exits non-zero, leaves no child and logs the step", () => {
+  it("stops past its budget, exits non-zero, leaves no child, prints the last lines and logs why", () => {
     const pidFile = join(root, "grandchild");
-    const cmd = `echo unit > "$CARETOOK_CHECK_STATE/step"; sh -c 'trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 1; done' & wait`;
-    const r = run("quick", "hangs", cmd, { CARETOOK_CHECK_LIMIT: "1", CARETOOK_CHECK_KILL_GRACE: "1" });
+    const r = run("quick", "hangs", hang(pidFile), {
+      CARETOOK_CHECK_LIMIT: "1",
+      CARETOOK_CHECK_KILL_GRACE: "1",
+    });
     expect(r.status).toBe(124);
-    expect(r.stderr).toMatch(/limit of 1s in the unit step/);
+    expect(r.stdout).toMatch(/^Check budget 0m01s \(the hard limit/m);
+    expect(r.stderr).toMatch(/passed its budget of 1s in the unit step and was stopped/);
+    expect(r.stderr).toContain("  | last words");
     expect(alive(readFileSync(pidFile, "utf8").trim())).toBe(false);
-    expect(parseLog(readFileSync(logFile, "utf8")).runs.at(-1)).toMatchObject({
+    expect(lastRun()).toMatchObject({
       reason: "hangs",
       exit: 124,
       failedStep: "unit",
+      failedFiles: [],
+      breach: "budget",
     });
+  });
+
+  it("stops at its silence limit well inside its budget", () => {
+    const pidFile = join(root, "grandchild-quiet");
+    const r = run("slice", "goes quiet", hang(pidFile), {
+      CARETOOK_CHECK_SILENCE: "1",
+      CARETOOK_CHECK_KILL_GRACE: "1",
+    });
+    expect(r.status).toBe(124);
+    expect(r.stderr).toMatch(/printed nothing for 1s in the unit step and was stopped/);
+    expect(r.stderr).toContain("  | last words");
+    expect(alive(readFileSync(pidFile, "utf8").trim())).toBe(false);
+    expect(lastRun()).toMatchObject({
+      reason: "goes quiet",
+      exit: 124,
+      failedStep: "unit",
+      breach: "silence",
+    });
+    expect(lastRun().seconds).toBeLessThan(10);
+  });
+
+  it("passes a slow check that keeps printing inside its budget", () => {
+    const r = run(
+      "slice",
+      "slow but talking",
+      "for i in 1 2 3 4 5 6 7 8 9 10; do echo tick $i; sleep 0.3; done",
+      {
+        CARETOOK_CHECK_LIMIT: "20",
+        CARETOOK_CHECK_SILENCE: "1",
+      },
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("tick 10");
+    expect(r.stderr).not.toMatch(/stopped/);
+    expect(lastRun()).toMatchObject({ reason: "slow but talking", exit: 0, breach: "" });
+  });
+
+  it("keeps stdout and stderr apart", () => {
+    const r = run("slice", "two streams", "echo to-out; echo to-err >&2");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("to-out");
+    expect(r.stdout).not.toContain("to-err");
+    expect(r.stderr).toContain("to-err");
+  });
+
+  it("doesn't count a machine sleep against either limit", () => {
+    // The fake clock jumps an hour while the command is quiet: a sleep. Then it
+    // keeps going past a second, quietly, and passes.
+    const clock = join(root, "clock");
+    writeFileSync(clock, "2000000000\n");
+    const cmd = `sleep 0.6; echo 2000003600 > "${clock}.new"; mv "${clock}.new" "${clock}"; sleep 0.6; echo awake`;
+    const r = run("slice", "slept", cmd, {
+      CARETOOK_CLOCK_FILE: clock,
+      CARETOOK_CHECK_LIMIT: "5",
+      CARETOOK_CHECK_SILENCE: "3",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/stopped/);
+    expect(lastRun()).toMatchObject({ reason: "slept", exit: 0, breach: "" });
+    expect(lastRun().seconds).toBeLessThan(5);
+  });
+
+  it("still stops past its budget after a sleep, counting only the time awake", () => {
+    const clock = join(root, "clock-2");
+    writeFileSync(clock, "2000000000\n");
+    // An hour's sleep, then the clock goes on: 3 s awake against a 2 s budget.
+    const tick = (t) => `echo ${t} > "${clock}.new"; mv "${clock}.new" "${clock}"; sleep 0.5`;
+    const cmd = `echo working; sleep 0.5; ${tick(2000003600)}; ${tick(2000003601)}; ${tick(2000003603)}; sleep 30`;
+    const r = run("slice", "slept then hung", cmd, {
+      CARETOOK_CLOCK_FILE: clock,
+      CARETOOK_CHECK_LIMIT: "2",
+      CARETOOK_CHECK_SILENCE: "100",
+      CARETOOK_CHECK_KILL_GRACE: "1",
+    });
+    expect(r.status).toBe(124);
+    expect(lastRun()).toMatchObject({ reason: "slept then hung", breach: "budget" });
   });
 });
 
@@ -140,7 +232,7 @@ describe("check-run.sh load reading", () => {
     const added = readFileSync(logFile, "utf8").split("\n").slice(before, -1);
     expect(added).toHaveLength(1);
     const fields = added[0].split("\t");
-    expect(fields).toHaveLength(15);
+    expect(fields).toHaveLength(16);
     expect(fields[11]).toBe("0");
     expect(fields[6]).toBe("0.58");
     expect(fields[7]).toBe("0.58");

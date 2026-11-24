@@ -2,16 +2,17 @@
 // summary: `pnpm prd check --times [--since <date>]`. Pure functions, plus a
 // small CLI at the bottom.
 //
-// A line has fifteen tab-separated fields: start, worktree, branch, mode,
+// A line has sixteen tab-separated fields: start, worktree, branch, mode,
 // reason, seconds, load at start, load at end, exit code, test files run, test
 // files in all, the seconds the check waited for the load (the load gate), the
-// step that failed, the failed test files and the flaky ones (comma-separated).
-// Older lines have nine to twelve, and none of what they lack.
+// step that failed, the failed test files and the flaky ones (comma-separated),
+// and the limit that stopped it (`budget` or `silence`; empty when none did).
+// Older lines have nine to fifteen, and none of what they lack.
 import { existsSync, readFileSync } from "node:fs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
  *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
- *   loadWaited: number | null, failedStep: string, failedFiles: string[], flakyFiles: string[] }} Run */
+ *   loadWaited: number | null, failedStep: string, failedFiles: string[], flakyFiles: string[], breach: string }} Run */
 
 const names = (s) => (s ? s.split(",").filter(Boolean) : []);
 const num = (s) => (s !== undefined && s !== "" && Number.isFinite(Number(s)) ? Number(s) : null);
@@ -52,6 +53,7 @@ export function parseLog(text) {
       failedStep: f[12] ?? "",
       failedFiles: names(f[13]),
       flakyFiles: names(f[14]),
+      breach: f[15] ?? "",
     });
   }
   return { runs, skipped };

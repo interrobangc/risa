@@ -7,9 +7,18 @@
 # it goes ahead and says so); the seconds leave that out too, and the log
 # records it.
 #
-# The time limit: CARETOOK_CHECK_LIMIT seconds, else 1200 for a slice or quick
-# check and 2400 for a full one. Past it, COMMAND and everything under it get
-# TERM, then KILL after CARETOOK_CHECK_KILL_GRACE (10 s), and the check exits 124.
+# The budget and the silence limit (check-budget.mjs): the budget from the
+# usual time of passing checks like this one, scaled for load, between 10
+# minutes and the hard limit (CARETOOK_CHECK_LIMIT, else 1200 s for a slice or
+# quick check and 2400 for a full one); the silence limit, CARETOOK_CHECK_SILENCE
+# (480 s) scaled the same way, on the command's output. Past either, COMMAND and
+# everything under it get TERM, then KILL after CARETOOK_CHECK_KILL_GRACE (10 s);
+# the check prints the step and its last 30 lines and exits 124. A gap of over
+# CARETOOK_CHECK_SLEEP_GAP (30 s) between two readings of the clock is the
+# machine asleep: it counts against neither limit, nor in the seconds logged.
+# CARETOOK_CLOCK_FILE (tests): epoch seconds to read instead of the clock;
+# CARETOOK_CHECK_BUDGET_LOAD (tests): the load the limits scale for.
+# If check-budget.mjs fails, the hard limit and the default silence apply.
 #
 # Fields: start (UTC), worktree, branch, mode, reason, seconds, 5-minute load
 # at start, load at end, exit code, test files run, test files in all (those
@@ -17,7 +26,8 @@
 # "<run> <all>" to the file named by CARETOOK_CHECK_COUNTS, which check-run.sh
 # sets; CARETOOK_CHECK_FILES_RUN and CARETOOK_CHECK_FILES_ALL override it), the
 # seconds waited for the load, the step that failed (or was running at the
-# limit), the failed test files and the flaky ones (comma-separated). The command
+# limit), the failed test files and the flaky ones (comma-separated), and the
+# limit that stopped it (budget or silence; none for a check that ended). The command
 # reports those three in the directory named by CARETOOK_CHECK_STATE: `step`,
 # `failed`, `flaky`.
 # Env: CARETOOK_CHECK_LOG (default: .loops/.check-times.log in the main checkout).
@@ -29,7 +39,18 @@ source "$here/lib.sh"
 mode=${1:?mode}; why=${2:-}; shift 2
 [[ ${1:-} == -- ]] && shift
 log=${CARETOOK_CHECK_LOG:-$loops/.check-times.log}
-if [[ $mode == full ]]; then limit=${CARETOOK_CHECK_LIMIT:-2400}; else limit=${CARETOOK_CHECK_LIMIT:-1200}; fi
+if [[ $mode == full ]]; then hard=2400; else hard=1200; fi
+[[ ${CARETOOK_CHECK_LIMIT:-} =~ ^[0-9]+$ ]] && ((CARETOOK_CHECK_LIMIT > 0)) && hard=$CARETOOK_CHECK_LIMIT
+sleep_gap=${CARETOOK_CHECK_SLEEP_GAP:-30}
+[[ $sleep_gap =~ ^[0-9]+$ ]] || sleep_gap=30
+
+# now → epoch seconds: the clock, or CARETOOK_CLOCK_FILE's (tests).
+now() {
+  local t=""
+  [[ -z ${CARETOOK_CLOCK_FILE:-} ]] || t=$(cat "$CARETOOK_CLOCK_FILE" 2>/dev/null)
+  [[ $t =~ ^[0-9]+$ ]] || t=$(date +%s)
+  echo "$t"
+}
 
 # One number whatever load_avg prints: drop the commas uptime puts after each
 # value and any blank line (a failed sysctl under pipefail), keep the 5-minute field.
@@ -56,41 +77,86 @@ stop_tree() {
 
 # Quick and slice checks are short: they wait only above the light limit (30).
 if [[ $mode == full ]]; then load_gate_wait "the check"; else CARETOOK_LOAD_LANE=light load_gate_wait "the check"; fi
-start=$(date -u +%Y-%m-%dT%H:%M:%SZ); t0=$(date +%s); l0=$(load5)
+start=$(date -u +%Y-%m-%dT%H:%M:%SZ); l0=$(load5)
+branch=$(git branch --show-current 2>/dev/null)
+budget=$hard silence=${CARETOOK_CHECK_SILENCE:-480}
+{ read -r b s; read -r said; } < <(node "$here/check-budget.mjs" --mode "$mode" --branch "$branch" --log "$log" --load "${CARETOOK_CHECK_BUDGET_LOAD:-$l0}" 2>/dev/null) || true
+if [[ ${b:-} =~ ^[0-9]+$ && ${s:-} =~ ^[0-9]+$ ]] && ((b > 0 && s > 0)); then
+  budget=$b silence=$s
+  echo "$said"
+else
+  [[ $silence =~ ^[0-9]+$ ]] && ((silence > 0)) || silence=480
+  echo "Check budget ${budget}s (the hard limit; its usual time couldn't be read); silence limit ${silence}s."
+fi
 counts=$(mktemp); export CARETOOK_CHECK_COUNTS=$counts
 state=$(mktemp -d); export CARETOOK_CHECK_STATE=$state
-"$@" &
+# The output goes on to stdout and stderr as before, and into $state/out for
+# the silence limit and the last lines.
+# Colours stay on for a terminal, though the command now writes to a pipe.
+out=$state/out; : > "$out"
+[[ -t 1 ]] && export FORCE_COLOR=${FORCE_COLOR:-1}
+mkfifo "$state/o" "$state/e"
+tee -a "$out" < "$state/o" & tee_o=$!
+tee -a "$out" < "$state/e" >&2 & tee_e=$!
+t0=$(now)
+"$@" > "$state/o" 2> "$state/e" &
 child=$!
-trap 'stop_tree "$child"; rm -rf "$state" "$counts"; exit 143' TERM
-trap 'stop_tree "$child"; rm -rf "$state" "$counts"; exit 130' INT
-timed_out=0
+# The tees end when the last writer closes; one the command left behind holding
+# its output mustn't hold the check, so they get 5 s, then go.
+tees_done() {
+  local i
+  for ((i = 0; i < 25; i++)); do
+    kill -0 "$tee_o" 2>/dev/null || kill -0 "$tee_e" 2>/dev/null || break
+    sleep 0.2
+  done
+  kill "$tee_o" "$tee_e" 2>/dev/null
+  wait "$tee_o" "$tee_e" 2>/dev/null
+  return 0
+}
+cleanup() { rm -rf "$state" "$counts"; }
+trap 'stop_tree "$child"; tees_done; cleanup; exit 143' TERM
+trap 'stop_tree "$child"; tees_done; cleanup; exit 130' INT
+breach="" slept=0 last=$t0 heard=$t0 size=0
 while kill -0 "$child" 2>/dev/null; do
-  if (($(date +%s) - t0 >= limit)); then
-    timed_out=1
-    stop_tree "$child"
-    break
-  fi
+  t=$(now)
+  # A long gap between two readings: the machine slept (or the clock jumped).
+  if ((t - last > sleep_gap)); then slept=$((slept + t - last)); heard=$t; fi
+  last=$t
+  sz=$(wc -c < "$out" 2>/dev/null || echo 0); sz=${sz//[^0-9]/}
+  if ((${sz:-0} != size)); then size=${sz:-0}; heard=$t; fi
+  if ((t - t0 - slept >= budget)); then breach=budget; break; fi
+  if ((t - heard > silence)); then breach=silence; break; fi  # whole seconds: over, not at
   sleep 0.2
 done
+[[ -z $breach ]] || stop_tree "$child"
 wait "$child" 2>/dev/null
 code=$?
+tees_done
 trap - TERM INT
 step=$(cat "$state/step" 2>/dev/null || true)
-if ((timed_out)); then
+if [[ -n $breach ]]; then
   code=124
-  echo "The check passed its limit of ${limit}s in the ${step:-first} step and was stopped." >&2
+  {
+    if [[ $breach == budget ]]; then
+      echo "The check passed its budget of ${budget}s in the ${step:-first} step and was stopped (the hard limit, CARETOOK_CHECK_LIMIT, is ${hard}s)."
+    else
+      echo "The check printed nothing for ${silence}s in the ${step:-first} step and was stopped (CARETOOK_CHECK_SILENCE)."
+    fi
+    echo "A stopped check is a hang, not a test failure. Its last 30 lines:"
+    tail -n 30 "$out" | sed 's/^/  | /'
+  } >&2
 fi
 list() { [[ -f $1 ]] && sort -u "$1" | paste -sd, - ; }
 failed="" flaky=""
-if ((code)); then failed=$(list "$state/failed"); else step=""; fi
+if [[ -n $breach ]]; then failed=""; elif ((code)); then failed=$(list "$state/failed"); else step=""; fi
 flaky=$(list "$state/flaky")
 read -r crun call < "$counts" 2>/dev/null || true; rm -f "$counts"; rm -rf "$state"
 files_run=${CARETOOK_CHECK_FILES_RUN:-${crun:-}}; files_all=${CARETOOK_CHECK_FILES_ALL:-${call:-}}
-secs=$(($(date +%s) - t0)); l1=$(load5)
+secs=$(($(now) - t0 - slept)); ((secs >= 0)) || secs=0; l1=$(load5)
 clean() { printf '%s' "$1" | tr '\t\n' '  '; }
 top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-  "$start" "$(basename "$top")" "$(clean "$(git branch --show-current 2>/dev/null)")" "$mode" "$(clean "$why")" \
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  "$start" "$(basename "$top")" "$(clean "$branch")" "$mode" "$(clean "$why")" \
   "$secs" "$l0" "$l1" "$code" "$files_run" "$files_all" "$load_waited" \
-  "$(clean "$step")" "$(clean "$failed")" "$(clean "$flaky")" >> "$log"
+  "$(clean "$step")" "$(clean "$failed")" "$(clean "$flaky")" "$breach" >> "$log"
 exit "$code"
