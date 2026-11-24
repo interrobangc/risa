@@ -487,6 +487,55 @@ describe("plan and backlog", () => {
   });
 });
 
+describe("inbox", () => {
+  const b = () => `pnpm -s -C ${main} backlog`;
+
+  it("names the commands it may run, by the main checkout's path", () => {
+    const text = ok("inbox");
+    expect(text).toMatch(/^You are the inbox agent\./);
+    expect(text).toContain("Run only these:");
+    expect(text).toContain(`\`${b()} similar <words…>\` before every add; show the user what it finds`);
+    expect(text).toContain(`\`${b()} inbox add <type> <text…> [--details "<text>"]\``);
+    expect(text).toContain("rerun with `--anyway` only on the user's word");
+    expect(text).toContain(`\`${b()} inbox move <words…> <type>\``);
+    expect(text).toContain(`\`${b()} inbox\` lists the lines not filed yet, only when a request needs them`);
+  });
+
+  it("says what it must not do: no file, no commit, no ingest, triage, holds or asks", () => {
+    const text = ok("inbox");
+    expect(text).toContain("Edit no file and commit nothing");
+    expect(text).toContain("Ingest, triage, priority, holds, PRDs and asks belong to the backlog session");
+    expect(text).toContain("For a filed one it prints a `set` line: don't run it");
+    expect(text).not.toContain("pnpm backlog ingest");
+    expect(text).not.toContain("pnpm prd");
+  });
+
+  it("sends a priority request to the backlog session and writes nothing", () => {
+    expect(ok("inbox")).toContain(
+      "**Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.",
+    );
+  });
+
+  it("reads no doc, opens no poll, lists nothing at the start, and waits", () => {
+    const text = ok("inbox");
+    expect(text).toContain("read no doc, ask no opening question, list nothing at the start");
+    expect(text).toContain("Wait for what the user says.");
+    expect(text).not.toMatch(/AGENTS\.md|docs\/|AskUserQuestion|--guide/);
+  });
+
+  it("names items by their plain titles", () => {
+    expect(ok("inbox")).toContain("Name an item by its short plain title with the id");
+  });
+
+  it("runs with no topic, refuses one, and stays short", () => {
+    // Under a fixed size, the main checkout's path (a test's temporary one) counted as one word.
+    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(1700);
+    const r = prompt("inbox", "T");
+    expect(r.code).not.toBe(0);
+    expect(r.err).toContain("prompt: inbox takes no topic or options");
+  });
+});
+
 describe("recover", () => {
   it("is the recovery agent: inventory, ListAgents, carry-on message, the opener, no code changes", () => {
     const text = ok("recover");

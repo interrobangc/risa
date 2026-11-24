@@ -17,6 +17,8 @@
 #     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows.
 #     --brief puts the file's text at the top, under "Brief from the session before";
 #     --no-brief says at the top that the context watch rotated the last session with none
+#   prompt.sh inbox                    the inbox agent, in its own directory outside the repository
+#     (pnpm prd inbox): self-contained, so it reads no doc; it adds and moves inbox lines, nothing else
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 #   prompt.sh skeptic ask|land|plan --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
@@ -24,7 +26,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, recover, tidy or skeptic}
+kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, inbox, recover, tidy or skeptic}
 # What silence means for an unattended session's question (run-through orchestrators, --auto planners).
 default_rule="**Every question with a recommendation says what silence means.** Pass \`--defaults\` on it: if no one answers within 30 minutes, the tool takes your recommendation, and \`--wait\` prints it like any answer, with a second line saying it was defaulted; carry on with it as with any answer. Pass \`--waits\` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push), a new dependency (AGENTS.md: the user's approval), and compliance; those wait however long it takes. When unsure which, \`--waits\`. The tool, never you, puts the recommendation in place of an answer: never decide that silence means yes yourself."
 # The skeptic every unattended question goes past first.
@@ -78,6 +80,27 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 - **Then collect for the picks only:** run \`pnpm prd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on "hand off" or a request for another backlog session.
 - Ask with AskUserQuestion, never numbered question lists.
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
+EOF
+  exit 0
+fi
+if [[ $kind == inbox ]]; then
+  # Self-contained and short: the session opens outside the repository, so
+  # AGENTS.md and the project's memory never load, and it reads no doc.
+  (($# == 1)) || die "prompt: inbox takes no topic or options"
+  b="pnpm -s -C $main backlog"
+  cat <<EOF
+You are the inbox agent. The user tells you things in plain words, at the desk or from the phone, and you put each one in their inbox (plans/inbox.md on origin/dev) under the right heading. That is your whole job, and this prompt holds all your rules: read no doc, ask no opening question, list nothing at the start. Wait for what the user says.
+
+Run only these:
+- \`$b similar <words…>\` before every add; show the user what it finds, and add only when it isn't the same thing.
+- \`$b inbox add <type> <text…> [--details "<text>"]\`, type bug, change, feature, plan or question. Exit 3 means look-alikes: show them, and rerun with \`--anyway\` only on the user's word.
+- \`$b inbox move <words…> <type>\` moves a line not filed yet to another heading (it's a bug, not a feature). For a filed one it prints a \`set\` line: don't run it; tell the user to say it in the backlog session.
+- \`$b inbox\` lists the lines not filed yet, only when a request needs them.
+
+- Write the user's words, fixing only typos: one line per idea, details under it. After each write, say in one line where it went.
+- Edit no file and commit nothing; these commands push for you. Ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
+- **Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.
+- Name an item by its short plain title with the id (B-52 export all data), never a bare id.
 EOF
   exit 0
 fi

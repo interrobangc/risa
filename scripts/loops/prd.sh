@@ -6,7 +6,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
-# The model plan, backlog and hotfix sessions run on unless --model names another.
+# The model plan, backlog, hotfix and inbox sessions run on unless --model names another.
 agent_model=opus
 # Every command runs on .nvmrc's Node, whatever shell called it.
 use_node || true
@@ -34,6 +34,10 @@ pnpm prd <command>
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (on opus, a `design` row's planner on Fable; --model <m> runs that one session on model m)
                               (it reads the backlog and helps you decide what's next)
+    inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
+                              adds them to the inbox on origin/dev, under the right heading; Opus in fast mode
+                              (--model <m>: another model), Remote Control "inbox", opened in its own directory
+                              outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
@@ -280,6 +284,40 @@ case $cmd in
     echo
     echo "Start its planning session in a new terminal (or rerun with --open):"
     echo "  $cmd_line"
+    ;;
+  inbox)
+    # The inbox session (prompt.sh inbox): Opus in fast mode (session.sh gives
+    # the inbox kind inbox-settings.json, the context hook and fastMode in one
+    # file), opened bare: in its own directory outside the repository, so
+    # neither AGENTS.md nor the project's memory loads.
+    model=$agent_model
+    while (($#)); do
+      case $1 in
+        --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "inbox: --model needs a model name (e.g. opus)"; model=$2; shift ;;
+        --model=*) model=${1#--model=}; [[ -n $model ]] || die "inbox: --model needs a model name (e.g. opus)" ;;
+        *) die "inbox: unknown argument $1 (--model <m>)" ;;
+      esac
+      shift
+    done
+    dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox}
+    fresh=0
+    [[ -d $dir ]] || { mkdir -p "$dir" || die "inbox: can't create $dir"; fresh=1; }
+    dir=$(cd "$dir" && pwd -P)
+    if top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null); then
+      die "inbox: $dir is inside the git repository $top, where AGENTS.md would load; set CARETOOK_INBOX_DIR to a directory outside any repository"
+    fi
+    d=$dir
+    while :; do
+      for f in CLAUDE.md CLAUDE.local.md AGENTS.md; do
+        [[ ! -e $d/$f ]] || die "inbox: $d/$f would load into the inbox session; set CARETOOK_INBOX_DIR to a directory with none above it"
+      done
+      [[ $d != / ]] || break
+      d=$(dirname "$d")
+    done
+    ((fresh)) && echo "Made $dir for the inbox session. Its first open asks whether you trust this folder: choose Yes, once." >&2
+    wrapper=$(cd "$bin" && pwd)/session.sh
+    prompt_text=$("$bin/prompt.sh" inbox)
+    cd "$dir" && exec "$wrapper" inbox --kind inbox -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) exec "$bin/new.sh" slice "$@" ;;
   hotfix)

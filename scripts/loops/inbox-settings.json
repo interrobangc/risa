@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CARETOOK_CONTEXT_HOOK\" ] && node \"$CARETOOK_CONTEXT_HOOK\" hook 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "fastMode": true
+}
