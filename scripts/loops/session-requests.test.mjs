@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { START_GRACE_MS } from "./keep-alive.mjs";
+import { MAX_TEXT } from "./notices.mjs";
 import {
   KEEP_SETTLED_MS,
   backlogRemoteOf,
@@ -210,6 +211,28 @@ describe("the decision", () => {
       "request r1: `backlog - a` not opened: fictional",
     );
   });
+
+  it("keeps a notice with long names and a long error within the board, with its id and outcome", () => {
+    const name = "x".repeat(40);
+    const from = `backlog-${"y".repeat(40)}`;
+    const why = `its tab didn't open (${"fictional opener error ".repeat(12)})`;
+    const refused = requestNotice(req("r12", name, { from }), { opened: false, why });
+    expect(refused.length).toBeLessThanOrEqual(MAX_TEXT);
+    expect(refused).toMatch(
+      /^request r12 \(for backlog-y+…?\): `backlog - x+…?` not opened: its tab didn't open/,
+    );
+    expect(refused).toMatch(/…$/);
+    const opened = requestNotice(req("r12", name, { from }), { opened: true });
+    expect(opened.length).toBeLessThanOrEqual(MAX_TEXT);
+    expect(opened).toMatch(/^request r12 \(for backlog-y+…?\): opened `backlog - x+…?`$/);
+    // Even a requester's name past the board alone leaves the id and the outcome.
+    const huge = requestNotice(req("r12", name, { from: "z".repeat(400) }), {
+      opened: false,
+      why: "\n".repeat(3) + why,
+    });
+    expect(huge.length).toBeLessThanOrEqual(MAX_TEXT);
+    expect(huge).toMatch(/^request r12 \(for z+…\): `backlog - x+…?` not opened: its tab/);
+  });
 });
 
 describe("the command", () => {
@@ -262,6 +285,14 @@ describe("the command", () => {
       expect(r.stderr).toContain("pnpm prd:");
     }
     expect(readRequests(dir)).toEqual([]);
+  });
+
+  it("lists a settled request's failed notice", () => {
+    const r = createRequest(dir, { name: "quiet", now: Date.now() });
+    settleRequest(dir, r.id, { state: "opened", noticeFailed: "a fictional board error" });
+    expect(cli("requests").stdout).toContain(
+      `${r.id}  opened  backlog - quiet  from -, ${r.requestedAt} (its notice failed: a fictional board error)`,
+    );
   });
 
   it("says nothing is pending", () => {
