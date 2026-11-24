@@ -23,6 +23,8 @@ import {
   gateLines,
   listNotices,
   NoticeError,
+  raiseSeq,
+  readSeq,
   statusPart,
   withdrawNotice,
 } from "./notices.mjs";
@@ -53,6 +55,32 @@ describe("the notice store", () => {
     const next = createNotice(dir, { text: "later", now: NOW + 2 * MIN });
     expect(next.id).not.toBe(short.id);
     expect([...ids, short.id]).not.toContain(next.id);
+  });
+
+  it("keeps the high-water mark at the higher id when a lower raise lands last, so ids are never reused", () => {
+    const dir = fresh();
+    // Two creates posted together: n2's raise finishes first, then n1's lands
+    // late (the check-then-rename used to leave .seq at 1 here).
+    const n1 = createNotice(dir, { text: "one", minutes: 1, now: NOW });
+    const n2 = createNotice(dir, { text: "two", minutes: 1, now: NOW });
+    expect([n1.id, n2.id]).toEqual(["n1", "n2"]);
+    raiseSeq(dir, 1);
+    expect(readSeq(dir)).toBe(2);
+    // Both expire and are pruned: the next post still gets a new id.
+    expect(listNotices(dir, { now: NOW + 2 * MIN })).toEqual([]);
+    expect(createNotice(dir, { text: "three", now: NOW + 2 * MIN }).id).toBe("n3");
+    expect(readSeq(dir)).toBe(3);
+  });
+
+  it("never lowers the mark, whatever order raises run in, and reads the old .seq file", () => {
+    const dir = fresh();
+    for (const n of [3, 5, 1, 4, 2]) raiseSeq(dir, n);
+    expect(readSeq(dir)).toBe(5);
+    const old = fresh();
+    writeFileSync(join(old, ".seq"), "7\n");
+    expect(createNotice(old, { text: "after the old mark", now: NOW }).id).toBe("n8");
+    expect(existsSync(join(old, ".seq"))).toBe(false);
+    expect(readSeq(old)).toBe(8);
   });
 
   it("takes the next id when another create holds the one it wanted", () => {
