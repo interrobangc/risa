@@ -42,8 +42,9 @@
 # the recovery agent again).
 #
 # Env: CARETOOK_DOCKER_WAIT_SECS (180), CARETOOK_RECOVER_PG_SECS (60),
-# CARETOOK_RECOVER_PROBE_SECS (600); CARETOOK_CLOCK_FILE (tests: a file holding
-# the current epoch second, in place of the clock).
+# CARETOOK_RECOVER_PROBE_SECS (600), CARETOOK_RECOVER_STEP_SECS (300: --at's
+# longest sleep before it rechecks the clock); CARETOOK_CLOCK_FILE (tests: a
+# file holding the current epoch second, in place of the clock).
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -73,17 +74,18 @@ now_secs() {
   if [[ -n ${CARETOOK_CLOCK_FILE:-} ]]; then cat "$CARETOOK_CLOCK_FILE"; else date +%s; fi
 }
 
-# wait_until EPOCH → sleep in short steps until then (a laptop asleep doesn't
-# count sleep(1) time, so it rechecks the clock).
+# wait_until EPOCH → sleep in steps of at most CARETOOK_RECOVER_STEP_SECS until
+# then (a laptop asleep doesn't count sleep(1) time, so it rechecks the clock).
 # fmt_wait SECS → 3h05m, or 4m10s under an hour.
 fmt_wait() { if (($1 >= 3600)); then printf '%dh%02dm' $(($1 / 3600)) $(($1 % 3600 / 60)); else fmt_secs "$1"; fi; }
 
 wait_until() {
-  local left
+  local left step=${CARETOOK_RECOVER_STEP_SECS:-300}
+  [[ $step =~ ^[0-9]+$ ]] && ((step > 0)) || die "recover: CARETOOK_RECOVER_STEP_SECS must be a whole number of seconds"
   while :; do
     left=$(($1 - $(now_secs)))
     ((left > 0)) || return 0
-    sleep $((left < 300 ? left : 300))
+    sleep $((left < step ? left : step))
   done
 }
 

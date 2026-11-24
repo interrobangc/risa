@@ -189,7 +189,12 @@ function build() {
     CARETOOK_ASKS_DIR: "",
   };
   mkdirSync(join(root, "iTerm.app"));
-  for (const k of ["CARETOOK_RECOVER_PROBE_SECS", "CARETOOK_DOCKER_WAIT_SECS", "CARETOOK_RECOVER_PG_SECS"])
+  for (const k of [
+    "CARETOOK_RECOVER_PROBE_SECS",
+    "CARETOOK_DOCKER_WAIT_SECS",
+    "CARETOOK_RECOVER_PG_SECS",
+    "CARETOOK_RECOVER_STEP_SECS",
+  ])
     delete env[k];
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
@@ -594,12 +599,47 @@ describe("down and recover", () => {
     expect(lines.indexOf("compose up caretook-shared-test")).toBeGreaterThan(lastSleep);
   });
 
+  // A wait of most of a day in 300 s steps is 258 fake sleeps, each a process or
+  // two: about 3 s idle and past the 20 s test timeout under load (B-418). The
+  // step test above keeps 300 s; these take 6 h steps, so they stay a handful.
+  const slept = () =>
+    calls()
+      .split("\n")
+      .filter((l) => l.startsWith("sleep "))
+      .map((l) => Number(l.split(" ")[1]));
+  const STEP = { CARETOOK_RECOVER_STEP_SECS: String(6 * 3600) };
+
   it("--at a time that has passed waits until tomorrow", () => {
     const clock = join(state, "clock");
     put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000));
-    const out = okRecover(["--at=09:30"], { CARETOOK_CLOCK_FILE: clock });
+    const out = okRecover(["--at=09:30"], { ...STEP, CARETOOK_CLOCK_FILE: clock });
     expect(out).toMatch(/Waiting until 09:30 \(in 21h30m\)/);
     expect(Number(readFileSync(clock, "utf8"))).toBe(Date.UTC(2026, 10, 20, 9, 30, 0) / 1000);
+    expect(slept()).toEqual([21600, 21600, 21600, 12600]);
+  });
+
+  it("--at reads the time in the local time zone, not UTC", () => {
+    const clock = join(state, "clock");
+    put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000)); // 04:00 in Los Angeles (PST)
+    const out = okRecover(["--at", "03:30"], {
+      ...STEP,
+      TZ: "America/Los_Angeles",
+      CARETOOK_CLOCK_FILE: clock,
+    });
+    expect(out).toMatch(/Waiting until 03:30 \(in 23h30m\)/);
+    expect(Number(readFileSync(clock, "utf8"))).toBe(Date.UTC(2026, 10, 20, 11, 30, 0) / 1000);
+    expect(slept().reduce((a, b) => a + b, 0)).toBe(23.5 * 3600);
+  });
+
+  it("refuses a step that isn't a whole number of seconds", () => {
+    put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000));
+    const r = recover(["--at", "13:00"], {
+      CARETOOK_RECOVER_STEP_SECS: "0",
+      CARETOOK_CLOCK_FILE: join(state, "clock"),
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/CARETOOK_RECOVER_STEP_SECS must be a whole number/);
+    expect(calls()).not.toMatch(/^sleep /m);
   });
 
   it("--wait probes claude every 10 minutes until one answers, then recovers", () => {
