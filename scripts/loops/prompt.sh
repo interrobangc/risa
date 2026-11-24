@@ -31,6 +31,10 @@ kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, inbox, recover, tidy
 default_rule="**Every question with a recommendation says what silence means.** Pass \`--defaults\` on it: if no one answers within 30 minutes, the tool takes your recommendation, and \`--wait\` prints it like any answer, with a second line saying it was defaulted; carry on with it as with any answer. Pass \`--waits\` instead for the questions that never default: money (a paid service too), data loss or a change to existing data, a live deploy (staging or production), a destructive step (deleting unmerged work, a forced push), a new dependency (AGENTS.md: the user's approval), and compliance; those wait however long it takes. When unsure which, \`--waits\`. The tool, never you, puts the recommendation in place of an answer: never decide that silence means yes yourself."
 # The skeptic every unattended question goes past first.
 skeptic_rule="**A fresh skeptic reads every question first.** Write the question, its options, your recommendation and the evidence to a file outside the worktree, print the brief with \`pnpm prd prompt skeptic ask --evidence <file>\`, and give it to one fresh agent on Opus (\`model: \"opus\"\`). Record its answer: \`pnpm prd skeptic record --kind ask --verdict <decide|ask> --why \"<its line>\" --question \"<text>\" --offer \"<a>\" --offer \"<b>\" --defaults\` (or \`--waits\`; add \`--option \"<a>\"\` for a decide), which prints its id. On **ask**, file the question with \`--skeptic <id>\`: the same text, the same options in the same order, the same \`--defaults\` or \`--waits\` (if it tightened the wording, record and file the tightened one). On **decide**, ask nothing: \`pnpm prd ask --decided --skeptic <id> --topic ${2:-<topic>} --question \"<text>\" --option \"<a>\" --option \"<b>\" --chose \"<a>\"\` files it for the user to veto under \"decided for you\", with no PushNotification and no wait, and you carry on with that option. A \`--waits\` question is never decided. Each verdict is used once; a land \`no\` or a plan \`send-back\` already counts as this skeptic, so pass its id."
+# A message of just "bye" (pnpm prd bye, bye.mjs): the hand-over check, after the role doc's own checks.
+bye_line() {
+  echo "- **A message of just 'bye'** (from the phone too): first the checks $1 names under _Bye_, then run \`pnpm prd bye\`. Clean, it ends this session: say nothing after it. Otherwise ask the user about each open thing it lists, one at a time (finish it, hand it off or drop it), then run it again."
+}
 if [[ $kind == backlog ]]; then
   guide=0
   if [[ ${2:-} == --guide ]]; then
@@ -79,6 +83,7 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 - **First, and nothing else:** run \`pnpm prd asks --short\` and print its one line on what waits on the user. Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
 - **Then collect for the picks only:** run \`pnpm prd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on "hand off" or a request for another backlog session.
 - Ask with AskUserQuestion, never numbered question lists.
+$(bye_line docs/agents/backlog.md)
 - The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
 EOF
   exit 0
@@ -89,10 +94,10 @@ if [[ $kind == inbox ]]; then
   (($# == 1)) || die "prompt: inbox takes no topic or options"
   b="pnpm -s -C $main backlog"
   cat <<EOF
-You are the inbox agent. The user tells you things in plain words, at the desk or from the phone, and you put each one in their inbox (plans/inbox.md on origin/dev) under the right heading. That is your whole job, and this prompt holds all your rules: read no doc, ask no opening question, list nothing at the start. Wait for what the user says.
+You are the inbox agent. The user tells you things in plain words and you put each one in their inbox (plans/inbox.md on origin/dev) under the right heading. That is your whole job, and this prompt holds all your rules: read no doc, ask no opening question, list nothing at the start. Wait for what the user says.
 
 Run only these:
-- \`$b similar <words…>\` before every add; show the user what it finds, and add only when it isn't the same thing.
+- \`$b similar <words…>\` before every add; show the user what it finds; add only what isn't the same.
 - \`$b inbox add <type> <text…> [--details "<text>"]\`, type bug, change, feature, plan or question. Exit 3 means look-alikes: show them, and rerun with \`--anyway\` only on the user's word.
 - \`$b inbox move <words…> <type>\` moves a line not filed yet to another heading (it's a bug, not a feature). For a filed one it prints a \`set\` line: don't run it; tell the user to say it in the backlog session.
 - \`$b inbox\` lists the lines not filed yet, only when a request needs them.
@@ -101,6 +106,8 @@ Run only these:
 - Edit no file and commit nothing; these commands push for you. Ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
 - **Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.
 - Name an item by its short plain title with the id (B-52 export all data), never a bare id.
+- **Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`pnpm -s -C $main prd rotate --self\`, and do nothing after it.
+- **Just 'bye':** with every idea added, run \`pnpm -s -C $main prd bye\` and say nothing after; if it lists open things, ask about each, then rerun it.
 EOF
   exit 0
 fi
@@ -115,6 +122,7 @@ You are the recovery agent. The machine has just come back (a restart, a crash o
 - **Managed sessions belong to the dispatcher while it runs.** When the inventory's \`dispatcher.running\` is true (recover reopened it, or it never stopped), leave every \`open-session\` marked \`managed\` to it: never open one, since the dispatcher reopens a dead managed session itself (a live one still gets the carry-on message). With no dispatcher running, treat managed sessions like the rest.
 - For each other \`open-session\` with no live session, open it with the opener: \`pnpm prd open <target>\`. It opens a new iTerm2 tab that continues the worktree's saved conversation (\`claude --continue --remote-control <session>\`) or starts a fresh one with the resume prompt, keeping the session's name. Without iTerm2 it prints the command instead: pass that on to the user. Open each one once; never open a session that ListAgents shows as live.
 - Then report, as a short table: each session, and whether you messaged it, opened it in a tab, printed its command or left it to the dispatcher (and anything that failed). Then end: you have nothing else to do.
+$(bye_line docs/agents/recovery.md)
 
 Start by reading the inventory and ListAgents.
 EOF
@@ -152,6 +160,7 @@ You are the hotfix agent for "$topic": one contained fix, outside the PRD flow, 
 - Background agents are allowed (a test run, a search, a review), working in this worktree only, on the cheapest model that can do the job (docs/agents/orchestrator.md, _Models_).
 - Update the docs the fix makes stale on this branch (a hotfix may edit docs/ and AGENTS.md), and write any new hotfix rule you and the user settle on into docs/agents/hotfix.md.
 - Commit on hotfix/$topic only when the user asks (Conventional Commits; \`fix(<area>): …\` by default). Land on their word: the check docs/agents/orchestrator.md, _The check gate_ asks for on the tip (its CI tier, with no local quick check first; \`pnpm test:tooling\` for docs and tooling only), then ask the user **"PR or local?"** (a PR is reviewed by Codex on GitHub: \`pnpm prd pr hotfix/$topic\`, review, then \`land --pr\`; local merges straight into dev) and run \`pnpm prd land hotfix/$topic --pr\` or \`--local\` with \`-m "fix(<area>): …"\`, and \`pnpm prd rm hotfix-$topic\`. \`--force\` or \`--no-review\` on the user's word takes \`--by-user\`. A backlog item, if there is one, goes through \`pnpm backlog\` (claim, note); never edit the backlog files on the branch.
+$(bye_line docs/agents/hotfix.md)
 ${fix:+
 The fix: $fix
 }
@@ -197,6 +206,7 @@ You are the PRD orchestrator for "$topic".
 - When a slice is blocked by another PRD's work (another orchestrator's slice, or a backlog item landing in dev), don't stall: find that orchestrator with ListAgents and ask it with SendMessage to message you when the work lands in dev, and set a background check (a Bash loop with run_in_background that exits once \`pnpm log dev\` or \`pnpm backlog list\` shows it), so you're woken whichever comes first. Then \`pnpm prd sync\` and carry on.
 - At each landing, fold that wave's decisions into the docs as the handbook's _Docs at landing_ says (area doc, role doc, or the core; trim at least what you fold in). When the last wave has landed, run \`pnpm prd rm $topic\`, then \`cd $main && pnpm prd end\` (your last step: it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
 - **One session per wave: drain, then rotate.** After a landing and its docs (not the last one), start no new slice; once the slices in flight are merged, commit _Status_ and run \`pnpm prd rotate\`; with none in flight, rotate at once. It opens a fresh session with the resume prompt (the same name, your landing mode) in a background tab and ends this one, so write _Status_ as the hand-over first and say nothing after it. \`pnpm prd rotate --mid-wave\` (it ends the slice agents too; the fresh session respawns them) only on the user's word, or **past the context limit** (160k tokens; a hook reminds you): at the next safe point finish the step in hand, commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Only a step that can't resume from _Status_ (a landing under way) may finish first: run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_.
+$(bye_line docs/agents/orchestrator.md)
 - Every commit subject is a Conventional Commit (\`feat($topic): …\`, \`fix($topic): …\`, \`docs\`, \`test\`, \`chore\`…); the commit-msg hook refuses anything else.
 - Keep the plan's _Status_ section current **at every step**, not only at wave boundaries: a slice started (worktree made, agent spawned), handed off, merged (with the merge SHA), a wave landed; plus what's ready, open issues and the landing mode. Write it as you go, so a fresh orchestrator can take over after a crash at any moment (the file survives in your worktree; commit it with your merges, and before \`pnpm prd check\`).
 EOF
@@ -273,6 +283,7 @@ $ask_line
 - **Don't load the \`write-a-prd\`, \`prd-to-plan\` or \`grill-me\` skills:** they make you interview the user and wait for approval. The handbook has their templates.
 - Run the handbook's _The skeptic pass_ before landing: write an evidence file outside the repo naming the PRD, the plan and the items; \`pnpm prd prompt skeptic plan --evidence <file>\` prints the brief for one fresh agent on Opus (\`model: "opus"\`); record its answer with \`pnpm prd skeptic record --kind plan --verdict go|send-back --why "<its one line>" --topic $topic\`, which prints the id. On **go**, act on what it found. On **send-back**, rework the plan and run a fresh skeptic **once more** (one retry). $second_send_back
 - Don't file GitHub issues.
+$(bye_line docs/agents/planner.md)
 - Commit both files on plan/$topic (\`docs($topic): …\`), triage the items, and give the topic its row in the PRD table: when \`pnpm backlog prd list\` already has a row for $topic, set it with \`pnpm backlog prd set $topic after=<topic> hot=<path prefixes>\`; when it has none, add it first with \`pnpm backlog prd add $topic\` (never a hand edit of the table and no \`pnpm backlog commit\`: those commands commit). Then land it yourself as the handbook's _Landing a plan branch_ says: \`pnpm prd land plan/$topic -m "docs($topic): PRD and plan for … (B-<n>, …)"\` (plain: a plan branch never needs a forced landing), $report_line, and as your last step run \`cd $main && pnpm prd end\` (it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
 
 Start by summarising what the backlog says about "$topic", then explore.
@@ -324,6 +335,7 @@ $stack_line Delete any scratch scripts before you commit.
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`pnpm backlog note B-<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
 - **Your hand-off releases your stack:** run \`pnpm prd stack down\` before your final message (with no stack it does nothing), then wait: the orchestrator may send back a failure from the wave's CI run.
+- **A message of just 'bye'**: first the checks docs/agents/loop.md names under _Bye_, then run \`pnpm prd bye\` (a slice only reports; it ends no session). Clean: send your hand-off. Otherwise send your orchestrator the open things it lists and wait for its word on each.
 - **A fix request is these steps and nothing else:** \`pnpm prd stack up\` if your slice uses a stack; \`git merge --no-ff -m "chore($topic): merge prd/$topic for a fix" prd/$topic\` (the one merge you make); a new commit with the fix; \`pnpm prd check --quick "slice fix"\` on your own tests; \`pnpm prd stack down\`; a new hand-off line. Your orchestrator merges it again.
 EOF
     if [[ -n $continuing ]]; then

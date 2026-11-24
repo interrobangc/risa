@@ -90,8 +90,8 @@ describe("keepAliveDecision", () => {
     expect(one({ keep: clearKeepStops(keep) }).action).toBe("open");
   });
 
-  it("the kinds list drives it", () => {
-    expect(KEPT_KINDS).toEqual(["backlog"]);
+  it("the kinds list drives it, the inbox session among them", () => {
+    expect(KEPT_KINDS).toEqual(["backlog", "inbox"]);
     const ds = decide({
       kinds: ["backlog", "inbox"],
       sessions: [{ name: "backlog", live: true }],
@@ -100,6 +100,34 @@ describe("keepAliveDecision", () => {
       ["backlog", "none"],
       ["inbox", "open"],
     ]);
+  });
+});
+
+describe("the inbox session", () => {
+  const inbox = (facts) => decide(facts).find((d) => d.kind === "inbox");
+  it("is opened like the backlog session, beside it", () => {
+    const ds = decide({ sessions: [{ name: "backlog", live: true }] });
+    expect(ds.map((d) => [d.kind, d.action])).toEqual([
+      ["backlog", "none"],
+      ["inbox", "open"],
+    ]);
+    expect(inbox({ processes: ["claude --model opus --remote-control inbox You are"] })).toMatchObject({
+      action: "none",
+      why: "live, opened by hand",
+    });
+  });
+
+  it("isn't opened while its directory isn't trusted, and is once it is", () => {
+    const why = "its directory isn't trusted yet: run pnpm prd inbox once and accept the folder";
+    expect(inbox({ unready: { inbox: why } })).toMatchObject({ action: "none", why });
+    expect(decide({ unready: { inbox: why } })[0]).toMatchObject({ kind: "backlog", action: "open" });
+    expect(inbox({ unready: {} }).action).toBe("open");
+  });
+
+  it("dies quickly three times, then asks, as the backlog session does", () => {
+    const keep = { inbox: { deaths: MAX_QUICK_DEATHS - 1, openedAt: NOW - START_GRACE_MS } };
+    expect(inbox({ keep })).toMatchObject({ action: "ask", deaths: MAX_QUICK_DEATHS });
+    expect(inbox({ keep }).text).toContain("The inbox session died 3 times");
   });
 });
 

@@ -4,12 +4,15 @@
 #
 #   rotate-into.sh prd-<topic> <old pid> [--reason <text>]
 #   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief]
+#   rotate-into.sh inbox <old pid> [--reason <text>]
 #
 # A backlog session needs its live record at that pid (else nothing is ended).
 # It reopens fresh in the main checkout with the backlog prompt, on the record's
 # model and Remote Control name; --brief leads the prompt and is deleted once
 # read; --no-brief (the dispatcher, when none was written) says so at its top.
-# The steps are otherwise the same:
+# The inbox session (its live record at that pid, too) reopens through `prd.sh
+# inbox` in its recorded directory, on its recorded model, in fast mode, with
+# no brief. The steps are otherwise the same:
 #
 # 1. Marks the record (.loops/.sessions/prd-<topic>.json) rotating, making one
 #    when there is none (a session started before session.sh), so an opener or
@@ -29,9 +32,9 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 wait_secs=${CARETOOK_ROTATE_WAIT:-20}
 
-usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief]"
+usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>]|inbox <old pid> [--reason <text>] [--brief <file> | --no-brief]"
 name=${1:-} old=${2:-}
-[[ ($name == prd-?* || $name == backlog || $name == backlog-?*) && $old =~ ^[0-9]+$ ]] || die "$usage"
+[[ ($name == prd-?* || $name == backlog || $name == backlog-?* || $name == inbox) && $old =~ ^[0-9]+$ ]] || die "$usage"
 shift 2
 reason="" brief="" no_brief=""
 while (($#)); do
@@ -45,7 +48,10 @@ while (($#)); do
 done
 [[ -z $brief || -z $no_brief ]] || die "rotate-into: --brief or --no-brief, not both"
 kind=backlog topic="" dir=$main
-if [[ $name == prd-* ]]; then
+[[ $name != inbox ]] || kind=inbox
+if [[ $kind == inbox ]]; then
+  [[ -z $brief && -z $no_brief ]] || die "rotate-into: the inbox session hands off with no brief"
+elif [[ $name == prd-* ]]; then
   kind=prd topic=${name#prd-} dir=$loops/${name#prd-}
   [[ -z $brief && -z $no_brief ]] || die "rotate-into: an orchestrator hands over through _Status_, not a brief"
   [[ -d $dir ]] || die "rotate-into: no worktree $topic in $loops"
@@ -58,8 +64,8 @@ before=$(sessions get "$name" 2>/dev/null || true)
 auto=""
 [[ $(field "$before" auto) == true ]] && auto=1
 [[ $kind != prd ]] || ! node "$bin/rotate.mjs" run-through "$dir/plans/$topic-plan.md" || auto=1
-if [[ $kind == backlog ]]; then
-  [[ $(field "$before" kind) == backlog ]] || die "rotate-into: $name has no backlog record; nothing was ended"
+if [[ $kind == backlog || $kind == inbox ]]; then
+  [[ $(field "$before" kind) == "$kind" ]] || die "rotate-into: $name has no $kind record; nothing was ended"
   [[ $(sessions live "$name" 2>/dev/null || true) == "$old" ]] || die "rotate-into: pid $old isn't $name's live session; nothing was ended"
   if [[ -n $brief ]]; then
     why=$(node "$bin/rotate.mjs" brief-check "$brief") || die "rotate-into: $why; nothing was ended"
@@ -72,7 +78,11 @@ wrapped=""
 [[ -n $before && $(field "$before" pid) == "$old" && -z $(field "$before" ended) ]] && wrapped=1
 
 if [[ -n $before ]]; then sessions set "$name" rotating=true; else sessions set "$name" kind=prd topic="$topic" rotating=true; fi
-if [[ $kind == prd ]]; then what="the resume prompt"; else what="the backlog prompt${brief:+ and the brief}"; fi
+case $kind in
+  prd) what="the resume prompt" ;;
+  inbox) what="the inbox prompt" ;;
+  *) what="the backlog prompt${brief:+ and the brief}" ;;
+esac
 echo "Rotating $name${reason:+ ($reason)}: ending pid $old, then a fresh session with $what${auto:+ (run-through)}."
 
 # Gone, or a zombie waiting for its parent.
@@ -96,6 +106,13 @@ if [[ -n $wrapped ]]; then
 fi
 
 cd "$dir"
+if [[ $kind == inbox ]]; then
+  # prd.sh inbox checks the bare directory, gives the fast settings and the prompt.
+  args=(inbox)
+  [[ -z $(field "$before" dir) ]] || args+=(--dir "$(field "$before" dir)")
+  [[ -z $(field "$before" model) ]] || args+=(--model "$(field "$before" model)")
+  exec "$bin/prd.sh" "${args[@]}" ${managed:+--managed}
+fi
 if [[ $kind == backlog ]]; then
   # The old session is gone, so a brief that went bad now costs the brief, never the session.
   prompt=""

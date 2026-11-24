@@ -1,6 +1,12 @@
-// The dispatcher's keep-alive: one session of each kept kind (`backlog`; `inbox`
-// joins the list once that session exists) stays open, outside the PRD slots.
-// Pure: the facts in, one decision per kind out; dispatch.mjs gathers and acts.
+// The dispatcher's keep-alive: one session of each kept kind (`backlog`, `inbox`)
+// stays open, outside the PRD slots. Pure: the facts in, one decision per kind
+// out; dispatch.mjs gathers and acts.
+//
+// A kind with a reason in `unready` isn't opened: the inbox session's bare
+// directory before Claude Code has been told once, by hand, to trust it (its
+// "trust this folder?" prompt defaults to "No, exit", so an unattended open
+// would stop there). dispatch.mjs reads that from Claude Code's own files,
+// never writing them.
 //
 // A kind is live with a live record under its name, a record `rotating` within
 // ROTATING_GRACE_MS, or a claude process with `--remote-control <kind>` (a
@@ -16,7 +22,7 @@ import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
 
 /** The kinds kept alive; each one's session is named after it. */
-export const KEPT_KINDS = ["backlog"];
+export const KEPT_KINDS = ["backlog", "inbox"];
 /** The answers the keep-alive question offers. */
 export const KEEP_OPTIONS = ["open again", "stop keeping it alive"];
 /** This many quick deaths in a row get the question instead of another open. */
@@ -73,7 +79,7 @@ export function clearKeepStops(/** @type {KeepState | undefined} */ keep) {
 /**
  * One decision per kept kind.
  * @param {{ kinds?: string[], sessions?: KeepSession[], processes?: string[] | null, keep?: KeepState,
- *   paused?: boolean, off?: boolean, now: number, claude?: string }} facts
+ *   paused?: boolean, off?: boolean, now: number, claude?: string, unready?: Record<string, string> }} facts
  * @returns {KeepDecision[]}
  */
 export function keepAliveDecision({
@@ -85,6 +91,7 @@ export function keepAliveDecision({
   off = false,
   now,
   claude = "claude",
+  unready = {},
 }) {
   return kinds.map((kind) => {
     const none = (/** @type {string} */ why, reset = false) => ({
@@ -111,6 +118,7 @@ export function keepAliveDecision({
       return none("live, opened by hand", recovered);
 
     if (e.asked) return none(`waits on ask ${e.asked.id}`);
+    if (unready[kind]) return none(unready[kind]);
     const sinceOpen = e.openedAt === undefined ? Infinity : now - e.openedAt;
     if ((e.deaths ?? 0) < MAX_QUICK_DEATHS && sinceOpen < START_GRACE_MS) return none("just opened");
 

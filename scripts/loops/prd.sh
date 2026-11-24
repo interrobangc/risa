@@ -37,7 +37,8 @@ pnpm prd <command>
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
                               adds them to the inbox on origin/dev, under the right heading; Opus in fast mode
                               (--model <m>: another model), Remote Control "inbox", opened in its own directory
-                              outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created)
+                              outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created);
+                              the dispatcher keeps it open once you have opened it by hand and trusted the folder
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
@@ -71,6 +72,10 @@ pnpm prd <command>
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
     end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
                               orchestrator or planner, after pnpm prd rm); its tab closes
+    bye [--dry-run] [--json]  a session's hand-over check, when the user says just "bye": clean (no uncommitted or
+                              unpushed work, worktree, branch, stack, server, running lease, background job or open
+                              question of its own left), it prints the hand-off line, releases its leases and ends the
+                              session (a slice only reports); else it lists each open thing and exits 3, closing nothing
     context [--keep "<why>" | --all [--json]]   this session's context size and the limit; --keep leaves it
                               alone for 30 minutes; --all lists every live session
     rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
@@ -236,6 +241,7 @@ case $cmd in
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   end) exec "$bin/end-session.sh" "$@" ;;
+  bye) exec node "$bin/bye.mjs" "$@" ;;
   rotate) exec "$bin/rotate.sh" "$@" ;;
   context) exec node "$bin/context.mjs" "$@" ;;
   session)
@@ -290,16 +296,19 @@ case $cmd in
     # the inbox kind inbox-settings.json, the context hook and fastMode in one
     # file), opened bare: in its own directory outside the repository, so
     # neither AGENTS.md nor the project's memory loads.
-    model=$agent_model
+    # --dir and --managed are the reopen's and rotation's (open-session.mjs,
+    # rotate-into.sh): the recorded directory, and the dispatcher's record.
+    model=$agent_model dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
     while (($#)); do
       case $1 in
         --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "inbox: --model needs a model name (e.g. opus)"; model=$2; shift ;;
         --model=*) model=${1#--model=}; [[ -n $model ]] || die "inbox: --model needs a model name (e.g. opus)" ;;
-        *) die "inbox: unknown argument $1 (--model <m>)" ;;
+        --dir) [[ -n ${2:-} ]] || die "inbox: --dir needs a directory"; dir=$2; shift ;;
+        --managed) managed=(--managed) ;;
+        *) die "inbox: unknown argument $1 (--model <m>, --dir <d>, --managed)" ;;
       esac
       shift
     done
-    dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox}
     fresh=0
     [[ -d $dir ]] || { mkdir -p "$dir" || die "inbox: can't create $dir"; fresh=1; }
     dir=$(cd "$dir" && pwd -P)
@@ -317,7 +326,7 @@ case $cmd in
     ((fresh)) && echo "Made $dir for the inbox session. Its first open asks whether you trust this folder: choose Yes, once." >&2
     wrapper=$(cd "$bin" && pwd)/session.sh
     prompt_text=$("$bin/prompt.sh" inbox)
-    cd "$dir" && exec "$wrapper" inbox --kind inbox -- --model "$model" --remote-control inbox "$prompt_text"
+    cd "$dir" && exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) exec "$bin/new.sh" slice "$@" ;;
   hotfix)

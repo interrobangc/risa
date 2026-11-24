@@ -1,8 +1,8 @@
 // The context watch: how large a recorded session has grown, and the reminders
 // past its soft and hard limits.
 //
-// session.sh gives `prd` and `backlog` sessions context-settings.json (claude --settings), a
-// PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
+// session.sh gives `prd` and `backlog` sessions context-settings.json, and the
+// inbox session inbox-settings.json (claude --settings), a PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
 // it, it adds a reminder to the agent's context. It never blocks a tool call
 // and any error in it is swallowed (exit 0, no output).
@@ -13,13 +13,16 @@
 // point, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN (10). A backlog
 // session has only the soft one, and it is never a forced close: past it the
 // session tells the user its size and asks whether to hand off or keep going,
-// and no answer means keep going. The dispatcher's follow-up starts at the hard
+// and no answer means keep going. The inbox session has one limit, the soft one
+// (its hard limit equals it): past it, it hands off unasked, at the crossing and
+// every CARETOOK_CONTEXT_REMIND_MIN. The dispatcher's follow-up starts at the hard
 // limit (`hardOverAt`).
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
-// session's. A backlog session's subagents get no reminder: they have no
-// orchestrator to hand off to. Any other subagent has two fixed limits: past
+// session's. A backlog or inbox session's subagents get no reminder: they have no
+// orchestrator to hand off to. The inbox session's reminder has it hand off by
+// the command its prompt names (the main checkout's path: it runs outside it). Any other subagent has two fixed limits: past
 // the soft one a reminder asks it to judge, again every further 25k; past the
 // hard one it is told to hand off, on every tool call.
 //
@@ -39,7 +42,7 @@
 //
 // CARETOOK_CONTEXT_LIMIT (the soft limit, 160000 tokens), CARETOOK_CONTEXT_HARD_LIMIT
 // (225000; never below the soft one) and CARETOOK_CONTEXT_REMIND_MIN (10) are for
-// orchestrators and backlog sessions; a subagent's limits are constants.
+// orchestrators, backlog and inbox sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -73,14 +76,14 @@ const positive = (/** @type {string | undefined} */ value, /** @type {number} */
   const n = Number(value);
   return value && Number.isFinite(n) && n > 0 ? n : fallback;
 };
-/** An orchestrator's or backlog session's soft limit. */
+/** An orchestrator's, backlog or inbox session's soft limit. */
 export const limitOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_LIMIT, 160_000);
 /** An orchestrator's hard limit, never below the soft one. */
 export const hardLimitOf = (env = process.env) =>
   Math.max(positive(env.CARETOOK_CONTEXT_HARD_LIMIT, 225_000), limitOf(env));
-/** A session kind's hard limit: a backlog session has none (null). */
+/** A session kind's hard limit: a backlog session has none (null); the inbox session's one limit is the soft one. */
 export const hardLimitFor = (/** @type {string | undefined} */ kind, env = process.env) =>
-  kind === "backlog" ? null : hardLimitOf(env);
+  kind === "backlog" ? null : kind === "inbox" ? limitOf(env) : hardLimitOf(env);
 const remindMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_REMIND_MIN, 10) * MIN_MS;
 const keepMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_KEEP_MIN, 30) * MIN_MS;
 
@@ -168,6 +171,25 @@ export function backlogNudge(/** @type {number} */ size, /** @type {number} */ s
   return `Context watch, second notice: this session is still at ${kilo(size)} tokens, well past the soft limit of ${kilo(soft)}. Never hand off on your own: at the next pause in the talk, never in the middle of a question, tell the user the size and ask whether to hand off or keep going; if they don't answer, keep going. The dispatcher also asks the user, and with no answer it leaves the session running. Only on the user's word to hand off: write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`.`;
 }
 
+/** The inbox session's hand-off: it runs outside the repository, so by the main checkout's path. */
+export const inboxRotate = (/** @type {string} */ main) => `pnpm -s -C ${main} prd rotate --self`;
+
+export function inboxReminder(
+  /** @type {number} */ size,
+  /** @type {number} */ limit,
+  /** @type {string} */ rotate,
+) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. At the next pause in the talk with the user, never in the middle of a request, hand off without asking: say in one line that a fresh inbox session takes over, then run \`${rotate}\` and do nothing after it.`;
+}
+
+export function inboxNudge(
+  /** @type {number} */ size,
+  /** @type {number} */ limit,
+  /** @type {string} */ rotate,
+) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, run \`${rotate}\`. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
+}
+
 export function loopSoftReminder(/** @type {number} */ size) {
   return `Context watch: this agent is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(LOOP_SOFT)} (the hard limit is ${kilo(LOOP_HARD)}; \`pnpm prd context\` shows your orchestrator's size, not yours). Judge whether to go on: continue if you are mid-change or hold understanding a fresh agent would pay to rebuild; otherwise hand off at the next natural boundary. Say which you chose and why in your hand-off. To hand off, commit any changes you were asked to make and write your hand-off as your final message; if this is a slice, tell your orchestrator to continue it with a fresh \`--continue\` agent.`;
 }
@@ -210,12 +232,23 @@ function softMessage(/** @type {any} */ record, /** @type {number} */ size, /** 
  * orchestrator's hard one (a backlog session has none).
  * @param {any} current the record, or null
  * @param {{ pid: number, size: number, now: number, limit: number, hard?: number, remindMs: number,
- *   loop?: boolean, backlog?: boolean }} facts
+ *   loop?: boolean, backlog?: boolean, inbox?: string }} facts `inbox`: the inbox session's hand-off
+ *   command; its one limit is the soft one (`hard` is ignored)
  * @returns {{ record: any, message: string | null }}
  */
 export function hookDecision(
   current,
-  { pid, size, now, limit, hard = Math.max(limit, 225_000), remindMs, loop = false, backlog = false },
+  {
+    pid,
+    size,
+    now,
+    limit,
+    hard = Math.max(limit, 225_000),
+    remindMs,
+    loop = false,
+    backlog = false,
+    inbox = "",
+  },
 ) {
   const at = new Date(now).toISOString();
   const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
@@ -234,14 +267,16 @@ export function hookDecision(
     return { record, message: null };
   }
   record.firstOverAt ??= at;
-  // The dispatcher's follow-up watches the hard limit, for a backlog session too.
-  const overHard = size > Math.max(hard, limit);
+  // The dispatcher's follow-up watches the hard limit, for a backlog session too; the
+  // inbox session's is its soft one.
+  const overHard = size > (inbox ? limit : Math.max(hard, limit));
   if (overHard) record.hardOverAt ??= at;
   else for (const k of ["hardOverAt", "nudgeAt", "nudgeDeliveredAt"]) delete record[k];
   if (record.keep) return { record, message: null };
   if (record.nudgeAt && !record.nudgeDeliveredAt) {
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
+    if (inbox) return { record, message: inboxNudge(size, limit, inbox) };
     return { record, message: backlog ? backlogNudge(size, limit) : orchestratorNudge(size, hard) };
   }
   if (backlog)
@@ -256,6 +291,7 @@ export function hookDecision(
   if (!crossed && record.remindedAt && now - Date.parse(record.remindedAt) < remindMs)
     return { record, message: null };
   record.remindedAt = at;
+  if (inbox) return { record, message: inboxReminder(size, limit, inbox) };
   return { record, message: orchestratorReminder(size, hard) };
 }
 
@@ -328,7 +364,8 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   const dir = contextDirOf(sessions);
   const loop = Boolean(input.agent_id);
   const backlog = session.kind === "backlog";
-  if (loop && backlog) return "";
+  const inbox = session.kind === "inbox" ? inboxRotate(dirname(dirname(sessions))) : "";
+  if (loop && (backlog || inbox)) return "";
   const transcript = loop ? agentTranscript(input) : input.transcript_path;
   if (typeof transcript !== "string") return "";
   const size = readSize(transcript, { agent: loop });
@@ -346,10 +383,11 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
       size,
       now,
       limit: limitOf(env),
-      hard: hardLimitOf(env),
+      hard: inbox ? limitOf(env) : hardLimitOf(env),
       remindMs: remindMsOf(env),
       loop,
       backlog,
+      inbox,
     });
     message = d.message;
     return d.record;
@@ -359,7 +397,8 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
 }
 
 /**
- * Every live session with its size and limits (`hard` null for a backlog session).
+ * Every live session with its size and limits (`hard` null for a backlog session, the soft
+ * limit for the inbox session).
  * @param {string} sessions @param {{ limit?: number, hardLimit?: number, now?: number }} [opts]
  */
 export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf(), now = Date.now() } = {}) {
@@ -369,7 +408,7 @@ export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf
     .map(({ name, record }) => {
       const size = sizeRecord(dir, name, record.pid ?? 0);
       const keep = size?.keep && Date.parse(size.keep.until) > now ? size.keep : null;
-      const hard = record.kind === "backlog" ? null : hardLimit;
+      const hard = record.kind === "backlog" ? null : record.kind === "inbox" ? limit : hardLimit;
       return {
         name,
         pid: record.pid,
