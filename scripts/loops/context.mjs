@@ -2,7 +2,9 @@
 // past its soft and hard limits.
 //
 // session.sh gives `prd` and `backlog` sessions context-settings.json, and the
-// inbox session inbox-settings.json (claude --settings), a PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
+// inbox session inbox-settings.json (claude --settings), hooks that run `context.mjs hook`
+// on PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop and Stop. Every event
+// feeds the heartbeat (heartbeat.mjs); only PostToolUse is sized. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
 // it, it adds a reminder to the agent's context. It never blocks a tool call
 // and any error in it is swallowed (exit 0, no output).
@@ -59,6 +61,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { recordHeartbeat } from "./heartbeat.mjs";
 import { defaultDir, isLive, processOf, readRecord, readRecords } from "./sessions.mjs";
 
 const MIN_MS = 60_000;
@@ -361,6 +364,14 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   const session = readRecord(sessions, name);
   if (session?.pid !== pid) return "";
   const input = JSON.parse(raw);
+  try {
+    recordHeartbeat(input, env, now, session);
+  } catch {
+    /* the heartbeat never hurts the size watch */
+  }
+  // Only a finished call is sized; the other events are the heartbeat's alone.
+  const event = input?.hook_event_name;
+  if (event !== undefined && event !== "PostToolUse") return "";
   const dir = contextDirOf(sessions);
   const loop = Boolean(input.agent_id);
   const backlog = session.kind === "backlog";

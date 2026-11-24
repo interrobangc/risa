@@ -19,7 +19,8 @@ pnpm prd <command>
 
   See what's going on
     status                    every worktree: branch, changes, dev server link; sessions (managed or by hand);
-                              the dispatcher (running, paused and why, stopped; its last line); lease holders; the load
+                              the dispatcher (running, paused and why, stopped; its last line); lease holders; the load;
+                              the workers (each lease, pnpm prd command and slice agent: age, usual time, state)
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     ready [topic]             the ready-to-land report: link, what it addresses, blockers
 

@@ -240,6 +240,7 @@ beforeAll(() => {
     "dispatch-pick.mjs",
     "dispatch-context.mjs",
     "context.mjs",
+    "heartbeat.mjs",
     "keep-alive.mjs",
     "session-requests.mjs",
     "notices.mjs",
