@@ -16,9 +16,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { agentTranscript, hardLimitFor, hookDecision, sizeFromTranscript } from "./context.mjs";
+import { processOf } from "./sessions.mjs";
 
 const CONTEXT = new URL("./context.mjs", import.meta.url).pathname;
-const PID = 4242;
+// The test sessions' pid: past any pid the OS hands out (macOS 99999, Linux at most
+// 2^22), so `--all` never finds a real process behind it.
+const PID = 99_999_999;
 const MIN = 60_000;
 const NOW = Date.parse("2026-11-22T12:00:00Z");
 
@@ -528,9 +531,15 @@ describe("pnpm prd context", () => {
   });
 
   it("--all --json lists live sessions only and ignores a stale size record", async () => {
-    const child = spawn("sleep", ["30"], { stdio: "ignore" });
+    // Outlives any slow run (killed below): a child gone mid-test drops every row.
+    const child = spawn("sleep", ["600"], { stdio: "ignore" });
     try {
       const started = new Date().toISOString();
+      // A live process under a record that started long before it: a reused pid, not the session.
+      writeFileSync(
+        join(sessions, "prd-reused.json"),
+        JSON.stringify({ pid: child.pid, started: new Date(Date.now() - 10 * MIN).toISOString() }),
+      );
       writeFileSync(join(sessions, "prd-live.json"), JSON.stringify({ pid: child.pid, started }));
       writeFileSync(join(sessions, "prd-stale.json"), JSON.stringify({ pid: child.pid, started }));
       writeFileSync(
@@ -549,7 +558,8 @@ describe("pnpm prd context", () => {
       writeFileSync(join(context, "backlog.json"), JSON.stringify({ pid: child.pid, size: 230_000 }));
       const rows = JSON.parse(cli(["--all", "--json"]).stdout);
       const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
-      expect(Object.keys(byName).sort()).toEqual(["backlog", "prd-big", "prd-live", "prd-stale"]);
+      // In name order, whatever the files' times; prd-t (the fixed PID) and prd-reused never.
+      expect(rows.map((r) => r.name)).toEqual(["backlog", "prd-big", "prd-live", "prd-stale"]);
       expect(byName["prd-live"]).toMatchObject({
         size: 165_000,
         limit: 160_000,
@@ -570,5 +580,11 @@ describe("pnpm prd context", () => {
     } finally {
       child.kill();
     }
+  });
+
+  it("--all never takes the test sessions' fixed pid for a live process", () => {
+    // prd-t (every test's session) under a pid a busy machine could hand out was --all's row.
+    expect(processOf(PID)).toBeNull();
+    expect(JSON.parse(cli(["--all", "--json"]).stdout)).toEqual([]);
   });
 });
