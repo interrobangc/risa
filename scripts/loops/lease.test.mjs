@@ -260,34 +260,56 @@ describe("pnpm prd check's check lease", SLOW, () => {
     );
   });
 
-  it("makes the runs beyond the default limit of two wait, and holders shows who holds what", async () => {
-    const log = join(root, "check-log");
-    writeFileSync(log, "");
-    // A fake pnpm check: note its start and end, run for 2 s.
-    const fake = ["sh", "-c", `echo start >> ${log}; sleep 2; echo end >> ${log}`];
-    const runs = [];
-    for (let i = 0; i < 5; i++) runs.push(start(["run", "check", "--label", "pnpm check", "--", ...fake]));
-    await until(
-      () =>
-        readFileSync(log, "utf8")
-          .split("\n")
-          .filter((l) => l === "start").length === 2,
-    );
-    const { out } = cli(["holders"]);
-    expect(out).toMatch(/^check leases: 2 of 2 held$/m);
-    expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(2);
-    expect(out).toMatch(/^browser leases: 0 of 2 held$/m);
+  // Every run's command holds until the test creates `go`, so nothing ends
+  // while the test looks: no real-time race between a 2 s fake check, the
+  // takers' start-up (slow under load) and `holders`. `delay` spawns one taker
+  // late, past where the old 2 s fake would have ended (B-654).
+  it.each([
+    ["all at once", 0],
+    ["one taker slowed", 2500],
+  ])(
+    "makes the runs beyond the default limit of two wait, and holders shows who holds what (%s)",
+    async (_, delay) => {
+      const log = join(root, `check-log-${delay}`);
+      const go = join(root, `check-go-${delay}`);
+      writeFileSync(log, "");
+      // A fake pnpm check: note its start, hold until `go`, note its end.
+      const fake = [
+        "sh",
+        "-c",
+        `echo start >> ${log}; while [ ! -e ${go} ]; do sleep 0.05; done; echo end >> ${log}`,
+      ];
+      const run = () => start(["run", "check", "--label", "pnpm check", "--", ...fake]);
+      const lines = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
+      const waiting = (r) => r.err.includes("All 2 check leases are taken; waiting");
+      const runs = [];
+      for (let i = 0; i < 4; i++) runs.push(run());
+      if (delay) {
+        await until(() => lines().length === 2 && runs.filter(waiting).length === 2);
+        await sleep(delay);
+      }
+      runs.push(run());
+      // Each taker's own state: two started, three told they wait.
+      await until(() => lines().length === 2 && runs.filter(waiting).length === 3, 20_000);
+      const { out } = cli(["holders"]);
+      expect(out).toMatch(/^check leases: 2 of 2 held$/m);
+      expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(2);
+      expect(out).toMatch(/^browser leases: 0 of 2 held$/m);
+      expect(lines()).toEqual(["start", "start"]); // nobody ran past the limit while waiting
 
-    expect(await Promise.all(runs.map((r) => r.exit))).toEqual([0, 0, 0, 0, 0]);
-    expect(runs.filter((r) => r.err.includes("All 2 check leases are taken; waiting"))).toHaveLength(3);
-    let running = 0;
-    let most = 0;
-    for (const line of readFileSync(log, "utf8").split("\n").filter(Boolean)) {
-      running += line === "start" ? 1 : -1;
-      most = Math.max(most, running);
-    }
-    expect(most).toBe(2);
-  });
+      writeFileSync(go, "");
+      expect(await Promise.all(runs.map((r) => r.exit))).toEqual([0, 0, 0, 0, 0]);
+      expect(runs.filter(waiting)).toHaveLength(3);
+      let running = 0;
+      let most = 0;
+      for (const line of lines()) {
+        running += line === "start" ? 1 : -1;
+        most = Math.max(most, running);
+      }
+      expect(most).toBe(2);
+      expect(lines()).toHaveLength(10);
+    },
+  );
 });
 
 describe("browser leases and the old path", SLOW, () => {
