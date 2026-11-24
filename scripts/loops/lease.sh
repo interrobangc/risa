@@ -217,6 +217,41 @@ lease_write() {
   mv "$lease_path/name.tmp" "$lease_path/name"
 }
 
+# lease_claim KIND DIR N → make lease DIR/N (mkdir is the atomic take) and
+# record it as ours (lease_path and the rest), with TERM and INT held off
+# between the two: a signal in that window used to leave the directory behind,
+# since the caller's trap releases only $lease_path (B-742). A signal that came
+# meanwhile is raised again once the caller's traps are back, so they run as
+# they would have, now with the lease to release.
+lease_deferred=""
+lease_claim() {
+  local saved rc=1
+  saved=$(trap -p TERM INT)
+  lease_deferred=""
+  trap 'lease_deferred=TERM' TERM
+  trap 'lease_deferred=INT' INT
+  if mkdir "$2/$3" 2>/dev/null; then
+    [[ -z ${CARETOOK_LEASE_TEST_PAUSE:-} ]] || lease_test_pause "$CARETOOK_LEASE_TEST_PAUSE"
+    lease_kind=$1 lease_path=$2/$3 lease_n=$3 lease_started=$(date +%s)
+    rc=0
+  fi
+  trap - TERM INT
+  eval "$saved"
+  if [[ -n $lease_deferred ]]; then kill -s "$lease_deferred" "${BASHPID:-$$}"; fi
+  return "$rc"
+}
+
+# lease_test_pause MARKER → (tests only) touch MARKER, then wait in the claim's
+# window until a signal comes (or 30 s pass).
+lease_test_pause() {
+  local i
+  : > "$1"
+  for ((i = 0; i < 300; i++)); do
+    [[ -z $lease_deferred ]] || return 0
+    sleep 0.1
+  done
+}
+
 # lease_take_over KIND N → remove lease N if its holder is gone (under a short
 # mutex, so two waiters can't both remove it and one of them delete a fresh lease).
 lease_take_over() {
@@ -244,8 +279,7 @@ lease_take_counted() {
   fi
   if (($(lease_held "$1") + $4 < $3)); then
     for n in $(seq 1 "$3"); do
-      if mkdir "$dir/$n" 2>/dev/null; then
-        lease_kind=$1 lease_path=$dir/$n lease_n=$n lease_started=$(date +%s)
+      if lease_claim "$1" "$dir" "$n"; then
         lease_write "$2"
         ${lease_say:-:} "Took $1 lease $n of $3 ($4 more under the old path)."
         rc=0
@@ -346,8 +380,7 @@ lease_take() {
       fi
     fi
     ((old > 0)) || for n in $(seq 1 "$slots"); do # (with old holders, only the counted take)
-      if mkdir "$dir/$n" 2>/dev/null; then
-        lease_kind=$kind lease_path=$dir/$n lease_n=$n lease_started=$(date +%s)
+      if lease_claim "$kind" "$dir" "$n"; then
         lease_write "$label"
         lease_waiting_clear
         if [[ -n $announced ]]; then
