@@ -76,7 +76,7 @@ import {
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
-import { contextDirOf, limitOf, sizeRecord, updateRecord } from "./context.mjs";
+import { contextDirOf, hardLimitOf, sizeRecord, updateRecord } from "./context.mjs";
 import { CONTEXT_OPTIONS, CONTEXT_SESSION, commandUnder, contextDecision } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
 import { briefProblem } from "./rotate.mjs";
@@ -394,7 +394,8 @@ function contextStep(
   if (env.CARETOOK_CONTEXT_WATCH === "off") return false;
   const now = g.facts.now;
   const dir = contextDirOf(p.sessions);
-  const limit = limitOf(env);
+  // The follow-up starts at the hard limit; the hook alone handles the soft one.
+  const limit = hardLimitOf(env);
   const waitMs = positive(env.CARETOOK_CONTEXT_NUDGE_MIN, 15) * 60_000;
   const entries = readState(p.state).context ?? {};
   const sessions = g.records.map((r) => ({
@@ -494,7 +495,7 @@ function contextStep(
         CONTEXT_SESSION,
         ...CONTEXT_OPTIONS.flatMap((o) => ["--option", o]),
         "--recommend",
-        CONTEXT_OPTIONS[0],
+        a.recommend,
         "--defaults",
       ]);
       const id = r.ok ? r.out.split("\n")[0].trim() : "";
