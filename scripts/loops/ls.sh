@@ -51,7 +51,7 @@ for dir in "$loops"/*/; do
   printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
 done
 [[ -n $found ]] || echo "(no worktrees: pnpm prd start <topic>)"
-echo "PRD worktrees: $(prd_count) of $max_prds"
+echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)}"
 
 # The dispatcher, recorded sessions and open asks (status-extra.mjs): sessions and asks print nothing,
 # heading included, when there are none.

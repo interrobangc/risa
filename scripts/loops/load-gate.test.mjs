@@ -304,4 +304,25 @@ describe("the scripts that wait or warn", () => {
     );
     for (const n of ["c1", "c2", "c3", "d"]) fresh(n);
   });
+
+  it("a stored --cap (.loops/.prd-cap) wins over CARETOOK_MAX_PRDS for start and status", async () => {
+    fresh("w");
+    for (const n of ["k1", "k2"]) git(main, "worktree", "add", "-q", "-b", `prd/${n}`, join(loops, n), "dev");
+    writeFileSync(join(loops, ".prd-cap"), "2\n");
+    try {
+      expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
+        "PRD worktrees: 2 of 2 (pnpm prd dispatch --cap)",
+      );
+      const third = await run("prd.sh", ["start", "e"], { CARETOOK_MAX_PRDS: "5" });
+      expect(third.status).toBe(1);
+      expect(third.out).toContain("already 2 PRD worktrees (cap 2; from pnpm prd dispatch --cap:");
+      writeFileSync(join(loops, ".prd-cap"), "junk\n");
+      expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
+        "PRD worktrees: 2 of 5 (CARETOOK_MAX_PRDS)",
+      );
+    } finally {
+      rmSync(join(loops, ".prd-cap"), { force: true });
+      for (const n of ["k1", "k2"]) fresh(n);
+    }
+  });
 });

@@ -7,7 +7,15 @@ main=$(git -C "$(dirname "${BASH_SOURCE[0]}")" worktree list --porcelain | awk '
 loops=$main/.loops
 leases=$loops/.slots
 trunk=${TRUNK:-dev}
-max_prds=${CARETOOK_MAX_PRDS:-4}
+# The PRD cap (lanes): `pnpm prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
+# wins over CARETOOK_MAX_PRDS; the default is 4. max_prds_from says which one set it.
+prd_cap_file=$loops/.prd-cap
+max_prds=${CARETOOK_MAX_PRDS:-4} max_prds_from=${CARETOOK_MAX_PRDS:+CARETOOK_MAX_PRDS}
+max_prds_from=${max_prds_from:-default}
+if [[ -r $prd_cap_file ]] && _cap=$(<"$prd_cap_file") && [[ $_cap =~ ^[1-9][0-9]?$ ]]; then
+  max_prds=$_cap max_prds_from="pnpm prd dispatch --cap"
+fi
+unset _cap
 
 # dispatch_pid → the running dispatcher's pid (pnpm prd dispatch: its lock,
 # .loops/.dispatch.lock), or nothing and false when none runs.
