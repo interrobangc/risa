@@ -494,18 +494,38 @@ describe("inbox", () => {
     const text = ok("inbox");
     expect(text).toMatch(/^You are the inbox agent\./);
     expect(text).toContain("Run only these:");
-    expect(text).toContain(`\`${b()} similar <words…>\` before every add; show the user what it finds`);
     expect(text).toContain(`\`${b()} inbox add <type> <text…> [--details "<text>"]\``);
     expect(text).toContain("rerun with `--anyway` only on the user's word");
+    expect(text).toContain(`\`${b()} inbox edit <words…> --to "<text>" [--details "<text>"]\``);
     expect(text).toContain(`\`${b()} inbox move <words…> <type>\``);
+    expect(text).toContain(`\`${b()} inbox remove <words…>\``);
     expect(text).toContain(`\`${b()} inbox\` lists the lines not filed yet, only when a request needs them`);
+    // Its backlog commands are the inbox ones, nothing else.
+    expect(
+      text
+        .split(`${b()} `)
+        .slice(1)
+        .map((s) => /^[a-z]+/.exec(s)?.[0]),
+    ).toEqual(Array(5).fill("inbox"));
+  });
+
+  it("only writes unfiled lines on the user's word: no backlog read, no similar step, no extra work", () => {
+    const text = ok("inbox");
+    expect(text).toContain("On the user's word you add, reword, move or remove lines in their inbox");
+    expect(text).toContain("never read the backlog");
+    expect(text).toContain("do no extra work");
+    expect(text).not.toMatch(/similar|backlog\.md|backlog list|backlog show/);
+    expect(text).toContain(
+      "Dedupe, ingest, triage, priority, holds, PRDs and asks belong to the backlog session",
+    );
   });
 
   it("says what it must not do: no file, no commit, no ingest, triage, holds or asks", () => {
     const text = ok("inbox");
     expect(text).toContain("Edit no file and commit nothing");
-    expect(text).toContain("Ingest, triage, priority, holds, PRDs and asks belong to the backlog session");
-    expect(text).toContain("For a filed one it prints a `set` line: don't run it");
+    expect(text).toContain(
+      "A filed line (one with an id) is the backlog session's: edit, move and remove refuse it (move prints a `set` line: don't run it)",
+    );
     expect(text).not.toContain("pnpm backlog ingest");
     expect(text).not.toContain("pnpm prd");
     // Its prd commands are its own hand-off and its bye.
@@ -528,7 +548,9 @@ describe("inbox", () => {
 
   it("reads no doc, opens no poll, lists nothing at the start, and waits", () => {
     const text = ok("inbox");
-    expect(text).toContain("read no doc, ask no opening question, list nothing at the start");
+    expect(text).toContain(
+      "read no doc, never read the backlog, ask no opening question, list nothing at the start",
+    );
     expect(text).toContain("Wait for what the user says.");
     expect(text).not.toMatch(/AGENTS\.md|docs\/|AskUserQuestion|--guide/);
   });
@@ -539,7 +561,7 @@ describe("inbox", () => {
 
   it("runs with no topic, refuses one, and stays short", () => {
     // Under a fixed size, the main checkout's path (a test's temporary one) counted as one word.
-    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(1900);
+    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(2000);
     const r = prompt("inbox", "T");
     expect(r.code).not.toBe(0);
     expect(r.err).toContain("prompt: inbox takes no topic or options");

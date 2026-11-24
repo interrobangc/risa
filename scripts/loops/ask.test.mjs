@@ -231,16 +231,29 @@ describe("defaults on silence", () => {
     expect(stored("a1")).toMatchObject({ answer: "after the check", defaulted: false });
   });
 
-  it("asks shows the countdown, and a due ask as due without settling it: it can still be answered", async () => {
-    askDefaulting(30);
-    expect(prd(["asks"]).stdout.split("\n")[0]).toMatch(
-      /^a1 {2}question {2}demo {2}\d+s ago, dispatch, takes "yes" in 30m \(at \d\d:\d\d\) unless answered$/,
-    );
-    askDefaulting(0.001);
-    await new Promise((r) => setTimeout(r, 200));
-    const listed = prd(["asks"]).stdout;
+  it("asks shows the countdown from a fixed now, and a due ask as due without settling it: it can still be answered", () => {
+    // CARETOOK_CLOCK_FILE: ask files at, and asks lists from, these epoch seconds.
+    const clockFile = join(root, "clock");
+    const T = 1_794_999_960; // a whole minute (2026-11-18)
+    const at = (s) => {
+      writeFileSync(clockFile, String(T + s));
+      return { CARETOOK_CLOCK_FILE: clockFile };
+    };
+    expect(askDefaulting(30, at(0)).status).toBe(0);
+    const when = hhmm(stored("a1").defaultAt);
+    const first = (s) => prd(["asks"], at(s)).stdout.split("\n")[0];
+    const line = (ago, left) =>
+      `a1  question  demo  ${ago} ago, dispatch, takes "yes" in ${left} (at ${when}) unless answered`;
+    expect(first(0)).toBe(line("0s", "30m"));
+    // Whole minutes left, rounded down: 1 s and 59 s past a minute boundary both read 29m.
+    expect(first(1)).toBe(line("1s", "29m"));
+    expect(first(59)).toBe(line("59s", "29m"));
+    expect(first(60)).toBe(line("1m", "29m"));
+    expect(first(61)).toBe(line("1m", "28m"));
+    askDefaulting(0.001, at(59)); // due 60 ms later
+    const listed = prd(["asks"], at(60)).stdout;
     expect(listed).toMatch(
-      /^a2 {2}question {2}demo {2}\d+s ago, dispatch, takes "yes": due \(still answerable\)$/m,
+      /^a2 {2}question {2}demo {2}1s ago, dispatch, takes "yes": due \(still answerable\)$/m,
     );
     expect(stored("a2")).toMatchObject({ answeredAt: null, defaulted: false });
     expect(prd(["asks", "--json"]).status).toBe(0);

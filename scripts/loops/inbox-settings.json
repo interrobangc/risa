@@ -12,5 +12,6 @@
       }
     ]
   },
-  "fastMode": true
+  "fastMode": false,
+  "effortLevel": "low"
 }

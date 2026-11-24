@@ -1,4 +1,4 @@
-// The origin writer and the inbox commands (`pnpm backlog inbox add|move`,
+// The origin writer and the inbox commands (`pnpm backlog inbox add|move|edit|remove`,
 // `inbox`, `ingest`'s pickup), against a throwaway main checkout, a bare origin
 // and a second clone standing in for another device. The scripts are copied
 // into the checkout, so the pickup's lib.sh belongs to it; nothing here reaches
@@ -307,6 +307,73 @@ describe("inbox move", () => {
     expect(r.status).toBe(1);
     expect(r.err).toContain("filed as B-1: change the item instead: pnpm backlog set B-1 type=feature");
     expect(onOrigin()).not.toContain("(B-");
+  });
+});
+
+describe("inbox edit and remove", () => {
+  it("edit rewords an unfiled bullet in place, keeping its details; --details replaces them", () => {
+    const before = snapshot();
+    let r = cli(["inbox", "edit", "for", "the", "calendar", "--to", "Dark mode for the agenda"], off);
+    expect(r.status, r.err).toBe(0);
+    expect(r.out).toMatch(
+      /^edited on origin\/dev as [0-9a-f]{7}: "Dark mode for the calendar" is now "Dark mode for the agenda"$/,
+    );
+    expect(onOrigin()).toContain(
+      "- Dark mode for the agenda\n  and the timeline\n- Dark mode for the settings",
+    );
+    expect(gitIn(origin, "log", "-1", "--format=%B", "dev")).toMatch(/Backlog-Tool: inbox edit$/);
+    r = cli(["inbox", "edit", "for", "the", "agenda", "--details", "at night"], off);
+    expect(r.status, r.err).toBe(0);
+    expect(onOrigin()).toContain("- Dark mode for the agenda\n  at night\n- Dark mode for the settings");
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("remove takes an unfiled bullet and its details out", () => {
+    const before = snapshot();
+    const r = cli(["inbox", "remove", "for", "the", "calendar"], off);
+    expect(r.status, r.err).toBe(0);
+    expect(r.out).toMatch(/^removed on origin\/dev as [0-9a-f]{7}: Dark mode for the calendar$/);
+    expect(onOrigin()).toContain("## Feature requests\n\n- Dark mode for the settings\n\n## Questions");
+    expect(onOrigin()).not.toContain("and the timeline");
+    expect(gitIn(origin, "log", "-1", "--format=%B", "dev")).toMatch(/Backlog-Tool: inbox remove$/);
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("both refuse a filed bullet, on origin/dev or only local, and no match or several, pushing nothing", () => {
+    remote((t) => ({ [INBOX]: t.replace("- Timeline jumps on scroll", "- Timeline jumps on scroll (B-7)") }));
+    const tip = gitIn(origin, "rev-parse", "dev");
+    let r = cli(["inbox", "edit", "timeline", "jumps", "--to", "Timeline jumps"], off);
+    expect(r.status).toBe(1);
+    expect(r.err).toContain(
+      '"Timeline jumps on scroll" is filed as B-7: change the item instead, in the backlog session',
+    );
+    r = cli(["inbox", "remove", "timeline", "jumps"], off);
+    expect(r.status).toBe(1);
+    expect(r.err).toContain(
+      '"Timeline jumps on scroll" is filed as B-7: drop the item instead, in the backlog session',
+    );
+    r = cli(["inbox", "remove", "dark", "mode"], off);
+    expect(r.err).toMatch(/in 2 inbox lines .*give more of its words/);
+    r = cli(["inbox", "edit", "nothing", "like", "it", "--to", "x"], off);
+    expect(r.err).toMatch(/no inbox line on origin\/dev has "nothing like it"; nothing was written/);
+    expect(gitIn(origin, "rev-parse", "dev")).toBe(tip);
+
+    git("pull", "-q", "origin", "dev");
+    expect(cli(["ingest"], off).status).toBe(0); // tags the other two locally
+    commitIn(repo, { "a.txt": "mine\n" }, "feat: my own"); // so nothing local is pushed
+    r = cli(["inbox", "remove", "dark", "mode", "for", "the", "settings"], off);
+    expect(r.status).toBe(1);
+    expect(r.err).toMatch(/"Dark mode for the settings" is filed as B-\d+: drop the item instead/);
+    expect(gitIn(origin, "rev-parse", "dev")).toBe(tip);
+  });
+
+  it("edit needs --to or --details; neither command takes no words", () => {
+    expect(cli(["inbox", "edit", "timeline"], off).err).toContain("usage: inbox edit <words…> --to TEXT");
+    expect(cli(["inbox", "remove"], off).err).toContain("usage: inbox remove <words…>");
+    expect(cli(["inbox", "edit", "timeline", "--to", "x (B-2)"], off).err).toContain("leave out the (B-n)");
+    expect(cli(["inbox", "drop", "x"], off).err).toContain(
+      'unknown inbox command "drop" (add, move, edit, remove)',
+    );
   });
 });
 
