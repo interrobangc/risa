@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DISPATCHER_SESSIONS } from "./asks.mjs";
 import { CONTEXT_SESSION } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION } from "./dispatch-pick.mjs";
+import { STUCK_SESSION } from "./dispatch-stuck.mjs";
 import { recordVerdict } from "./skeptics.mjs";
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
@@ -382,7 +383,7 @@ describe("a skeptic before every ask", () => {
   });
 
   it("only the dispatcher's sessions are exempt, and only by an explicit --session", () => {
-    expect(DISPATCHER_SESSIONS).toEqual([DISPATCH_SESSION, CONTEXT_SESSION, KEEP_SESSION]);
+    expect(DISPATCHER_SESSIONS).toEqual([DISPATCH_SESSION, CONTEXT_SESSION, KEEP_SESSION, STUCK_SESSION]);
     for (const s of DISPATCHER_SESSIONS) expect(raw(question("--session", s, "--waits")).status).toBe(0);
     expect(raw(question("--session", "prd-demo", "--waits")).status).toBe(1);
     expect(raw(question("--waits"), { CARETOOK_SESSION: "dispatch" }).status).toBe(1);

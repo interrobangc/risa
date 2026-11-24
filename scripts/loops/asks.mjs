@@ -52,7 +52,7 @@ export const NEVER_DEFAULT =
 /** How long answering, settling or dismissing waits for another one's lock on the same ask. */
 export const LOCK_WAIT_MS = 5000;
 /** The dispatcher's own sessions: code, so their questions need no skeptic (the honor system). */
-export const DISPATCHER_SESSIONS = ["dispatch", "dispatch-context", "dispatch-keep"];
+export const DISPATCHER_SESSIONS = ["dispatch", "dispatch-context", "dispatch-keep", "dispatch-stuck"];
 /** A lock this old is taken over even if its holder looks alive (a reused pid). */
 const LOCK_STALE_MS = 60_000;
 
