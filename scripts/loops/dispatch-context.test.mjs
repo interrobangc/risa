@@ -430,6 +430,7 @@ describe("the tick", () => {
     for (const f of [
       "dispatch.mjs",
       "dispatch-context.mjs",
+      "dispatch-stuck.mjs",
       "dispatch-pick.mjs",
       "context.mjs",
       "heartbeat.mjs",
