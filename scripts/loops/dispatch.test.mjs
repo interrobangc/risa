@@ -80,6 +80,7 @@ if [[ -n \${STUB_NEW_MAKE:-} ]]; then
   if [[ $1 == plan ]]; then name=plan-$2; else name=$2; fi
   git worktree add -q -b "$1/$2" ".loops/$name" dev
 fi
+[[ -z \${STUB_NEW_FAIL_AFTER:-} ]] || { echo "migrate failed" >&2; exit 1; }
 echo "made $2"
 `;
 // rm.sh: removes the worktree and its session record, as the real one does.
@@ -334,7 +335,7 @@ describe("one tick per action", () => {
     expect(out).toContain(
       "  prd-a: its tab never opened, not counted as a death (failed (exit 1): no tab); a later tick retries; a removed",
     );
-    expect(calls("rm")).toEqual(["a"]);
+    expect(calls("rm")).toEqual(["a --no-registry"]);
     expect(existsSync(join(loops, "a"))).toBe(false);
     expect(existsSync(join(sessions, "prd-a.json"))).toBe(false);
     expect(dstate().reopens ?? {}).toEqual({});
@@ -358,7 +359,7 @@ describe("one tick per action", () => {
       { topic: "q", state: "to-write", waiting: 2 },
     ]);
     ok(["--once"], { STUB_NEW_MAKE: "1", STUB_OPEN_FAIL: "plan-p" });
-    expect(calls("rm")).toEqual(["plan-p"]);
+    expect(calls("rm")).toEqual(["plan-p --no-registry"]);
     expect(existsSync(join(loops, "plan-p"))).toBe(false);
     // No planner runs: another may be planned (here p again, by row order), none is reopened.
     const next = ok(["--dry-run"]);
@@ -437,6 +438,42 @@ describe("one tick per action", () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("dispatch needs iTerm2");
     expect(calls("new")).toEqual([]);
+  });
+
+  it("a new.sh that fails after making the worktree removes it: no slot held at the next tick (B-452)", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { STUB_NEW_MAKE: "1", STUB_NEW_FAIL_AFTER: "1" });
+    expect(out).toContain("  new.sh prd a: failed (exit 1): migrate failed; a removed");
+    // Forced (a half setup holds no work) and with the registry row left alone.
+    expect(calls("rm")).toEqual(["a --no-registry --force"]);
+    expect(existsSync(join(loops, "a"))).toBe(false);
+    expect(existsSync(join(sessions, "prd-a.json"))).toBe(false);
+    expect(openCalls()).toEqual([]);
+    expect(
+      logText()
+        .split("\n")
+        .filter((l) => l.includes("new.sh")),
+    ).toHaveLength(1);
+    // The next tick sees no worktree opened by hand and no slot taken: it starts a again.
+    const next = ok(["--dry-run"], { CARETOOK_MAX_PRDS: "1" });
+    expect(next).toContain("start a: planned, and nothing stops it");
+    expect(next).not.toContain("opened by hand");
+  });
+
+  it("a planner whose new.sh fails after making its worktree doesn't hold the planner slot (B-452)", () => {
+    setRows([{ topic: "p", state: "to-write", waiting: 2 }]);
+    ok(["--once"], { STUB_NEW_MAKE: "1", STUB_NEW_FAIL_AFTER: "1" });
+    expect(calls("rm")).toEqual(["plan-p --no-registry --force"]);
+    expect(existsSync(join(loops, "plan-p"))).toBe(false);
+    const next = ok(["--dry-run"]);
+    expect(next).toContain("plan p: 2 waiting, no plan yet");
+    expect(next).not.toContain("a planner is running");
+  });
+
+  it("a new.sh that fails before making the worktree removes nothing", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    expect(ok(["--once"], { STUB_NEW_FAIL: "1" })).toContain("  new.sh prd a: failed (exit 1): no room\n");
+    expect(calls("rm")).toEqual([]);
   });
 });
 

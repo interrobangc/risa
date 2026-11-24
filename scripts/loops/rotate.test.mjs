@@ -798,4 +798,24 @@ Intro.
     expect(r.stdout).not.toContain("hot files");
     expect(rowOf("busy").hot).toEqual(["apps/web/"]);
   });
+
+  it("--no-registry marks nothing done and clears no hot files (the dispatcher's undo, B-452)", () => {
+    commitOnDev({ "plans/backlog.md": REGISTRY, "plans/fin-plan.md": plan(MERGED) });
+    // The earlier tests' kept branches go: these two start fresh from dev, as new.sh's do.
+    for (const b of ["prd/fin", "prd/fixes-x"])
+      if (git(main, "branch", "--list", b)) git(main, "branch", "-D", b);
+    prdWorktree("fin");
+    prdWorktree("fixes-x");
+    const head = git(main, "rev-parse", "HEAD");
+    for (const t of ["fin", "fixes-x"]) {
+      const r = run("rm.sh", [t, "--no-registry", "--force"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toMatch(/done|hot files/);
+      expect(r.stdout).toContain(`Removed ${t} and its branch prd/${t}`);
+    }
+    expect(git(main, "rev-parse", "HEAD")).toBe(head);
+    const rows = JSON.parse(backlog("prd", "list", "--json"));
+    expect(rows.find((r) => r.topic === "fin").flags).toEqual(["hold"]);
+    expect(rows.find((r) => r.topic === "fixes-x").hot).toEqual(["scripts/loops/", "docs/"]);
+  });
 });
