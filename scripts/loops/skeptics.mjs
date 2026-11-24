@@ -326,6 +326,10 @@ export function readRules(root) {
   };
 }
 
+/** The slice-size cap (B-596), which the plan brief carries beside the handbook's skeptic pass. */
+export const SLICE_SIZE_RULE =
+  "**A slice too big:** one that would touch more than about 8 files, or more than one running topic's hot file (`pnpm backlog prd list`), is a send-back: split it into slices that each land on their own.";
+
 const JOB = {
   ask: (r) =>
     `A session wants to ask the user the question in the evidence. Decide whether it is really the user's.
@@ -347,6 +351,8 @@ Answer **go** when they hold up. Answer **send-back** with what to fix when they
 What to look for:
 
 ${r.skepticPass}
+
+${SLICE_SIZE_RULE}
 
 Never list (an assumed decision here must be a question): ${r.neverList}.`,
 };
