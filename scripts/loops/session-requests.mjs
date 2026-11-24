@@ -9,7 +9,9 @@
 // (CARETOOK_REQUESTS_DIR): { id, kind, name, session (backlog-<name>), remote
 // (`backlog - <name>`), model, brief, from, requestedAt, state (pending, opened
 // or refused), why, noticeFailed (why the requester's notice couldn't post),
-// doneAt }. Ids are r1, r2, … and never reused. A brief is
+// doneAt }. Ids are r1, r2, … and never reused: the high-water mark is
+// notices.mjs's (.seq.d/ files that only move up; an old .seq still reads), so
+// two requests filed together can't lower it. A brief is
 // copied into the store when the request is filed, so the requester's file can
 // go; it is deleted with its request, a day after that settled.
 //
@@ -33,7 +35,7 @@ import { pathToFileURL } from "node:url";
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { START_GRACE_MS } from "./keep-alive.mjs";
-import { MAX_TEXT, oneLine } from "./notices.mjs";
+import { MAX_TEXT, oneLine, raiseSeq, readSeq } from "./notices.mjs";
 import {
   ancestorClaude,
   claudeName,
@@ -53,7 +55,6 @@ const MAX_NAME = 40;
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MODEL = /^[A-Za-z0-9._[\]-]+$/;
 const ID_FILE = /^r(\d+)\.json$/;
-const SEQ = ".seq";
 
 export class RequestError extends Error {}
 
@@ -78,13 +79,6 @@ const gone = (/** @type {string} */ file) => {
     unlinkSync(file);
   } catch (e) {
     if (/** @type {NodeJS.ErrnoException} */ (e).code !== "ENOENT") throw e;
-  }
-};
-const readSeq = (/** @type {string} */ dir) => {
-  try {
-    return Number(readFileSync(join(dir, SEQ), "utf8").trim()) || 0;
-  } catch {
-    return 0;
   }
 };
 const fileNames = (/** @type {string} */ dir) => {
@@ -167,11 +161,7 @@ export function createRequest(dir, { name, brief = null, model = null, from = nu
     } finally {
       gone(tmp);
     }
-    if (readSeq(dir) < n) {
-      const s = tmpName(dir);
-      writeFileSync(s, `${n}\n`);
-      renameSync(s, join(dir, SEQ));
-    }
+    raiseSeq(dir, n);
     return record;
   }
 }
