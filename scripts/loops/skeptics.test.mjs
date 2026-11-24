@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  SLICE_SIZE_RULE,
   SkepticError,
   VERDICTS,
   checkRecord,
@@ -272,6 +273,14 @@ describe("the brief", () => {
     expect(brief).toContain("What is worth asking");
     expect(brief).toContain("The fix topics");
     for (const word of words) expect(brief).toContain(word);
+  });
+
+  it("the plan brief carries the slice-size cap; the others don't", () => {
+    const brief = (kind) => skepticBrief(kind, { evidence: "x", rules: rules() });
+    expect(brief("plan")).toContain(SLICE_SIZE_RULE);
+    expect(SLICE_SIZE_RULE).toContain("more than about 8 files, or more than one running topic's hot file");
+    expect(SLICE_SIZE_RULE).toContain("split it into slices that each land on their own");
+    for (const kind of ["ask", "land"]) expect(brief(kind)).not.toContain(SLICE_SIZE_RULE);
   });
 
   it("refuses an empty evidence or another kind", () => {

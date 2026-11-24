@@ -390,6 +390,13 @@ describe("plan and backlog", () => {
       expect(out).not.toContain("A fresh skeptic reads every question");
   });
 
+  it("both planner prompts cap a slice at about 8 files and one running topic's hot file", () => {
+    for (const plan of [ok("plan", "T"), ok("plan", "T", "--auto")])
+      expect(plan).toContain(
+        "**a slice that would touch more than about 8 files, or more than one running topic's hot file** (`pnpm backlog prd list`), **is split into slices that each land on their own**",
+      );
+  });
+
   it("both planner prompts run the skeptic from the plan brief, with send-back and one retry", () => {
     for (const plan of [ok("plan", "T"), ok("plan", "T", "--auto")]) {
       expect(plan).toContain("`pnpm prd prompt skeptic plan --evidence <file>`");
