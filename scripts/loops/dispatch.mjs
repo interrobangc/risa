@@ -658,7 +658,7 @@ const readJson = (/** @type {string} */ file) => {
 function watchMarks(/** @type {string} */ file) {
   /** @type {{ slice: string, at: string }[]} */
   const out = [];
-  let text = "";
+  let text;
   try {
     text = readFileSync(file, "utf8");
   } catch {
