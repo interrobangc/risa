@@ -8,7 +8,8 @@
 // One JSON file per request in the main checkout's .loops/.requests
 // (CARETOOK_REQUESTS_DIR): { id, kind, name, session (backlog-<name>), remote
 // (`backlog - <name>`), model, brief, from, requestedAt, state (pending, opened
-// or refused), why, doneAt }. Ids are r1, r2, … and never reused. A brief is
+// or refused), why, noticeFailed (why the requester's notice couldn't post),
+// doneAt }. Ids are r1, r2, … and never reused. A brief is
 // copied into the store when the request is filed, so the requester's file can
 // go; it is deleted with its request, a day after that settled.
 //
@@ -31,6 +32,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { START_GRACE_MS } from "./keep-alive.mjs";
+import { MAX_TEXT, oneLine } from "./notices.mjs";
 import {
   ancestorClaude,
   claudeName,
@@ -57,7 +59,7 @@ export class RequestError extends Error {}
 /**
  * @typedef {{ id: string, kind: "backlog", name: string, session: string, remote: string, model: string,
  *   brief: string | null, from: string | null, requestedAt: string, state: "pending" | "opened" | "refused",
- *   why?: string, doneAt?: string }} SessionRequest
+ *   why?: string, noticeFailed?: string, doneAt?: string }} SessionRequest
  * @typedef {{ name: string, kind?: string, live: boolean, rotating?: boolean,
  *   rotatingAt?: number | string | null }} RequestSession
  */
@@ -177,11 +179,22 @@ export function createRequest(dir, { name, brief = null, model = null, from = nu
 export function settleRequest(
   /** @type {string} */ dir,
   /** @type {string} */ id,
-  /** @type {{ state: "opened" | "refused", why?: string, now?: number }} */ { state, why, now = Date.now() },
+  /** @type {{ state: "opened" | "refused", why?: string, noticeFailed?: string, now?: number }} */ {
+    state,
+    why,
+    noticeFailed,
+    now = Date.now(),
+  },
 ) {
   const file = join(dir, `${id}.json`);
   const current = JSON.parse(readFileSync(file, "utf8"));
-  const next = { ...current, state, ...(why ? { why } : {}), doneAt: new Date(now).toISOString() };
+  const next = {
+    ...current,
+    state,
+    ...(why ? { why } : {}),
+    ...(noticeFailed ? { noticeFailed } : {}),
+    doneAt: new Date(now).toISOString(),
+  };
   const tmp = tmpName(dir);
   writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
   renameSync(tmp, file);
@@ -277,15 +290,34 @@ export function requestLine(
   return `cd ${sh(main)} && ${sh(wrapper)} ${r.session} --kind backlog --managed -- --model ${sh(r.model)} --remote-control ${sh(r.remote)} "$(${prompt})"`;
 }
 
-/** The notice for the requester: one line, within the board's 200 characters. */
+/** `s` in at most `n` characters, its end cut to an ellipsis. */
+const clip = (/** @type {string} */ s, /** @type {number} */ n) =>
+  s.length <= n ? s : `${s.slice(0, Math.max(0, n - 1))}…`;
+
+/**
+ * The notice for the requester: one line within the board's MAX_TEXT. The id
+ * and the outcome always stay; past the bound the variable parts (the
+ * requester, the remote name, why) are cut, the longest first, to an ellipsis.
+ */
 export function requestNotice(
   /** @type {SessionRequest} */ r,
   /** @type {{ opened: boolean, why?: string }} */ { opened, why },
 ) {
-  const to = r.from ? ` (for ${r.from})` : "";
-  return opened
-    ? `request ${r.id}${to}: opened \`${r.remote}\``
-    : `request ${r.id}${to}: \`${r.remote}\` not opened: ${why}`;
+  /** @type {string[]} */
+  const parts = (opened ? [r.from, r.remote] : [r.from, r.remote, why]).map((p) => oneLine(p));
+  const text = (/** @type {string[]} */ [from, remote, reason]) => {
+    const to = from ? ` (for ${from})` : "";
+    return opened
+      ? `request ${r.id}${to}: opened \`${remote}\``
+      : `request ${r.id}${to}: \`${remote}\` not opened: ${reason}`;
+  };
+  const full = text(parts);
+  if (full.length <= MAX_TEXT) return full;
+  // The widest cap on each part that fits: the room left over the fixed text.
+  const room = MAX_TEXT - (full.length - parts.reduce((n, p) => n + p.length, 0));
+  let cap = Math.max(...parts.map((p) => p.length));
+  while (cap > 1 && parts.reduce((n, p) => n + Math.min(p.length, cap), 0) > room) cap--;
+  return text(parts.map((p) => clip(p, cap)));
 }
 
 /** `pnpm prd status`'s part: the pending requests under a heading, or "". */
@@ -300,7 +332,8 @@ export function pendingPart(/** @type {string} */ dir) {
 }
 
 const listLine = (/** @type {SessionRequest} */ r) =>
-  `${r.id}  ${r.state}  ${r.remote}  from ${r.from ?? "-"}, ${r.requestedAt}${r.why ? `: ${r.why}` : ""}`;
+  `${r.id}  ${r.state}  ${r.remote}  from ${r.from ?? "-"}, ${r.requestedAt}${r.why ? `: ${r.why}` : ""}` +
+  (r.noticeFailed ? ` (its notice failed: ${r.noticeFailed})` : "");
 
 /** The live session record of the calling shell's ancestor claude, by name, or null. */
 function callerName(/** @type {string | undefined} */ sessionsDir) {

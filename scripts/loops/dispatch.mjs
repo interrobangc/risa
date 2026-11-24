@@ -617,7 +617,19 @@ function requestStep(
       now,
     });
   } catch (e) {
-    out(`  its notice failed (ignored): ${e instanceof Error ? e.message : String(e)}`);
+    // The requester reads it in `pnpm prd session requests`.
+    const noticeFailed = e instanceof Error ? e.message : String(e);
+    out(`  its notice failed: ${noticeFailed}`);
+    try {
+      settleRequest(p.requests, request.id, {
+        state: opened ? "opened" : "refused",
+        ...(opened ? {} : { why }),
+        noticeFailed,
+        now,
+      });
+    } catch {
+      // The request is settled already; only its note is lost.
+    }
   }
   return true;
 }
