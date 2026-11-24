@@ -214,6 +214,20 @@ describe("releasing", SLOW, () => {
     expect(existsSync(h.path)).toBe(false);
   });
 
+  // B-742: a TERM between the lease's mkdir and lease_path= left the directory behind.
+  it.each([
+    ["hold", ["hold", "window", "--label", "held"]],
+    ["run", ["run", "window", "--", "true"]],
+  ])("leaves no lease when %s is TERMed between making the lease and recording it", async (_, args) => {
+    const marker = join(root, `window-${args[0]}`);
+    const p = start(args, { CARETOOK_LEASE_TEST_PAUSE: marker });
+    await until(() => existsSync(marker));
+    expect(existsSync(dir("window", 1))).toBe(true); // made, not yet recorded
+    p.child.kill("SIGTERM");
+    expect(await p.exit).toBe(143);
+    expect(existsSync(dir("window", 1))).toBe(false);
+  });
+
   it("releases a hold when its stdin closes or its watched pid exits", async () => {
     const h = await hold("eof", "held");
     h.child.stdin.end();
