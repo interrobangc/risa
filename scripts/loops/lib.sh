@@ -395,6 +395,8 @@ pr_verdict() {
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.
 
+inbox_path=plans/inbox.md
+
 # land_dir BRANCH → the worktree a prd/, plan/ or hotfix/ branch lives in.
 land_dir() {
   case $1 in
@@ -451,10 +453,29 @@ with_backlog_lock() {
 }
 
 # push_trunk → push the main checkout's dev to origin/dev, fast-forward only
-# (never forced), under the backlog lock. Stops when origin/dev has diverged.
+# (never forced), under the backlog lock. When origin/dev has commits dev lacks
+# it runs dev-sync first; a conflict there stops the push.
 push_trunk() {
+  local there
   git -C "$main" fetch --quiet origin "$trunk" || die "couldn't fetch origin/$trunk"
+  there=$(git -C "$main" rev-parse --verify --quiet "refs/remotes/origin/$trunk" || true)
+  if [[ -n $there ]] && ! git -C "$main" merge-base --is-ancestor "$there" "refs/heads/$trunk"; then
+    (dev_sync "a push of $trunk") || die "origin/$trunk has commits $trunk lacks and dev-sync stopped: nothing was pushed"
+  fi
   with_backlog_lock _push_trunk
+}
+# land_push_trunk → push_trunk for a landing, just before its merge. The landing's
+# checks saw dev as it was, so a pickup that brings anything but the backlog files
+# and CI's two lists refuses: nothing has landed, and a sync and rerun judge it.
+land_push_trunk() {
+  local before after moved
+  before=$(git -C "$main" rev-parse "refs/heads/$trunk")
+  push_trunk
+  after=$(git -C "$main" rev-parse "refs/heads/$trunk")
+  [[ $before != "$after" ]] || return 0
+  moved=$(git -C "$main" diff --name-only "$before" "$after" |
+    grep -vxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt || true)
+  [[ -z $moved ]] || die "origin/$trunk brought changes this landing's checks didn't see (${moved%%$'\n'*}…): nothing landed; run \`pnpm prd sync\`, then land again"
 }
 _push_trunk() {
   local here there
@@ -477,14 +498,28 @@ backlog_commit() {
   [[ -n $files ]] && ! grep -qvxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md <<< "$files"
 }
 
-# dev_sync BRANCH → after a GitHub merge, bring the main checkout's dev up to
-# origin/dev: fast-forward when dev is behind; rebase dev's own commits when
-# every one is a backlog commit (unpushed, so nothing shared is rewritten);
-# otherwise a merge commit (chore(dev): merge origin/dev after BRANCH). It
-# refuses a checkout off dev or mid-merge, rebase or cherry-pick, and any
-# uncommitted change to a file the update touches (git read-tree -m -u), and
-# moves dev under the backlog lock. No conflicts: it stops before touching
-# anything when the commits don't apply cleanly.
+# held_elsewhere SHA → true when another ref (a branch, remote-tracking ref, tag
+# or stash) or a detached worktree holds SHA: the amend rule's test
+# (scripts/backlog/backlog.mjs). Replaying such a commit would give it a new id.
+held_elsewhere() {
+  local sha others
+  others=$(git -C "$main" for-each-ref --contains "$1" --format='%(refname)' | grep -vxF "refs/heads/$trunk" || true)
+  [[ -z $others ]] || return 0
+  while read -r sha; do
+    git -C "$main" merge-base --is-ancestor "$1" "$sha" 2>/dev/null && return 0
+  done < <(git -C "$main" worktree list --porcelain | awk '/^HEAD /{h=$2} /^detached$/{print h}')
+  return 1
+}
+
+# dev_sync BRANCH → bring the main checkout's dev up to origin/dev: fast-forward
+# when dev is behind; replay dev's own commits when every one is a backlog commit
+# no other ref holds (unpushed, so nothing shared is rewritten); otherwise a merge
+# commit (chore(dev): merge origin/dev after BRANCH). It never stops on the inbox:
+# a conflict only in plans/inbox.md is resolved by the inbox merge, and uncommitted
+# inbox lines stay uncommitted on top of the update. It refuses a checkout off dev
+# or mid-merge, rebase or cherry-pick, a conflict in any other file, and any
+# uncommitted change to another file the update touches (git read-tree -m -u),
+# before changing anything, and moves dev under the backlog lock.
 dev_sync() {
   local gd f
   [[ $(git -C "$main" branch --show-current) == "$trunk" ]] || die "dev-sync: the main checkout ($main) isn't on $trunk"
@@ -496,7 +531,7 @@ dev_sync() {
   with_backlog_lock _dev_sync "${1:-a GitHub merge}"
 }
 _dev_sync() {
-  local here there c tree new n=0 own=()
+  local here there c tree new replay=1 own=()
   here=$(git -C "$main" rev-parse "refs/heads/$trunk")
   there=$(git -C "$main" rev-parse "refs/remotes/origin/$trunk")
   if git -C "$main" merge-base --is-ancestor "$there" "$here"; then
@@ -507,13 +542,14 @@ _dev_sync() {
     echo "dev-sync: fast-forwarded $trunk to ${there:0:7}"; return 0
   fi
   while read -r c; do own+=("$c"); done < <(git -C "$main" rev-list --reverse "$there..$here")
-  for c in "${own[@]}"; do backlog_commit "$c" || { n=-1; break; }; done
-  if ((n == 0)); then
+  for c in "${own[@]}"; do
+    if ! backlog_commit "$c" || held_elsewhere "$c"; then replay=0; break; fi
+  done
+  if ((replay)); then
     new=$there
     for c in "${own[@]}"; do
-      tree=$(git -C "$main" merge-tree --write-tree --merge-base="$c^" "$new" "$c") ||
+      tree=$(_merge_trees "$c^" "$new" "$c") ||
         die "dev-sync: backlog commit ${c:0:7} doesn't apply onto origin/$trunk: rebase it by hand (git -C $main rebase origin/$trunk)"
-      tree=${tree%%$'\n'*}
       new=$(git -C "$main" log -1 --format=%B "$c" |
         GIT_AUTHOR_NAME=$(git -C "$main" log -1 --format=%an "$c") \
         GIT_AUTHOR_EMAIL=$(git -C "$main" log -1 --format=%ae "$c") \
@@ -524,20 +560,79 @@ _dev_sync() {
     echo "dev-sync: rebased ${#own[@]} backlog commit(s) onto origin/$trunk (${there:0:7}); $trunk is ${new:0:7}"
     return 0
   fi
-  tree=$(git -C "$main" merge-tree --write-tree "$here" "$there") ||
+  tree=$(_merge_trees "" "$here" "$there") ||
     die "dev-sync: $trunk's own commits conflict with origin/$trunk: merge by hand (git -C $main merge origin/$trunk)"
-  tree=${tree%%$'\n'*}
   new=$(git -C "$main" commit-tree "$tree" -p "$here" -p "$there" -m "chore(dev): merge origin/$trunk after $1") ||
     die "dev-sync: couldn't write the merge commit"
   _move_trunk "$here" "$new" "merge origin/$trunk after $1"
   echo "dev-sync: merged origin/$trunk into $trunk (${#own[@]} local commit(s) kept) as ${new:0:7}"
 }
+# _inbox_merge BASE OURS THEIRS OUT → the inbox merge of three files, into OUT.
+_inbox_merge() {
+  node "$(dirname "${BASH_SOURCE[0]}")/../backlog/inbox-merge.mjs" "$1" "$2" "$3" > "$4"
+}
+# _merge_trees BASE OURS THEIRS → the merged tree (BASE empty: git's own). A
+# conflict only in the inbox is resolved by the inbox merge; any other fails.
+_merge_trees() {
+  local out rc=0 tree tmp blob from
+  out=$(git -C "$main" merge-tree --write-tree --name-only --no-messages ${1:+"--merge-base=$1"} "$2" "$3") || rc=$?
+  tree=${out%%$'\n'*}
+  if ((rc == 0)); then echo "$tree"; return 0; fi
+  ((rc == 1)) && [[ ${out#*$'\n'} == "$inbox_path" ]] || return 1
+  from=${1:-$(git -C "$main" merge-base "$2" "$3")} || return 1
+  tmp=$(mktemp -d)
+  if git -C "$main" cat-file blob "$from:$inbox_path" > "$tmp/base" 2>/dev/null &&
+    git -C "$main" cat-file blob "$2:$inbox_path" > "$tmp/ours" 2>/dev/null &&
+    git -C "$main" cat-file blob "$3:$inbox_path" > "$tmp/theirs" 2>/dev/null &&
+    _inbox_merge "$tmp/base" "$tmp/ours" "$tmp/theirs" "$tmp/merged" &&
+    blob=$(git -C "$main" hash-object -w --stdin < "$tmp/merged") &&
+    GIT_INDEX_FILE=$tmp/index git -C "$main" read-tree "$tree" &&
+    GIT_INDEX_FILE=$tmp/index git -C "$main" update-index --add --cacheinfo "100644,$blob,$inbox_path" &&
+    GIT_INDEX_FILE=$tmp/index git -C "$main" write-tree; then
+    rm -rf "$tmp"; return 0
+  fi
+  rm -rf "$tmp"; return 1
+}
+# _inbox_dirty BLOB → true when the main checkout's inbox, on disk or staged,
+# differs from BLOB.
+_inbox_dirty() {
+  [[ $(git -C "$main" hash-object --path="$inbox_path" -- "$main/$inbox_path") != "$1" ||
+    $(git -C "$main" rev-parse --verify --quiet ":$inbox_path" || true) != "$1" ]]
+}
 # _move_trunk OLD NEW WHY → update the main checkout's files, then dev, from OLD
-# to NEW; read-tree refuses when an uncommitted change would be overwritten.
+# to NEW; read-tree refuses when an uncommitted change would be overwritten. When
+# the update changes an inbox with uncommitted edits, read-tree moves everything
+# else (so a refusal leaves the user's file untouched), then the working copy
+# becomes the merge of OLD's copy, itself and NEW's copy, still uncommitted.
 _move_trunk() {
+  local old=$1 new=$2 why=$3 a b tmp="" target=$2 work=$main/$inbox_path gd
   git -C "$main" update-index -q --refresh >/dev/null 2>&1 || true
-  git -C "$main" read-tree -m -u "$1" "$2" ||
+  a=$(git -C "$main" rev-parse --verify --quiet "$old:$inbox_path" || true)
+  b=$(git -C "$main" rev-parse --verify --quiet "$new:$inbox_path" || true)
+  if [[ -n $a && -n $b && $a != "$b" && -f $work ]] && _inbox_dirty "$a"; then
+    tmp=$(mktemp -d)
+    git -C "$main" cat-file blob "$a" > "$tmp/base" &&
+      cp "$work" "$tmp/ours" &&
+      git -C "$main" cat-file blob "$b" > "$tmp/theirs" &&
+      _inbox_merge "$tmp/base" "$tmp/ours" "$tmp/theirs" "$tmp/merged" &&
+      GIT_INDEX_FILE=$tmp/index git -C "$main" read-tree "$new" &&
+      GIT_INDEX_FILE=$tmp/index git -C "$main" update-index --cacheinfo "100644,$a,$inbox_path" &&
+      target=$(GIT_INDEX_FILE=$tmp/index git -C "$main" write-tree) ||
+      { rm -rf "$tmp"; die "dev-sync: couldn't merge the inbox; nothing changed"; }
+  fi
+  if ! git -C "$main" read-tree -m -u "$old" "$target"; then
+    [[ -z $tmp ]] || rm -rf "$tmp"
     die "dev-sync: uncommitted changes in $main touch files the update changes: commit or stash them, then: pnpm prd dev-sync"
-  git -C "$main" update-ref -m "dev-sync: $3" "refs/heads/$trunk" "$2" "$1" ||
+  fi
+  if [[ -n $tmp ]]; then
+    gd=$(git -C "$main" rev-parse --absolute-git-dir)
+    git -C "$main" update-index --cacheinfo "100644,$b,$inbox_path"
+    cp -p "$work" "$gd/caretook-inbox-merged"
+    cat "$tmp/merged" > "$gd/caretook-inbox-merged"
+    mv "$gd/caretook-inbox-merged" "$work"
+    rm -rf "$tmp"
+    echo "dev-sync: kept your uncommitted lines in $inbox_path"
+  fi
+  git -C "$main" update-ref -m "dev-sync: $why" "refs/heads/$trunk" "$new" "$old" ||
     die "dev-sync: $trunk moved meanwhile; rerun pnpm prd dev-sync"
 }

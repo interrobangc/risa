@@ -8,8 +8,9 @@
 # backlog-only commits on dev don't count, nor drift that needs no merge:
 # unsynced_safe), then:
 #   1. pushes the main checkout's dev to origin/dev, fast-forward only, so the
-#      PR's base is the dev the branch last synced with; it stops when
-#      origin/dev has diverged (lib.sh, push_trunk);
+#      PR's base is the dev the branch last synced with; when origin/dev has
+#      commits dev lacks it runs dev-sync first, and stops if that stops
+#      (lib.sh, push_trunk);
 #   2. pushes the branch (never forced);
 #   3. opens the PR into dev, or updates the open one: the title is the landing
 #      subject (-m, else the one `land` would build); the body lists the

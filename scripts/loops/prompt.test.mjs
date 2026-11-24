@@ -88,6 +88,9 @@ describe("orchestrator", () => {
       expect(out).toContain("`pnpm prd pr T`");
       expect(out).toContain("`pnpm prd review T --wait` in the background");
       expect(out).toContain("push a real one off to the backlog");
+      expect(out).toContain(
+        "when `add` stops on a look-alike (exit 3), `note` the item it names if that covers the finding, or rerun with `--anyway` if it doesn't",
+      );
       expect(out).toContain("Reply on every thread before resolving it");
       expect(out).toContain("resolve each answered thread");
       expect(out).toContain("`review --again` until clean");
@@ -526,6 +529,8 @@ describe("tidy", () => {
     expect(text).toContain("`/loop 3h`");
     expect(text).toContain("The dispatcher runs `pnpm prd tidy --yes` every six hours by itself");
     expect(text).toContain("dead lease and slot tickets");
+    expect(text).toContain("finished backlog items: dropped ones, and landed ones whose topic has no `prd/`");
+    expect(text).not.toContain("archive backlog items");
     expect(text).toContain("**Never close or end a session**");
     expect(text).toContain("**Never delete unmerged work**");
     expect(text).toContain("A report is never pushed: send no PushNotification for it.");

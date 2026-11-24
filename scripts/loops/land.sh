@@ -11,8 +11,9 @@
 #                  PR into dev (pnpm prd pr) is merged on GitHub (a merge commit
 #                  with the -m subject, pinned to the checked tip with
 #                  --match-head-commit, the remote branch deleted), after dev is
-#                  pushed to origin (fast-forward only); then dev-sync (lib.sh)
-#                  brings the main checkout's dev up to origin/dev.
+#                  pushed to origin (fast-forward only; a pickup of anything but
+#                  the backlog files there refuses: land_push_trunk); then
+#                  dev-sync (lib.sh) brings the main checkout's dev up to origin/dev.
 #   the local path plan/ branches, and hotfix/ ones with --local: one
 #                  `git merge --no-ff` in the main checkout, as before; pushing
 #                  dev stays the dev keeper's.
@@ -518,7 +519,7 @@ if [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]]; then
   exit 0
 fi
 
-push_trunk
+land_push_trunk
 "${merge[@]}" || die "gh couldn't merge PR #$number ($url): nothing landed; see the PR"
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"
