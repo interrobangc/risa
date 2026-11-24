@@ -8,6 +8,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -205,6 +206,7 @@ beforeAll(() => {
     "test-db.sh",
   ])
     copyFileSync(join(HERE, f), scripts(f));
+  cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
   const backlogDir = join(HERE, "../backlog");
   for (const f of readdirSync(backlogDir).filter((f) => f.endsWith(".mjs") && !f.includes(".test.")))
     copyFileSync(join(backlogDir, f), join(main, "scripts/backlog", f));

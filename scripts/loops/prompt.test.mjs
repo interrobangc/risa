@@ -2,7 +2,7 @@
 // copied in: the plain prompts, the resume and continue variants, and the
 // every-step _Status_ rule. Nothing here starts a session.
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -51,6 +51,7 @@ beforeAll(() => {
   for (const f of ["prompt.sh", "lib.sh", "slice-fields.mjs"]) {
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   }
+  cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });
   writeFileSync(join(main, "plans/T-plan.md"), PLAN);
   writeFileSync(join(main, "plans/T-prd.md"), "# PRD: T\n");
   git(root, "init", "-q", "-b", "dev", main);
