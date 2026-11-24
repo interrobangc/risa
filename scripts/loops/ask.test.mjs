@@ -234,7 +234,7 @@ describe("defaults on silence", () => {
   it("asks shows the countdown from a fixed now, and a due ask as due without settling it: it can still be answered", () => {
     // CARETOOK_CLOCK_FILE: ask files at, and asks lists from, these epoch seconds.
     const clockFile = join(root, "clock");
-    const T = 1_794_999_960; // a whole minute (2026-11-17)
+    const T = 1_794_999_960; // a whole minute (2026-11-18)
     const at = (s) => {
       writeFileSync(clockFile, String(T + s));
       return { CARETOOK_CLOCK_FILE: clockFile };
