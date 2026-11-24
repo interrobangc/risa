@@ -7,7 +7,7 @@
 # check: lease.sh holders), and after the worktree table the dispatcher (running,
 # paused and why, or stopped; its last log entry), the recorded sessions (managed
 # or by hand), the open asks, the workers (status-extra.mjs: every lease, pnpm prd
-# command and slice agent with its age, usual time and state) and the live notices. (pnpm prd status, and pnpm prd status-watch)
+# command and slice agent with its age, usual time and state), the usage limits (usage.mjs) and the live notices. (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -58,6 +58,9 @@ echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)
 # heading included, when there are none.
 extra=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$(dirname "$0")/status-extra.mjs" 2>/dev/null || true)
 [[ -z $extra ]] || printf '\n%s\n' "${extra%$'\n'}"
+# The usage limits (usage.mjs status): one line, unknown when no session has read them lately.
+usage=$(CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/usage.mjs" status 2>/dev/null || true)
+[[ -z $usage ]] || printf '\n%s\n' "$usage"
 # The live notices' count (notice.mjs status): nothing when there are none.
 notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
 [[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
