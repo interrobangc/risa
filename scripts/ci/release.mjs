@@ -13,7 +13,7 @@ export const BROWSER_RUNS = /** @type {const} */ (["browser", "browser-2", "brow
 export const ZONE_JOBS = /** @type {const} */ (["zone-components-1", "zone-components-2", "zone-browser"]);
 export const MAX_ZONE_FILINGS = 10;
 /** Where second-zone failures past the cap are noted. */
-export const ZONE_OVERFLOW_ITEM = "B-372";
+export const ZONE_OVERFLOW_ITEM = "B-750";
 const MAX_TITLE = 100;
 const MAX_OVERFLOW_NAMES = 20;
 
