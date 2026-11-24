@@ -54,6 +54,22 @@
           }
         ]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$CARETOOK_CONTEXT_HOOK\" ] && node \"$(dirname \"$CARETOOK_CONTEXT_HOOK\")/usage.mjs\" stop-failure 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "[ -n \"$CARETOOK_CONTEXT_HOOK\" ] && node \"$(dirname \"$CARETOOK_CONTEXT_HOOK\")/usage.mjs\" statusline 2>/dev/null || true",
+    "refreshInterval": 60
   }
 }

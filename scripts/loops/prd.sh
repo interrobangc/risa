@@ -89,6 +89,10 @@ pnpm prd <command>
                               session (a slice only reports); else it lists each open thing and exits 3, closing nothing
     context [--keep "<why>" | --all [--json]]   this session's context size and the limit; --keep leaves it
                               alone for 30 minutes; --all lists every live session
+    usage [--json]            the plan's usage limits as the sessions' status lines last read them: the 5-hour
+                              and weekly (a gateway's spend limit too) use and reset times, unknown when no
+                              reading is newer than \$CARETOOK_USAGE_STALE_MIN (15) min, and the sessions
+                              stopped on a rate limit (.loops/.usage/<session>.json)
     rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
     rotate --self [--brief <file>]    replace the calling backlog session (or orchestrator) with a fresh one
                               (resume prompt, same name) from a background tab; refuses an uncommitted plan or
@@ -544,6 +548,7 @@ case $cmd in
     fi
     CARETOOK_NOTICES_DIR=$notices_dir exec node "$bin/notice.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
+  usage) CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} exec node "$bin/usage.mjs" "$@" ;;
   help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
 esac
