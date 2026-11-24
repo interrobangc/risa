@@ -63,6 +63,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -213,26 +214,75 @@ export function lockHolder(/** @type {string} */ lock) {
   }
 }
 
-/** Takes the lock for this process: { ok: true, took?: pid } or { ok: false, pid } (another runs). */
-export function takeLock(/** @type {string} */ lock) {
+/** How long a takeover guard may stand before it counts as a crashed taker's and is removed. */
+export const TAKEOVER_STALE_MS = 10_000;
+/** How long a taker waits for another's takeover guard before it gives up. */
+const TAKEOVER_WAIT_MS = 2_000;
+
+const pause = (/** @type {number} */ ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Takes the lock: { ok: true } or { ok: false, pid } (another runs; 0 when a
+ * racing taker's takeover outlasts the wait). A dead holder's lock is taken over
+ * under a guard directory (`<lock>.takeover`, made atomically): only the guard's
+ * holder re-reads the lock, removes a still-dead holder's and writes its own, so
+ * of two takers racing over one stale lock exactly one holds it (B-454). A guard
+ * older than TAKEOVER_STALE_MS is a crashed taker's and is removed.
+ * `between` (tests only) runs after the stale holder is read, before the takeover.
+ */
+export function takeLock(
+  /** @type {string} */ lock,
+  /** @type {{ pid?: number, between?: () => void }} */ { pid = process.pid, between } = {},
+) {
   mkdirSync(dirname(lock), { recursive: true });
-  for (let i = 0; i < 2; i++) {
+  const guard = `${lock}.takeover`;
+  const deadline = Date.now() + TAKEOVER_WAIT_MS;
+  for (;;) {
     try {
-      writeFileSync(lock, `${process.pid}\n`, { flag: "wx" });
+      writeFileSync(lock, `${pid}\n`, { flag: "wx" });
       return { ok: true };
     } catch (e) {
       if (/** @type {NodeJS.ErrnoException} */ (e).code !== "EEXIST") throw e;
-      const holder = lockHolder(lock);
-      if (holder && holder !== process.pid) return { ok: false, pid: holder };
-      // A dead holder's lock: taken over.
+    }
+    const holder = lockHolder(lock);
+    if (holder && holder !== pid) return { ok: false, pid: holder };
+    between?.();
+    try {
+      mkdirSync(guard);
+    } catch (e) {
+      if (/** @type {NodeJS.ErrnoException} */ (e).code !== "EEXIST") throw e;
+      // Another taker is mid-takeover: wait for it, or clear a crashed one's guard.
+      try {
+        if (Date.now() - statSync(guard).mtimeMs > TAKEOVER_STALE_MS) rmdirSync(guard);
+      } catch {
+        /* its taker just finished */
+      }
+      if (Date.now() > deadline) return { ok: false, pid: lockHolder(lock) ?? 0 };
+      pause(20);
+      continue;
+    }
+    try {
+      // Re-read under the guard: a racing taker may have taken it since.
+      const now = lockHolder(lock);
+      if (now && now !== pid) return { ok: false, pid: now };
       try {
         unlinkSync(lock);
       } catch {
-        /* another taker removed it */
+        /* already gone */
+      }
+      writeFileSync(lock, `${pid}\n`, { flag: "wx" });
+      return { ok: true };
+    } catch (e) {
+      if (/** @type {NodeJS.ErrnoException} */ (e).code !== "EEXIST") throw e;
+      return { ok: false, pid: lockHolder(lock) ?? 0 };
+    } finally {
+      try {
+        rmdirSync(guard);
+      } catch {
+        /* gone */
       }
     }
   }
-  return { ok: false, pid: lockHolder(lock) ?? 0 };
 }
 
 const releaseLock = (/** @type {string} */ lock) => {

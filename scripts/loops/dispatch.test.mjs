@@ -20,16 +20,19 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAsk, getAsk } from "./asks.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import {
   HELPER_SESSION,
   REOPEN_RESET_MS,
+  TAKEOVER_STALE_MS,
   TIDY_EVERY_MS,
   answerAction,
   helperLine,
+  lockHolder,
   sessionLine,
+  takeLock,
   tidyDue,
 } from "./dispatch.mjs";
 import { createRequest } from "./session-requests.mjs";
@@ -451,6 +454,69 @@ describe("the lock, pause, resume and stop", () => {
     expect(existsSync(join(loops, ".dispatch.lock"))).toBe(false);
     expect(logText()).toContain("stopped (SIGTERM)");
     expect(ok(["--stop"])).toContain("No dispatcher is running.");
+  });
+});
+
+describe("taking over a stale lock (B-454)", () => {
+  // Two takers in this process, each with a live pid of its own; `between` runs
+  // the other taker at the point the old unlink-and-write raced.
+  const A = process.pid;
+  const B = process.ppid;
+  /** @type {string} */ let dir;
+  /** @type {string} */ let lock;
+  /** @type {number} */ let dead;
+
+  beforeAll(() => {
+    const r = spawnSync("sh", ["-c", "echo $$"], { encoding: "utf8" });
+    dead = Number(r.stdout.trim());
+  });
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "dispatch-lock-"));
+    lock = join(dir, ".dispatch.lock");
+    writeFileSync(lock, `${dead}\n`);
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  const held = () => Number(readFileSync(lock, "utf8").trim());
+
+  it("two takers racing over a dead holder's lock end with one holder", () => {
+    /** @type {any} */ let inner;
+    const outer = takeLock(lock, { pid: A, between: () => (inner = takeLock(lock, { pid: B })) });
+    expect(inner).toEqual({ ok: true });
+    expect(outer).toEqual({ ok: false, pid: B });
+    expect(held()).toBe(B);
+    expect(existsSync(`${lock}.takeover`)).toBe(false);
+  });
+
+  it("the same race the other way round also ends with one holder", () => {
+    /** @type {any} */ let inner;
+    const outer = takeLock(lock, { pid: B, between: () => (inner = takeLock(lock, { pid: A })) });
+    expect(inner).toEqual({ ok: true });
+    expect(outer).toEqual({ ok: false, pid: A });
+    expect(held()).toBe(A);
+  });
+
+  it("a lone taker takes a dead holder's lock", () => {
+    expect(takeLock(lock, { pid: A })).toEqual({ ok: true });
+    expect(lockHolder(lock)).toBe(A);
+  });
+
+  it("a live holder's lock is never taken", () => {
+    writeFileSync(lock, `${B}\n`);
+    expect(takeLock(lock, { pid: A })).toEqual({ ok: false, pid: B });
+    expect(held()).toBe(B);
+  });
+
+  it("a crashed taker's stale guard is cleared; a fresh one is waited on", () => {
+    mkdirSync(`${lock}.takeover`);
+    const old = (Date.now() - TAKEOVER_STALE_MS - 1000) / 1000;
+    utimesSync(`${lock}.takeover`, old, old);
+    expect(takeLock(lock, { pid: A })).toEqual({ ok: true });
+    expect(held()).toBe(A);
+
+    writeFileSync(lock, `${dead}\n`);
+    mkdirSync(`${lock}.takeover`);
+    expect(takeLock(lock, { pid: A })).toEqual({ ok: false, pid: 0 });
+    expect(held()).toBe(dead);
   });
 });
 
