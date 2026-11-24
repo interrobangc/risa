@@ -129,6 +129,9 @@ const land = (...args) => landWith({}, ...args);
 beforeEach(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "land-")));
   repo = join(root, "repo");
+  // The run log outside the throwaway repo, whose .loops/ isn't ignored: a log
+  // there would be committed by a test's `git add -A`.
+  process.env.CARETOOK_RUN_LOG = join(root, "run-log.jsonl");
   mkdirSync(join(root, "bin"));
   writeFileSync(join(root, "bin", "gh"), GH);
   chmodSync(join(root, "bin", "gh"), 0o755);
