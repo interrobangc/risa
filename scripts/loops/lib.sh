@@ -270,6 +270,20 @@ trunk_drift() {
     grep -vxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt || true
 }
 
+# trunk_lists BRANCH [REF] → CI's two lists that dev (or REF) changed since
+# BRANCH last merged it and BRANCH itself didn't: what `sync` copies when it skips
+# the merge. A list both sides changed is shared, so dev-brought.mjs refuses and
+# sync merges instead.
+trunk_lists() {
+  local base f
+  base=$(git -C "$main" merge-base "$1" "${2:-$trunk}") || return 0
+  for f in scripts/ci/brake-list.txt scripts/ci/quarantine.txt; do
+    git -C "$main" diff --quiet "$base" "${2:-$trunk}" -- "$f" && continue
+    git -C "$main" diff --quiet "$base" "$1" -- "$f" || continue
+    echo "$f"
+  done
+}
+
 # Machine-wide leases (browser checks, pnpm prd check) live in lease.sh.
 
 # fmt_secs N → 1m05s.

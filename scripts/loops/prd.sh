@@ -152,7 +152,8 @@ pnpm prd <command>
                               how many reviewed heads Codex had findings on (out of credits apart),
                               from .loops/.run-log.jsonl, the check log and the flake log; works anywhere
     sync [--force]            merge dev into this PRD branch when its changes need it (shared or risky
-                              files); --force merges anyway, when you need code another PRD landed
+                              files; Markdown isn't shared); --force merges anyway, when you need code
+                              another PRD landed. Dev's CI lists always come in (a commit when no merge)
     browser <check>           one browser check; at most four run at once machine-wide
     browser --changed         the checks this worktree's changes need (--base REF, --list)
     browser --smoke …         any of these in smoke mode: each check's core path only (after a merge)
@@ -473,9 +474,22 @@ case $cmd in
       --force) sync_force=1 ;;
       *) die "sync: unknown option $1 (--force merges even when dev's changes don't need it)" ;;
     esac
-    if [[ -z $(trunk_drift "$branch") ]]; then
+    # CI reads the branch's own copy of its two lists, so a sync always brings
+    # dev's in. A list-only change keeps the recorded check (keeps_check).
+    lists=$(trunk_lists "$branch")
+    if [[ -z $(trunk_drift "$branch") && -z $lists ]]; then
       echo "$branch is up to date with $trunk (only backlog commits are newer, if any)"
+    elif [[ -z $(trunk_drift "$branch") ]]; then
+      git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch (CI lists)" "$trunk"
+      echo "Merged $trunk's CI lists into $branch (nothing else but backlog commits). No recheck needed"
     elif [[ -z $sync_force ]] && unsynced_safe "$branch" "$trunk"; then
+      if [[ -n $lists ]]; then
+        # shellcheck disable=SC2086
+        git -C "$dir" checkout "$trunk" -- $lists
+        # shellcheck disable=SC2086
+        git -C "$dir" commit -q -m "chore(${branch#*/}): take $trunk's CI lists" -- $lists
+        echo "Took $trunk's CI lists ($(echo $lists | tr ' ' ',')) into $branch"
+      fi
       echo "$branch needs no merge: $trunk's changes share no file with it and bring nothing risky. No recheck needed (pnpm prd sync --force merges anyway, when you need that code)"
     else
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"

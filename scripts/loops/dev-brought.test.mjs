@@ -108,6 +108,22 @@ describe("devBrought", () => {
     expect(v.refusal).toBe(`dev brought ${kind} (${file})`);
   });
 
+  it.each(["plans/topic-plan.md", "docs/domain/sync.md"])("doesn't call %s shared", (file) => {
+    on("branch");
+    commit(file, "mine.ts");
+    on("dev");
+    commit(file);
+    expect(devBrought(repo, "dev", "branch")).toMatchObject({ drift: true, shared: [], refusal: null });
+  });
+
+  it("still names code shared beside a shared plan", () => {
+    on("branch");
+    commit("plans/topic-plan.md", "shared.ts");
+    on("dev");
+    commit("plans/topic-plan.md", "shared.ts");
+    expect(devBrought(repo, "dev", "branch").shared).toEqual(["shared.ts"]);
+  });
+
   it("leaves Markdown and CI's two lists off the risky list", () => {
     expect(riskyKind("packages/data/src/seeds/notes.md")).toBeNull();
     expect(riskyKind("scripts/ci/quarantine.txt")).toBeNull();

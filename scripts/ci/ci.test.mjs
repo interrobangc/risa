@@ -694,6 +694,65 @@ describe("ci gate and ci file", () => {
     expect(w.calls.filter((c) => c.includes("--branch"))).toEqual([]);
   });
 
+  it("ci gate after a dev sync requests a recheck at the tier dev brought and carries the wave's green", async () => {
+    const WAVE = "c".repeat(40);
+    const DEV = "d".repeat(40);
+    const wave = { ...green, commit: WAVE, runId: "6", ranTier: "components", tier: "components" };
+    const recheck = { ...green, runId: "8", ranTier: "integration", tier: "integration" };
+    const w = world({ verdict: recheck });
+    const { git, gh } = w.io;
+    w.io.git = (/** @type {string[]} */ args) => {
+      const line = `git ${args.join(" ")}`;
+      if (args[0] === "rev-list") return (w.calls.push(line), { ok: true, out: `${SHA}\n${WAVE}` });
+      if (args[0] === "diff" && args[3] === `${SHA}^1`)
+        return (w.calls.push(line), { ok: true, out: "packages/data/src/a.ts\nscripts/loops/lib.sh" });
+      if (args[0] === "diff") return (w.calls.push(line), { ok: true, out: "apps/web/b.ts" });
+      if (args[0] === "rev-parse" && args.at(-1) === `${SHA}^2`) return { ok: true, out: DEV };
+      if (args[0] === "merge-base") return (w.calls.push(line), { ok: args[2] === DEV });
+      return git(args);
+    };
+    w.io.gh = (/** @type {string[]} */ args) => {
+      if (args[1] === "list" && args.includes(WAVE))
+        return {
+          ok: true,
+          out: JSON.stringify([
+            {
+              ...running,
+              databaseId: 6,
+              headSha: WAVE,
+              headBranch: "ci/components/slice-t-2",
+              status: "completed",
+              conclusion: "success",
+            },
+          ]),
+        };
+      if (args[1] === "download" && args[2] === "6") {
+        writeFileSync(join(args[args.indexOf("--dir") + 1], "verdict.json"), JSON.stringify(wave));
+        return { ok: true, out: "" };
+      }
+      return gh(args);
+    };
+    const dir = mkdtempSync(join(tmpdir(), "ci-gate-"));
+    try {
+      const out = join(dir, "decision");
+      const args = ["gate", "slice/t/2", "--tier", "components", "--base", OTHER, "--out", out];
+      expect(await main(args, w.io)).toBe(EXIT.green);
+      expect(w.pushes()[0]).toContain(`${SHA}:refs/heads/ci/integration/slice-t-2`);
+      expect(w.lines.join("\n")).toContain("carrying its green, with a recheck at integration");
+      expect(readFileSync(out, "utf8")).toContain("ranTier=components (integration recheck)\n");
+      expect(readFileSync(out, "utf8")).toContain("run=8,6\n");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("ci file --run takes a list and files each run's flakes", async () => {
+    const w = filingWorld(flaky);
+    expect(await main(["file", "slice/t/2", "--base", OTHER, "--run", "7,8"], w.io)).toBe(EXIT.green);
+    expect(w.calls.filter((c) => /^gh run download [78] /.test(c))).toHaveLength(2);
+    expect(w.filings).toHaveLength(2);
+  });
+
   it("ci file --run reads that run, diffs against --base and pushes the quarantine", async () => {
     const w = filingWorld(flaky);
     expect(await main(fileArgs, w.io)).toBe(EXIT.green);
