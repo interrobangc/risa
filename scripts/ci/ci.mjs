@@ -19,14 +19,15 @@
 //   pnpm prd ci blame [<branch>] [--json]
 //       splits a file or brake verdict against a run on dev's tip and files dev's
 //       failures: exit 0 all dev's, 2 some the branch's, 5 unknown.
-//   pnpm prd ci file [<branch>] [--base <sha>] [--run <id>] [--no-push]
-//       files the verdict's flakes (--run: that run's); a file the branch touched
+//   pnpm prd ci file [<branch>] [--base <sha>] [--run <id>[,<id>]] [--no-push]
+//       files the verdict's flakes (--run: those runs'); a file the branch touched
 //       (against --base, else origin/dev) is the branch's and writes nothing: exit 0,
 //       2 some the branch's, 5 unknown. --no-push leaves a quarantine commit on local dev.
 //   pnpm prd ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek]
 //       the landing gate: finds a whole-tier verdict for <t> or higher on the tip (or
-//       behind only docs and tooling commits), requests the run when there is none, and
-//       decides (gate.mjs). Exit 0 lands; else the verdict kind's code. --out writes
+//       behind only docs and tooling commits; behind a dev sync, a recheck at the tier
+//       dev brought, carrying the pre-sync verdict), requests the run when there is
+//       none, and decides (gate.mjs). Exit 0 lands; else the verdict kind's code. --out writes
 //       key=value lines for land.sh; --peek reads only: no run, no blame, no filing.
 //   pnpm prd ci status <branch>…
 //       each branch's latest whole-tier verdict, cached, for pnpm prd status.
@@ -179,7 +180,7 @@ export async function main(/** @type {string[]} */ argv, io = realIo()) {
     }
     if (argv.length > 1 || argv[0]?.startsWith("-"))
       throw new Error(
-        'usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote | ci release [--wait <min>] [--rerun] | ci override <commit> --reason "…" | ci release-test <commit> | ci zone-file [<branch>] [--run <id>]',
+        'usage: pnpm prd ci [<branch>] | ci run <tier> [--ref <branch>] [--files <file>…] [--force-flake <check>] [--wait [min]] | ci blame [<branch>] [--json] | ci file [<branch>] [--base <sha>] [--run <id>[,<id>]] [--no-push] | ci gate <branch> --tier <t> --base <sha> [--fixes B-n,…] [--out <file>] [--peek] | ci status <branch>… | ci candidate cut [<commit>] [--wait [min]] | ci candidate fix <commit> [--wait [min]] | ci candidate status | ci promote | ci release [--wait <min>] [--rerun] | ci override <commit> --reason "…" | ci release-test <commit> | ci zone-file [<branch>] [--run <id>]',
       );
     return latestVerdict({ sha: resolve(io, argv[0] ?? null).sha }, io);
   } catch (e) {

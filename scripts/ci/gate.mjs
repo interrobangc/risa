@@ -2,6 +2,7 @@
 // Pure: `ci gate` (ci.mjs) finds the verdict, runs blame when it's needed, and
 // acts on what this returns. The code is the verdict kind's exit code, 0 to land.
 import { label } from "./blame.mjs";
+import { PROPOSED_TIERS, tierRank } from "../loops/check-plan.mjs";
 import { TIERS } from "./tiers.mjs";
 
 const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
@@ -45,6 +46,65 @@ export function releasePasses(v, tier, sha) {
     );
   if (v.kind === "flake" && !flaky.length) return no("a flake verdict that names no flaky test");
   return { pass: true, why: v.kind };
+}
+
+/**
+ * Whether a verdict from before a dev sync can vouch for the synced tip beside a
+ * recheck: one that lands with no blame (green, or a flake outside the branch's files).
+ * @param {any} v
+ * @param {string[]} touched
+ */
+export const carries = (v, touched) =>
+  v.kind === "green" || (v.kind === "flake" && !touchedFlakes(v, touched).length);
+
+/**
+ * @typedef {{ verdict: any, run: any }} Found
+ * @typedef {{ verdict: any, run: any, carried: Found | null, need: string }} Walked
+ */
+
+/**
+ * The verdicts that vouch for the tip at this tier, walking first-parent commits
+ * from it. A verdict of the tier on the tip, or behind only commits that keep one
+ * (docs, tooling, CI's lists, a sync that brought only those), is the verdict. Behind
+ * a dev sync that brought more, the pre-sync verdict is carried when it lands with no
+ * blame, and the tip needs a recheck at the tier the syncs brought (syncTier),
+ * found on a commit no newer sync follows; a recheck of the tier or more needs no carry.
+ * `need` is the tier to request when `verdict` is null.
+ * @param {{ commits: string[], tier: string, touched: string[],
+ *   verdictAt: (sha: string, tier: string) => Found | null,
+ *   changeOf: (sha: string) => string | null }} request `verdictAt` is null when
+ *   GitHub can't be read; `changeOf` is a commit's own tier (none keeps a verdict), null for
+ *   one no carry crosses
+ * @returns {Walked | null} null when GitHub can't be read
+ */
+export function walkVerdicts({ commits, tier, touched, verdictAt, changeOf }) {
+  const none = { verdict: null, run: null, carried: null, need: tier };
+  /** @type {{ sha: string, rank: number }[]} */ const steps = [];
+  /** @type {Found | null} */ let base = null;
+  for (const sha of commits) {
+    const found = verdictAt(sha, tier);
+    if (found === null) return null;
+    if (found.verdict) {
+      base = found;
+      break;
+    }
+    const change = changeOf(sha);
+    if (change === null || tierRank(change) < 0) break;
+    steps.push({ sha, rank: tierRank(change) });
+  }
+  if (!base) return none;
+  const demand = Math.max(0, ...steps.map((s) => s.rank));
+  if (!demand) return { ...base, carried: null, need: tier };
+  const need = /** @type {string} */ (PROPOSED_TIERS[demand]);
+  if (demand >= tierRank(tier)) return { ...none, need };
+  if (!carries(base.verdict, touched)) return none;
+  const newest = steps.findIndex((s) => s.rank > 0);
+  for (const { sha } of steps.slice(0, newest + 1)) {
+    const found = verdictAt(sha, need);
+    if (found === null) return null;
+    if (found.verdict) return { ...found, carried: base, need };
+  }
+  return { verdict: null, run: null, carried: base, need };
 }
 
 /** Blame is worth running only on a failure that a flake in the branch's files hasn't already refused. */

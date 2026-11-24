@@ -15,11 +15,24 @@ import { zoneFindings } from "./release.mjs";
 /**
  * `ci file`: file a verdict's flakes: the given run's, else the commit's latest. The
  * landing passes --run and --base (dev before its merge), since after the merge the
- * branch's diff is empty, and --no-push on a local landing.
+ * branch's diff is empty, and --no-push on a local landing. A list of runs (1,2: a
+ * recheck and the verdict it carried) files each one's; the worst exit wins.
  * @param {{ branch: string, sha: string, base?: string | null, runId?: string | null, noPush?: boolean }} request
  * @param {Io} io
  */
-export function fileFlakes({ branch, sha, base = null, runId = null, noPush = false }, io) {
+export function fileFlakes({ runId = null, ...request }, io) {
+  if (!runId?.includes(",")) return fileRunFlakes({ ...request, runId }, io);
+  let code = EXIT.green;
+  for (const id of runId.split(",")) code = Math.max(code, fileRunFlakes({ ...request, runId: id }, io));
+  return code;
+}
+
+/**
+ * One run's flakes (fileFlakes).
+ * @param {{ branch: string, sha: string, base?: string | null, runId?: string | null, noPush?: boolean }} request
+ * @param {Io} io
+ */
+function fileRunFlakes({ branch, sha, base = null, runId = null, noPush = false }, io) {
   const given = runId ? readVerdict(io, Number(runId)) : null;
   if (runId && (!given || given.narrowed)) return unknown(io, `no whole-tier verdict in run ${runId}`);
   const found = given ? { verdict: given, run: null } : findVerdict({ sha }, io);

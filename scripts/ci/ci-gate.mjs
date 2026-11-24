@@ -3,11 +3,11 @@
 // none, blame when it's needed, then the decision (the pure rules are gate.mjs).
 import { writeFileSync } from "node:fs";
 
-import { keepsVerdict } from "../loops/check-plan.mjs";
+import { keepsVerdict, syncTier } from "../loops/check-plan.mjs";
 import { splitAgainstDev } from "./ci-blame.mjs";
 import { DEFAULT_WAIT_MIN, EXIT, exitFor } from "./ci-io.mjs";
 import { findVerdict, requestRun, unknown, verdictLines } from "./ci-runs.mjs";
-import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
+import { decideGate, needsBlame, verdictMeets, walkVerdicts } from "./gate.mjs";
 
 /**
  * @typedef {import("./ci-io.mjs").Io} Io
@@ -18,26 +18,37 @@ import { decideGate, needsBlame, verdictMeets } from "./gate.mjs";
 const GATE_WALK = 20;
 
 /**
- * The newest verdict that still vouches for the tip at this tier: on the tip, or on
- * a first-parent ancestor with only docs, tooling or CI's lists changed since.
- * @param {{ sha: string, base: string, tier: string }} request
+ * The verdicts that still vouch for the tip at this tier (walkVerdicts): on the tip,
+ * behind only docs, tooling or CI's lists, or behind dev syncs with a recheck of what
+ * they brought and the pre-sync verdict carried.
+ * @param {{ sha: string, base: string, tier: string, touched: string[] }} request
  * @param {Io} io
- * @returns {{ verdict: any, run: Run | null } | null} null when git or GitHub can't be read
+ * @returns {import("./gate.mjs").Walked | null} null when git or GitHub can't be read
  */
-function findGateVerdict({ sha, base, tier }, io) {
+function findGateVerdict({ sha, base, tier, touched }, io) {
   const log = io.git(["rev-list", "--first-parent", `--max-count=${GATE_WALK}`, `${base}..${sha}`]);
   if (!log.ok) return null;
-  for (const commit of log.out ? log.out.split("\n") : []) {
-    const found = findVerdict({ sha: commit, accept: (v) => verdictMeets(v, tier) }, io);
-    if (found === null || found.verdict) return found;
-    const diff = io.git(["diff", "--name-only", "--no-renames", `${commit}^1`, commit]);
-    if (!diff.ok || !keepsVerdict(diff.out ? diff.out.split("\n") : [])) break;
-  }
-  return { verdict: null, run: null };
+  return walkVerdicts({
+    commits: log.out ? log.out.split("\n") : [],
+    tier,
+    touched,
+    verdictAt: (commit, t) => findVerdict({ sha: commit, accept: (v) => verdictMeets(v, t) }, io),
+    changeOf: (commit) => {
+      const diff = io.git(["diff", "--name-only", "--no-renames", `${commit}^1`, commit]);
+      if (!diff.ok) return null;
+      const files = diff.out ? diff.out.split("\n") : [];
+      // A dev sync: a merge whose second parent dev already holds.
+      const second = io.git(["rev-parse", "--verify", "--quiet", `${commit}^2`]);
+      if (second.ok && second.out && io.git(["merge-base", "--is-ancestor", second.out, base]).ok)
+        return syncTier(files, touched).tier;
+      return keepsVerdict(files) ? "none" : null;
+    },
+  });
 }
 
 /**
- * `ci gate`: whether this branch's tip may land at this tier.
+ * `ci gate`: whether this branch's tip may land at this tier. Behind a dev sync it may
+ * wait for less (a recheck of what dev brought) or more (dev brought something above it).
  * @param {{ branch: string, sha: string, tier: string, base: string, fixes?: string[], out?: string | null, peek?: boolean, waitMin?: number }} request
  * @param {Io} io
  */
@@ -48,18 +59,25 @@ export async function gate(
   const diff = io.git(["diff", "--name-only", "--no-renames", `${base}...${sha}`]);
   if (!diff.ok) return unknown(io, "could not read what the branch changed");
   const touched = diff.out ? diff.out.split("\n") : [];
-  const found = findGateVerdict({ sha, base, tier }, io);
+  const found = findGateVerdict({ sha, base, tier, touched }, io);
   if (found === null) return unknown(io, "GitHub can't be reached");
   let { verdict, run } = found;
+  const { carried, need } = found;
+  if (carried)
+    io.log(
+      `dev synced in since the ${carried.verdict.ranTier} verdict on ${String(carried.verdict.commit).slice(0, 8)}: ` +
+        `carrying its ${carried.verdict.kind}, with a recheck at ${need} of what dev brought`,
+    );
+  else if (need !== tier) io.log(`dev synced in what asks for ${need}, above ${tier}`);
   if (!verdict && peek) {
-    io.log(`no ${tier} verdict for ${sha.slice(0, 8)}: the landing will request one`);
+    io.log(`no ${need} verdict for ${sha.slice(0, 8)}: the landing will request one`);
     return EXIT.unknown;
   }
   if (!verdict) {
-    io.log(`no ${tier} verdict for ${sha.slice(0, 8)}: requesting one`);
+    io.log(`no ${need} verdict for ${sha.slice(0, 8)}: requesting one`);
     const code = await requestRun(
       {
-        tier,
+        tier: need,
         branch,
         sha,
         waitMin,
@@ -71,13 +89,13 @@ export async function gate(
       io,
     );
     if (!verdict) {
-      io.log(`no verdict came back. Retry: pnpm prd ci run ${tier} --ref ${branch} --wait`);
+      io.log(`no verdict came back. Retry: pnpm prd ci run ${need} --ref ${branch} --wait`);
       return code || EXIT.unknown;
     }
   }
   for (const line of verdictLines(verdict)) io.log(line);
-  if (!verdictMeets(verdict, tier)) {
-    io.log(`the run reached ${verdict.ranTier ?? "no tier"}, below ${tier}: refused`);
+  if (!verdictMeets(verdict, need)) {
+    io.log(`the run reached ${verdict.ranTier ?? "no tier"}, below ${need}: refused`);
     return EXIT.unknown;
   }
   if (peek) return exitFor(verdict.kind);
@@ -88,18 +106,22 @@ export async function gate(
     if (typeof result === "string") io.log(`blame: ${result}`);
     else blamed = result;
   }
-  const decision = decideGate({ verdict, tier, branch, touched, blamed, fixes });
+  const decision = decideGate({ verdict, tier: need, branch, touched, blamed, fixes });
   for (const line of decision.lines) io.log(line);
+  // With a carried verdict: the wave's tier, both runs (ci file files each one's
+  // flakes), and a flake if either flaked.
+  const prior = carried?.verdict;
+  const kind = prior?.kind === "flake" && verdict.kind === "green" ? "flake" : verdict.kind;
   if (out)
     writeFileSync(
       out,
       `${[
         `land=${decision.land ? 1 : 0}`,
-        `kind=${verdict.kind}`,
-        `ranTier=${verdict.ranTier}`,
+        `kind=${kind}`,
+        `ranTier=${prior ? `${prior.ranTier} (${verdict.ranTier} recheck)` : verdict.ranTier}`,
         `commit=${verdict.commit}`,
-        `run=${verdict.runId}`,
-        `flakes=${decision.fileFlakes ? 1 : 0}`,
+        `run=${prior ? `${verdict.runId},${prior.runId}` : verdict.runId}`,
+        `flakes=${decision.fileFlakes || (decision.land && (prior?.flaky ?? []).length > 0) ? 1 : 0}`,
       ].join("\n")}\n`,
     );
   return decision.code;
