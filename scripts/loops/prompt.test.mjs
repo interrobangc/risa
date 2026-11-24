@@ -332,7 +332,10 @@ describe("plan and backlog", () => {
         "**The dispatcher is running, so deciding what runs next is moving and holding rows**",
       );
       expect(text).toContain("`pnpm backlog prd move <topic> --first|--before <t>|--after <t>`");
-      expect(text).toContain("`pnpm backlog prd set <topic> flags=hold`");
+      expect(text).toContain(
+        "`pnpm backlog prd set <topic> flags+=hold` to keep it back (`flags-=hold` releases it",
+      );
+      expect(text).not.toContain("flags=hold");
       expect(text).toContain("**Print no start commands**");
       expect(text).toContain("What to run: move up, hold or leave each topic.");
       expect(text).toContain("leave it to the dispatcher (move it first;");
@@ -402,9 +405,10 @@ describe("plan and backlog", () => {
       /second \*\*send-back\*\* is the user's: put it to them with AskUserQuestion/,
     );
     const auto = ok("plan", "T", "--auto");
-    expect(auto).toContain("`pnpm backlog prd set T flags=<its flags>,hold`");
+    expect(auto).toContain("`pnpm backlog prd set T flags+=hold`");
+    expect(auto).not.toContain("flags=");
     expect(auto).toContain("`--waits` question with `--skeptic <that record's id>`");
-    expect(auto.indexOf("flags=<its flags>,hold")).toBeLessThan(auto.indexOf("`--waits` question with"));
+    expect(auto.indexOf("flags+=hold")).toBeLessThan(auto.indexOf("`--waits` question with"));
   });
 
   it("plan --auto: questions and the report through pnpm prd ask with a push, never AskUserQuestion", () => {
@@ -433,7 +437,8 @@ describe("plan and backlog", () => {
       expect(report).toBeGreaterThan(land);
       expect(rm).toBeGreaterThan(report);
       expect(plan.indexOf("&& pnpm prd end`")).toBeGreaterThan(rm);
-      expect(plan).toContain("`pnpm backlog prd set T flags=hold`");
+      expect(plan).toContain("`pnpm backlog prd set T flags+=hold`");
+      expect(plan).not.toContain("flags=");
     }
     const r = prompt("plan", "T", "--resume");
     expect(r.code).toBe(1);
