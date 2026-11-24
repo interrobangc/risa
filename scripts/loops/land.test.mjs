@@ -937,6 +937,23 @@ exit 0
     chmodSync(join(root, "bin", "pnpm"), 0o755);
   });
 
+  it("records the landing's end after the unsynced typecheck", () => {
+    started();
+    toDev({ "apps/web/dev.ts": "d" });
+    const r = go();
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(steps()).toEqual(["typegen", "typecheck"]);
+    const kinds = readFileSync(process.env.CARETOOK_RUN_LOG, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l))
+      .map((e) => [e.kind, e.exit]);
+    expect(kinds).toEqual([
+      ["land-start", undefined],
+      ["land-end", 0],
+    ]);
+  });
+
   it("lands over drift on other files: typegen then typecheck, the line printed and in --body", () => {
     started();
     toDev({ "apps/web/dev.ts": "d" });

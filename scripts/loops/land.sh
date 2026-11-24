@@ -137,9 +137,18 @@ esac
 pr_seam "$branch"
 # The run log (run-log.mjs): this landing's start, and on every exit its end:
 # the exit code, whether it merged, and its seconds. It never fails or stops a landing.
+# The unsynced typecheck's own EXIT trap (unsynced.sh's restore) runs in its own
+# process (lease.sh run … unsynced.sh typecheck), so it never clears this one;
+# land_log_end is re-armed after it anyway, should that ever change.
 landed=false
+land_log_end() {
+  local rc=$?
+  trap - EXIT
+  run_log land-end "branch=$branch" "path=$path" "exit:=$rc" "landed:=$landed" "seconds:=$SECONDS"
+  exit "$rc"
+}
 run_log land-start "branch=$branch" "path=$path"
-trap 'land_rc=$?; run_log land-end "branch=$branch" "path=$path" "exit:=$land_rc" "landed:=$landed" "seconds:=$SECONDS"; exit "$land_rc"' EXIT
+trap land_log_end EXIT
 
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
 [[ $(git -C "$main" branch --show-current) == "$trunk" ]] || die "the main checkout isn't on $trunk"
@@ -263,6 +272,7 @@ typecheck_merge() {
   trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; exit 143' TERM INT
   wait "$pid" || rc=$?
   trap - TERM INT
+  trap land_log_end EXIT
   case $rc in
     0) ;;
     3) drift_refusal "the merge with $drift_ref conflicts" ;;
