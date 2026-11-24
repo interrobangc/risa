@@ -449,6 +449,7 @@ describe("the tick", () => {
       "drain.mjs",
       "usage.mjs",
       "land-journal.mjs",
+      "resume.mjs",
     ])
       copyFileSync(join(HERE, f), scripts(f));
     writeFileSync(scripts("open-session.sh"), OPEN_SH);
