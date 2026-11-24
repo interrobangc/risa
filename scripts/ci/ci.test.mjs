@@ -113,13 +113,23 @@ describe("the tiers", () => {
       "integration",
       "components-1",
       "components-2",
+      "components-3",
     ]);
     expect(jobsFor("full")).toEqual({
-      jobs: ["static", "unit", "integration", "components-1", "components-2", "build"],
+      jobs: ["static", "unit", "integration", "components-1", "components-2", "components-3", "build"],
       ranTier: "full",
     });
     expect(jobsFor("candidate")).toEqual({
-      jobs: ["static", "unit", "integration", "components-1", "components-2", "build", "browser"],
+      jobs: [
+        "static",
+        "unit",
+        "integration",
+        "components-1",
+        "components-2",
+        "components-3",
+        "build",
+        "browser",
+      ],
       ranTier: "candidate",
     });
   });
@@ -211,6 +221,7 @@ describe("the verdict", () => {
       integration: ok,
       "components-1": ok,
       "components-2": ok,
+      "components-3": ok,
       build: ok,
     };
     expect(buildVerdict({ ...base, tier: "full", needs })).toMatchObject({
