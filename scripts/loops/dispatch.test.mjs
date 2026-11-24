@@ -8,6 +8,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -923,6 +924,7 @@ describe("the session-request tick", () => {
 
   it("the opened line really starts a recorded session with the brief at the top", () => {
     for (const f of ["session.sh", "prompt.sh", "lib.sh"]) copyFileSync(join(HERE, f), scripts(f));
+    cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
     const seen = join(root, "claude-args");
     const stub = join(root, "bin", "claude-args");
     writeFileSync(stub, `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > ${seen}\n`);

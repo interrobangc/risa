@@ -7,6 +7,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -234,6 +235,7 @@ beforeAll(() => {
     "inbox-settings.json",
   ])
     copyFileSync(join(HERE, f), scripts(f));
+  cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
   mkdirSync(join(main, "scripts/backlog"));
   for (const f of ["registry.mjs", "format.mjs"])
     copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
