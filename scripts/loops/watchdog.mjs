@@ -21,8 +21,9 @@
 // A deliberate stop wins: `pnpm prd down --stay` (.loops/.stay-down.json), a
 // paused dispatcher, a down record with no reboot since, or a clean
 // `dispatch --stop` (its lock gone) leave everything alone. So does a usage
-// reading that says limited (a recover would open sessions that spend), and a
-// recover already running.
+// reading that says limited (a recover would open sessions that spend): the
+// drain's own rule (drain.mjs readDrain, probeAllowed), so the watchdog and the
+// dispatcher never disagree. And a recover already running.
 //
 // A failed recover backs off (10, 20, then every 30 minutes) and only the first
 // failure of an incident files recover's report (CARETOOK_RECOVER_REPORT=off for
@@ -31,7 +32,8 @@
 // a line only when its decision changes (launchd's log, .loops/.watchdog.log),
 // and it never fails: a reading or write that breaks is logged and it exits 0.
 //
-// Env: CARETOOK_USAGE_STOP (98: the percent of a plan window that is limited),
+// Env: the drain's (CARETOOK_USAGE_STOP, CARETOOK_USAGE_DRAIN, CARETOOK_USAGE_WATCH,
+// CARETOOK_USAGE_STALE_MIN: drain.mjs),
 // CARETOOK_BOOT_TIME (tests: the last boot, epoch seconds), CARETOOK_CLOCK_FILE
 // (tests: the current epoch second), CARETOOK_RECOVER_BIN (tests: recover.sh),
 // CARETOOK_SESSIONS_DIR, CARETOOK_USAGE_DIR.
@@ -39,6 +41,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { probeAllowed, readDrain } from "./drain.mjs";
 
 const MIN_MS = 60_000;
 /** Back-off after the nth failed recover, in minutes: 10, 20, then 30. */
@@ -71,29 +74,13 @@ const ms = (/** @type {unknown} */ v) => {
 const hhmm = (/** @type {number} */ t) => new Date(t).toISOString().slice(0, 16).replace("T", " ") + "Z";
 
 /**
- * Whether the usage reading says limited: a plan window at the stop line, overage in
- * use, or a session stopped on a rate limit whose reset hasn't come. Pure.
- * @param {ReturnType<typeof import("./usage.mjs").mergeReadings>} u
- * @param {number} stop the percent
+ * Whether the drain says limited: the dispatcher's own rule (drain.mjs), so the two never
+ * disagree; nothing may open a claude then. Pure.
+ * @param {import("./drain.mjs").Drain | null | undefined} d
  */
-export function limitedOf(u, stop = 98) {
-  if (!u) return { limited: false, why: "no reading" };
-  const at = (/** @type {number | null} */ t) => (t ? ` until ${hhmm(t)}` : "");
-  for (const [w, label] of /** @type {const} */ ([
-    ["fiveHour", "the 5-hour limit"],
-    ["sevenDay", "the weekly limit"],
-  ])) {
-    const win = u[w];
-    if (win && win.percent >= stop)
-      return { limited: true, why: `${label} is at ${Math.round(win.percent)}%${at(win.resetsAt)}` };
-  }
-  if (u.overage) return { limited: true, why: `extra usage is being spent${at(u.resetsAt)}` };
-  if (u.stalled?.length)
-    return {
-      limited: true,
-      why: `${u.stalled.map((s) => s.session).join(", ")} stopped on a rate limit${at(u.resetsAt)}`,
-    };
-  return { limited: false, why: u.known ? "under the limits" : "no current reading" };
+export function limitedOf(d) {
+  if (!d) return { limited: false, why: "no reading" };
+  return { limited: !probeAllowed(d), why: d.why };
 }
 
 /**
@@ -234,10 +221,8 @@ export async function collect(main, env = process.env) {
   const p = pathsOf(main, env);
   const { collectFacts } = await import("./inventory-facts.mjs");
   const { readRecords, isLive, processOf } = await import("./sessions.mjs");
-  const { readUsage } = await import("./usage.mjs");
   const inv = collectFacts({ main, env, now });
   const lock = inv.locks.find((l) => l.kind === "dispatch");
-  const stop = Number(env.CARETOOK_USAGE_STOP);
   return {
     now,
     bootAt: bootTime(env),
@@ -258,10 +243,7 @@ export async function collect(main, env = process.env) {
       ended: record.ended,
       live: !record.ended && isLive(record, processOf(record.pid ?? 0, Date.now()), Date.now()),
     })),
-    usage: limitedOf(
-      readUsage(p.usage, { now, env }),
-      env.CARETOOK_USAGE_STOP && stop > 0 && stop <= 100 ? stop : 98,
-    ),
+    usage: limitedOf(readDrain(p.usage, { now, env })),
     state: readObject(p.state) ?? {},
   };
 }

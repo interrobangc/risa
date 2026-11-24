@@ -6,6 +6,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { drainDecision, probeAllowed, readDrain } from "./drain.mjs";
 import { backoffMs, decide, limitedOf, nextState } from "./watchdog.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -222,27 +223,55 @@ describe("limitedOf", () => {
     known: true,
     fiveHour: null,
     sevenDay: null,
+    spend: null,
     overage: false,
     stalled: [],
     resetsAt: null,
     ...over,
   });
-  it("is limited at the stop line, on overage, or with a session stalled", () => {
-    expect(limitedOf(u({ fiveHour: { percent: 98.2, resetsAt: NOW + 60 * MIN } }), 98)).toEqual({
+  const drainOf = (usage, opts = {}) =>
+    drainDecision(usage, { drain: 85, stop: 98, now: NOW, staleMs: 15 * MIN, timeZone: "UTC", ...opts });
+  const win = (percent, resetsAt = NOW + 60 * MIN) => ({ percent, resetsAt, at: NOW });
+
+  it("is limited at the stop line, on overage, or with a session stalled, in the drain's words", () => {
+    expect(limitedOf(drainOf(u({ fiveHour: win(98.2) })))).toEqual({
       limited: true,
-      why: "the 5-hour limit is at 98% until 2026-11-24 13:00Z",
+      why: "5h 98%, at or over the stop line 98% (until 13:00)",
     });
-    expect(limitedOf(u({ sevenDay: { percent: 99, resetsAt: null } }), 98).why).toBe(
-      "the weekly limit is at 99%",
-    );
-    expect(limitedOf(u({ overage: true }), 98).limited).toBe(true);
-    expect(limitedOf(u({ stalled: [{ session: "prd-a" }], resetsAt: NOW + MIN }), 98).why).toMatch(
-      /^prd-a stopped on a rate limit until/,
-    );
+    expect(limitedOf(drainOf(u({ sevenDay: win(100), overage: true }))).why).toMatch(/^over the plan limit/);
+    expect(
+      limitedOf(
+        drainOf(u({ stalled: [{ session: "prd-a", at: NOW, error: "rate_limit", resetsAt: NOW + MIN }] })),
+      ).why,
+    ).toMatch(/^stopped on a limit: prd-a/);
   });
-  it("isn't limited below it, or with no reading", () => {
-    expect(limitedOf(u({ fiveHour: { percent: 90, resetsAt: null } }), 98).limited).toBe(false);
-    expect(limitedOf(u({ known: false }), 98)).toEqual({ limited: false, why: "no current reading" });
+
+  it("isn't limited draining, below the lines, with no reading, or with the watch off", () => {
+    expect(limitedOf(drainOf(u({ fiveHour: win(90) }))).limited).toBe(false);
+    expect(limitedOf(drainOf(u({ known: false })))).toMatchObject({ limited: false });
+    expect(limitedOf(drainOf(u({ fiveHour: win(99) }), { off: true })).limited).toBe(false);
+    expect(limitedOf(null)).toEqual({ limited: false, why: "no reading" });
+  });
+
+  it("agrees with the drain on every reading: limited exactly when nothing may open a claude (B-786)", () => {
+    const stall = { session: "prd-a", at: NOW, error: "limited", resetsAt: NOW + MIN };
+    const readings = [
+      u({}),
+      u({ known: false }),
+      u({ fiveHour: win(84) }),
+      u({ fiveHour: win(85) }),
+      u({ sevenDay: win(97.9) }),
+      u({ sevenDay: win(98) }),
+      u({ fiveHour: win(100), overage: true }),
+      u({ stalled: [stall], resetsAt: NOW + MIN }),
+      u({ fiveHour: win(50), stalled: [stall] }),
+    ];
+    for (const r of readings)
+      for (const opts of [{}, { stop: 90, drain: 80 }, { off: true }]) {
+        const d = drainOf(r, opts);
+        expect(limitedOf(d)).toEqual({ limited: d.state === "limited" && !probeAllowed(d), why: d.why });
+        expect(limitedOf(d).limited).toBe(d.state === "limited");
+      }
   });
 });
 
@@ -334,6 +363,34 @@ describe("pnpm prd watchdog (stub recover)", () => {
     expect(run().stdout).toMatch(/recover succeeded/);
     expect(state()).toMatchObject({ failures: 0, incident: null, lastSuccess: NOW + 61 * MIN });
     rmSync(join(loops, ".dispatch.lock"));
+  });
+
+  it("reads the limit as the drain does: its own reason, from the same readings (B-786)", () => {
+    clock(0);
+    writeFileSync(join(loops, ".dispatch.lock"), `${DEAD_PID}\n`);
+    mkdirSync(join(loops, ".usage"), { recursive: true });
+    writeFileSync(
+      join(loops, ".usage", "prd-a.json"),
+      JSON.stringify({
+        session: "prd-a",
+        windows: { fiveHour: { percent: 99, at: iso(NOW), resetsAt: iso(NOW + 60 * MIN) } },
+      }),
+    );
+    try {
+      // The drain on the same readings, at the watchdog's (fake) clock.
+      const d = readDrain(join(loops, ".usage"), { now: NOW, env });
+      expect(d.state).toBe("limited");
+      expect(JSON.parse(run(["--dry-run", "--json"]).stdout)).toMatchObject({
+        action: "nothing",
+        reason: `limited: ${d.why}`,
+      });
+      // Off for the drain is off for the watchdog too: the stale lock is acted on.
+      const off = run(["--dry-run", "--json"], { CARETOOK_USAGE_WATCH: "off" });
+      expect(JSON.parse(off.stdout)).toMatchObject({ action: "recover" });
+    } finally {
+      rmSync(join(loops, ".usage"), { recursive: true, force: true });
+      rmSync(join(loops, ".dispatch.lock"));
+    }
   });
 
   it("stay-down wins over the stale lock", () => {
