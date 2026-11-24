@@ -115,11 +115,13 @@ pnpm prd <command>
                               refused once defaulted)
 
   Skeptic (a fresh subagent's verdict before an ask or a risky landing, in the main checkout's .loops/.skeptic)
-    prompt skeptic ask|land|plan --evidence <file>   print its brief: the rules and the evidence
-    skeptic record --kind ask|land|plan --verdict <v> --why "<one line>" [--option <a>]
+    prompt skeptic ask|land|plan|stall --evidence <file>   print its brief: the rules and the evidence
+    skeptic record --kind ask|land|plan|stall --verdict <v> --why "<one line>" [--option <a>]
                               [--question <text> [--offer <a>]… --defaults|--waits]
                               [--tip <full sha> --action force|no-review|"decline <thread>"]
-                              record its answer (ask: decide, ask; land: go, no; plan: go, send-back);
+                              [--slice <n> --defaults|--waits]   (stall; --waits: a never-list step)
+                              record its answer (ask: decide, ask; land: go, no; plan: go, send-back;
+                              stall: restart, leave, ask);
                               prints the id; counts for \$CARETOOK_SKEPTIC_MAX_MIN (60) min
     skeptic [list] [--topic <t>] [--json]   the verdicts, oldest first
 
@@ -198,7 +200,7 @@ pnpm prd <command>
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
                      recover: the recovery agent (pnpm prd recover opens it)
                      tidy: the cleanup brief for a cheap session (haiku), repeated with /loop
-                     skeptic ask|land|plan --evidence <file>: the brief for a fresh skeptic
+                     skeptic ask|land|plan|stall --evidence <file>: the brief for a fresh skeptic
                      orchestrator <topic> --resume [--auto]: take over after an interruption
                      slice <topic> <n> --continue: pick up an interrupted slice
 USAGE

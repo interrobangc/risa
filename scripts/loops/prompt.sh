@@ -21,7 +21,7 @@
 #     (pnpm prd inbox): self-contained, so it reads no doc; it adds, rewords, moves and removes unfiled inbox lines, nothing else
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
-#   prompt.sh skeptic ask|land|plan --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
+#   prompt.sh skeptic ask|land|plan|stall --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
 #
 # Where each part lives: this file only picks the kind's part and sources it,
 # so open just the one you change.

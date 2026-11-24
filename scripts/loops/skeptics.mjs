@@ -4,8 +4,8 @@
 // (`ask`, `land`) check that record with checkRecord. `skeptic.mjs` is the
 // command line.
 //
-// A record: { id, kind: "ask" | "land" | "plan", verdict, why, option, session,
-// topic, tip, action, questionHash, askerClass, at }, one JSON file per verdict
+// A record: { id, kind: "ask" | "land" | "plan" | "stall", verdict, why, option,
+// session, topic, tip, action, questionHash, askerClass, slice, at }, one JSON file per verdict
 // (`.loops/.skeptic/<id>.json` in the main checkout; machine local, untracked).
 // Ids are s1, s2, …, taken exclusively by link(2) of a fully written temp file.
 // A record never changes: single use is a marker beside it (`<id>.used`, created
@@ -14,7 +14,10 @@
 // A verdict is bound to what it approved: a land record to its action and tip,
 // an ask record to the hash of its question and options and to the asker's class
 // (`defaults` or `waits`). A `decide` on a `waits` question is refused when it
-// is recorded and again when it is used: the never list is the user's.
+// is recorded and again when it is used: the never list is the user's. A stall
+// record (the watch's `skeptic` on a slice agent) is bound to its slice and
+// class: `waits` is a step on the never list, which only `ask` answers; its
+// `ask` lets `pnpm prd ask` file a question naming that slice.
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -36,7 +39,12 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 /** How long a verdict counts, in minutes (CARETOOK_SKEPTIC_MAX_MIN). */
 export const DEFAULT_MAX_MIN = 60;
 /** The verdicts each kind of skeptic can give. */
-export const VERDICTS = { ask: ["decide", "ask"], land: ["go", "no"], plan: ["go", "send-back"] };
+export const VERDICTS = {
+  ask: ["decide", "ask"],
+  land: ["go", "no"],
+  plan: ["go", "send-back"],
+  stall: ["restart", "leave", "ask"],
+};
 
 export class SkepticError extends Error {}
 
@@ -55,10 +63,12 @@ export const questionHash = (text, options = []) =>
 const isAction = (a) => a === "force" || a === "no-review" || /^decline \S+$/.test(a ?? "");
 
 /** Throws a SkepticError unless the verdict is well formed for its kind. */
-function validate({ kind, verdict, why, option, tip, action, question, offers, askerClass, topic }) {
-  if (!VERDICTS[kind]) throw new SkepticError(`unknown kind ${kind} (ask, land or plan)`);
+function validate({ kind, verdict, why, option, tip, action, question, offers, askerClass, topic, slice }) {
+  if (!VERDICTS[kind]) throw new SkepticError(`unknown kind ${kind} (ask, land, plan or stall)`);
   if (!VERDICTS[kind].includes(verdict))
-    throw new SkepticError(`a ${kind} skeptic answers ${VERDICTS[kind].join(" or ")}, not ${verdict}`);
+    throw new SkepticError(
+      `a ${kind} skeptic answers ${VERDICTS[kind].join(", ").replace(/, (?=[^,]*$)/, " or ")}, not ${verdict}`,
+    );
   if (!topic) throw new SkepticError("a verdict needs a topic");
   if (!why?.trim()) throw new SkepticError("a verdict needs one line of why");
   if (/[\r\n]/.test(why)) throw new SkepticError("the why is one line");
@@ -74,8 +84,18 @@ function validate({ kind, verdict, why, option, tip, action, question, offers, a
     if (askerClass !== "defaults" && askerClass !== "waits")
       throw new SkepticError("an ask verdict needs the asker's class: --defaults or --waits");
     if (new Set(offers).size !== offers.length) throw new SkepticError("options must differ");
+  } else if (kind === "stall") {
+    if (!/^\d+$/.test(slice ?? "")) throw new SkepticError("a stall verdict names its slice: --slice <n>");
+    if (askerClass !== "defaults" && askerClass !== "waits")
+      throw new SkepticError(
+        "a stall verdict needs the step's class: --defaults, or --waits for the never list",
+      );
+    if (askerClass === "waits" && verdict !== "ask")
+      throw new SkepticError("a step on the never list is the user's: a stall skeptic can only ask");
+    if (question != null || offers.length) throw new SkepticError("a stall verdict has no question");
   } else if (question != null || askerClass != null || offers.length)
     throw new SkepticError("only an ask verdict has a question, its options and a class");
+  if (kind !== "stall" && slice != null) throw new SkepticError("only a stall verdict names a slice");
   if (verdict === "decide") {
     if (askerClass === "waits")
       throw new SkepticError("a --waits question is the user's: a skeptic can't decide it (answer ask)");
@@ -102,7 +122,7 @@ const idNumbers = (dir) => {
  * @param {string} dir
  * @param {{ kind: string, verdict: string, why: string, topic: string, session?: string | null,
  *   option?: string | null, tip?: string | null, action?: string | null, question?: string | null,
- *   offers?: string[], askerClass?: "defaults" | "waits" | null, now?: number }} input
+ *   offers?: string[], askerClass?: "defaults" | "waits" | null, slice?: string | null, now?: number }} input
  */
 export function recordVerdict(dir, input) {
   const {
@@ -117,9 +137,10 @@ export function recordVerdict(dir, input) {
     question = null,
     offers = [],
     askerClass = null,
+    slice = null,
     now,
   } = input;
-  validate({ kind, verdict, why, option, tip, action, question, offers, askerClass, topic });
+  validate({ kind, verdict, why, option, tip, action, question, offers, askerClass, topic, slice });
   mkdirSync(dir, { recursive: true });
   const base = {
     kind,
@@ -132,6 +153,7 @@ export function recordVerdict(dir, input) {
     action,
     questionHash: kind === "ask" ? questionHash(question, offers) : null,
     askerClass,
+    slice,
     at: new Date(now ?? Date.now()).toISOString(),
   };
   let n = Math.max(0, ...idNumbers(dir)) + 1;
@@ -205,6 +227,18 @@ function checkAsk(record, wanted) {
     return record.verdict === "send-back"
       ? { ok: true }
       : no(`${record.id} is a plan go: nothing to ask the user`);
+  if (record.kind === "stall") {
+    if (record.verdict !== "ask")
+      return no(
+        `${record.id} is a stall ${record.verdict}: act on it (mark the slice), nothing to ask the user`,
+      );
+    const names = new RegExp(`\\b(slice ${record.slice}|${wanted.topic}-${record.slice})\\b`, "i");
+    if (!names.test(wanted.question ?? ""))
+      return no(`${record.id} judged slice ${record.slice}: name "slice ${record.slice}" in the question`);
+    if (record.askerClass === "waits" && wanted.askerClass !== "waits")
+      return no(`${record.id} judged a step on the never list: the question takes --waits`);
+    return { ok: true };
+  }
   if (record.verdict === "decide")
     return no(`the skeptic decided this one: file it with pnpm prd ask --decided --skeptic ${record.id}`);
   if (record.verdict !== "ask") return no(`${record.id} has no ask verdict`);
@@ -232,7 +266,8 @@ function checkDecided(record, wanted) {
  * defaults are the clock and CARETOOK_SKEPTIC_MAX_MIN).
  * @param {object | null} record
  * @param {{ use: "land", topic: string, action: string, tip: string }
- *   | { use: "ask", topic: string, questionHash: string, askerClass: "defaults" | "waits" }
+ *   | { use: "ask", topic: string, questionHash: string, askerClass: "defaults" | "waits",
+ *       question?: string }
  *   | { use: "decided", topic: string, questionHash: string, chose: string,
  *       askerClass?: "defaults" | "waits" }} wanted  `ask` files a question, `decided` a settled one
  * @param {{ now?: number, maxMin?: number }} [opts]
@@ -278,7 +313,12 @@ export function formatRecords(records) {
   if (!records.length) return "No skeptic verdicts.";
   return records
     .map((r) => {
-      const bound = r.kind === "land" ? ` ${r.action} @${r.tip.slice(0, 7)}` : "";
+      const bound =
+        r.kind === "land"
+          ? ` ${r.action} @${r.tip.slice(0, 7)}`
+          : r.kind === "stall"
+            ? ` slice ${r.slice}`
+            : "";
       const chose = r.option ? ` "${r.option}"` : "";
       const used = r.usedAt ? " (used)" : "";
       return `${r.id}  ${r.at}  ${r.topic}  ${r.kind}${bound}: ${r.verdict}${chose}${used}: ${r.why}`;
@@ -355,21 +395,28 @@ ${r.skepticPass}
 ${SLICE_SIZE_RULE}
 
 Never list (an assumed decision here must be a question): ${r.neverList}.`,
+  stall: (r) =>
+    `An orchestrator's watch says a slice agent has stalled and needs judgement (\`pnpm prd watch\`'s \`skeptic\`): no progress while still making calls, a second stall, uncommitted changes, a changed migration, a merge under way, or a restart whose stop isn't confirmed. The evidence names the slice, its ages, the agent's last output and its worktree's git state. Decide what the orchestrator does next.
+
+Answer **restart** only when the agent is really stuck and a fresh \`--continue\` agent in the same worktree is safe: its old agent is gone (a stop recorded, or no call for long), and its uncommitted work stays as it is (a restart never resets, cleans or removes a worktree). A slice is restarted once: one already restarted can't be again. Answer **leave** when it is plausibly working (a long debug, a slow check) and should get more time. Answer **ask** when it is the user's: two agents might end up in one worktree, work could be lost, or you can't tell.
+
+**A step on the never list is always ask** (the session records it with \`--waits\`). Never list: ${r.neverList}.`,
 };
 
 const ANSWER = {
   ask: "decide <option> | ask",
   land: "go | no",
   plan: "go | send-back",
+  stall: "restart | leave | ask",
 };
 
 /**
  * The brief for a fresh skeptic. Pure.
- * @param {"ask" | "land" | "plan"} kind
+ * @param {"ask" | "land" | "plan" | "stall"} kind
  * @param {{ evidence: string, rules: ReturnType<typeof readRules> }} input
  */
 export function skepticBrief(kind, { evidence, rules }) {
-  if (!JOB[kind]) throw new SkepticError(`the skeptic's brief is ask, land or plan, not ${kind}`);
+  if (!JOB[kind]) throw new SkepticError(`the skeptic's brief is ask, land, plan or stall, not ${kind}`);
   if (!evidence?.trim()) throw new SkepticError("the evidence file is empty");
   return `You are a skeptic: a fresh second opinion, with no stake in the work. Assume the session's reasoning is wrong until the evidence shows otherwise. The evidence is its claim, so check it against the files and commits it names. Change nothing: no edits, commits, landings or asks.
 

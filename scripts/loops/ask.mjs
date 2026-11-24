@@ -279,6 +279,7 @@ function spendVerdict(opts, input, chose) {
         questionHash: hash,
         // A question with no recommendation can't default, so it counts as --waits.
         askerClass: opts.defaults ? "defaults" : "waits",
+        question: input.text,
       };
   const { id, verdict, why } = useRecord(dir, opts.skeptic, wanted);
   return { id, verdict, why };

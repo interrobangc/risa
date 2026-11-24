@@ -2,13 +2,14 @@
 // pnpm prd skeptic | prompt skeptic: the skeptic's command line (the store, the
 // checker and the brief are skeptics.mjs).
 //
-//   record --kind ask|land|plan --verdict <v> --why "<one line>"
+//   record --kind ask|land|plan|stall --verdict <v> --why "<one line>"
 //          [--option <the decided option>]                  decide
 //          [--question <text> [--offer <a>]… --defaults|--waits]   ask: what it judged
 //          [--tip <full sha> --action force|no-review|"decline <thread>"]   land
+//          [--slice <n> --defaults|--waits]                 stall (--waits: a never-list step, only ask)
 //          [--topic <t>] [--session <s>]                    prints the id
 //   [list] [--topic <t>] [--json]                           the verdicts, oldest first
-//   brief ask|land|plan --evidence <file>                   (pnpm prd prompt skeptic …)
+//   brief ask|land|plan|stall --evidence <file>                   (pnpm prd prompt skeptic …)
 //
 // The directory is CARETOOK_SKEPTIC_DIR (prd.sh sets the main checkout's
 // .loops/.skeptic). The topic and session default to what prd.sh passes as
@@ -64,6 +65,7 @@ function record(argv) {
       "offer",
       "tip",
       "action",
+      "slice",
       "topic",
       "session",
       "here-topic",
@@ -86,6 +88,7 @@ function record(argv) {
     question: opts.question ?? null,
     offers: opts.offer,
     askerClass: opts.defaults ? "defaults" : opts.waits ? "waits" : null,
+    slice: opts.slice ?? null,
   });
   console.log(r.id);
 }
@@ -99,7 +102,7 @@ function list(argv) {
 
 function brief(argv) {
   const { opts, rest } = parse(argv, ["evidence"]);
-  if (rest.length !== 1) fail("usage: pnpm prd prompt skeptic ask|land|plan --evidence <file>");
+  if (rest.length !== 1) fail("usage: pnpm prd prompt skeptic ask|land|plan|stall --evidence <file>");
   if (!opts.evidence) fail("the skeptic's brief needs --evidence <file>");
   let evidence;
   try {

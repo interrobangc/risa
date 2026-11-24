@@ -167,7 +167,7 @@ describe("orchestrator", () => {
     expect(out).toContain(ASK_FIRST);
     expect(out).not.toContain(RUN_THROUGH);
     expect(out).not.toContain(RESUME);
-    expect(out).not.toContain("--continue");
+    expect(out).not.toContain("**Respawn each in-flight slice**");
     expect(out.trimEnd()).toMatch(/Record the answers in the plan's _Status_ and follow them\..*$/);
   });
 
@@ -277,11 +277,44 @@ describe("orchestrator", () => {
     for (const flags of [[], ["--resume"]]) {
       const out = ok("orchestrator", "T", ...flags);
       expect(out).not.toContain("pnpm prd ask");
-      expect(out).not.toContain("--defaults");
+      // The watch's stall record names its class (--defaults or --waits); nothing else defaults.
+      expect(out.replace(/^- \*\*Watch the slice agents:\*\*.*$/m, "")).not.toContain("--defaults");
       expect(out).toContain("AskUserQuestion");
     }
     // An attended planner asks in front of the user: nothing defaults there.
     expect(ok("plan", "T", "B-1")).not.toContain("--defaults");
+  });
+
+  it("carries the watch steps in every variant: mark first, confirm a stop, a stall skeptic", () => {
+    for (const flags of [[], ["--auto"], ["--resume"], ["--resume", "--auto"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).toContain("keep one `pnpm prd watch T --wait` running in the background");
+      expect(out).toContain("**marking first** (`pnpm prd watch T --mark <n> <mark>`)");
+      expect(out).toMatch(/\*\*nudge:\*\* mark `nudged`, then SendMessage .*mark `replied`/);
+      expect(out).toMatch(
+        /\*\*restart:\*\* mark `restarted`, stop the agent \(TaskStop\), then run `pnpm prd watch T` until that slice reads `stopped`.*only then spawn one background agent with `pnpm prd prompt slice T <n> --continue` in the same worktree/,
+      );
+      expect(out).toContain("No stop shown means no spawn");
+      expect(out).toContain("A slice restarts once");
+      expect(out).toContain("`pnpm prd prompt skeptic stall --evidence <file>`");
+      expect(out).toContain("`pnpm prd skeptic record --kind stall --slice <n> --verdict restart|leave|ask");
+      expect(out).toContain("(`--waits` for a step on the never list: then only ask)");
+      expect(out).toContain(
+        flags.includes("--auto")
+          ? 'on ask, file it naming "slice <n>" (`pnpm prd ask … --skeptic <id>`), then mark `asked --ask <id>`'
+          : 'on ask, ask the user about "slice <n>" with AskUserQuestion, then mark `asked`',
+      );
+      expect(out).toContain("restarts nothing");
+    }
+  });
+
+  it("--resume restarts the watch after respawning", () => {
+    const out = ok("orchestrator", "T", "--resume");
+    const respawn = out.indexOf("**Respawn each in-flight slice**");
+    expect(
+      out.indexOf("Then start the watch again: `pnpm prd watch T --wait` in the background"),
+    ).toBeGreaterThan(respawn);
+    expect(ok("orchestrator", "T")).not.toContain("start the watch again");
   });
 
   it("--resume: reconcile _Status_ with git first, respawn with --continue, review handed-off slices", () => {

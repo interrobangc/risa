@@ -147,6 +147,37 @@ describe("decide", () => {
     expect(one(quiet(), { marks: marks(11) }).action).toBe("skeptic");
   });
 
+  it("an unconfirmed stop goes to the skeptic; a confirmed one says to spawn", () => {
+    const marks = {
+      4: [
+        { mark: "nudged", at: at(40) },
+        { mark: "restarted", at: at(15) },
+      ],
+    };
+    // Still quiet, no stop recorded, no new agent's call since the mark.
+    const unconfirmed = one(quiet(4, { lastActivityAt: at(50) }), { marks });
+    expect(unconfirmed).toMatchObject({ state: "quiet", action: "skeptic" });
+    expect(unconfirmed.reason).toMatch(/stop isn't confirmed .*spawn nothing/);
+    const confirmed = one(quiet(4, { lastActivityAt: at(50), stopped: true }), { marks });
+    expect(confirmed).toMatchObject({ state: "stopped", action: "none" });
+    expect(confirmed.reason).toMatch(/stop confirmed: spawn its --continue agent/);
+    expect(one(quiet(4, { stopped: true })).reason).not.toMatch(/spawn/);
+  });
+
+  it("a second restart becomes skeptic", () => {
+    // Restarted once; the new agent worked, then went quiet again and wasn't answering a nudge.
+    const marks = {
+      4: [
+        { mark: "nudged", at: at(90) },
+        { mark: "restarted", at: at(80) },
+        { mark: "nudged", at: at(12) },
+      ],
+    };
+    const s = one(quiet(4, { firstAt: at(78) }), { marks });
+    expect(s).toMatchObject({ state: "quiet", action: "skeptic" });
+    expect(s.reason).toMatch(/second stall/);
+  });
+
   it("two quiet agents at once are one finding, and neither is acted on", () => {
     const marks = { 4: [{ mark: "nudged", at: at(12) }] };
     const d = run([quiet(4), quiet(5, { lastActivityAt: at(30) }), worker(6)], { marks });
@@ -318,6 +349,15 @@ describe("the command", () => {
     expect(watch("--mark", "x", "nudged").status).toBe(2);
     writeMark(watchDir, "fresh", { slice: "2", mark: "nudged", at: at(1) });
     expect(readMarks(watchDir, "fresh")).toEqual({ 2: [{ slice: "2", mark: "nudged", at: at(1) }] });
+    rmSync(join(watchDir, "topic"), { recursive: true, force: true });
+  });
+
+  it("refuses a second restart mark of a slice", () => {
+    expect(watch("--mark", "4", "restarted").status).toBe(0);
+    const again = watch("--mark", "4", "restarted");
+    expect(again.status).toBe(1);
+    expect(again.stderr).toMatch(/restarted once already.*second restart is refused/);
+    expect(readMarks(watchDir, "topic")[4].map((m) => m.mark)).toEqual(["restarted"]);
     rmSync(join(watchDir, "topic"), { recursive: true, force: true });
   });
 

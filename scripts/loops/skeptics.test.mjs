@@ -248,6 +248,56 @@ describe("the checker", () => {
   });
 });
 
+describe("a stall verdict", () => {
+  const stall = (over = {}) =>
+    recordVerdict(dir, {
+      kind: "stall",
+      verdict: "restart",
+      why: "quiet an hour, its stop recorded",
+      topic: "t",
+      slice: "4",
+      askerClass: "defaults",
+      now: NOW,
+      ...over,
+    });
+  const wantStall = (over = {}) => wantAsk({ question: "Slice 4 has stalled twice: restart it?", ...over });
+
+  it("records restart, leave or ask, bound to its slice and class", () => {
+    expect(VERDICTS.stall).toEqual(["restart", "leave", "ask"]);
+    for (const verdict of VERDICTS.stall)
+      expect(stall({ verdict })).toMatchObject({ kind: "stall", slice: "4" });
+    expect(() => stall({ verdict: "go" })).toThrow(/answers restart, leave or ask/);
+    expect(() => stall({ slice: null })).toThrow(/names its slice/);
+    expect(() => stall({ askerClass: null })).toThrow(/--defaults, or --waits/);
+    expect(() => stall({ question: Q })).toThrow(/no question/);
+    expect(() => ask({ slice: "4" })).toThrow(/only a stall verdict names a slice/);
+  });
+
+  it("refuses restart or leave on a never-list step: only ask", () => {
+    expect(() => stall({ askerClass: "waits" })).toThrow(
+      /never list is the user's: a stall skeptic can only ask/,
+    );
+    expect(() => stall({ askerClass: "waits", verdict: "leave" })).toThrow(/can only ask/);
+    expect(stall({ askerClass: "waits", verdict: "ask" })).toMatchObject({
+      verdict: "ask",
+      askerClass: "waits",
+    });
+  });
+
+  it("lets an ask take its ask verdict on a question naming the slice", () => {
+    expect(check(stall({ verdict: "ask" }), wantStall())).toEqual({ ok: true });
+    expect(check(stall({ verdict: "ask" }), wantStall({ question: "Restart t-4?" }))).toEqual({ ok: true });
+    expect(check(stall({ verdict: "ask" }), wantStall({ question: "Restart slice 5?" })).reason).toMatch(
+      /name "slice 4"/,
+    );
+    expect(check(stall(), wantStall()).reason).toMatch(/stall restart: act on it/);
+    expect(check(stall({ verdict: "leave" }), wantStall()).reason).toMatch(/stall leave/);
+    const never = stall({ verdict: "ask", askerClass: "waits" });
+    expect(check(never, wantStall()).reason).toMatch(/takes --waits/);
+    expect(check(never, wantStall({ askerClass: "waits" }))).toEqual({ ok: true });
+  });
+});
+
 describe("the brief", () => {
   const rules = () => readRules(REPO);
   const preferencesNever = () =>
@@ -266,6 +316,7 @@ describe("the brief", () => {
     ["ask", ["decide <option>", "**ask**", "always ask"]],
     ["land", ["**go**", "**no**"]],
     ["plan", ["**go**", "**send-back**", "once more", "a slice too big"]],
+    ["stall", ["**restart**", "**leave**", "**ask**", "restarted once", "never resets, cleans or removes"]],
   ])("the %s brief has the evidence, the never list and its verdict words", (kind, words) => {
     const brief = skepticBrief(kind, { evidence: "EVIDENCE-LINE", rules: rules() });
     expect(brief).toContain("EVIDENCE-LINE");
@@ -285,7 +336,9 @@ describe("the brief", () => {
 
   it("refuses an empty evidence or another kind", () => {
     expect(() => skepticBrief("ask", { evidence: " \n", rules: rules() })).toThrow(/empty/);
-    expect(() => skepticBrief("other", { evidence: "x", rules: rules() })).toThrow(/ask, land or plan/);
+    expect(() => skepticBrief("other", { evidence: "x", rules: rules() })).toThrow(
+      /ask, land, plan or stall/,
+    );
   });
 
   it("refuses docs that lost the never list", () => {

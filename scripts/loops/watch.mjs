@@ -15,8 +15,9 @@
 // the tree is dirty, a migration changed or a merge is under way, or it is a
 // second stall (a nudge or restart before this stall began): then the skeptic.
 // No progress goes to the skeptic; slow gets one nudge. A `left` mark past its
-// recheck time, an answered `asked` one, or a restart with no call since for
-// RESTART minutes go to the skeptic too.
+// recheck time, an answered `asked` one, or a restart whose stop isn't confirmed
+// (still quiet, not stopped, no new agent's call) for RESTART minutes go to the
+// skeptic too. A slice is restarted once: `--mark restarted` refuses a second.
 //
 // Machine sleep: a gap over the sleep gap between two readings, or a wake later
 // than a clock (macOS's kern.waketime), resets the clocks to then. All quiet at
@@ -243,7 +244,12 @@ export function decide({
     });
 
     if (w.status && /handed off|merged/i.test(w.status)) return result("none", `_Status_: ${w.status}`);
-    if (s.state === "ok" || s.state === "stopped" || s.state === "unknown") return result("none");
+    if (s.state === "stopped") {
+      const newest = [...(marks[w.n] ?? [])].sort((a, b) => (ms(a.at) ?? 0) - (ms(b.at) ?? 0)).pop();
+      const restarted = newest?.mark === "restarted";
+      return result("none", restarted ? "stop confirmed: spawn its --continue agent" : "");
+    }
+    if (s.state === "ok" || s.state === "unknown") return result("none");
     if (w.openAsk) return result("none", `open ask ${w.openAsk}`);
 
     const all = [...(marks[w.n] ?? [])].sort((a, b) => (ms(a.at) ?? 0) - (ms(b.at) ?? 0));
@@ -264,8 +270,10 @@ export function decide({
     }
     if (latest?.mark === "left") return result("skeptic", `left until ${latest.until}: its recheck`);
     if (latest?.mark === "restarted") {
-      if (now - (ms(latest.at) ?? now) < restartMs) return result("none", "restart under way");
-      return result("skeptic", `no call since the restart ${ago(now - (ms(latest.at) ?? now))} ago`);
+      // Still quiet, not stopped, no new agent's call: the old agent's stop isn't confirmed.
+      const markedFor = now - (ms(latest.at) ?? now);
+      if (markedFor < restartMs) return result("none", "restart under way: confirm its stop, then spawn");
+      return result("skeptic", `its stop isn't confirmed ${ago(markedFor)} after the restart: spawn nothing`);
     }
 
     if (s.state === "slow") {
@@ -563,6 +571,14 @@ async function main(/** @type {string[]} */ argv) {
     if (what === "left" && opt.until && !parseUntil(opt.until, now))
       usage(`--until ${opt.until}: not a time`);
     if (opt.ask && !/^a\d+$/.test(opt.ask)) usage(`--ask ${opt.ask}: not an ask id`);
+    const before =
+      what === "restarted" && readMarks(watchDir, topic)[String(n)]?.find((m) => m.mark === "restarted");
+    if (before) {
+      console.error(
+        `watch: ${topic}-${n} was restarted once already (${before.at}): a second restart is refused; leave it or ask`,
+      );
+      return 1;
+    }
     writeMark(watchDir, topic, {
       slice: String(n),
       mark: String(what),
