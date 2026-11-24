@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 # prompts/slice.sh: prompt.sh slice <topic> <n> [--continue], the prompt an
 # orchestrator gives a slice agent; its fields come from slice-fields.mjs.
-# Sourced by prompt.sh after shared.sh and topic.sh, with $topic set.
+# Sourced by prompt.sh after shared.sh and topic.sh, with $topic set. The
+# slice's section, its wave's intro and what it cites from the PRD are embedded
+# at the end (slice-brief.mjs), so the agent never reads the whole plan or PRD.
 n=${3:?slice number}
 continuing=""
 for flag in "${@:4}"; do
@@ -17,6 +19,21 @@ fields_cli=$(dirname "$0")/slice-fields.mjs
 fields=$(node "$fields_cli" "$n" <<<"$plan_text" 2>/dev/null | sed 's/^/  - /')
 warnings=$(node "$fields_cli" "$n" <<<"$plan_text" 2>&1 >/dev/null | sed 's/^warning: slice [0-9]*: //' | paste -sd ';' - | sed 's/;/; /g')
 stack=$(node "$fields_cli" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
+# The slice's section and what it needs from the plan and PRD; empty when the
+# plan has no such slice, and then the agent reads the files.
+prd_file=""
+[[ -n $prd_read ]] && prd_file=$here/plans/$topic-prd.md
+brief=$(node "$(dirname "$0")/slice-brief.mjs" "$n" "$topic" ${prd_file:+--prd "$prd_file"} <<<"$plan_text" 2>/dev/null || true)
+if [[ -n $brief ]]; then
+  if [[ -n $prd_read ]]; then
+    from="plans/$topic-plan.md and plans/$topic-prd.md" whole="the whole plan or PRD"
+  else
+    from="plans/$topic-plan.md" whole="the whole plan"
+  fi
+  read_line="Your slice's section and what it needs from $from${no_prd:-} are at the end of this prompt: work from them, and open $whole only for a question they leave. Then read the docs its Reads field names."
+else
+  read_line="Then read ${prd_read}slice $n in plans/$topic-plan.md${no_prd:-}, then the docs its Reads field names."
+fi
 # Once the worktree exists, what it really has wins (new.sh decides).
 if [[ -f $loops/$topic-$n/.env.loop ]]; then
   if grep -q '^SLOT=[0-9]' "$loops/$topic-$n/.env.loop"; then stack=yes; else stack=no; fi
@@ -30,7 +47,7 @@ cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.
 
 - Your worktree is $loops/$topic-$n, on branch slice/$topic/$n (from prd/$topic). \`cd\` there in every shell and work only there; Read, Edit and Write use absolute paths inside it.
-- AGENTS.md (the core) is already in your context (CLAUDE.md loads it); Read it only if it isn't. Then read ${prd_read}slice $n in plans/$topic-plan.md${no_prd:-}, then the docs its Reads field names. AGENTS.md's _Area index_ finds any other rule you need.
+- AGENTS.md (the core) is already in your context (CLAUDE.md loads it); Read it only if it isn't. $read_line AGENTS.md's _Area index_ finds any other rule you need.
 - This slice's fields, from the plan:
 $fields
 EOF
@@ -58,4 +75,7 @@ if [[ -n $continuing ]]; then
 - Check that against the slice's acceptance criteria and finish what's missing from there. Don't start over, and don't redo committed work.
 - If everything is committed and \`pnpm prd check\` (or \`--quick\`) passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
 EOF
+fi
+if [[ -n $brief ]]; then
+  printf '\nSlice %s, from %s:\n\n%s\n' "$n" "$from" "$brief"
 fi
