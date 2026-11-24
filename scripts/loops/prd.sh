@@ -138,6 +138,9 @@ pnpm prd <command>
                               sync config, a lockfile, a package.json (beyond its scripts) or the Vitest config makes it a full
                               check; the tooling tests join when the diff touches the tooling
                               (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
+    status-trim [topic] [--dry-run] [--next]   keep the plan's _Status_ short (after each landing): move the
+                              hand-offs but the latest, and a fixes plan's landed waves (their paragraphs and
+                              table rows), to plans/<topic>-history.md, newest first; --next: the next slice number
     wait [check|browser|<kind>] [--timeout <s>]   block until this worktree's check (or that lease kind's
                               holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
                               naming it. Wait on a background check with this, never \`pgrep -f\` (it matches itself)
@@ -239,6 +242,12 @@ case $cmd in
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   queue) exec node "$bin/queue.mjs" "$@" ;;
+  status-trim)
+    t=""
+    [[ ${1:-} == "" || ${1:-} == -* ]] || { t=$1; shift; }
+    if [[ -z $t ]]; then h=$(here_name); [[ -n $h ]] || die "status-trim: name a topic, or run it inside its worktree"; t=$(topic_of "$h"); fi
+    exec node "$bin/status-trim.mjs" "$t" "$@"
+    ;;
   dispatch) exec node "$bin/dispatch.mjs" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
