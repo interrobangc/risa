@@ -72,6 +72,10 @@ pnpm prd <command>
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
     end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
                               orchestrator or planner, after pnpm prd rm); its tab closes
+    bye [--dry-run] [--json]  a session's hand-over check, when the user says just "bye": clean (no uncommitted or
+                              unpushed work, worktree, branch, stack, server, running lease, background job or open
+                              question of its own left), it prints the hand-off line, releases its leases and ends the
+                              session (a slice only reports); else it lists each open thing and exits 3, closing nothing
     context [--keep "<why>" | --all [--json]]   this session's context size and the limit; --keep leaves it
                               alone for 30 minutes; --all lists every live session
     rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
@@ -237,6 +241,7 @@ case $cmd in
   down) exec "$bin/down.sh" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   end) exec "$bin/end-session.sh" "$@" ;;
+  bye) exec node "$bin/bye.mjs" "$@" ;;
   rotate) exec "$bin/rotate.sh" "$@" ;;
   context) exec node "$bin/context.mjs" "$@" ;;
   session)

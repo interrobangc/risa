@@ -508,8 +508,8 @@ describe("inbox", () => {
     expect(text).toContain("For a filed one it prints a `set` line: don't run it");
     expect(text).not.toContain("pnpm backlog ingest");
     expect(text).not.toContain("pnpm prd");
-    // Its one prd command is its own hand-off.
-    expect(text.match(/ prd [a-z-]+/g)).toEqual([" prd rotate"]);
+    // Its prd commands are its own hand-off and its bye.
+    expect(text.match(/ prd [a-z-]+/g)).toEqual([" prd rotate", " prd bye"]);
   });
 
   it("hands off to a fresh inbox session by the main checkout's path, with no brief", () => {
@@ -543,6 +543,48 @@ describe("inbox", () => {
     const r = prompt("inbox", "T");
     expect(r.code).not.toBe(0);
     expect(r.err).toContain("prompt: inbox takes no topic or options");
+  });
+});
+
+describe("bye", () => {
+  const BYE = "- **A message of just 'bye'** (from the phone too): first the checks";
+  const AFTER =
+    "then run `pnpm prd bye`. Clean, it ends this session: say nothing after it. Otherwise ask the user about each open thing it lists, one at a time (finish it, hand it off or drop it), then run it again.";
+
+  it.each([
+    ["orchestrator", ["orchestrator", "T"], "orchestrator.md"],
+    ["orchestrator --auto", ["orchestrator", "T", "--auto"], "orchestrator.md"],
+    ["orchestrator --resume", ["orchestrator", "T", "--resume"], "orchestrator.md"],
+    ["plan", ["plan", "T"], "planner.md"],
+    ["plan --auto", ["plan", "T", "--auto"], "planner.md"],
+    ["hotfix", ["hotfix", "x", "the fix"], "hotfix.md"],
+    ["backlog", ["backlog"], "backlog.md"],
+    ["recover", ["recover"], "recovery.md"],
+  ])("%s: a message of just 'bye' runs pnpm prd bye after its doc's own checks", (_, args, doc) => {
+    const text = ok(...args);
+    expect(text).toContain(`${BYE} docs/agents/${doc} names under _Bye_, ${AFTER}`);
+    expect(text.match(/just 'bye'/g)).toHaveLength(1);
+  });
+
+  it.each([
+    ["slice", ["slice", "T", "1"]],
+    ["slice --continue", ["slice", "T", "1", "--continue"]],
+  ])("%s: bye only reports, and the open things go to the orchestrator", (_, args) => {
+    expect(ok(...args)).toContain(
+      "- **A message of just 'bye'**: first the checks docs/agents/loop.md names under _Bye_, then run `pnpm prd bye` (a slice only reports; it ends no session). Clean: send your hand-off. Otherwise send your orchestrator the open things it lists and wait for its word on each.",
+    );
+  });
+
+  it("inbox: its own checks in the prompt, by the main checkout's path", () => {
+    const text = ok("inbox");
+    expect(text).toContain(
+      `- **Just 'bye':** with every idea added, run \`pnpm -s -C ${main} prd bye\` and say nothing after; if it lists open things, ask about each, then rerun it.`,
+    );
+    expect(text).not.toContain("_Bye_");
+  });
+
+  it("the briefs that aren't a role get none", () => {
+    expect(ok("tidy")).not.toContain("bye");
   });
 });
 
