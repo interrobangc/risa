@@ -16,24 +16,27 @@
 // as the answer and marks the ask `defaulted`, only while the ask is still
 // unanswered and not dismissed. A defaulted ask stays listed ("decided for
 // you") until dismissed, and can't be answered afterwards. Answering, settling
-// and dismissing each take the ask's lock (`.<id>.lock`, created exclusively),
-// re-read the ask inside it and write before letting go, so neither overwrites
-// the other: whichever comes first stands and the other reports it. Reading
-// never settles: only a waiting session (`ask --wait`) and the dispatcher's
-// tick call settleAsk.
+// and dismissing each take the ask's lock (`.<id>.lock`, created exclusively;
+// a dead holder's is taken over under `.<id>.takeover`, so two takers never
+// both remove it and a fresh lock is never removed), re-read the ask inside
+// it and write before letting go, so neither overwrites the other: whichever
+// comes first stands and the other reports it. Reading never settles: only a
+// waiting session (`ask --wait`) and the dispatcher's tick call settleAsk.
 //
 // A question that went past a skeptic carries `skeptic: { id, verdict, why }`.
 // One the skeptic decided is filed already settled (`chose`): its answer is the
 // option, `defaulted` is true so it lists and dismisses with the defaulted ones
 // under "decided for you", and it is never pushed.
 import {
+  closeSync,
+  fstatSync,
   linkSync,
+  openSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
   rmSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -230,17 +233,25 @@ const mustGet = (dir, id) => {
 
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-/** Whether a lock file's holder is gone: its pid is dead, or it is older than LOCK_STALE_MS. */
-const lockIsStale = (lock) => {
-  let text, mtime;
+/** A lock file's text and mtime, read from one open file, or null when it's gone. */
+const readLock = (path) => {
+  let fd;
   try {
-    text = readFileSync(lock, "utf8");
-    mtime = statSync(lock).mtimeMs;
+    fd = openSync(path, "r");
   } catch (e) {
-    if (e.code === "ENOENT") return false;
+    if (e.code === "ENOENT") return null;
     throw e;
   }
-  if (Date.now() - mtime > LOCK_STALE_MS) return true;
+  try {
+    return { mtimeMs: fstatSync(fd).mtimeMs, text: readFileSync(fd, "utf8") };
+  } finally {
+    closeSync(fd);
+  }
+};
+
+/** Whether a read lock's holder is gone: its pid is dead, or it is older than LOCK_STALE_MS. */
+const holderGone = ({ text, mtimeMs }) => {
+  if (Date.now() - mtimeMs > LOCK_STALE_MS) return true;
   const pid = Number(text.split(" ")[0]);
   if (!Number.isInteger(pid) || pid <= 0) return false; // being written
   try {
@@ -251,17 +262,52 @@ const lockIsStale = (lock) => {
   }
 };
 
+const lockIsStale = (lock) => {
+  const read = readLock(lock);
+  return read !== null && holderGone(read);
+};
+
+/** A takeover mutex this old belongs to a taker that died inside it (it holds one for a read and an unlink). */
+const TAKEOVER_STALE_MS = 5000;
+
+/**
+ * Remove a stale lock under the ask's takeover mutex (`.<id>.takeover`, created
+ * exclusively), judging it again inside: two takers that both saw it stale can't
+ * both remove it, so neither deletes the lock the other took fresh after. Only
+ * takers remove another's lock, and only here, so a lock judged inside the mutex
+ * stays the one removed. Returns false when another taker holds the mutex.
+ * @returns {boolean}
+ */
+const takeOver = (lock, mutex) => {
+  try {
+    writeFileSync(mutex, String(process.pid), { flag: "wx" });
+  } catch (e) {
+    if (e.code !== "EEXIST") throw e;
+    const held = readLock(mutex);
+    if (held && Date.now() - held.mtimeMs > TAKEOVER_STALE_MS) rmSync(mutex, { force: true });
+    return false;
+  }
+  try {
+    if (lockIsStale(lock)) rmSync(lock, { force: true });
+    return true;
+  } finally {
+    rmSync(mutex, { force: true });
+  }
+};
+
 /**
  * Run fn with the ask's lock held: the one exclusive step answering, settling
  * and dismissing share. Waits up to waitMs for another holder (a dead one is
- * taken over), then throws.
+ * taken over, atomically: see takeOver), then throws. `afterStaleCheck` is a
+ * test hook, called between judging a lock stale and taking it over.
  * @template T @param {string} dir @param {string} id @param {() => T} fn
- * @param {{ waitMs?: number }} [opts] @returns {T}
+ * @param {{ waitMs?: number, afterStaleCheck?: () => void }} [opts] @returns {T}
  */
-export function withAskLock(dir, id, fn, { waitMs = LOCK_WAIT_MS } = {}) {
+export function withAskLock(dir, id, fn, { waitMs = LOCK_WAIT_MS, afterStaleCheck } = {}) {
   if (!/^a\d+$/.test(id)) throw new AskError(`no ask ${id}`);
   mkdirSync(dir, { recursive: true });
   const lock = join(dir, `.${id}.lock`);
+  const mutex = join(dir, `.${id}.takeover`);
   const token = `${process.pid} ${Math.random().toString(36).slice(2)}`;
   const end = Date.now() + waitMs;
   for (;;) {
@@ -272,8 +318,8 @@ export function withAskLock(dir, id, fn, { waitMs = LOCK_WAIT_MS } = {}) {
       if (e.code !== "EEXIST") throw e;
     }
     if (lockIsStale(lock)) {
-      rmSync(lock, { force: true });
-      continue;
+      afterStaleCheck?.();
+      if (takeOver(lock, mutex)) continue;
     }
     if (Date.now() >= end)
       throw new AskError(`${id} is busy: another answer or default holds it (try again)`);

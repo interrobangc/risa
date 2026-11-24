@@ -1,6 +1,14 @@
 // The asks store (asks.mjs) against a throwaway directory.
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -305,6 +313,108 @@ describe("defaults", () => {
     writeFileSync(join(dir, ".a1.lock"), "999999 gone");
     expect(answerAsk(dir, "a1", "1", { lockWaitMs: 100 }).answer).toBe("yes");
     expect(readdirSync(dir).filter((n) => n.endsWith(".lock"))).toEqual([]);
+  });
+
+  // Spin (blocking, as withAskLock's hook runs synchronously) until a file appears.
+  const waitFile = (path) => {
+    const end = Date.now() + 10_000;
+    while (!existsSync(path)) {
+      if (Date.now() > end) throw new Error(`timed out waiting for ${path}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  };
+  const leftovers = () => readdirSync(dir).filter((n) => n.endsWith(".lock") || n.endsWith(".takeover"));
+
+  it("a lock taken fresh after the stale check is never removed by the taker that saw it stale", () => {
+    defaulting();
+    const lock = join(dir, ".a1.lock");
+    writeFileSync(lock, "999999 gone");
+    let ran = false;
+    let hooked = 0;
+    expect(() =>
+      withAskLock(dir, "a1", () => (ran = true), {
+        waitMs: 100,
+        afterStaleCheck: () => {
+          if (hooked++) return;
+          // Another taker removes the stale lock and takes it fresh in between.
+          rmSync(lock);
+          writeFileSync(lock, `${process.pid} fresh`, { flag: "wx" });
+        },
+      }),
+    ).toThrow(/a1 is busy/);
+    expect(ran).toBe(false);
+    expect(readFileSync(lock, "utf8")).toBe(`${process.pid} fresh`);
+    expect(leftovers()).toEqual([".a1.lock"]);
+  });
+
+  it("two takers racing over one stale lock end with exactly one holder", async () => {
+    defaulting();
+    const lock = join(dir, ".a1.lock");
+    writeFileSync(lock, "999999 gone");
+    const f = (name) => join(dir, name);
+    // The other taker: judges the lock stale, waits until this one has too, then
+    // takes it over and holds it until told to go.
+    const child = spawn(process.execPath, [
+      "--input-type=module",
+      "-e",
+      `import { existsSync, writeFileSync } from "node:fs";
+      import { withAskLock } from ${JSON.stringify(ASKS)};
+      const dir = process.argv[1];
+      const wait = (n) => { while (!existsSync(dir + "/" + n)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); };
+      let hooked = false;
+      withAskLock(dir, "a1", () => { writeFileSync(dir + "/held", ""); wait("go"); }, {
+        afterStaleCheck: () => { if (hooked) return; hooked = true; writeFileSync(dir + "/child-stale", ""); wait("parent-stale"); },
+      });
+      console.log("held");`,
+      dir,
+    ]);
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    const exited = new Promise((resolve) => child.on("exit", resolve));
+    let ran = false;
+    let hooked = false;
+    let whileHeld;
+    try {
+      expect(() =>
+        withAskLock(dir, "a1", () => (ran = true), {
+          waitMs: 200,
+          afterStaleCheck: () => {
+            if (hooked) return;
+            hooked = true;
+            // Both have judged the same lock stale; the child takes it over first.
+            writeFileSync(f("parent-stale"), "");
+            waitFile(f("child-stale"));
+            waitFile(f("held"));
+          },
+        }),
+      ).toThrow(/a1 is busy/);
+      whileHeld = readFileSync(lock, "utf8");
+    } finally {
+      writeFileSync(f("go"), "");
+    }
+    expect(await exited, err).toBe(0);
+    expect(out.trim()).toBe("held");
+    expect(ran).toBe(false);
+    expect(whileHeld.split(" ")[0]).toBe(String(child.pid));
+    expect(leftovers()).toEqual([]);
+  });
+
+  it("a takeover mutex makes other takers wait; one left by a dead taker is cleared once old", () => {
+    defaulting();
+    const lock = join(dir, ".a1.lock");
+    const mutex = join(dir, ".a1.takeover");
+    writeFileSync(lock, "999999 gone");
+    writeFileSync(mutex, "999998");
+    // Another taker is inside the mutex: this one leaves the lock alone and gives up.
+    expect(() => answerAsk(dir, "a1", "1", { lockWaitMs: 100 })).toThrow(/a1 is busy/);
+    expect(readFileSync(lock, "utf8")).toBe("999999 gone");
+    // That taker died inside it: once old, the mutex is cleared and the lock taken over.
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(mutex, old, old);
+    expect(answerAsk(dir, "a1", "1", { lockWaitMs: 100 }).answer).toBe("yes");
+    expect(leftovers()).toEqual([]);
   });
 
   it("an answer and a settle racing for one ask leave exactly one, and the loser reports it", async () => {
