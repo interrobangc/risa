@@ -50,7 +50,7 @@ export function parseReadArgs(/** @type {string} */ command, /** @type {string[]
     else if (a === "--no-push" && command === "file") noPush = true;
     else if (a === "--run" && command === "file") {
       runId = args[++i] ?? null;
-      if (!runId || !/^\d+$/.test(runId)) throw new Error("--run needs a run id");
+      if (!runId || !/^\d+(,\d+)*$/.test(runId)) throw new Error("--run needs a run id (or ids: 1,2)");
     } else if (a === "--base" && command === "file") {
       base = args[++i] ?? null;
       if (!base || base.startsWith("-")) throw new Error("--base needs a commit");

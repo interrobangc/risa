@@ -10,6 +10,7 @@ import {
   planCheck,
   planToolingLint,
   proposeTier,
+  syncTier,
 } from "./check-plan.mjs";
 
 const ROOT = join(import.meta.dirname, "../..");
@@ -120,6 +121,21 @@ describe("keepsVerdict", () => {
     [["apps/web/app/a.tsx"], false],
   ])("%j: %s", (files, kept) => {
     expect(keepsVerdict(files)).toBe(kept);
+  });
+});
+
+describe("syncTier", () => {
+  it.each([
+    [["docs/a.md", "scripts/backlog/backlog.mjs"], [], "none"],
+    // fixes-bug 82a3cf1b: dev brought lib.sh, and the carry broke on it
+    [["scripts/loops/lib.sh", "scripts/loops/land.sh", "plans/backlog.md"], ["apps/web/a.tsx"], "none"],
+    [["scripts/loops/lib.sh"], ["scripts/loops/lib.sh"], "integration"],
+    [["scripts/ci/quarantine.txt"], [], "none"],
+    [["packages/data/src/a.ts", "docs/a.md"], [], "integration"],
+    [["apps/web/a.tsx"], [], "components"],
+    [["pnpm-lock.yaml"], [], "full"],
+  ])("brought %j, the branch touched %j: %s", (brought, touched, tier) => {
+    expect(syncTier(brought, touched).tier).toBe(tier);
   });
 });
 

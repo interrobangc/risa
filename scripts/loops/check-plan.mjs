@@ -123,6 +123,20 @@ export const keepsVerdict = (changed, packages = new Map()) =>
   ).tier === "none";
 
 /**
+ * What a dev sync (a merge of dev into the branch) asks the synced tip to recheck:
+ * the tier of the files dev brought, which dev's own landing already vouched for
+ * alone. The browser harness counts as tooling here, since `pnpm test:tooling` runs
+ * its test, unless the branch changed that file too; CI's two lists count for nothing.
+ * @param {string[]} brought files the merge changed against the branch's side
+ * @param {string[]} touched files the branch itself changed against dev
+ * @returns {{ tier: ProposedTier, reason: string }}
+ */
+export function syncTier(brought, touched) {
+  const shared = new Set(touched);
+  return proposeTier(brought.filter((f) => !CI_LISTS.has(f) && (shared.has(f) || !BROWSER_HARNESS.test(f))));
+}
+
+/**
  * A declared tier against the proposal. `none` under a real proposal is no gate at
  * all, which is what --force is for, so a reason doesn't buy it.
  * @param {string} proposed
