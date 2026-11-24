@@ -793,7 +793,7 @@ export function tick(
       if (what === "hold") {
         const row = facts.rows.find((r) => r.topic === topic);
         const flags = [...new Set([...(row?.flags ?? []), "hold"])];
-        const r = backlog(p.main, ["prd", "set", topic, `flags=${flags.join(",")}`]);
+        const r = backlog(p.main, ["prd", "set", topic, "flags+=hold"]);
         out(
           r.ok
             ? `ask ${id} answered "${a.answer}": ${topic} flagged hold`

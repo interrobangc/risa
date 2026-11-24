@@ -76,6 +76,7 @@
 //   pnpm backlog prd list [--json]           each topic with its worked-out state
 //   pnpm backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
 //   pnpm backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
+//   pnpm backlog prd set <topic> flags+=hold | flags-=hold   adds or removes flags, keeping the others
 //   pnpm backlog prd move <topic> --first|--last|--before T|--after T
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),

@@ -206,7 +206,8 @@ function insert(rows, row, pos) {
 
 /**
  * Apply "key=value" pairs (flags, after, hot: comma-separated, — or empty
- * clears; notes: text) to a copy of `row`.
+ * clears; notes: text) to a copy of `row`. `flags+=a,b` adds flags and
+ * `flags-=a,b` removes them, keeping the others (a hold keeps `standing`).
  * @param {Row} row @param {string[]} pairs @returns {Row}
  */
 export function setRow(row, pairs) {
@@ -214,14 +215,21 @@ export function setRow(row, pairs) {
   for (const p of pairs) {
     const eq = p.indexOf("=");
     if (eq < 1) throw new BacklogError(`"${p}" isn't key=value`);
-    const key = p.slice(0, eq);
+    let key = p.slice(0, eq);
     const value = p.slice(eq + 1);
+    const op = /[+-]$/.test(key) ? key.slice(-1) : "";
+    if (op) {
+      key = key.slice(0, -1);
+      if (key !== "flags") throw new BacklogError(`"${p}": only flags takes += or -=`);
+    }
     if (key === "notes") r.notes = value.trim() === NONE ? "" : value.trim();
     else if (key === "flags") {
       const flags = [...new Set(parseList(value))];
       const bad = flags.filter((f) => !FLAGS.includes(f));
       if (bad.length) throw new BacklogError(`unknown flag ${bad.join(", ")} (flags: ${FLAGS.join(", ")})`);
-      r.flags = flags;
+      if (op === "+") r.flags = [...new Set([...r.flags, ...flags])];
+      else if (op === "-") r.flags = r.flags.filter((f) => !flags.includes(f));
+      else r.flags = flags;
     } else if (key === "after") {
       const after = [...new Set(parseList(value))];
       after.forEach(checkTopic);

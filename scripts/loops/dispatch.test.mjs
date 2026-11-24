@@ -133,7 +133,10 @@ else if (a === "prd" && b === "set") {
   }
   const rows = JSON.parse(readFileSync(file, "utf8"));
   const row = rows.find((r) => r.topic === topic);
-  for (const w of kv) if (w.startsWith("flags=")) row.flags = w.slice(6).split(",").filter(Boolean);
+  for (const w of kv) {
+    if (w.startsWith("flags=")) row.flags = w.slice(6).split(",").filter(Boolean);
+    if (w.startsWith("flags+=")) row.flags = [...new Set([...(row.flags ?? []), ...w.slice(7).split(",")])];
+  }
   writeFileSync(file, JSON.stringify(rows));
 } else process.exit(2);
 `;
@@ -737,7 +740,7 @@ describe("deaths and the reopen ask", () => {
     answer("a2", "hold the topic");
     const held = ok();
     expect(held).toContain('ask a2 answered "hold the topic": a flagged hold');
-    expect(calls("backlog")).toEqual(["prd set a flags=hold"]);
+    expect(calls("backlog")).toEqual(["prd set a flags+=hold"]);
     expect(held).toContain("a: on hold; its orchestrator isn't live (not reopened)");
     expect(openCalls()).toHaveLength(6);
     expect(ok()).not.toContain("filed ask");
@@ -799,7 +802,7 @@ describe("deaths and the reopen ask", () => {
 
     const held = ok();
     expect(held).toContain('ask a1 answered "hold the topic": a flagged hold');
-    expect(calls("backlog")).toEqual(["prd set a flags=hold", "prd set a flags=hold"]);
+    expect(calls("backlog")).toEqual(["prd set a flags+=hold", "prd set a flags+=hold"]);
     expect(held).toContain("a: on hold; its orchestrator isn't live (not reopened)");
     expect(dstate()).toMatchObject({ reopens: {}, asked: {} });
     expect(openCalls()).toHaveLength(3);

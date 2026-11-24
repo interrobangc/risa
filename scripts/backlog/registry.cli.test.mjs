@@ -133,6 +133,20 @@ describe("backlog prd", () => {
     expect(cliFails(prd, "prd", "set", "fixes-x", "flags=paused").out).toContain("unknown flag paused");
   });
 
+  it("holds and releases with flags+= and flags-=, keeping standing", () => {
+    const flags = () =>
+      JSON.parse(cli(prd, "prd", "list", "--json")).find((r) => r.topic === "fixes-x").flags;
+    cli(prd, "prd", "set", "fixes-x", "flags+=hold");
+    expect(flags()).toEqual(["standing", "hold"]);
+    expect(lastMessage()).toContain("prd set fixes-x: flags+=hold");
+    // Holding a held row changes nothing: no commit.
+    const head = git(main, "rev-parse", "HEAD");
+    cli(prd, "prd", "set", "fixes-x", "flags+=hold");
+    expect(git(main, "rev-parse", "HEAD")).toBe(head);
+    cli(prd, "prd", "set", "fixes-x", "flags-=hold");
+    expect(flags()).toEqual(["standing"]);
+  });
+
   it("adds rows where it's told", () => {
     cli(prd, "prd", "add", "delta");
     cli(

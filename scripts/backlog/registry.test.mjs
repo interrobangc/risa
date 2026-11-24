@@ -105,6 +105,21 @@ describe("edits", () => {
     expect(() => reg.updateRow(rows, "b", [])).toThrow(/usage/);
   });
 
+  it("flags+= and flags-= add and remove flags, keeping the others", () => {
+    const standing = row("s", { flags: ["standing"], notes: "kept" });
+    const held = reg.setRow(standing, ["flags+=hold"]);
+    expect(held).toEqual(row("s", { flags: ["standing", "hold"], notes: "kept" }));
+    expect(reg.setRow(held, ["flags-=hold"])).toEqual(standing);
+    // A present flag added, or an absent one removed, changes nothing.
+    expect(reg.setRow(held, ["flags+=hold"])).toEqual(held);
+    expect(reg.setRow(standing, ["flags-=hold"])).toEqual(standing);
+    expect(reg.setRow(row("s"), ["flags+=alone,design"]).flags).toEqual(["alone", "design"]);
+    // Plain flags= still replaces.
+    expect(reg.setRow(held, ["flags=hold"]).flags).toEqual(["hold"]);
+    expect(() => reg.setRow(standing, ["flags+=paused"])).toThrow(/unknown flag paused/);
+    expect(() => reg.setRow(standing, ["hot+=x/"])).toThrow(/only flags takes \+= or -=/);
+  });
+
   it("moves in all four forms", () => {
     expect(topics(reg.moveRow(rows, "c", { first: true }))).toEqual(["c", "a", "b"]);
     expect(topics(reg.moveRow(rows, "a", { last: true }))).toEqual(["b", "c", "a"]);
