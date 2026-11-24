@@ -353,7 +353,15 @@ describe("tidy archives finished items", () => {
     }).trim();
 
   beforeAll(() => {
-    for (const f of ["backlog.mjs", "amend.mjs", "format.mjs", "registry.mjs"])
+    for (const f of [
+      "backlog.mjs",
+      "amend.mjs",
+      "format.mjs",
+      "inbox-edit.mjs",
+      "inbox-merge.mjs",
+      "origin.mjs",
+      "registry.mjs",
+    ])
       copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
     writeFileSync(backlogFile(), "# Backlog\n\n## Items\n");
     git(main, "add", "scripts/backlog", "plans/backlog.md");
