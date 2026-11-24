@@ -649,8 +649,9 @@ describe("pnpm prd rotate --self", () => {
           "inbox",
           "--managed",
           "--",
+          // Recorded on the old default: the new session must come up on prd.sh's Sonnet.
           "--model",
-          "sonnet",
+          "opus",
           "--remote-control",
           "inbox",
           "x",
@@ -661,7 +662,7 @@ describe("pnpm prd rotate --self", () => {
       await until(() => existsSync(join(state, "ready")));
       return { s, pid: stubPid(), out: stateFile("rotate.out"), code: stateFile("rotate.code").trim() };
     };
-    /** The new session: in the recorded directory, on the recorded model, fast settings, managed. */
+    /** The new session: in the recorded directory, on Sonnet with the low-effort settings, managed. */
     const expectFresh = (oldPid) => {
       const atStart = JSON.parse(stateFile("record-at-start"));
       expect(atStart).toMatchObject({
@@ -686,9 +687,10 @@ describe("pnpm prd rotate --self", () => {
     };
     beforeEach(() => rmSync(join(root, "home"), { recursive: true, force: true }));
 
-    it("rotates itself into a fresh one in its own directory, keeping its model and fast mode", async () => {
+    it("rotates itself into a fresh one in its own directory, on Sonnet at low effort though recorded on Opus", async () => {
       const old = await startInbox();
       expect(old.code).toBe("0");
+      expect(JSON.parse(stateFile("record-at-start")).model).toBe("opus");
       expect(old.out).toContain(`Rotating inbox: pid ${old.pid} (the calling session).`);
       const line = printedLine(old.out);
       expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} inbox ${old.pid}`);
@@ -715,16 +717,15 @@ describe("pnpm prd rotate --self", () => {
       expect(r.stderr).toContain("the inbox session hands off with no brief");
     });
 
-    it("the opener reopens a dead one the same way: its directory, model, fast mode and managed", async () => {
+    it("the keep-alive's opener reopens a dead Opus one the same way: its directory, Sonnet low, managed", async () => {
       const old = await startInbox();
       await finish(old);
+      expect(record("inbox").model).toBe("opus");
       rmSync(join(state, "record-at-start"), { force: true });
       const r = run("open-session.sh", ["inbox", "--print"], inboxEnv());
       expect(r.status).toBe(0);
       const line = r.stdout.split("\n")[1].trim();
-      expect(line).toBe(
-        `cd ${main} && ${scripts("prd.sh")} inbox --dir ${inboxDir()} --model sonnet --managed`,
-      );
+      expect(line).toBe(`cd ${main} && ${scripts("prd.sh")} inbox --dir ${inboxDir()} --managed`);
       const opened = spawnSync("bash", ["-c", line], {
         cwd: root,
         encoding: "utf8",

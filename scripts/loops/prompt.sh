@@ -18,7 +18,7 @@
 #     --brief puts the file's text at the top, under "Brief from the session before";
 #     --no-brief says at the top that the context watch rotated the last session with none
 #   prompt.sh inbox                    the inbox agent, in its own directory outside the repository
-#     (pnpm prd inbox): self-contained, so it reads no doc; it adds and moves inbox lines, nothing else
+#     (pnpm prd inbox): self-contained, so it reads no doc; it adds, rewords, moves and removes unfiled inbox lines, nothing else
 #   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 #   prompt.sh skeptic ask|land|plan --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
@@ -96,16 +96,18 @@ if [[ $kind == inbox ]]; then
   (($# == 1)) || die "prompt: inbox takes no topic or options"
   b="pnpm -s -C $main backlog"
   cat <<EOF
-You are the inbox agent. The user tells you things in plain words and you put each one in their inbox (plans/inbox.md on origin/dev) under the right heading. That is your whole job, and this prompt holds all your rules: read no doc, ask no opening question, list nothing at the start. Wait for what the user says.
+You are the inbox agent. On the user's word you add, reword, move or remove lines in their inbox (plans/inbox.md on origin/dev), and nothing else. This prompt holds all your rules: read no doc, never read the backlog, ask no opening question, list nothing at the start, do no extra work. Wait for what the user says.
 
 Run only these:
-- \`$b similar <words…>\` before every add; show the user what it finds; add only what isn't the same.
 - \`$b inbox add <type> <text…> [--details "<text>"]\`, type bug, change, feature, plan or question. Exit 3 means look-alikes: show them, and rerun with \`--anyway\` only on the user's word.
-- \`$b inbox move <words…> <type>\` moves a line not filed yet to another heading (it's a bug, not a feature). For a filed one it prints a \`set\` line: don't run it; tell the user to say it in the backlog session.
+- \`$b inbox edit <words…> --to "<text>" [--details "<text>"]\` rewords a line not filed yet.
+- \`$b inbox move <words…> <type>\` moves a line not filed yet to another heading.
+- \`$b inbox remove <words…>\` removes a line not filed yet.
 - \`$b inbox\` lists the lines not filed yet, only when a request needs them.
 
-- Write the user's words, fixing only typos: one line per idea, details under it. After each write, say in one line where it went.
-- Edit no file and commit nothing; these commands push for you. Ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
+- A filed line (one with an id) is the backlog session's: edit, move and remove refuse it (move prints a \`set\` line: don't run it); tell the user to say it there.
+- Write the user's words, fixing only typos: one line per idea, details under it. After each write, say in one line what changed.
+- Edit no file and commit nothing; these commands push for you. Dedupe, ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
 - **Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.
 - Name an item by its short plain title with the id (B-52 export all data), never a bare id.
 - **Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`pnpm -s -C $main prd rotate --self\`, and do nothing after it.

@@ -240,21 +240,22 @@ describe("backlog, recovery and hotfix sessions", () => {
     );
   });
 
-  it("the inbox session reopens through prd.sh inbox in its recorded directory, on its recorded model", () => {
+  it("the inbox session reopens through prd.sh inbox in its recorded directory, on prd.sh's model", () => {
     const prd = wrapper.replace(/session\.sh$/, "prd.sh");
-    const record = { kind: "inbox", model: "sonnet", managed: true, dir: "/h/.caretook/inbox" };
+    // A record from the old default (Opus) passes no --model: prd.sh's Sonnet at low effort takes over.
+    const record = { kind: "inbox", model: "opus", managed: true, dir: "/h/.caretook/inbox" };
     expect(chooseMainCommand({ name: "inbox", main: "/m", wrapper, record })).toMatchObject({
       session: "inbox",
       kind: "inbox",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${prd} inbox --dir /h/.caretook/inbox --model sonnet --managed`,
+      command: `cd /m && ${prd} inbox --dir /h/.caretook/inbox --managed`,
     });
-    // No directory or model recorded: the default directory, on Opus; by hand stays by hand.
+    // No directory or model recorded: the default directory; by hand stays by hand.
     expect(
       chooseMainCommand({ name: "inbox", main: "/m", wrapper, record: { kind: "inbox" }, inboxDir: "/d" })
         .command,
-    ).toBe(`cd /m && ${prd} inbox --dir /d --model opus`);
+    ).toBe(`cd /m && ${prd} inbox --dir /d`);
   });
 
   it("the inbox directory is the record's, else CARETOOK_INBOX_DIR, else ~/.caretook/inbox", () => {

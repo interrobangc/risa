@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addEntry, findEntries, headingFor, moveEntry } from "./inbox-edit.mjs";
+import { addEntry, findEntries, headingFor, moveEntry, removeEntry, rewordEntry } from "./inbox-edit.mjs";
 import { parseInbox } from "./format.mjs";
 
 const INBOX = [
@@ -90,5 +90,46 @@ describe("moveEntry", () => {
     const out = moveEntry(INBOX, e.line, "question");
     expect(out).toContain("- Sign-in link works twice (B-1)\n\n## Change requests");
     expect(out.endsWith("## Questions\n\n- Timeline jumps on scroll\n  on the phone\n")).toBe(true);
+  });
+});
+
+describe("rewordEntry", () => {
+  it("rewords the bullet in place, keeping its details unless new ones are given", () => {
+    const [e] = findEntries(INBOX, "for the calendar");
+    let out = rewordEntry(INBOX, e.line, "Dark  mode for   the agenda");
+    expect(out).toContain(
+      "## Feature requests\n\n- Dark mode for the agenda\n  and the timeline\n- Dark mode for the settings",
+    );
+    out = rewordEntry(INBOX, e.line, e.text, "only at night\n\nand on the phone");
+    expect(out).toContain(
+      "- Dark mode for the calendar\n  only at night\n  and on the phone\n- Dark mode for the settings",
+    );
+    out = rewordEntry(INBOX, e.line, e.text, "");
+    expect(out).toContain("- Dark mode for the calendar\n- Dark mode for the settings");
+    expect(parseInbox(out)).toHaveLength(parseInbox(INBOX).length);
+  });
+
+  it("refuses an empty line and an id", () => {
+    const [e] = findEntries(INBOX, "timeline jumps");
+    expect(() => rewordEntry(INBOX, e.line, "  ")).toThrow(/what should the line say/);
+    expect(() => rewordEntry(INBOX, e.line, "Jumps (B-3)")).toThrow(/leave out the \(B-n\)/);
+  });
+});
+
+describe("removeEntry", () => {
+  it("removes a bullet with its details, and tidies the blank lines it leaves", () => {
+    const [e] = findEntries(INBOX, "for the calendar");
+    const out = removeEntry(INBOX, e.line);
+    expect(out).toContain("## Feature requests\n\n- Dark mode for the settings\n\n## Questions");
+    expect(out).not.toContain("and the timeline");
+    expect(parseInbox(out)).toHaveLength(parseInbox(INBOX).length - 1);
+  });
+
+  it("leaves an emptied section with one blank line, and the file's end tidy", () => {
+    const [e] = findEntries(INBOX, "timeline jumps");
+    expect(removeEntry(INBOX, e.line)).toContain("- Sign-in link works twice (B-1)\n\n## Change requests");
+    const last = `${INBOX}- Last one\n  its detail\n`;
+    const [l] = findEntries(last, "last one");
+    expect(removeEntry(last, l.line).endsWith("## Questions\n")).toBe(true);
   });
 });

@@ -39,6 +39,11 @@
 //                                            a look-alike (items, unfiled lines) stops it (exit 3)
 //   pnpm backlog inbox move <words…> <type>  an unfiled bullet (its words must find one) to another
 //                                            heading, on origin/dev; a filed one names its `set` line
+//   pnpm backlog inbox edit <words…> --to TEXT [--details TEXT]
+//                                            reword an unfiled bullet in place (--details replaces its
+//                                            detail lines, "" drops them); a filed one is refused
+//   pnpm backlog inbox remove <words…>       an unfiled bullet and its details out, on origin/dev;
+//                                            a filed one is refused
 //
 // The inbox commands write through the origin writer (scripts/backlog/origin.mjs):
 // a commit built on origin/dev's tip, changing only the inbox, pushed without
@@ -602,17 +607,48 @@ function inboxAdd(args, opts) {
   pickup("an inbox push");
 }
 
+/**
+ * The one unfiled bullet `words` find in `t` (origin/dev's inbox), for move,
+ * edit and remove. A filed one (tagged on origin/dev, or only on local dev's
+ * copy, `localText`) throws `filed(entry, id)`; none, or several, throw why.
+ * @param {string} t @param {string | null} localText @param {string} words
+ * @param {(e: import("./format.mjs").InboxEntry, id: string) => Error} filed
+ */
+function findUnfiled(t, localText, words, filed) {
+  const key = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  const local = localText === null ? [] : fmt.parseInbox(localText);
+  const hits = edits.findEntries(t, words);
+  if (!hits.length) {
+    const there = localText === null ? [] : edits.findEntries(localText, words).filter((e) => e.id);
+    if (there.length === 1) throw filed(there[0], /** @type {string} */ (there[0].id));
+    const work = readText(inboxFile);
+    if (work !== null && edits.findEntries(work, words).length)
+      throw new fmt.BacklogError(
+        `"${words}" is only in your uncommitted ${INBOX_REL}, not on ${REMOTE}/${TRUNK}: change it there by hand`,
+      );
+    throw new fmt.BacklogError(`no inbox line on ${REMOTE}/${TRUNK} has "${words}"`);
+  }
+  if (hits.length > 1)
+    throw new fmt.BacklogError(
+      `"${words}" is in ${hits.length} inbox lines (${hits.map((e) => `"${fmt.titleFromBullet(e.text)}"`).join(", ")}): give more of its words`,
+    );
+  const e = hits[0];
+  if (e.id) throw filed(e, e.id);
+  const tagged = local.find((l) => l.id && key(l.text) === key(e.text));
+  if (tagged) throw filed(e, /** @type {string} */ (tagged.id));
+  return e;
+}
+
+/** A filed line's refusal: `then` says what to do instead. */
+const filedAs = (/** @type {{ text: string }} */ e, /** @type {string} */ id, /** @type {string} */ then) =>
+  new fmt.BacklogError(`"${fmt.titleFromBullet(e.text)}" is filed as ${id}: ${then}`);
+
 /** `inbox move <words…> <type>`. */
 function inboxMove(args) {
   const type = args.at(-1);
   const words = args.slice(0, -1).join(" ");
   if (!type || !words.trim()) throw new fmt.BacklogError("usage: inbox move <words…> <type>");
   fmt.checkType(type);
-  const key = (s) => s.replace(/\s+/g, " ").trim().toLowerCase();
-  const filed = (e, id) =>
-    new fmt.BacklogError(
-      `"${fmt.titleFromBullet(e.text)}" is filed as ${id}: change the item instead: pnpm backlog set ${id} type=${type}`,
-    );
   /** @type {{ text: string, from: string } | null} */
   let moved = null;
   const { commit } = pushInboxEdit({
@@ -625,26 +661,9 @@ function inboxMove(args) {
     },
     edit: (t, localText) => {
       moved = null;
-      const local = localText === null ? [] : fmt.parseInbox(localText);
-      const hits = edits.findEntries(t, words);
-      if (!hits.length) {
-        const there = localText === null ? [] : edits.findEntries(localText, words).filter((e) => e.id);
-        if (there.length === 1) throw filed(there[0], there[0].id);
-        const work = readText(inboxFile);
-        if (work !== null && edits.findEntries(work, words).length)
-          throw new fmt.BacklogError(
-            `"${words}" is only in your uncommitted ${INBOX_REL}, not on ${REMOTE}/${TRUNK}: move it there by hand`,
-          );
-        throw new fmt.BacklogError(`no inbox line on ${REMOTE}/${TRUNK} has "${words}"`);
-      }
-      if (hits.length > 1)
-        throw new fmt.BacklogError(
-          `"${words}" is in ${hits.length} inbox lines (${hits.map((e) => `"${fmt.titleFromBullet(e.text)}"`).join(", ")}): give more of its words`,
-        );
-      const e = hits[0];
-      if (e.id) throw filed(e, e.id);
-      const tagged = local.find((l) => l.id && key(l.text) === key(e.text));
-      if (tagged) throw filed(e, /** @type {string} */ (tagged.id));
+      const e = findUnfiled(t, localText, words, (x, id) =>
+        filedAs(x, id, `change the item instead: pnpm backlog set ${id} type=${type}`),
+      );
       if (e.type === type) return t;
       moved = { text: e.text, from: e.type };
       return edits.moveEntry(t, e.line, type);
@@ -653,6 +672,70 @@ function inboxMove(args) {
   if (!commit || !moved) return console.log(`already under ${type}: nothing to move`);
   const heading = edits.headingFor(showAt(commit, INBOX_REL) ?? "", type);
   console.log(`moved to ${heading} ${sayPushed(commit)}: ${fmt.titleFromBullet(moved.text)}`);
+  pickup("an inbox push");
+}
+
+/** `inbox edit <words…> --to TEXT [--details TEXT]`: reword an unfiled bullet in place. */
+function inboxEdit(args, opts) {
+  const words = args.join(" ");
+  const to = typeof opts.to === "string" ? opts.to : undefined;
+  const details = typeof opts.details === "string" ? opts.details : undefined;
+  if (!words.trim() || (to === undefined && details === undefined))
+    throw new fmt.BacklogError("usage: inbox edit <words…> --to TEXT [--details TEXT]");
+  if (to !== undefined) edits.addEntry("", "bug", to); // a bad line fails here, before any network
+  /** @type {{ was: string, now: string } | null} */
+  let changed = null;
+  const { commit } = pushInboxEdit({
+    ...originWrite(),
+    message: {
+      tool: "inbox edit",
+      ids: [],
+      text: `inbox: edit "${fmt.titleFromBullet(words)}"`,
+      lines: [`By: ${who()}`],
+    },
+    edit: (t, localText) => {
+      changed = null;
+      const e = findUnfiled(t, localText, words, (x, id) =>
+        filedAs(x, id, "change the item instead, in the backlog session"),
+      );
+      const out = edits.rewordEntry(t, e.line, to ?? e.text, details);
+      if (out !== t)
+        changed = { was: e.text, now: to === undefined ? e.text : to.replace(/\s+/g, " ").trim() };
+      return out;
+    },
+  });
+  if (!commit || !changed) return console.log("the line already says that: nothing to change");
+  const { was, now } = changed;
+  console.log(
+    `edited ${sayPushed(commit)}: ${was === now ? fmt.titleFromBullet(now) : `"${fmt.titleFromBullet(was)}" is now "${fmt.titleFromBullet(now)}"`}`,
+  );
+  pickup("an inbox push");
+}
+
+/** `inbox remove <words…>`: an unfiled bullet and its details. */
+function inboxRemove(args) {
+  const words = args.join(" ");
+  if (!words.trim()) throw new fmt.BacklogError("usage: inbox remove <words…>");
+  /** @type {string | null} */
+  let removed = null;
+  const { commit } = pushInboxEdit({
+    ...originWrite(),
+    message: {
+      tool: "inbox remove",
+      ids: [],
+      text: `inbox: remove "${fmt.titleFromBullet(words)}"`,
+      lines: [`By: ${who()}`],
+    },
+    edit: (t, localText) => {
+      const e = findUnfiled(t, localText, words, (x, id) =>
+        filedAs(x, id, "drop the item instead, in the backlog session"),
+      );
+      removed = e.text;
+      return edits.removeEntry(t, e.line);
+    },
+  });
+  if (!commit || removed === null) return console.log("nothing changed");
+  console.log(`removed ${sayPushed(commit)}: ${fmt.titleFromBullet(removed)}`);
   pickup("an inbox push");
 }
 
@@ -1078,7 +1161,10 @@ function main() {
       const [sub, ...args] = pos;
       if (sub === "add") return inboxAdd(args, opts);
       if (sub === "move") return inboxMove(args);
-      if (sub !== undefined) throw new fmt.BacklogError(`unknown inbox command "${sub}" (add, move)`);
+      if (sub === "edit") return inboxEdit(args, opts);
+      if (sub === "remove") return inboxRemove(args);
+      if (sub !== undefined)
+        throw new fmt.BacklogError(`unknown inbox command "${sub}" (add, move, edit, remove)`);
       const merged = mergedInbox(true);
       const pending = merged === null ? [] : fmt.newInboxEntries(merged);
       for (const e of pending) console.log(`${e.type.padEnd(8)}  ${e.text}`);
