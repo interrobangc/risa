@@ -16,8 +16,8 @@
 # A stacked worktree leases the lowest free slot (1-19), which fixes its ports
 # (slot_ports in lib.sh) and Compose project (caretook-loopN). Secrets
 # are copied from the main checkout's env files. If the branch already exists,
-# it's checked out instead (to resume after rm.sh). At most CARETOOK_MAX_PRDS
-# (default 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
+# it's checked out instead (to resume after rm.sh). At most max_prds (lib.sh: the
+# stored `pnpm prd dispatch --cap`, else CARETOOK_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
 # (pnpm prd start|slice|plan|hotfix wrap this.)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
@@ -38,7 +38,7 @@ kind=${1:?kind: prd, slice, plan or hotfix}; topic=${2:?topic}
 case $kind in
   prd) name=$topic branch=prd/$topic base=${base:-$trunk} stack=${stack:-1}
     if [[ ! -e $loops/$name ]] && (($(prd_count) >= max_prds)); then
-      echo "already $(prd_count) PRD worktrees (cap $max_prds; raise CARETOOK_MAX_PRDS to override)" >&2; exit 1
+      echo "already $(prd_count) PRD worktrees (cap $max_prds; from $max_prds_from: pnpm prd dispatch --cap <n> changes it)" >&2; exit 1
     fi ;;
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
     # The plan's Stack field (docs/agents/planner.md, _Slice fields_) decides: a stack only

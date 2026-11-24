@@ -10,6 +10,7 @@
 //   pnpm prd dispatch --pause [<why>]       the running dispatcher (and any later one) does nothing
 //   pnpm prd dispatch --resume              undo --pause
 //   pnpm prd dispatch --stop                end the running dispatcher (TERM)
+//   pnpm prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
 //   - start: `new.sh prd <topic>`, then a managed, run-through orchestrator
@@ -60,7 +61,7 @@
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
-// Env: CARETOOK_MAX_PRDS (4), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
+// Env: CARETOOK_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
 // the pick's caps; CARETOOK_LOAD_* (load-gate.mjs); CARETOOK_SESSIONS_DIR,
 // CARETOOK_ASKS_DIR; CARETOOK_ITERM_APP (default /Applications/iTerm.app);
 // CARETOOK_CLAUDE_BIN (the helper's claude); CARETOOK_CLOCK_FILE (tests: epoch
@@ -199,7 +200,31 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
     asks: env.CARETOOK_ASKS_DIR || join(loops, ".asks"),
     requests: env.CARETOOK_REQUESTS_DIR || join(loops, ".requests"),
     notices: env.CARETOOK_NOTICES_DIR || join(loops, ".notices"),
+    cap: join(loops, ".prd-cap"),
   };
+}
+
+/** The highest --cap: the slots (lib.sh, 1-19). */
+export const MAX_CAP = 19;
+
+/** The stored --cap (.loops/.prd-cap, lib.sh reads it too), or null when none or not 1-MAX_CAP. */
+export function storedCap(/** @type {string} */ file) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8").trim();
+  } catch {
+    return null;
+  }
+  const n = /^[1-9][0-9]?$/.test(text) ? Number(text) : 0;
+  return n >= 1 && n <= MAX_CAP ? n : null;
+}
+
+/** The PRD cap and what set it: the stored --cap, else CARETOOK_MAX_PRDS, else 4. */
+export function prdCapOf(/** @type {string} */ file, env = process.env) {
+  const stored = storedCap(file);
+  if (stored !== null) return { cap: stored, from: "pnpm prd dispatch --cap" };
+  const fromEnv = positive(env.CARETOOK_MAX_PRDS, 0);
+  return fromEnv ? { cap: fromEnv, from: "CARETOOK_MAX_PRDS" } : { cap: 4, from: "default" };
 }
 
 /** @typedef {{ paused?: { at: string, why: string } | null, reopens?: Record<string, number>,
@@ -402,7 +427,7 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
       busy: gate.busy,
       paused: Boolean(state.paused),
       caps: {
-        prds: positive(env.CARETOOK_MAX_PRDS, 4),
+        prds: prdCapOf(p.cap, env).cap,
         planners: positive(env.CARETOOK_MAX_PLANNERS, 1),
         fixesMin: positive(env.CARETOOK_FIXES_MIN, 3),
       },
@@ -1113,6 +1138,7 @@ function parse(/** @type {string[]} */ argv) {
     pause: /** @type {string | null} */ (null),
     resume: false,
     stop: false,
+    cap: /** @type {string | null} */ (null),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -1124,10 +1150,15 @@ function parse(/** @type {string[]} */ argv) {
     else if (a === "--pause") o.pause = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "";
     else if (a === "--resume") o.resume = true;
     else if (a === "--stop") o.stop = true;
-    else if (a === "-h" || a === "--help") o.help = true;
+    else if (a === "--cap") {
+      const v = argv[++i] ?? "";
+      if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
+        throw new Error(`--cap takes a number from 1 to ${MAX_CAP}, or default`);
+      o.cap = v;
+    } else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
-        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop)`,
+        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --cap <n>|default)`,
       );
   }
   return o;
@@ -1145,7 +1176,7 @@ async function main() {
     const text = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n");
     console.log(
       text
-        .slice(1, 12)
+        .slice(1, 13)
         .map((l) => l.replace(/^\/\/ ?/, ""))
         .join("\n"),
     );
@@ -1160,6 +1191,36 @@ async function main() {
     );
   };
 
+  if (o.cap !== null) {
+    const now = nowOf();
+    const before = prdCapOf(p.cap);
+    mkdirSync(p.loops, { recursive: true });
+    if (o.cap === "default") {
+      if (existsSync(p.cap)) unlinkSync(p.cap);
+    } else {
+      const tmp = `${p.cap}.${process.pid}`;
+      writeFileSync(tmp, `${o.cap}\n`);
+      renameSync(tmp, p.cap);
+    }
+    const after = prdCapOf(p.cap);
+    const line = `PRD cap ${after.cap} (${after.from}; was ${before.cap})`;
+    log([line], now);
+    try {
+      createNotice(p.notices, { text: `${line}: running PRDs finish; new starts wait under it`, now });
+    } catch {
+      /* the cap is stored; a notice that can't post changes nothing */
+    }
+    const holder = lockHolder(p.lock);
+    const running = worktreesOf(p.main).filter((w) => w.branch.startsWith("prd/")).length;
+    console.log(
+      `${line}. ${running} PRD worktrees now: ${
+        running >= after.cap
+          ? `none start until fewer than ${after.cap} remain (running ones finish)`
+          : `${after.cap - running} more may start`
+      }; ${holder ? `the dispatcher (pid ${holder}) reads it on its next tick` : "no dispatcher is running"}.`,
+    );
+    return;
+  }
   if (o.pause !== null || o.resume) {
     if (o.pause !== null && o.resume) throw new Error("--pause or --resume, not both");
     const now = nowOf();
