@@ -1,4 +1,4 @@
-// Pure edits of plans/inbox.md for `pnpm backlog inbox add|move`: text in,
+// Pure edits of plans/inbox.md for `pnpm backlog inbox add|move|edit|remove`: text in,
 // text out. The origin writer (origin.mjs) applies them to origin/dev's copy.
 //
 // A bullet goes at the end of the first "## " section whose heading has its
@@ -69,6 +69,14 @@ function insert(text, type, block) {
   return text.endsWith("\n") && !out.endsWith("\n") ? `${out}\n` : out;
 }
 
+/** Detail lines as the inbox writes them: folded, indented, blanks dropped. @param {string} details */
+const detailLines = (details) =>
+  details
+    .split("\n")
+    .map(fold)
+    .filter(Boolean)
+    .map((l) => `  ${l}`);
+
 /**
  * A new bullet for `type`, with optional details (one line each).
  * @param {string} text @param {string} type @param {string} bullet @param {string} [details]
@@ -78,12 +86,7 @@ export function addEntry(text, type, bullet, details = "") {
   const b = fold(bullet);
   if (!b) throw new BacklogError("what should the line say?");
   if (TAG_AT_END.test(b)) throw new BacklogError("a new line has no id: leave out the (B-n)");
-  const more = details
-    .split("\n")
-    .map(fold)
-    .filter(Boolean)
-    .map((l) => `  ${l}`);
-  return insert(text, type, [`- ${b}`, ...more]);
+  return insert(text, type, [`- ${b}`, ...detailLines(details)]);
 }
 
 /**
@@ -109,18 +112,52 @@ function span(lines, line) {
 }
 
 /**
- * The bullet at line `line` (with its details) moved to the end of `type`'s section.
- * @param {string} text @param {number} line @param {string} type
+ * `text` without the bullet at line `line` and its details, and the block it took.
+ * @param {string} text @param {number} line
  */
-export function moveEntry(text, line, type) {
-  checkType(type);
+function cut(text, line) {
   const lines = text.split("\n");
   const last = span(lines, line);
   const block = lines.slice(line, last + 1);
   const kept = lines.filter((_, i) => i < line || i > last);
   // Collapse the blank lines the removal leaves behind, as removeInboxEntries does.
   const tidy = kept.filter((l, i) => !(l.trim() === "" && i > 0 && kept[i - 1].trim() === ""));
-  return insert(tidy.join("\n"), type, block);
+  while (tidy.length > 1 && tidy.at(-1) === "" && tidy.at(-2) === "") tidy.pop();
+  return { rest: tidy.join("\n"), block };
+}
+
+/**
+ * The bullet at line `line` (with its details) moved to the end of `type`'s section.
+ * @param {string} text @param {number} line @param {string} type
+ */
+export function moveEntry(text, line, type) {
+  checkType(type);
+  const { rest, block } = cut(text, line);
+  return insert(rest, type, block);
+}
+
+/**
+ * The bullet at line `line` reworded to `bullet`, in place; `details`, when
+ * given, replace its detail lines ("" drops them), else they stay.
+ * @param {string} text @param {number} line @param {string} bullet @param {string} [details]
+ */
+export function rewordEntry(text, line, bullet, details) {
+  const b = fold(bullet);
+  if (!b) throw new BacklogError("what should the line say?");
+  if (TAG_AT_END.test(b)) throw new BacklogError("a line has no id: leave out the (B-n)");
+  const lines = text.split("\n");
+  const last = span(lines, line);
+  const more = details === undefined ? lines.slice(line + 1, last + 1) : detailLines(details);
+  lines.splice(line, last - line + 1, `- ${b}`, ...more);
+  return lines.join("\n");
+}
+
+/**
+ * The inbox without the bullet at line `line` and its details.
+ * @param {string} text @param {number} line
+ */
+export function removeEntry(text, line) {
+  return cut(text, line).rest;
 }
 
 /** The heading a type's bullets sit under in `text` (or would). @param {string} text @param {string} type */

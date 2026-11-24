@@ -6,8 +6,10 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
-# The model plan, backlog, hotfix and inbox sessions run on unless --model names another.
+# The model plan, backlog and hotfix sessions run on unless --model names another.
 agent_model=opus
+# The inbox session's: Sonnet, for speed (inbox-settings.json sets low effort, fast mode off).
+inbox_model=sonnet
 # Every command runs on .nvmrc's Node, whatever shell called it.
 use_node || true
 
@@ -36,9 +38,9 @@ pnpm prd <command>
                               (it reads the backlog and helps you decide what's next; its Remote Control
                               name and tab title are a captain's, a new one each session; its record stays backlog)
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
-                              adds them to the inbox on origin/dev, under the right heading; Opus in fast mode
-                              (--model <m>: another model), Remote Control "inbox", opened in its own directory
-                              outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created);
+                              adds, rewords, moves or removes inbox lines on origin/dev; Sonnet at low effort
+                              (--model <m>: another model, this session only; a reopen or rotation is Sonnet),
+                              Remote Control "inbox", opened in its own directory outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on hotfix/<name> from dev, for a fix
@@ -296,13 +298,14 @@ case $cmd in
     echo "  $cmd_line"
     ;;
   inbox)
-    # The inbox session (prompt.sh inbox): Opus in fast mode (session.sh gives
-    # the inbox kind inbox-settings.json, the context hook and fastMode in one
-    # file), opened bare: in its own directory outside the repository, so
-    # neither AGENTS.md nor the project's memory loads.
+    # The inbox session (prompt.sh inbox): Sonnet at low effort, fast mode off
+    # (session.sh gives the inbox kind inbox-settings.json: the context hook,
+    # effortLevel and fastMode in one file), opened bare: in its own directory
+    # outside the repository, so neither AGENTS.md nor the project's memory loads.
     # --dir and --managed are the reopen's and rotation's (open-session.mjs,
-    # rotate-into.sh): the recorded directory, and the dispatcher's record.
-    model=$agent_model dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
+    # rotate-into.sh): the recorded directory, and the dispatcher's record. They
+    # pass no --model, so a reopen or rotation is always on inbox_model.
+    model=$inbox_model dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
     while (($#)); do
       case $1 in
         --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "inbox: --model needs a model name (e.g. opus)"; model=$2; shift ;;

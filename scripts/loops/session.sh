@@ -99,8 +99,8 @@ if [[ $kind == prd || $kind == backlog ]]; then
   export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
   set -- --settings "$bin/context-settings.json" "$@"
 elif [[ $kind == inbox ]]; then
-  # The inbox session runs in fast mode: claude takes one --settings, so
-  # inbox-settings.json holds the context hook as well as fastMode.
+  # The inbox session's own settings: claude takes one --settings, so
+  # inbox-settings.json holds the context hook as well as effortLevel and fastMode.
   export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
   set -- --settings "$bin/inbox-settings.json" "$@"
 fi

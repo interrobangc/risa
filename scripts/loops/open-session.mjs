@@ -16,9 +16,10 @@
 //     many conversations, so --continue could resume the wrong one), on its
 //     recorded model.
 //   - the inbox session, always fresh through `prd.sh inbox` (which checks its
-//     bare directory and gives it the fast settings), in its recorded directory
-//     on its recorded model:
-//       cd <main> && <this checkout>/scripts/loops/prd.sh inbox --dir <dir> --model <m> [--managed]
+//     bare directory and gives it its settings), in its recorded directory, on
+//     prd.sh's inbox model (Sonnet at low effort) whatever the record says, so
+//     a record from an older default never holds it there:
+//       cd <main> && <this checkout>/scripts/loops/prd.sh inbox --dir <dir> [--managed]
 //
 // Run-through (--auto) is the plan's _Status_ saying so, or the session's last
 // record having been run-through (carried over to the new record); a run-through
@@ -187,7 +188,8 @@ export function chooseCommand({
 
 /**
  * A backlog, recovery or inbox session's command: always fresh, under its own
- * name, on its recorded model; the main checkout, or the inbox's own directory.
+ * name; the main checkout on its recorded model, or the inbox's own directory
+ * on prd.sh's inbox model.
  * The main backlog session (backlog) comes back under a new captain's name
  * (captain.mjs: CAPTAIN, else one unlike its record's remote), which is also
  * its tab's `title`; every other one keeps its recorded Remote Control name.
@@ -201,7 +203,6 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
   if (!role)
     throw new Error(`open: ${name} is a ${kind || "kindless"} record, not a backlog, recovery or inbox one`);
   const managed = record.managed === true;
-  const model = record.model ?? (kind === "recovery" ? null : DEFAULT_MODEL);
   if (kind === "inbox")
     return {
       session: name,
@@ -211,9 +212,10 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
       auto: false,
       managed,
       command:
-        `cd ${sh(main)} && ${sh(join(dirname(wrapper), "prd.sh"))} inbox --dir ${sh(inboxDir ?? inboxDirOf(record))} ` +
-        `--model ${sh(/** @type {string} */ (model))}${managed ? " --managed" : ""}`,
+        `cd ${sh(main)} && ${sh(join(dirname(wrapper), "prd.sh"))} inbox --dir ${sh(inboxDir ?? inboxDirOf(record))}` +
+        `${managed ? " --managed" : ""}`,
     };
+  const model = record.model ?? (kind === "recovery" ? null : DEFAULT_MODEL);
   const captained = kind === "backlog" && name === CAPTAIN_SESSION;
   const remote = captained ? (captain ?? pickCaptain(record.remote)) : record.remote || name;
   return {

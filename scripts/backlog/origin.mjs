@@ -1,5 +1,5 @@
 // The origin writer: an edit of plans/inbox.md as a commit built on
-// origin/dev's tip and pushed there (`pnpm backlog inbox add|move`). It reads
+// origin/dev's tip and pushed there (`pnpm backlog inbox add|move|edit|remove`). It reads
 // and writes no working tree, index or HEAD: blobs, a tree from a temporary
 // index, commit-tree, a push without force, and the remote-tracking ref.
 //
