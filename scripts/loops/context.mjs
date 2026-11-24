@@ -403,8 +403,10 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
  */
 export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf(), now = Date.now() } = {}) {
   const dir = contextDirOf(sessions);
+  // Each process's start by its own ps call's clock: a `now` taken before every call
+  // would date the later ones earlier by however long the calls took under load.
   return readRecords(sessions)
-    .filter(({ record }) => isLive(record, processOf(record.pid ?? 0, now), now))
+    .filter(({ record }) => isLive(record, processOf(record.pid ?? 0), now))
     .map(({ name, record }) => {
       const size = sizeRecord(dir, name, record.pid ?? 0);
       const keep = size?.keep && Date.parse(size.keep.until) > now ? size.keep : null;
