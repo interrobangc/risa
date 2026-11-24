@@ -118,6 +118,13 @@ if [[ $kind == inbox ]]; then
   exec "$bin/prd.sh" "${args[@]}" ${managed:+--managed}
 fi
 if [[ $kind == backlog ]]; then
+  model=$(field "$before" model) remote=$(field "$before" remote)
+  if [[ $name == backlog ]]; then
+    # A new session, a new captain; with none drawn, Remote Control backlog rather than no session.
+    remote=${captain:-$(node "$bin/captain.mjs" next 2>/dev/null || echo backlog)}
+  fi
+  # The prompt names the captain (prompts/backlog.sh); none drawn, no line.
+  [[ $name != backlog || $remote == backlog ]] || export CARETOOK_CAPTAIN=$remote
   # The old session is gone, so a brief that went bad now costs the brief, never the session.
   prompt=""
   if [[ -n $brief ]]; then
@@ -129,11 +136,7 @@ if [[ $kind == backlog ]]; then
     fi
   fi
   [[ -n $prompt ]] || prompt=$("$bin/prompt.sh" backlog ${no_brief:+--no-brief})
-  model=$(field "$before" model) remote=$(field "$before" remote)
-  if [[ $name == backlog ]]; then
-    # A new session, a new captain; with none drawn, Remote Control backlog rather than no session.
-    remote=${captain:-$(node "$bin/captain.mjs" next 2>/dev/null || echo backlog)}
-  fi
+  unset CARETOOK_CAPTAIN
   args=()
   [[ -z $model ]] || args+=(--model "$model")
   args+=(--remote-control "${remote:-$name}" "$prompt")

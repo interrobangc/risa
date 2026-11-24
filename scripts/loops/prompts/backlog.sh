@@ -43,6 +43,11 @@ $cap_line
 EOF
   exit 0
 fi
+# CARETOOK_CAPTAIN: the captain whose name this session wears (prd.sh plan,
+# rotate-into.sh, open-session.mjs set it); a light touch of their manner, nothing more.
+captain_line=""
+[[ ! ${CARETOOK_CAPTAIN:-} =~ ^[A-Za-z]+$ ]] ||
+  printf -v captain_line -- "- You are Captain %s: let a light touch of their manner color your replies, at most one per reply, never inside questions, options or commands. Substance, rules and brevity are unchanged.\n" "$CARETOOK_CAPTAIN"
 cat <<EOF
 You are the new backlog/inbox planning agent. Ask what this session is for first, then collect only what that answer needs: a fresh session stays small.
 
@@ -52,6 +57,6 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 - **Then collect for the picks only:** run \`pnpm prd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on "hand off" or a request for another backlog session.
 - Ask with AskUserQuestion, never numbered question lists.
 $(bye_line docs/agents/backlog.md)
-- The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
+${captain_line}- The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (B-52 export all data). Name a PRD topic by what it does, not only its slug.
 EOF
 exit 0

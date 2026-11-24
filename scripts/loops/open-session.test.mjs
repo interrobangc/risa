@@ -181,7 +181,7 @@ describe("backlog, recovery and hotfix sessions", () => {
       title: "Pike",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(scripts/loops/prompt.sh backlog)"`,
+      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(CARETOOK_CAPTAIN=Pike scripts/loops/prompt.sh backlog)"`,
     });
   });
 
@@ -316,7 +316,9 @@ describe("backlog, recovery and hotfix sessions", () => {
     expect(out).toContain(`cd ${main} && `);
     const captain = /^backlog as ([A-Za-z]+) /m.exec(out)?.[1];
     expect(CAPTAINS).toContain(captain);
-    expect(out).toContain(`--model sonnet --remote-control ${captain} "$(scripts/loops/prompt.sh backlog)"`);
+    expect(out).toContain(
+      `--model sonnet --remote-control ${captain} "$(CARETOOK_CAPTAIN=${captain} scripts/loops/prompt.sh backlog)"`,
+    );
     expect(out).not.toContain("--continue");
     rmSync(folder, { recursive: true });
   });

@@ -99,3 +99,21 @@ describe("the last captain, from the backlog record", () => {
     expect(spawnSync("node", [join(HERE, "captain.mjs")], { encoding: "utf8" }).status).toBe(2);
   });
 });
+
+describe("the backlog prompt's captain line", () => {
+  const prompt = (/** @type {string | undefined} */ captain) =>
+    spawnSync("bash", [join(HERE, "prompt.sh"), "backlog"], {
+      encoding: "utf8",
+      env: { ...process.env, CARETOOK_CAPTAIN: captain ?? "" },
+    }).stdout;
+
+  it("names the captain when one is drawn, with its limits", () => {
+    const out = prompt("Picard");
+    expect(out).toContain("- You are Captain Picard: let a light touch of their manner color your replies");
+    expect(out).toContain("never inside questions, options or commands");
+  });
+
+  it("adds nothing with no captain, or with something that isn't a name", () => {
+    for (const c of [undefined, "", "Pi card", "$(x)"]) expect(prompt(c)).not.toContain("You are Captain");
+  });
+});

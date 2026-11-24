@@ -304,7 +304,7 @@ case $cmd in
       captain=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} node "$bin/captain.mjs" next) ||
         die "plan: couldn't pick the backlog session's captain"
       cd "$main" && exec "$wrapper" backlog --kind backlog -- \
-        ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$("$bin/prompt.sh" backlog)"
+        ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$(CARETOOK_CAPTAIN=$captain "$bin/prompt.sh" backlog)"
     fi
     topic=$1; shift; open=0 items=()
     for a in "$@"; do
