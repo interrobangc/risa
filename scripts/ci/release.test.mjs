@@ -190,7 +190,7 @@ describe("second-zone filing", () => {
     expect(findings.filter((f) => !f.item)).toHaveLength(MAX_ZONE_FILINGS);
     const over = findings.filter((f) => f.item);
     expect(over).toHaveLength(1);
-    expect(over[0].item).toBe("B-372");
+    expect(over[0].item).toBe("B-750");
     expect(over[0].note).toContain("3 more test file(s)");
     expect(over[0].note).toContain(testFiles(13)[12]);
   });
@@ -223,6 +223,6 @@ describe("second-zone filing", () => {
   it("says when the overflow's item is gone", () => {
     const { b, write } = backlog();
     b.items = [];
-    expect(applyFindings(b, null, zoneFindings(withFiles(11)), write).missed).toEqual(["B-372"]);
+    expect(applyFindings(b, null, zoneFindings(withFiles(11)), write).missed).toEqual(["B-750"]);
   });
 });
