@@ -674,9 +674,18 @@ export function tick(
         out(
           r.ok
             ? `ask ${id} answered "${a.answer}": ${topic} flagged hold`
-            : `ask ${id} answered "${a.answer}", but flagging ${topic} hold failed: ${r.err || r.out}`,
+            : `ask ${id} answered "${a.answer}", but flagging ${topic} hold failed (retried next tick): ${r.err || r.out}`,
         );
-        if (row && r.ok) row.flags = flags;
+        if (!r.ok) {
+          // Kept for the next tick's retry: the answer and the count stay, and
+          // this tick's pick sees the ask as still open, so the topic is skipped.
+          facts.asks = [
+            ...facts.asks.filter((x) => x.id !== id),
+            { ...a, answeredAt: null, doneAt: null, defaulted: false },
+          ];
+          continue;
+        }
+        if (row) row.flags = flags;
       } else if (what === "reset") out(`ask ${id} answered "${a.answer}": ${session} may be reopened again`);
       else
         out(
