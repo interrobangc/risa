@@ -264,6 +264,9 @@ beforeAll(() => {
     "rotate.mjs",
     "open-session.mjs",
     "planner-model.mjs",
+    "drain.mjs",
+    "usage.mjs",
+    "land-journal.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
@@ -301,6 +304,13 @@ beforeAll(() => {
     // Off unless a test turns it on, and never the machine's real processes.
     CARETOOK_KEEP_SESSIONS: "off",
     CARETOOK_PROCESS_FILE: join(root, "processes"),
+    // The drain: off unless a test turns it on; never the machine's own readings or landings.
+    CARETOOK_USAGE_WATCH: "off",
+    CARETOOK_USAGE_DIR: "",
+    CARETOOK_USAGE_DRAIN: "",
+    CARETOOK_USAGE_STOP: "",
+    CARETOOK_USAGE_STALE_MIN: "",
+    CARETOOK_LANDING_DIR: "",
     // Off unless a test turns it on; never the machine's own inbox folder or Claude Code files.
     CARETOOK_PICKUP_EVERY: "off",
     CARETOOK_INBOX_DIR: inboxDir,
@@ -1738,5 +1748,203 @@ describe("the stuck tick", () => {
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ kind: "report" });
     expect(all[0].text).toContain("prd-x, prd-y went quiet together");
+  });
+});
+
+describe("the drain", () => {
+  let procs = [];
+  const usageDir = () => join(loops, ".usage");
+  const on = { CARETOOK_USAGE_WATCH: "" };
+  /** A current reading (by the fake clock) of the 5-hour window, from a session of its own. */
+  const reading = (percent, resetSecs = T0 + 3600) => {
+    mkdirSync(usageDir(), { recursive: true });
+    writeFileSync(
+      join(usageDir(), "reader.json"),
+      JSON.stringify({
+        session: "reader",
+        windows: {
+          fiveHour: {
+            percent,
+            at: new Date(T0 * 1000).toISOString(),
+            resetsAt: new Date(resetSecs * 1000).toISOString(),
+          },
+        },
+      }),
+    );
+  };
+  const readingOf = (name) => JSON.parse(readFileSync(join(usageDir(), `${name}.json`), "utf8"));
+  /** A live session on a real process (a bash loop standing in for claude). */
+  const liveSession = (name, { managed = true, script = "while :; do sleep 0.2; done", ...extra } = {}) => {
+    const child = spawn("bash", ["-c", script], { detached: true, stdio: "ignore" });
+    procs.push(child);
+    mkdirSync(sessions, { recursive: true });
+    writeFileSync(
+      join(sessions, `${name}.json`),
+      JSON.stringify({ pid: child.pid, managed, started: new Date().toISOString(), ...extra }),
+    );
+    return child;
+  };
+  const gone = (child) => child.exitCode !== null || child.signalCode !== null;
+  const drainAsks = () =>
+    existsSync(asks)
+      ? readdirSync(asks)
+          .map((f) => askFile(f.replace(/\.json$/, "")))
+          .filter((a) => a.session === "dispatch-usage")
+      : [];
+
+  beforeEach(() => {
+    rmSync(usageDir(), { recursive: true, force: true });
+    rmSync(join(loops, ".landing"), { recursive: true, force: true });
+  });
+  afterEach(() => {
+    for (const c of procs)
+      try {
+        process.kill(-c.pid, "SIGKILL");
+      } catch {
+        /* gone */
+      }
+    procs = [];
+  });
+
+  it("draining: no start, plan or reopen, and --resume doesn't override it; CARETOOK_USAGE_WATCH=off does", () => {
+    reading(90);
+    worktree("d", "prd/d");
+    deadRecord("prd-d", { kind: "prd", topic: "d" });
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "p", state: "to-write", waiting: 2 },
+      { topic: "d", state: "running" },
+    ]);
+    const out = ok(["--once"], on);
+    expect(out).toMatch(/^\S+Z nothing: usage is draining: 5h 90%, at or over the drain line 85% \(until /);
+    expect(out).toContain("  a: no start while usage is draining");
+    expect(out).toContain("  p: no plan while usage is draining");
+    expect(out).toContain("  d: its orchestrator died; not reopened while usage is draining");
+    expect(out).toContain("usage: now draining: 5h 90%");
+    ok(["--resume"]);
+    expect(ok(["--once"], on)).toMatch(/^\S+Z nothing: usage is draining/);
+    expect(calls("new")).toEqual([]);
+    expect(openCalls()).toEqual([]);
+    expect(dstate().drain).toMatchObject({ state: "draining" });
+    // Off: the reopen goes ahead.
+    expect(ok(["--once"])).toMatch(/^\S+Z reopen prd-d/);
+  });
+
+  it("draining ends nothing, and a session in a landing is never stopped", () => {
+    reading(90);
+    const s = liveSession("prd-x", { kind: "prd", topic: "x" });
+    const l = liveSession("prd-y", {
+      kind: "prd",
+      topic: "y",
+      script: "exec -a land.sh bash -c 'while :; do sleep 0.2; done'",
+    });
+    ok(["--once"], on);
+    expect(gone(s) || gone(l)).toBe(false);
+    expect(existsSync(join(usageDir(), "prd-x.json"))).toBe(false);
+  });
+
+  it("limited: ends each managed session (marked stalled), one in a landing only after it finishes; reports the hand-opened once", async () => {
+    reading(99);
+    const x = liveSession("prd-x", { kind: "prd", topic: "x" });
+    const kept = liveSession("backlog", { kind: "backlog" });
+    // The landing: a land.sh under the session (as `pnpm prd land` runs it), until a file says stop.
+    const stop = join(root, "landing-done");
+    rmSync(stop, { force: true });
+    writeFileSync(join(root, "land.sh"), `while [[ ! -e ${stop} ]]; do sleep 0.2; done\n`);
+    const y = liveSession("prd-y", {
+      kind: "prd",
+      topic: "y",
+      script: `bash ${join(root, "land.sh")}; while :; do sleep 0.2; done`,
+    });
+    const hand = liveSession("hotfix-h", { managed: false, kind: "hotfix" });
+    const landing = () =>
+      execFileSync("ps", ["-A", "-o", "args="], { encoding: "utf8" })
+        .split("\n")
+        .some((l) => l.trim() === `bash ${join(root, "land.sh")}`);
+    await until(landing);
+
+    const first = ok(["--once"], on);
+    expect(first).toMatch(/^\S+Z nothing: usage is limited: 5h 99%, at or over the stop line 98%/);
+    expect(first).toMatch(new RegExp(`usage limited: ended prd-x \\(pid ${x.pid}, TERM; marked stalled\\)`));
+    expect(first).toContain("usage limited: ended backlog");
+    expect(first).toContain(
+      "usage limited: prd-y left running (it runs a landing: ended once that finishes)",
+    );
+    expect(first).toContain("usage limited: reported hotfix-h (opened by hand, never ended)");
+    await until(() => gone(x) && gone(kept));
+    expect(readingOf("prd-x").stalled).toMatchObject({
+      error: "limited",
+      pid: x.pid,
+      resetsAt: new Date((T0 + 3600) * 1000).toISOString(),
+    });
+    expect(gone(y) || gone(hand)).toBe(false);
+    const [report] = drainAsks();
+    expect(report).toMatchObject({ kind: "report" });
+    expect(report.text).toContain("never ends one opened by hand: hotfix-h is still live");
+
+    // The next tick: the landing still runs, and the report isn't filed again.
+    setClock(T0 + 60);
+    expect(ok(["--once"], on)).toContain("prd-y left running");
+    expect(drainAsks()).toHaveLength(1);
+    expect(gone(y)).toBe(false);
+
+    // Its landing over, the session is ended; the hand-opened one never is.
+    writeFileSync(stop, "");
+    await until(() => !landing());
+    setClock(T0 + 120);
+    expect(ok(["--once"], on)).toMatch(new RegExp(`usage limited: ended prd-y \\(pid ${y.pid}`));
+    await until(() => gone(y));
+    expect(gone(hand)).toBe(false);
+    expect(drainAsks()).toHaveLength(1);
+  });
+
+  it("limited on overage, and a session that ignores TERM is killed a tick later", async () => {
+    reading(100);
+    const x = liveSession("prd-x", {
+      kind: "prd",
+      topic: "x",
+      script: "trap '' TERM; while :; do sleep 0.2; done",
+    });
+    expect(ok(["--once"], on)).toMatch(/usage limited: ended prd-x/);
+    setClock(T0 + 1);
+    expect(ok(["--once"], on)).toContain("prd-x left running (sent TERM; waiting for it to end)");
+    expect(gone(x)).toBe(false);
+    setClock(T0 + 60);
+    expect(ok(["--once"], on)).toContain(`usage limited: prd-x ignored TERM: killed it (pid ${x.pid})`);
+    await until(() => gone(x));
+  });
+
+  it("nothing opens a claude while limited: no reopen ask's helper, keep-alive, session request or probe", () => {
+    reading(99);
+    const claudeCalls = join(state, "claude.calls");
+    const claude = join(root, "claude-recording");
+    writeFileSync(claude, `#!/usr/bin/env bash\necho "$*" >> ${claudeCalls}\n`);
+    chmodSync(claude, 0o755);
+    worktree("d", "prd/d");
+    deadRecord("prd-d", { kind: "prd", topic: "d" });
+    setRows([{ topic: "d", state: "running" }]);
+    createRequest(join(loops, ".requests"), { name: "notes", now: T0 * 1000 });
+    const extra = { ...on, CARETOOK_CLAUDE_BIN: claude, CARETOOK_KEEP_SESSIONS: "" };
+    // Past the reopen limit: a normal tick would file an ask and open its helper.
+    writeFileSync(join(loops, ".dispatch.json"), JSON.stringify({ reopens: { "prd-d": 2 } }));
+    for (let t = 0; t < 3; t++) {
+      setClock(T0 + 60 * t);
+      ok(["--once"], extra);
+    }
+    expect(openCalls()).toEqual([]);
+    expect(existsSync(claudeCalls)).toBe(false);
+  });
+
+  it("an unknown reading doesn't drain, and files one report while sessions are live", () => {
+    liveSession("prd-x", { kind: "prd", topic: "x" });
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], on);
+    expect(out).toMatch(/^\S+Z start a:/);
+    expect(out).toContain("usage: reported an unknown reading");
+    setClock(T0 + 60);
+    expect(ok(["--once"], on)).not.toContain("reported an unknown reading");
+    const reports = drainAsks();
+    expect(reports).toHaveLength(1);
+    expect(reports[0].text).toContain("The usage reading is unknown");
   });
 });

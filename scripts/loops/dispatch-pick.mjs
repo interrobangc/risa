@@ -12,7 +12,8 @@
 //      flagged `hold` (the answer "hold the topic") is never reopened. A
 //      worktree with no managed record was opened by hand: only reported, but
 //      it still takes a slot and its hot files.
-//   3. Busy: no start and no plan (reopens still happen).
+//   3. Busy: no start and no plan (reopens still happen). Draining or limited
+//      (drain.mjs, facts.drain): no start, plan, reopen or reopen ask.
 //   4. A `planned` topic may `start` when a slot is free, every `After` topic
 //      is `done`, no running topic shares a hot-file prefix with it, no
 //      `alone` topic runs (and nothing runs when it is the `alone` one), and
@@ -60,7 +61,8 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
  *   answeredAt?: string | null, doneAt?: string | null, defaulted?: boolean }} PickAsk
  * @typedef {{ rows: PickRow[], worktrees?: PickWorktree[], sessions?: PickSession[],
  *   asks?: PickAsk[], reopens?: Record<string, number>, busy?: boolean, paused?: boolean,
- *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number }} PickFacts
+ *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number,
+ *   drain?: { state: "normal" | "draining" | "limited", why: string } }} PickFacts
  * @typedef {{ topic?: string, why: string }} Reason
  * @typedef {{ action: "start" | "plan" | "reopen" | "ask" | "none", topic?: string,
  *   session?: string, worktree?: string, why?: string, text?: string, options?: string[],
@@ -101,6 +103,9 @@ export function pick(facts) {
   const sessions = new Map((facts.sessions ?? []).map((s) => [s.name, s]));
   const reopens = facts.reopens ?? {};
   const flags = (/** @type {PickRow | undefined} */ r) => r?.flags ?? [];
+  // Near or past a usage limit: nothing new opens (drain.mjs).
+  const held = facts.drain && facts.drain.state !== "normal" ? facts.drain : null;
+  const heldWhy = held ? `usage is ${held.state}: ${held.why}` : "";
 
   // An open question is one that awaits an answer: a defaulted one has its answer.
   const asks = (facts.asks ?? []).filter((a) => awaitsAnswer(a) && a.session !== KEEP_SESSION);
@@ -147,6 +152,7 @@ export function pick(facts) {
     else if (s.live) why = w.kind === "plan" ? "being planned" : "running";
     else if (s.rotating && (Number.isNaN(rotatedAt) || now - rotatedAt < ROTATING_GRACE_MS))
       why = `${what} is being rotated`;
+    else if (held) why = `${what} died; not reopened while ${heldWhy}`;
     else if ((reopens[w.session] ?? 0) >= MAX_REOPENS) {
       const open = reopenAskOf(w.topic);
       if (open) why = `${what} died after ${MAX_REOPENS} reopens; waits on ask ${open.id}`;
@@ -240,7 +246,7 @@ export function pick(facts) {
 
   const chosen = reopen
     ? null
-    : facts.busy
+    : held || facts.busy
       ? null
       : startPick
         ? { action: /** @type {const} */ ("start"), row: startPick }
@@ -261,6 +267,7 @@ export function pick(facts) {
     else if (r.state === "idle") why = "no waiting items";
     else if (r.state === "planned") {
       why = startBlock(r);
+      if (!why && held) why = `no start while ${heldWhy}`;
       if (!why && short(r))
         why = `${r.waiting ?? 0} waiting, under ${caps.fixesMin}, and ${startPick?.topic ?? "another topic"} may start`;
       if (!why && facts.busy) why = "the machine is busy";
@@ -268,6 +275,7 @@ export function pick(facts) {
       if (!why) why = `waits a tick: ${startPick?.topic} starts first`;
     } else if (r.state === "to-write") {
       why = planBlock(r);
+      if (!why && held) why = `no plan while ${heldWhy}`;
       if (!why && facts.busy) why = "the machine is busy";
       if (!why && reopen) why = `waits a tick: ${reopen.why}`;
       if (!why)
@@ -290,7 +298,11 @@ export function pick(facts) {
           : "planned, and nothing stops it";
     return { action: chosen.action, topic: r.topic, why, reasons };
   }
-  return { action: "none", why: facts.busy ? "the machine is busy" : "nothing to do", reasons };
+  return {
+    action: "none",
+    why: held ? heldWhy : facts.busy ? "the machine is busy" : "nothing to do",
+    reasons,
+  };
 }
 
 /** The pick as lines a person reads: the action, then each topic passed over. @param {Pick} p */
