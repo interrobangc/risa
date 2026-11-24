@@ -82,6 +82,16 @@ describe("orchestrator", () => {
     expect(out.trimEnd()).toMatch(/Record the answers in the plan's _Status_ and follow them\..*$/);
   });
 
+  it("runs the status trim after each landing, in every variant (B-598)", () => {
+    for (const flags of [[], ["--auto"], ["--resume"], ["--resume", "--auto"]]) {
+      const out = ok("orchestrator", "T", ...flags);
+      expect(out).toContain("Then run `pnpm prd status-trim T`");
+      expect(out).toContain("plans/T-history.md; commit both files");
+      expect(out).toContain("Keep _Status_ under about 6 KB");
+    }
+    expect(ok("orchestrator", "fixes-x")).toContain("numbered on from `pnpm prd status-trim fixes-x --next`");
+  });
+
   it("carries the PR flow in every variant", () => {
     for (const flags of [[], ["--auto"], ["--resume"], ["--resume", "--auto"]]) {
       const out = ok("orchestrator", "T", ...flags);
