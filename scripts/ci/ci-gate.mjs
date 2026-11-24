@@ -48,7 +48,7 @@ function findGateVerdict({ sha, base, tier, touched }, io) {
 
 /**
  * `ci gate`: whether this branch's tip may land at this tier. Behind a dev sync it may
- * wait for less (a recheck of what dev brought) or more (dev brought something above it).
+ * wait for less: a recheck of what dev brought.
  * @param {{ branch: string, sha: string, tier: string, base: string, fixes?: string[], out?: string | null, peek?: boolean, waitMin?: number }} request
  * @param {Io} io
  */
@@ -68,7 +68,6 @@ export async function gate(
       `dev synced in since the ${carried.verdict.ranTier} verdict on ${String(carried.verdict.commit).slice(0, 8)}: ` +
         `carrying its ${carried.verdict.kind}, with a recheck at ${need} of what dev brought`,
     );
-  else if (need !== tier) io.log(`dev synced in what asks for ${need}, above ${tier}`);
   if (!verdict && peek) {
     io.log(`no ${need} verdict for ${sha.slice(0, 8)}: the landing will request one`);
     return EXIT.unknown;

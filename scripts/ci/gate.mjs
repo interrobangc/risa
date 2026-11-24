@@ -68,7 +68,8 @@ export const carries = (v, touched) =>
  * (docs, tooling, CI's lists, a sync that brought only those), is the verdict. Behind
  * a dev sync that brought more, the pre-sync verdict is carried when it lands with no
  * blame, and the tip needs a recheck at the tier the syncs brought (syncTier),
- * found on a commit no newer sync follows; a recheck of the tier or more needs no carry.
+ * found on a commit no newer sync follows. A sync that brought the tier or more asks
+ * for the tier itself on the tip, as before.
  * `need` is the tier to request when `verdict` is null.
  * @param {{ commits: string[], tier: string, touched: string[],
  *   verdictAt: (sha: string, tier: string) => Found | null,
@@ -95,8 +96,9 @@ export function walkVerdicts({ commits, tier, touched, verdictAt, changeOf }) {
   if (!base) return none;
   const demand = Math.max(0, ...steps.map((s) => s.rank));
   if (!demand) return { ...base, carried: null, need: tier };
+  // Never above the declared tier: dev's own landing vouched for its files alone.
+  if (demand >= tierRank(tier)) return none;
   const need = /** @type {string} */ (PROPOSED_TIERS[demand]);
-  if (demand >= tierRank(tier)) return { ...none, need };
   if (!carries(base.verdict, touched)) return none;
   const newest = steps.findIndex((s) => s.rank > 0);
   for (const { sha } of steps.slice(0, newest + 1)) {

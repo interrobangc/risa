@@ -186,9 +186,11 @@ describe("walkVerdicts", () => {
     expect(result?.need).toBe("integration");
   });
 
-  it("asks for the sync's tier, with nothing carried, when it brought the wave's tier or more", () => {
-    const { result } = walk([{ sha: "sync", change: "full" }, wave]);
-    expect(result).toMatchObject({ verdict: null, carried: null, need: "full" });
+  it("asks for the declared tier itself, never more, when a sync brought that tier or more", () => {
+    for (const change of ["components", "full"]) {
+      const { result } = walk([{ sha: "sync", change }, wave]);
+      expect(result).toMatchObject({ verdict: null, carried: null, need: "components" });
+    }
   });
 
   it("carries a flake outside the branch's files, not one in them, nor a failure", () => {
