@@ -66,12 +66,14 @@ pnpm prd <command>
                               that look done); --yes removes the safe
                               ones and files the ask list as one report (prompt tidy: the haiku brief)
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
-    recover [--at HH:MM] [--wait] [--no-agent]   after a restart, crash or usage limit: Docker, stale locks,
-                              the test Postgres, stacks one at a time, servers, the dispatcher in a background
-                              tab when it was running (its lock cleared when its pid is gone); then the recovery agent here
+    recover [--at HH:MM] [--wait] [--no-agent] [--unattended]   after a restart, crash or usage limit (one at a
+                              time): Docker, stale locks, the test Postgres, stacks one at a time (a cut-off migrate
+                              reruns), servers, then, only when all of those recovered, the dispatcher in a background
+                              tab when it was running (its intent kept until it holds its lock); then the recovery agent here
                               (claude --remote-control recover) tells live orchestrators and planners to carry
                               on and reopens dead ones, leaving managed ones to a running dispatcher
-                              (--no-agent: stop before it); --at waits until then,
+                              (--no-agent: stop before it; --unattended: no terminal, the agent in a background tab, one
+                              report on failure); --at waits until then,
                               --wait probes claude every 10 min; recover --dry-run [--json] only shows what it would do
     down                      before a planned restart: record what's up (the dispatcher too), stop the
                               dispatcher, servers, stacks, the test Postgres
