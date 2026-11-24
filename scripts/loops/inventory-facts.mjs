@@ -14,12 +14,14 @@
 // DIR defaults to the main checkout of the repo this file is in. Env: TRUNK
 // (dev), CARETOOK_LEASE_ROOT (DIR/.loops/.lease), CARETOOK_MIN_FREE_GB (10),
 // CARETOOK_FREE_GB (overrides the df reading, for tests), CARETOOK_SESSIONS_DIR
-// (DIR/.loops/.sessions).
+// (DIR/.loops/.sessions), CARETOOK_LANDING_DIR (DIR/.loops/.landing: the
+// landing journal).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_MIN_FREE_GB, formatInventory, inventory } from "./inventory.mjs";
+import { listRecords } from "./land-journal.mjs";
 
 /** The backlog lock is stale after this long (backlog.mjs takes it over then too). */
 export const BACKLOG_LOCK_STALE_MS = 30_000;
@@ -300,8 +302,18 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       /* a record being written */
     }
 
+  // Landings cut off midway (land-journal.mjs): one record each.
+  const landings = listRecords(env.CARETOOK_LANDING_DIR || join(loops, ".landing")).map((r) => ({
+    branch: String(r.branch ?? ""),
+    path: String(r.path ?? ""),
+    step: String(r.step ?? ""),
+    at: String(r.at ?? ""),
+    file: r.file,
+  }));
+
   const min = Number(env.CARETOOK_MIN_FREE_GB);
   return {
+    landings,
     worktrees,
     locks,
     dispatcher,

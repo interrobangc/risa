@@ -44,14 +44,18 @@ const docsOnly = () =>
 
 // A `gh` that answers the three calls land.sh makes; the PR's head is $PR_HEAD
 // and Codex has said nothing ("waiting"), unless $PR_COMMENTS holds its
-// summary comment (a JSON array of comment nodes).
+// summary comment (a JSON array of comment nodes). A merge is logged to
+// $GH_MERGE_LOG, and the PR's state (a resume's question) is $GH_PR_STATE, else
+// MERGED once that log has a line, else OPEN.
 const GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "repo view") echo o/r ;;
   "pr list") echo 7 ;;
-  "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev; [[ -z "$GH_BREAK_SYNC" ]] || touch "$(git rev-parse --absolute-git-dir)/REVERT_HEAD" ;;
+  "pr merge") [[ -z "$GH_MERGE_FAIL" ]] || { echo "merge refused" >&2; exit 1; }; git push -q origin prd/throwaway-x:dev; [[ -z "$GH_MERGE_LOG" ]] || echo merged >> "$GH_MERGE_LOG"; [[ -z "$GH_BREAK_SYNC" ]] || touch "$(git rev-parse --absolute-git-dir)/REVERT_HEAD" ;;
   "pr edit") while (($#)); do [[ $1 != --body ]] || printf '%s' "$2" > "$GH_PR_BODY"; shift; done ;;
-  "pr view") echo https://example.test/pr/7 ;;
+  "pr view") if [[ " $* " != *" state "* ]]; then echo https://example.test/pr/7
+    elif [[ -n "$GH_PR_STATE" ]]; then echo "$GH_PR_STATE"
+    elif [[ -n "$GH_MERGE_LOG" && -s "$GH_MERGE_LOG" ]]; then echo MERGED; else echo OPEN; fi ;;
   "run list" | "run view" | "run download" | "api -X") exec node "$GH_CI" "$@" ;;
   "api graphql") printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":%s},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" "\${PR_COMMENTS:-[]}" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
@@ -132,6 +136,8 @@ beforeEach(() => {
   // The run log outside the throwaway repo, whose .loops/ isn't ignored: a log
   // there would be committed by a test's `git add -A`.
   process.env.CARETOOK_RUN_LOG = join(root, "run-log.jsonl");
+  // The landing journal outside it too, for the same reason.
+  process.env.CARETOOK_LANDING_DIR = join(root, "landing");
   mkdirSync(join(root, "bin"));
   writeFileSync(join(root, "bin", "gh"), GH);
   chmodSync(join(root, "bin", "gh"), 0o755);
@@ -448,7 +454,10 @@ describe("land.sh's CI gate", () => {
     const r = land(on(verdict("flake", { flaky })), [], { GH_BREAK_SYNC: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("dev-sync stopped");
-    expect(r.stderr).toMatch(/then file the flakes: `pnpm prd ci file prd\/throwaway-x --base \w+ --run 11`/);
+    expect(r.stderr).toContain("pnpm prd land --resume prd/throwaway-x");
+    expect(r.stderr).toMatch(
+      /then files the flakes: `pnpm prd ci file prd\/throwaway-x --base \w+ --run 11`/,
+    );
     expect(filed()).toEqual([]);
   });
 
@@ -1640,5 +1649,183 @@ describe("land.sh's --force and --no-review", () => {
     expect(text).not.toContain("before the last landing");
     expect(r.stdout).toContain("for the landing and run-through reports");
     expect(declinesSince(store(), "throwaway-x")).toEqual([]);
+  });
+});
+
+describe("land.sh --resume", () => {
+  const board = () => join(root, "notices");
+  const mergeLog = () => join(root, "merges.log");
+  const journal = (b = "prd-throwaway-x") => join(root, "landing", `${b}.json`);
+  const notices = () =>
+    existsSync(board()) ? readdirSync(board()).filter((f) => /^n\d+\.json$/.test(f)) : [];
+  const toTest = () => (existsSync(join(repo, "to-test")) ? readdirSync(join(repo, "to-test")) : []);
+  const merges = () => (existsSync(mergeLog()) ? readFileSync(mergeLog(), "utf8").trim().split("\n") : []);
+  const run = (args, extra = {}) =>
+    spawnSync("bash", ["scripts/loops/land.sh", ...args], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PR_HEAD: spawnSync("git", ["-C", repo, "rev-parse", "prd/throwaway-x"], {
+          encoding: "utf8",
+        }).stdout.trim(),
+        CARETOOK_NOTICES_DIR: board(),
+        GH_MERGE_LOG: mergeLog(),
+        ...extra,
+      },
+    });
+  const PRD = ["throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review", "--by-user"];
+  const HOTFIX = ["hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"];
+  const killedAt = (args, step) => {
+    const r = run(args, { CARETOOK_LAND_KILL_AT: step });
+    expect(r.signal, r.stderr + r.stdout).toBe("SIGKILL");
+    return r;
+  };
+  const resume = (b, extra) => run(["--resume", b], extra);
+  const has = (ref, tip) =>
+    spawnSync("git", ["-C", repo, "merge-base", "--is-ancestor", tip, ref]).status === 0;
+  const hotfix = () => {
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/c.ts": "3" }, "fix it");
+    git("checkout", "-q", "dev");
+    return git("rev-parse", "hotfix/throwaway-y");
+  };
+
+  describe("on the PR path", () => {
+    let tip;
+    beforeEach(() => {
+      branch({ "apps/web/b.ts": "2" });
+      tip = git("rev-parse", "prd/throwaway-x");
+    });
+
+    for (const step of ["mark", "to-test", "notice", "dev-sync", "flakes"])
+      it(`a landing killed before ${step} resumes to one merge and a synced dev`, () => {
+        killedAt(PRD, step);
+        expect(existsSync(journal())).toBe(true);
+        expect(run(PRD).stderr).toContain("pnpm prd land --resume prd/throwaway-x");
+        const r = resume("prd/throwaway-x");
+        expect(r.status, r.stderr + r.stdout).toBe(0);
+        expect(r.stdout).toContain("finish:");
+        expect(merges()).toEqual(["merged"]);
+        git("fetch", "-q", "origin");
+        expect(git("rev-parse", "dev")).toBe(git("rev-parse", "origin/dev"));
+        expect(has("dev", tip)).toBe(true);
+        expect(toTest()).toHaveLength(1);
+        expect(readFileSync(join(repo, "to-test", toTest()[0]), "utf8")).toContain(
+          `as \`${git("rev-parse", "--short", "dev")}\``,
+        );
+        expect(notices()).toHaveLength(1);
+        expect(existsSync(journal())).toBe(false);
+        expect(readdirSync(join(root, "landing"))).toEqual([]);
+        expect(resume("prd/throwaway-x").stdout).toContain("no cut-off landing");
+      });
+
+    it("a PR merged with no dev sync resumes with the sync", () => {
+      killedAt(PRD, "dev-sync");
+      expect(has("dev", tip)).toBe(false);
+      const r = resume("prd/throwaway-x");
+      expect(r.status, r.stderr + r.stdout).toBe(0);
+      expect(r.stdout).toContain("dev-sync: fast-forwarded");
+      expect(has("dev", tip)).toBe(true);
+    });
+
+    it("killed before the GitHub merge, it's undone, and goes through land again", () => {
+      killedAt(PRD, "merge");
+      expect(merges()).toEqual([]);
+      const r = resume("prd/throwaway-x");
+      expect(r.status, r.stderr + r.stdout).toBe(0);
+      expect(r.stdout).toContain("undone");
+      expect(existsSync(journal())).toBe(false);
+      expect(merges()).toEqual([]);
+      expect(toTest()).toEqual([]);
+      const again = run(PRD);
+      expect(again.status, again.stderr + again.stdout).toBe(0);
+      expect(merges()).toEqual(["merged"]);
+      expect(existsSync(journal())).toBe(false);
+    });
+
+    it("killed before its first step leaves no journal, and a resume says so", () => {
+      killedAt(PRD, "push");
+      expect(existsSync(journal())).toBe(false);
+      const r = resume("prd/throwaway-x");
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("no cut-off landing");
+    });
+
+    it("asks, and keeps the journal, when GitHub's state is unknown and origin/dev lacks the tip", () => {
+      killedAt(PRD, "merge");
+      const r = resume("prd/throwaway-x", { GH_PR_STATE: "WEIRD" });
+      expect(r.status).toBe(3);
+      expect(r.stdout + r.stderr).toContain("ask");
+      expect(existsSync(journal())).toBe(true);
+      expect(merges()).toEqual([]);
+    });
+
+    it("a refusal at the push drops the journal: nothing landed", () => {
+      git("checkout", "-q", "dev");
+      commit({ "apps/web/other.ts": "o" }, "elsewhere");
+      git("push", "-q", "origin", "dev");
+      git("reset", "-q", "--hard", "HEAD^");
+      const r = run(PRD);
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("nothing landed");
+      expect(existsSync(journal())).toBe(false);
+    });
+  });
+
+  describe("on the local path", () => {
+    let tip;
+    beforeEach(() => {
+      tip = hotfix();
+    });
+
+    for (const step of ["mark", "to-test", "notice", "flakes"])
+      it(`a landing killed before ${step} resumes to one merge`, () => {
+        killedAt(HOTFIX, step);
+        const r = resume("hotfix/throwaway-y");
+        expect(r.status, r.stderr + r.stdout).toBe(0);
+        expect(git("rev-list", "--merges", "--count", "dev")).toBe("1");
+        expect(has("dev", tip)).toBe(true);
+        expect(toTest()).toHaveLength(1);
+        expect(notices()).toHaveLength(1);
+        expect(existsSync(journal("hotfix-throwaway-y"))).toBe(false);
+      });
+
+    // A landing cut off inside `git merge`: the journal at merge, MERGE_HEAD the tip.
+    const midMerge = () => {
+      killedAt(HOTFIX, "mark");
+      git("reset", "-q", "--hard", "HEAD^");
+      git("merge", "-q", "--no-ff", "--no-commit", "hotfix/throwaway-y");
+    };
+    const mergeHead = () => join(git("rev-parse", "--absolute-git-dir"), "MERGE_HEAD");
+
+    it("killed mid-merge, it aborts the merge of the recorded tip and goes through land again", () => {
+      midMerge();
+      const before = git("rev-parse", "dev");
+      const r = resume("hotfix/throwaway-y");
+      expect(r.status, r.stderr + r.stdout).toBe(0);
+      expect(r.stdout).toContain("aborted the cut-off merge");
+      expect(existsSync(mergeHead())).toBe(false);
+      expect(git("rev-parse", "dev")).toBe(before);
+      expect(existsSync(journal("hotfix-throwaway-y"))).toBe(false);
+      const again = run(HOTFIX);
+      expect(again.status, again.stderr + again.stdout).toBe(0);
+      expect(git("rev-list", "--merges", "--count", "dev")).toBe("1");
+    });
+
+    it("never aborts a MERGE_HEAD other than the recorded tip", () => {
+      midMerge();
+      git("merge", "--abort");
+      git("checkout", "-qb", "other");
+      const other = commit({ "apps/web/d.ts": "4" }, "other work");
+      git("checkout", "-q", "dev");
+      git("merge", "-q", "--no-ff", "--no-commit", "other");
+      const r = resume("hotfix/throwaway-y");
+      expect(r.status).toBe(3);
+      expect(r.stdout).toContain("never aborted");
+      expect(readFileSync(mergeHead(), "utf8").trim()).toBe(other);
+      expect(existsSync(journal("hotfix-throwaway-y"))).toBe(true);
+    });
   });
 });

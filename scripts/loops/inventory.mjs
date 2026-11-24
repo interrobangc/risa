@@ -22,6 +22,10 @@
 //   dispatch              the dispatcher isn't running but was: the down record
 //                         says so, or its lock's pid is gone (a crash); recover
 //                         reopens it in a background tab
+//   resume-landing <branch>  a landing cut off midway (its journal in
+//                         .loops/.landing/, land-journal.mjs): recover only lists
+//                         it; the recovery agent and a resumed orchestrator run
+//                         `pnpm prd land --resume <branch>` before anything else
 //   offer-gc <name>       merged slices (a dirty one is offered, and gc keeps it)
 //   open-session <name>   every prd and plan worktree (the recovery agent skips
 //                         the ones with a live session, and managed ones while
@@ -44,6 +48,7 @@ export const STEPS = [
   "stack up",
   "serve",
   "dispatch",
+  "resume-landing",
   "offer-gc",
   "open-session",
   "delete-down-record",
@@ -86,6 +91,14 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @property {string} [downRecordPath]
  * @property {string} [downRecordError]   it exists but can't be read
  * @property {{ freeGb: number|null, minGb?: number }} [disk]
+ * @property {LandingFacts[]} [landings]   cut-off landings: the journal's records
+ *
+ * @typedef {object} LandingFacts
+ * @property {string} branch
+ * @property {string} [path]   pr or local
+ * @property {string} [step]   the step it was about to run
+ * @property {string} [at]     when it recorded that step
+ * @property {string} [file]
  *
  * @typedef {{ step: string, target?: string, why: string, dirty?: boolean, session?: string, managed?: boolean }} Action
  */
@@ -223,6 +236,13 @@ export function inventory(facts) {
           ? "the down record had the dispatcher running"
           : `the dispatcher's lock is stale (pid ${facts.dispatcher?.pid ?? "?"} is gone): it was running`,
     });
+  const landings = (facts.landings ?? []).filter((l) => l.branch);
+  for (const l of landings)
+    add({
+      step: "resume-landing",
+      target: l.branch,
+      why: `its landing was cut off at the ${l.step ?? "unknown"} step${l.at ? ` (${l.at})` : ""}: pnpm prd land --resume ${l.branch}, first`,
+    });
   const managed = new Set(facts.managed ?? []);
   for (const w of worktrees.filter((w) => w.class === "merged"))
     add({
@@ -267,6 +287,12 @@ export function inventory(facts) {
       reopen: actions.some((a) => a.step === "dispatch"),
     },
     disk,
+    landings: landings.map((l) => ({
+      branch: l.branch,
+      path: l.path ?? null,
+      step: l.step ?? null,
+      at: l.at ?? null,
+    })),
     warnings,
     actions,
   };
@@ -316,6 +342,14 @@ export function formatInventory(inv) {
     `  ${l.kind.padEnd(7)} ${l.path}${l.holder ? ` (${l.holder})` : ""}${l.why ? `: ${l.why}` : ""}`;
   if (inv.locks.stale.length) out.push("", "stale locks (cleared):", ...inv.locks.stale.map(lockLine));
   if (inv.locks.live.length) out.push("", "live locks (left alone):", ...inv.locks.live.map(lockLine));
+  if (inv.landings.length)
+    out.push(
+      "",
+      "cut-off landings (pnpm prd land --resume <branch>, first):",
+      ...inv.landings.map(
+        (l) => `  ${l.branch}: at ${l.step ?? "an unknown step"}${l.path ? ` (${l.path})` : ""}`,
+      ),
+    );
   if (inv.warnings.length) out.push("", "warnings:", ...inv.warnings.map((w) => `  ${w}`));
 
   out.push("", "actions:");

@@ -187,6 +187,7 @@ function build() {
     CARETOOK_CLOCK_FILE: "",
     CARETOOK_ITERM_APP: join(root, "iTerm.app"),
     CARETOOK_SESSIONS_DIR: "",
+    CARETOOK_LANDING_DIR: "",
     CARETOOK_ASKS_DIR: "",
   };
   mkdirSync(join(root, "iTerm.app"));
@@ -375,6 +376,26 @@ describe("recover --dry-run", () => {
     } finally {
       rmSync(record);
     }
+  });
+
+  it("lists a cut-off landing from its journal, to resume first", () => {
+    mkdirSync(join(loops, ".landing"), { recursive: true });
+    writeFileSync(
+      join(loops, ".landing", "prd-t.json"),
+      JSON.stringify({
+        branch: "prd/t",
+        path: "pr",
+        tip: "a".repeat(40),
+        step: "dev-sync",
+        at: "2026-11-20T10:00:00Z",
+      }),
+    );
+    const inv = json();
+    expect(inv.landings).toEqual([
+      { branch: "prd/t", path: "pr", step: "dev-sync", at: "2026-11-20T10:00:00Z" },
+    ]);
+    expect(inv.actions.filter((a) => a.step === "resume-landing").map((a) => a.target)).toEqual(["prd/t"]);
+    rmSync(join(loops, ".landing"), { recursive: true });
   });
 
   it("flags low disk", () => {

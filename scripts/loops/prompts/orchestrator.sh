@@ -40,6 +40,7 @@ if [[ -n $resume ]]; then
   cat <<EOF
 
 **You're taking over after an interruption** (a restart, a crash or a usage limit). An earlier orchestrator for "$topic" stopped mid-work, and its slice agents may have stopped with it. Before anything else:
+0. **A landing cut off midway:** run \`pnpm prd land --resume prd/$topic\` first. With no journal it says so and changes nothing; otherwise it finishes a landing that merged, or undoes one that didn't (land it again through \`pnpm prd land\` and every gate, in your landing mode). On \`ask\` (exit 3) it changed nothing: ask the user, with its line.
 1. Read the plan's _Status_, then reconcile it with git. **Git wins over a stale line**, so correct _Status_ first:
    - slice worktrees: \`pnpm prd status\` lists every \`$topic-<n>\` worktree, dirty or clean (\`git -C $loops/$topic-<n> status --short\` shows what's uncommitted);
    - \`slice/$topic/<n>\` branches ahead of prd/$topic: \`pnpm log --oneline prd/$topic..slice/$topic/<n>\`;

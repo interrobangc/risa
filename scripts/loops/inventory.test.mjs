@@ -266,6 +266,32 @@ describe("with a down record", () => {
   });
 });
 
+describe("cut-off landings", () => {
+  it("lists each, to resume first, after the dispatcher and before gc and the sessions", () => {
+    const f = clone(COLD);
+    f.landings = [
+      { branch: "prd/t", path: "pr", step: "dev-sync", at: "2026-11-20T10:00:00Z" },
+      { branch: "hotfix/y", path: "local", step: "merge" },
+    ];
+    const inv = inventory(f);
+    const resumes = inv.actions.filter((a) => a.step === "resume-landing");
+    expect(resumes.map(actionLine)).toEqual(["resume-landing prd/t", "resume-landing hotfix/y"]);
+    expect(resumes[0].why).toContain("pnpm prd land --resume prd/t");
+    const steps = inv.actions.map((a) => a.step);
+    expect(steps.indexOf("resume-landing")).toBeLessThan(steps.indexOf("offer-gc"));
+    expect(inv.landings).toEqual([
+      { branch: "prd/t", path: "pr", step: "dev-sync", at: "2026-11-20T10:00:00Z" },
+      { branch: "hotfix/y", path: "local", step: "merge", at: null },
+    ]);
+    expect(formatInventory(inv)).toMatch(/cut-off landings[^\n]*\n {2}prd\/t: at dev-sync \(pr\)/);
+  });
+
+  it("has none without a journal", () => {
+    expect(inventory(COLD).landings).toEqual([]);
+    expect(lines(inventory(COLD)).some((l) => l.startsWith("resume-landing"))).toBe(false);
+  });
+});
+
 describe("order and disk", () => {
   it("keeps the fixed order: Docker, locks, test Postgres, stacks, servers, gc, sessions, record", () => {
     const f = clone(COLD);
@@ -273,6 +299,7 @@ describe("order and disk", () => {
     f.locks = [{ kind: "slot", path: "/l/.slots/7", alive: false }];
     f.downRecord = { stacks: ["t"], servers: ["t"], dispatcher: true };
     f.downRecordPath = "/l/.down.json";
+    f.landings = [{ branch: "prd/t", path: "pr", step: "dev-sync" }];
     const steps = inventory(f).actions.map((a) => a.step);
     const ranks = steps.map((s) => STEPS.indexOf(s));
     expect(ranks).toEqual([...ranks].sort((a, b) => a - b));

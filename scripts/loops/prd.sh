@@ -186,6 +186,8 @@ pnpm prd <command>
                               --local: a local merge, the fallback, on their word)
     land hotfix/<name> --pr|--local [-m subject]   a hotfix: ask the user "PR or local?" each time
     land plan/<topic>         a plan branch: always a local merge
+    land --resume <branch>    a landing cut off midway: finish it if it merged, else undo it (land again);
+                              exit 3 asks (an unknown state, or a merge that isn't its own)
     review <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]
                               Codex's verdict on the branch's open PR into dev (clean, findings, waiting,
                               stale) and its findings; --again asks Codex again, --resolve closes a declined

@@ -198,7 +198,7 @@ session_name() {
 }
 
 run_actions() {
-  local list step target failed=() gc=() sessions=() record=""
+  local list step target failed=() gc=() sessions=() landings=() record=""
   list=$(inventory --json | node "$bin/recover-lib.mjs" actions)
   if grep -q $'^docker start\t' <<<"$list"; then
     start_docker
@@ -223,6 +223,7 @@ run_actions() {
         "$bin/open-session.sh" --command "cd $(printf %q "$main") && scripts/loops/prd.sh dispatch" --title dispatch --background \
           </dev/null 2>&1 | sed 's/^/  /' || failed+=("dispatcher")
         ;;
+      resume-landing) landings+=("$target") ;;
       offer-gc) gc+=("$target") ;;
       open-session) sessions+=("$target") ;;
       delete-down-record) record=$target ;;
@@ -230,6 +231,11 @@ run_actions() {
     esac
   done 3<<<"$list"
 
+  if ((${#landings[@]})); then
+    echo
+    echo "Landings cut off midway (the recovery agent resumes them first: pnpm prd land --resume <branch>):"
+    printf '  %s\n' "${landings[@]}"
+  fi
   if ((${#gc[@]})); then
     echo
     echo "Merged slices to clean up (pnpm prd gc; a dirty one is kept until its changes are committed or discarded):"
