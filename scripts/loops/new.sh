@@ -84,6 +84,8 @@ if git -C "$main" show-ref --verify --quiet "refs/heads/$branch"; then
 else
   git -C "$main" worktree add -b "$branch" "$dir" "$base"
 fi
+# The run log (run-log.mjs): a slice's start, for pnpm prd metrics. Never fails.
+[[ $kind != slice ]] || run_log slice-start "name=$name" "branch=$branch" "slice:=$n" "base=$base"
 cd "$dir"
 # The protection hooks (.githooks/); core.hooksPath is shared by every worktree.
 git config core.hooksPath .githooks

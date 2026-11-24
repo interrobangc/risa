@@ -79,8 +79,15 @@ fi
 stack_teardown "$dir"
 # Its databases on the shared test Postgres, worker copies too (nothing when that isn't running).
 "$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
+# Whether a slice was merged into its parent, for the run log's slice-end (below).
+slice_merged=false
+if [[ $branch == slice/* ]] && git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then
+  slice_merged=true
+fi
 git -C "$main" worktree remove ${force:+--force} "$dir"
 release_slot "$name"
+# The run log (run-log.mjs): a slice's end, for pnpm prd metrics. Never fails.
+[[ $branch != slice/* ]] || run_log slice-end "name=$name" "branch=$branch" "merged:=$slice_merged"
 # Its session record (session.sh), if it had one: the session itself isn't
 # touched (a planner removes its worktree, then ends with pnpm prd end).
 case $branch in

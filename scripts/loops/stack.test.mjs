@@ -103,7 +103,9 @@ const fixture = () => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f === "slice-fields.mjs"))
+  for (const f of readdirSync(HERE).filter(
+    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "run-log.mjs",
+  ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
@@ -168,6 +170,35 @@ describe("new.sh slice", () => {
     expect(read(loops, "t-4", ".env")).toMatch(/caretook-loop2/);
     ok("rm.sh", ["t-4"]);
     expect(leases()).toEqual(["1"]);
+  });
+});
+
+describe("the run log", () => {
+  it("records a slice's start at new.sh and its end at rm.sh", () => {
+    const runLog = join(root, "run-log.jsonl");
+    const opts = { env: { CARETOOK_RUN_LOG: runLog } };
+    ok("new.sh", ["slice", "t", "6"], opts);
+    ok("rm.sh", ["t-6"], opts);
+    const events = read(runLog)
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: "slice-start",
+        topic: "t",
+        name: "t-6",
+        branch: "slice/t/6",
+        slice: 6,
+      }),
+      expect.objectContaining({
+        kind: "slice-end",
+        topic: "t",
+        name: "t-6",
+        branch: "slice/t/6",
+        merged: true,
+      }),
+    ]);
   });
 });
 

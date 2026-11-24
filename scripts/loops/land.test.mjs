@@ -802,6 +802,74 @@ describe("land.sh posts a landing notice", () => {
   });
 });
 
+describe("land.sh's run log", () => {
+  const log = () => join(root, "run-log.jsonl");
+  const events = () =>
+    existsSync(log())
+      ? readFileSync(log(), "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l))
+      : [];
+  const landFor = (extra = {}) =>
+    spawnSync(
+      "bash",
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "-m",
+        "feat(throwaway-x): t (B-1)",
+        "--force",
+        "--no-review",
+        "--by-user",
+      ],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${join(root, "bin")}:${process.env.PATH}`,
+          PR_HEAD: git("rev-parse", "prd/throwaway-x"),
+          CARETOOK_NOTICES_DIR: join(root, "notices"),
+          CARETOOK_RUN_LOG: log(),
+          ...extra,
+        },
+      },
+    );
+
+  it("records a landing's start and its end, landed", () => {
+    branch({ "apps/web/b.ts": "2" });
+    const r = landFor();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    const [start, end, ...more] = events();
+    expect(more).toEqual([]);
+    expect(start).toMatchObject({
+      kind: "land-start",
+      topic: "throwaway-x",
+      branch: "prd/throwaway-x",
+      path: "pr",
+    });
+    expect(end).toMatchObject({ kind: "land-end", topic: "throwaway-x", exit: 0, landed: true, path: "pr" });
+    expect(end.seconds).toBeGreaterThanOrEqual(0);
+  });
+
+  it("records a failed landing's failure, with its exit", () => {
+    branch({ "apps/web/b.ts": "2" });
+    const r = landFor({ GH_MERGE_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(events().map((e) => e.kind)).toEqual(["land-start", "land-end"]);
+    expect(events()[1]).toMatchObject({ landed: false, exit: r.status });
+  });
+
+  it("a run log it can't write never stops a landing", () => {
+    branch({ "apps/web/b.ts": "2" });
+    writeFileSync(join(root, "not-a-dir"), "x");
+    const r = landFor({ CARETOOK_RUN_LOG: join(root, "not-a-dir", "run-log.jsonl") });
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("Landed prd/throwaway-x");
+  });
+});
+
 // The unsynced landing: dev moved on files the branch doesn't touch. A stub
 // `pnpm` logs its steps, and the seam stops the PR path before the merge.
 describe("land.sh on an unsynced tip", () => {

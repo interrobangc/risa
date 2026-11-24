@@ -128,6 +128,7 @@ beforeAll(() => {
     PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
     CARETOOK_BROWSER_LEASES: join(root, "leases"),
     CARETOOK_BROWSER_FLAKES: join(root, "flakes.log"),
+    CARETOOK_RUN_LOG: join(root, "run-log.jsonl"),
     // Generous, so a loaded machine's slow Node start isn't silence; the silent
     // check's test sets 2.
     CARETOOK_BROWSER_SILENCE: "10",
@@ -625,5 +626,30 @@ describe("--changed with the real map", SLOW, () => {
       .map((l) => l.split(/\s+/)[0]);
     const want = all.filter((c) => set.includes(c) || c === "groups");
     expect(out).toMatch(new RegExp(`^Checks needed: ${want.join(" ")}$`, "m"));
+  });
+});
+
+describe("the run log", SLOW, () => {
+  it("records a pass, a flaky pass and a failure, each with its result", async () => {
+    const log = join(root, "results-run-log.jsonl");
+    const state = join(root, "results-state");
+    mkdirSync(state);
+    const extra = { CARETOOK_RUN_LOG: log, FAKE_STATE: state };
+    expect((await run(["specpass"], extra)).status).toBe(0);
+    expect((await run(["specflaky"], extra)).status).toBe(0);
+    expect((await run(["--no-retry", "specfail"], extra)).status).not.toBe(0);
+    const events = readFileSync(log, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+    expect(events.map((e) => [e.kind, e.check, e.result, e.retried])).toEqual([
+      ["browser", "specpass", "pass", false],
+      ["browser", "specflaky", "flaky", true],
+      ["browser", "specfail", "fail", false],
+    ]);
+    for (const e of events) {
+      expect(e.mode).toBe("one");
+      expect(e.seconds).toBeGreaterThanOrEqual(0);
+    }
   });
 });

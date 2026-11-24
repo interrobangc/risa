@@ -23,6 +23,7 @@
 #                      coming). Run it in the background.
 #
 # A topic means prd/<topic>; prd/, hotfix/ and other branches are taken as given.
+# Each answer on a head goes to the run log once (run-log.mjs), for pnpm prd metrics.
 # Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
 # answered with its usage-limit comment), 75 when --wait times out, 3 for
 # anything else (no open PR, gh failing, a bad argument).
@@ -104,6 +105,18 @@ if [[ -n $wait ]]; then
     verdict
   done
 fi
+
+# The run log (run-log.mjs): Codex's answer on this head, once per PR and head
+# however often it's polled (an out-of-credits answer apart). Never fails.
+case $state in
+  clean | findings | out-of-credits)
+    answer=review
+    [[ $state != out-of-credits ]] || answer=out-of-credits
+    nfind=$(node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); process.stdout.write(String((v.findings ?? []).length))' <<< "$v" 2>/dev/null || echo 0)
+    run_log --once pr,head,answer codex "pr:=$number" "head=$(field headSha)" "branch=$branch" "answer=$answer" \
+      "state=$state" "findings:=${nfind:-0}" "carried=$(field carriedFrom)"
+    ;;
+esac
 
 if ((json)); then
   echo "$v"

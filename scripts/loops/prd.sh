@@ -147,6 +147,10 @@ pnpm prd <command>
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode, PRD and step, the ten most-failed test files); runs no check,
                               works from any checkout
+    metrics [--since <date>] [--json]   how runs are going: slice and landing durations (count, median,
+                              slowest), check times by mode, the flake rate by check and overall, and
+                              how many reviewed heads Codex had findings on (out of credits apart),
+                              from .loops/.run-log.jsonl, the check log and the flake log; works anywhere
     sync [--force]            merge dev into this PRD branch when its changes need it (shared or risky
                               files); --force merges anyway, when you need code another PRD landed
     browser <check>           one browser check; at most four run at once machine-wide
@@ -226,6 +230,10 @@ case $cmd in
     done
     ;;
   ready) exec "$bin/ready.sh" "$@" ;;
+  metrics)
+    exec node "$bin/metrics.mjs" --run-log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
+      --check-log "${CARETOOK_CHECK_LOG:-$loops/.check-times.log}" \
+      --flake-log "${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}" "$@" ;;
   land) exec "$bin/land.sh" "$@" ;;
   serve) exec "$bin/serve.sh" "$@" ;;
   browser) exec "$bin/browser.sh" "$@" ;;

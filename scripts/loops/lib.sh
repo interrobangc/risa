@@ -89,6 +89,16 @@ prd_count() {
 
 die() { echo "$*" >&2; exit 1; }
 
+# run_log [--once <field,…>] KIND [key=value|key:=json]… → one event in the run log
+# (run-log.mjs; $CARETOOK_RUN_LOG, else .loops/.run-log.jsonl in the main
+# checkout). It never prints and never fails: watching never hurts the work.
+run_log() {
+  local once=()
+  if [[ ${1:-} == --once ]]; then once=(--once "${2:-}"); shift 2; fi
+  node "$(dirname "${BASH_SOURCE[0]}")/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
+    ${once[@]+"${once[@]}"} "$@" </dev/null >/dev/null 2>&1 || true
+}
+
 # here_name → the name of the .loops worktree the shell is in, or nothing.
 here_name() {
   local top

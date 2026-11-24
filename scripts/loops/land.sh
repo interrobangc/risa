@@ -135,6 +135,11 @@ esac
 [[ -z $skeptics$byuser || -n $force$noreview ]] || die "--skeptic and --by-user go with --force or --no-review"
 [[ -z $tier$why$fixes || $branch != plan/* ]] || die "a plan/ branch has no check gate: drop --tier, --why and --fixes"
 pr_seam "$branch"
+# The run log (run-log.mjs): this landing's start, and on every exit its end:
+# the exit code, whether it merged, and its seconds. It never fails or stops a landing.
+landed=false
+run_log land-start "branch=$branch" "path=$path"
+trap 'land_rc=$?; run_log land-end "branch=$branch" "path=$path" "exit:=$land_rc" "landed:=$landed" "seconds:=$SECONDS"; exit "$land_rc"' EXIT
 
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
 [[ $(git -C "$main" branch --show-current) == "$trunk" ]] || die "the main checkout isn't on $trunk"
@@ -470,6 +475,7 @@ if [[ $path == local ]]; then
   land_unsynced
   skeptic_report
   git -C "$main" merge --no-ff -m "$msg" ${unsynced_line:+-m "$unsynced_line"} "$branch"
+  landed=true
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
   mark_landed
@@ -521,6 +527,7 @@ fi
 
 land_push_trunk
 "${merge[@]}" || die "gh couldn't merge PR #$number ($url): nothing landed; see the PR"
+landed=true
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"
 mark_landed
