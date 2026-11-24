@@ -69,11 +69,13 @@ const calls = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
 const leases = () => (existsSync(join(loops, ".slots")) ? readdirSync(join(loops, ".slots")) : []);
 const read = (...p) => readFileSync(join(...p), "utf8");
 
-beforeAll(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "stack-test-")));
-  main = join(root, "repo");
-  loops = join(main, ".loops");
-  log = join(root, "calls.log");
+// A throwaway repo with the scripts and fakes in place; `use` points sh, ok,
+// calls and leases at it.
+const fixture = () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "stack-test-")));
+  const main = join(root, "repo");
+  const loops = join(main, ".loops");
+  const log = join(root, "calls.log");
   const bin = join(root, "bin");
   const nvm = join(root, "nvm");
   mkdirSync(bin);
@@ -83,7 +85,7 @@ beforeAll(() => {
   writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
   for (const f of ["docker", "pnpm", "lsof"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
-  env = {
+  const env = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     NVM_DIR: nvm,
@@ -117,8 +119,14 @@ beforeAll(() => {
   mkdirSync(join(main, "apps/web"), { recursive: true });
   writeFileSync(join(main, "packages/data/.env"), 'DATABASE_URL="x"\nSEED_USER_PASSWORD="pw-fictional"\n');
   writeFileSync(join(main, "apps/web/.env"), 'BETTER_AUTH_URL="x"\nCRON_SECRET="s"\n');
-});
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+  return { root, main, loops, log, env };
+};
+const use = (f) => ({ root, main, loops, log, env } = f);
+
+// One repo for the file, made once; only gc's merged-slice test has its own (below).
+let shared;
+beforeAll(() => use((shared = fixture())));
+afterAll(() => rmSync(shared.root, { recursive: true, force: true }));
 beforeEach(() => rmSync(log, { force: true }));
 
 describe("new.sh slice", () => {
@@ -234,40 +242,53 @@ describe("rm.sh", () => {
 });
 
 describe("status and gc", () => {
-  const merge = () => {
-    const dir = join(loops, "t-3");
-    writeFileSync(join(dir, "work.txt"), "done\n");
-    git(dir, "add", "work.txt");
-    git(dir, "commit", "-q", "-m", "feat(t): work");
-    const prd = join(root, "prd-t");
-    if (!existsSync(prd)) git(main, "worktree", "add", "-q", prd, "prd/t");
-    git(prd, "merge", "--no-ff", "-q", "-m", "feat(t): merge slice 3", "slice/t/3");
-  };
+  // Every ls.sh and gc.sh call walks every worktree, with a dozen or more git
+  // starts each (B-740), so this test has a repo of its own with just the two
+  // it reads: a fresh slice (t-1) and the one it merges (t-3). On the file's
+  // repo (t-1 and t-2 besides) it took 12-15 s at load 10-100 and hit 20 s at
+  // load 60; here 7-9 s. ls.sh runs once per state, not once per assertion.
+  describe("a merged slice", () => {
+    beforeAll(() => {
+      use(fixture());
+      ok("new.sh", ["slice", "t", "1"]);
+    });
+    afterAll(() => {
+      rmSync(root, { recursive: true, force: true });
+      use(shared);
+    });
 
-  it("flags a merged slice, not a fresh one, and gc removes it only after a yes", () => {
-    ok("new.sh", ["slice", "t", "3"]);
-    expect(ok("ls.sh", [])).not.toMatch(/merged:/);
-    merge();
-    // Its wave hasn't landed: the worktree stays for a fix, and says so.
-    expect(ok("ls.sh", [])).not.toMatch(/merged: t-3/);
-    expect(ok("ls.sh", [])).toMatch(/^ {2}t-3: handed off$/m);
-    expect(ok("gc.sh", ["--list"])).toMatch(/^keep {8}t-3 \(merged, but its wave hasn't landed\)/m);
-    git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land", "prd/t");
-    const status = ok("ls.sh", []);
-    expect(status).toMatch(/merged: t-3 \(slice\/t\/3 is merged into prd\/t\): pnpm prd gc/);
-    expect(status).not.toMatch(/merged: t-1/);
-    expect(status).toMatch(/shared test Postgres: not running/);
+    it("flags a merged slice, not a fresh one, and gc removes it only after a yes", () => {
+      ok("new.sh", ["slice", "t", "3"]);
+      expect(ok("ls.sh", [])).not.toMatch(/merged:/);
+      const dir = join(loops, "t-3");
+      writeFileSync(join(dir, "work.txt"), "done\n");
+      git(dir, "add", "work.txt");
+      git(dir, "commit", "-q", "-m", "feat(t): work");
+      const prd = join(root, "prd-t");
+      git(main, "worktree", "add", "-q", prd, "prd/t");
+      git(prd, "merge", "--no-ff", "-q", "-m", "feat(t): merge slice 3", "slice/t/3");
+      // Its wave hasn't landed: the worktree stays for a fix, and says so.
+      const handedOff = ok("ls.sh", []);
+      expect(handedOff).not.toMatch(/merged: t-3/);
+      expect(handedOff).toMatch(/^ {2}t-3: handed off$/m);
+      expect(ok("gc.sh", ["--list"])).toMatch(/^keep {8}t-3 \(merged, but its wave hasn't landed\)/m);
+      git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land", "prd/t");
+      const status = ok("ls.sh", []);
+      expect(status).toMatch(/merged: t-3 \(slice\/t\/3 is merged into prd\/t\): pnpm prd gc/);
+      expect(status).not.toMatch(/merged: t-1/);
+      expect(status).toMatch(/shared test Postgres: not running/);
 
-    expect(ok("gc.sh", ["--list"])).toMatch(/^remove {6}t-3 /m);
-    expect(ok("gc.sh", [], { input: "n\n" })).toMatch(/Nothing changed/);
-    expect(existsSync(join(loops, "t-3"))).toBe(true);
+      expect(ok("gc.sh", ["--list"])).toMatch(/^remove {6}t-3 /m);
+      expect(ok("gc.sh", [], { input: "n\n" })).toMatch(/Nothing changed/);
+      expect(existsSync(join(loops, "t-3"))).toBe(true);
 
-    const out = ok("gc.sh", [], { input: "y\n", env: { FAKE_SHARED_ID: "c0ffee" } });
-    expect(out).toMatch(/Cleaned up 1/);
-    expect(existsSync(join(loops, "t-3"))).toBe(false);
-    expect(git(main, "branch", "--list", "slice/t/3")).toBe("");
-    expect(calls()).toMatch(/dropdb -U caretook --if-exists --force caretook_test_t_3/);
-    expect(existsSync(join(loops, "t-1"))).toBe(true);
+      const out = ok("gc.sh", [], { input: "y\n", env: { FAKE_SHARED_ID: "c0ffee" } });
+      expect(out).toMatch(/Cleaned up 1/);
+      expect(existsSync(join(loops, "t-3"))).toBe(false);
+      expect(git(main, "branch", "--list", "slice/t/3")).toBe("");
+      expect(calls()).toMatch(/dropdb -U caretook --if-exists --force caretook_test_t_3/);
+      expect(existsSync(join(loops, "t-1"))).toBe(true);
+    });
   });
 
   it("flags a stack stopped for over a day, and gc takes it down but keeps the worktree", () => {
