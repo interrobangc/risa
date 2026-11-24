@@ -247,8 +247,14 @@ child="" watchdog=""
 # also release it before their exit (done_with).
 cleanup() {
   set +e
+  local c
   [[ -n $watchdog ]] && kill_tree "$watchdog" TERM
   [[ -n $child ]] && kill -0 "$child" 2>/dev/null && kill_tree "$child" TERM
+  # Then anything else still below this script: a signal that lands between
+  # `node … &` and `child=$!` (or the watcher's `&` and `watchdog=$!`) runs this
+  # trap with neither recorded, and the check would outlive it with its output
+  # filter (B-704).
+  for c in $(pgrep -P $$ 2>/dev/null); do kill_tree "$c" TERM; done
   lease_release
 }
 # done_with RC → release the lease, then exit with RC.
