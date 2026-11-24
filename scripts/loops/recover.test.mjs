@@ -10,6 +10,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -207,6 +208,7 @@ function build() {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f.endsWith(".mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });
   mkdirSync(join(main, "scripts/backlog"));
   for (const f of ["registry.mjs", "format.mjs"])
     copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
