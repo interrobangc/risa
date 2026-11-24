@@ -1,11 +1,20 @@
-// The context watch: how large a recorded session has grown, and the reminder
-// to hand off past the limit.
+// The context watch: how large a recorded session has grown, and the reminders
+// past its soft and hard limits.
 //
 // session.sh gives `prd` and `backlog` sessions context-settings.json (claude --settings), a
 // PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
 // it, it adds a reminder to the agent's context. It never blocks a tool call
 // and any error in it is swallowed (exit 0, no output).
+//
+// An orchestrator has two limits: past the soft one (CARETOOK_CONTEXT_LIMIT,
+// 160k) a reminder asks it to judge, again every further 25k; past the hard one
+// (CARETOOK_CONTEXT_HARD_LIMIT, 225k) it is told to rotate at the next safe
+// point, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN (10). A backlog
+// session has only the soft one, and it is never a forced close: past it the
+// session tells the user its size and asks whether to hand off or keep going,
+// and no answer means keep going. The dispatcher's follow-up starts at the hard
+// limit (`hardOverAt`).
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
@@ -15,19 +24,22 @@
 // hard one it is told to hand off, on every tool call.
 //
 // Records, in .context beside the sessions folder (the main checkout's .loops):
-//   <name>.json            pid, size, readAt, firstOverAt, remindedAt, nudgeAt
-//                          (a nudge is waiting), nudgeDeliveredAt, keep
-//                          { reason, until }. One whose pid isn't the live
-//                          session's is stale and ignored.
+//   <name>.json            pid, size, readAt, firstOverAt (past soft), remindedAt,
+//                          remindedSize (where the next soft reminder counts
+//                          from), hardOverAt (past hard), nudgeAt (a nudge is
+//                          waiting), nudgeDeliveredAt, keep { reason, until }.
+//                          One whose pid isn't the live session's is stale and
+//                          ignored.
 //   .agents/<name>/<id>.json   the same for one subagent of that session, with
 //                          remindedSize (where its next soft reminder counts from)
 //
-//   pnpm prd context                the calling session's size and the limit
+//   pnpm prd context                the calling session's size and its limits
 //   pnpm prd context --keep "<why>" leave it alone for CARETOOK_CONTEXT_KEEP_MIN (30)
 //   pnpm prd context --all [--json] every live session
 //
-// CARETOOK_CONTEXT_LIMIT (160000 tokens) and CARETOOK_CONTEXT_REMIND_MIN (10)
-// are for orchestrators and backlog sessions; a subagent's limits are constants.
+// CARETOOK_CONTEXT_LIMIT (the soft limit, 160000 tokens), CARETOOK_CONTEXT_HARD_LIMIT
+// (225000; never below the soft one) and CARETOOK_CONTEXT_REMIND_MIN (10) are for
+// orchestrators and backlog sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -54,12 +66,21 @@ const LOCK_STALE_MS = 5000;
 const LOOP_SOFT = 175_000;
 const LOOP_HARD = 300_000;
 const LOOP_REPEAT = 25_000;
+/** How much further a session grows between two soft reminders. */
+const SOFT_REPEAT = 25_000;
 
 const positive = (/** @type {string | undefined} */ value, /** @type {number} */ fallback) => {
   const n = Number(value);
   return value && Number.isFinite(n) && n > 0 ? n : fallback;
 };
+/** An orchestrator's or backlog session's soft limit. */
 export const limitOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_LIMIT, 160_000);
+/** An orchestrator's hard limit, never below the soft one. */
+export const hardLimitOf = (env = process.env) =>
+  Math.max(positive(env.CARETOOK_CONTEXT_HARD_LIMIT, 225_000), limitOf(env));
+/** A session kind's hard limit: a backlog session has none (null). */
+export const hardLimitFor = (/** @type {string | undefined} */ kind, env = process.env) =>
+  kind === "backlog" ? null : hardLimitOf(env);
 const remindMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_REMIND_MIN, 10) * MIN_MS;
 const keepMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_KEEP_MIN, 30) * MIN_MS;
 
@@ -123,20 +144,28 @@ export function agentTranscript(/** @type {any} */ input) {
   return join(input.transcript_path.replace(/\.jsonl$/, ""), "subagents", file);
 }
 
-export function orchestratorReminder(/** @type {number} */ size, /** @type {number} */ limit) {
-  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. Finish the step in hand, commit _Status_, then run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Only a step that can't resume from _Status_ may finish first: run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_.`;
+export function orchestratorSoftReminder(
+  /** @type {number} */ size,
+  /** @type {number} */ soft,
+  /** @type {number} */ hard,
+) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Judge whether to rotate now: go on if a step in hand can't resume from _Status_ (a landing under way) or the wave is nearly done; otherwise, at the next safe point, finish the step in hand, commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Past the hard limit you rotate at the next safe point.`;
 }
 
-export function orchestratorNudge(/** @type {number} */ size, /** @type {number} */ limit) {
-  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't rotated. Rotate now: commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). If the step in hand can't resume from _Status_, run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
+export function orchestratorReminder(/** @type {number} */ size, /** @type {number} */ hard) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the hard limit of ${kilo(hard)}. Finish the step in hand, commit _Status_, then run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Only a step that can't resume from _Status_ may finish first: run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_.`;
 }
 
-export function backlogReminder(/** @type {number} */ size, /** @type {number} */ limit) {
-  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. At the next pause in the talk with the user, never in the middle of a question, hand off with a brief, without asking which mode: run \`pnpm prd rotate --self --brief-path\` for where to write it, write what's in hand, what was decided and what's next (at most about 40 lines), then run \`pnpm prd rotate --self --brief <that file>\`. Only a step that can't be picked up from a brief may finish first: run \`pnpm prd context --keep "<why>"\`.`;
+export function orchestratorNudge(/** @type {number} */ size, /** @type {number} */ hard) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the hard limit of ${kilo(hard)}, and hasn't rotated. Rotate now: commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). If the step in hand can't resume from _Status_, run \`pnpm prd context --keep "<why>"\` and write the reason in _Status_. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
 }
 
-export function backlogNudge(/** @type {number} */ size, /** @type {number} */ limit) {
-  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, never in the middle of a question, write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`. If a step can't be picked up from a brief, run \`pnpm prd context --keep "<why>"\`. Otherwise the user is asked next, and the session is rotated if they don't answer: a brief written from now on goes with it, and without one nothing is handed over.`;
+export function backlogReminder(/** @type {number} */ size, /** @type {number} */ soft) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)}. This limit is soft: never hand off on your own. At the next pause in the talk with the user, never in the middle of a question, tell them the size and ask whether to hand off or keep going; if they don't answer, keep going. Only on their word to hand off: run \`pnpm prd rotate --self --brief-path\` for where to write a brief, write what's in hand, what was decided and what's next (at most about 40 lines), then run \`pnpm prd rotate --self --brief <that file>\`. You are reminded again every further ${kilo(SOFT_REPEAT)}.`;
+}
+
+export function backlogNudge(/** @type {number} */ size, /** @type {number} */ soft) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, well past the soft limit of ${kilo(soft)}. Never hand off on your own: at the next pause in the talk, never in the middle of a question, tell the user the size and ask whether to hand off or keep going; if they don't answer, keep going. The dispatcher also asks the user, and with no answer it leaves the session running. Only on the user's word to hand off: write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`.`;
 }
 
 export function loopSoftReminder(/** @type {number} */ size) {
@@ -164,33 +193,70 @@ function loopMessage(/** @type {any} */ record, /** @type {number} */ size, /** 
   return size > LOOP_HARD ? loopHardReminder(size) : loopSoftReminder(size);
 }
 
+/** A soft reminder for SIZE, or null inside the repeat; updates the record's size mark. */
+function softMessage(/** @type {any} */ record, /** @type {number} */ size, /** @type {string} */ at) {
+  if (record.remindedSize !== undefined && size < record.remindedSize + SOFT_REPEAT) {
+    // Shrunk since the last reminder: the next one counts from here.
+    record.remindedSize = Math.min(record.remindedSize, size);
+    return false;
+  }
+  record.remindedAt = at;
+  record.remindedSize = size;
+  return true;
+}
+
 /**
- * What the hook does with a new size. Pure.
+ * What the hook does with a new size. Pure. `limit` is the soft limit and `hard` the
+ * orchestrator's hard one (a backlog session has none).
  * @param {any} current the record, or null
- * @param {{ pid: number, size: number, now: number, limit: number, remindMs: number, loop?: boolean,
- *   backlog?: boolean }} facts
+ * @param {{ pid: number, size: number, now: number, limit: number, hard?: number, remindMs: number,
+ *   loop?: boolean, backlog?: boolean }} facts
  * @returns {{ record: any, message: string | null }}
  */
-export function hookDecision(current, { pid, size, now, limit, remindMs, loop = false, backlog = false }) {
+export function hookDecision(
+  current,
+  { pid, size, now, limit, hard = Math.max(limit, 225_000), remindMs, loop = false, backlog = false },
+) {
   const at = new Date(now).toISOString();
   const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
   if (record.keep && !(Date.parse(record.keep.until) > now)) delete record.keep;
   if (loop) return { record, message: loopMessage(record, size, at) };
   if (size <= limit) {
-    for (const k of ["firstOverAt", "remindedAt", "nudgeAt", "nudgeDeliveredAt"]) delete record[k];
+    for (const k of [
+      "firstOverAt",
+      "remindedAt",
+      "remindedSize",
+      "hardOverAt",
+      "nudgeAt",
+      "nudgeDeliveredAt",
+    ])
+      delete record[k];
     return { record, message: null };
   }
   record.firstOverAt ??= at;
+  // The dispatcher's follow-up watches the hard limit, for a backlog session too.
+  const overHard = size > Math.max(hard, limit);
+  if (overHard) record.hardOverAt ??= at;
+  else for (const k of ["hardOverAt", "nudgeAt", "nudgeDeliveredAt"]) delete record[k];
   if (record.keep) return { record, message: null };
   if (record.nudgeAt && !record.nudgeDeliveredAt) {
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
-    return { record, message: (backlog ? backlogNudge : orchestratorNudge)(size, limit) };
+    return { record, message: backlog ? backlogNudge(size, limit) : orchestratorNudge(size, hard) };
   }
-  if (record.remindedAt && now - Date.parse(record.remindedAt) < remindMs) return { record, message: null };
+  if (backlog)
+    return { record, message: softMessage(record, size, at) ? backlogReminder(size, limit) : null };
+  if (!overHard)
+    return {
+      record,
+      message: softMessage(record, size, at) ? orchestratorSoftReminder(size, limit, hard) : null,
+    };
+  // Past hard: at the crossing, then every remindMs.
+  const crossed = record.hardOverAt === at;
+  if (!crossed && record.remindedAt && now - Date.parse(record.remindedAt) < remindMs)
+    return { record, message: null };
   record.remindedAt = at;
-  const remind = backlog ? backlogReminder : orchestratorReminder;
-  return { record, message: remind(size, limit) };
+  return { record, message: orchestratorReminder(size, hard) };
 }
 
 const readJson = (/** @type {string} */ file) => {
@@ -238,10 +304,14 @@ export function sizeRecord(/** @type {string} */ dir, /** @type {string} */ name
   return record?.pid === pid ? record : null;
 }
 
-/** A live session's size for its status line. */
-export function sizeNote(/** @type {any} */ record, { limit = limitOf(), now = Date.now() } = {}) {
+/**
+ * A live session's size for its status line: "over soft" past the soft limit, "OVER hard"
+ * past the hard one. `hard` null: the session has none (a backlog session).
+ * @param {any} record @param {{ limit?: number, hard?: number | null, now?: number }} [opts]
+ */
+export function sizeNote(record, { limit = limitOf(), hard = hardLimitOf(), now = Date.now() } = {}) {
   if (typeof record?.size !== "number") return "no size yet";
-  const over = record.size > limit ? " OVER" : "";
+  const over = hard !== null && record.size > hard ? " OVER hard" : record.size > limit ? " over soft" : "";
   const kept = record.keep && Date.parse(record.keep.until) > now ? `, kept: ${record.keep.reason}` : "";
   return `${kilo(record.size)}${over}${kept}`;
 }
@@ -276,6 +346,7 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
       size,
       now,
       limit: limitOf(env),
+      hard: hardLimitOf(env),
       remindMs: remindMsOf(env),
       loop,
       backlog,
@@ -287,23 +358,29 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   return JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: message } });
 }
 
-/** Every live session with its size. */
-export function liveSizes(/** @type {string} */ sessions, { limit = limitOf(), now = Date.now() } = {}) {
+/**
+ * Every live session with its size and limits (`hard` null for a backlog session).
+ * @param {string} sessions @param {{ limit?: number, hardLimit?: number, now?: number }} [opts]
+ */
+export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf(), now = Date.now() } = {}) {
   const dir = contextDirOf(sessions);
   return readRecords(sessions)
     .filter(({ record }) => isLive(record, processOf(record.pid ?? 0, now), now))
     .map(({ name, record }) => {
       const size = sizeRecord(dir, name, record.pid ?? 0);
       const keep = size?.keep && Date.parse(size.keep.until) > now ? size.keep : null;
+      const hard = record.kind === "backlog" ? null : hardLimit;
       return {
         name,
         pid: record.pid,
         size: size?.size ?? null,
         limit,
+        hard,
         over: (size?.size ?? 0) > limit,
+        overHard: hard !== null && (size?.size ?? 0) > hard,
         readAt: size?.readAt ?? null,
         keep,
-        note: sizeNote(size, { limit, now }),
+        note: sizeNote(size, { limit, hard, now }),
       };
     });
 }
@@ -313,7 +390,7 @@ function cli(/** @type {string[]} */ args) {
   const dir = contextDirOf(sessions);
   const limit = limitOf();
   if (args[0] === "--all") {
-    const rows = liveSizes(sessions, { limit });
+    const rows = liveSizes(sessions, { limit, hardLimit: hardLimitOf() });
     if (args.includes("--json")) console.log(JSON.stringify(rows));
     else for (const r of rows) console.log(`${r.name}  ${r.note}`);
     return 0;
@@ -330,7 +407,8 @@ function cli(/** @type {string[]} */ args) {
   }
   const name = process.env.CARETOOK_SESSION_NAME;
   const pid = Number(process.env.CARETOOK_SESSION_PID);
-  if (!name || !pid || readRecord(sessions, name)?.pid !== pid) {
+  const session = name ? readRecord(sessions, name) : null;
+  if (!name || !pid || session?.pid !== pid) {
     console.error("context: this shell isn't in a session the wrapper started with the context watch");
     return keeping ? 1 : 0;
   }
@@ -358,7 +436,9 @@ function cli(/** @type {string[]} */ args) {
     return 0;
   }
   const record = sizeRecord(dir, name, pid);
-  console.log(`${name}: ${sizeNote(record, { limit })} (limit ${kilo(limit)})`);
+  const hard = hardLimitFor(session.kind);
+  const limits = `soft ${kilo(limit)}, ${hard === null ? "no hard limit" : `hard ${kilo(hard)}`}`;
+  console.log(`${name}: ${sizeNote(record, { limit, hard })} (${limits})`);
   return 0;
 }
 

@@ -49,14 +49,14 @@ describe("statusParts", () => {
     expect(out).not.toContain("OPEN ASKS");
   });
 
-  it("shows a live session's size, the over-limit mark and the keep; a stale record is no size", () => {
+  it("shows a live session's size, the soft and hard marks and the keep; a stale record is no size", () => {
     const dir = join(root, "sized", "sessions");
     const context = join(root, "sized", ".context");
     mkdirSync(dir, { recursive: true });
     mkdirSync(context);
     const started = ago(H);
-    const sized = (name, pid, size) => {
-      writeFileSync(join(dir, `${name}.json`), JSON.stringify({ pid, started }));
+    const sized = (name, pid, size, kind = "prd") => {
+      writeFileSync(join(dir, `${name}.json`), JSON.stringify({ pid, started, kind }));
       writeFileSync(join(context, `${name}.json`), JSON.stringify(size));
     };
     sized("prd-small", 11, { pid: 11, size: 90_000 });
@@ -67,10 +67,15 @@ describe("statusParts", () => {
       keep: { reason: "landing under way", until: new Date(NOW + H).toISOString() },
     });
     sized("prd-stale", 14, { pid: 99, size: 200_000 });
+    sized("prd-huge", 15, { pid: 15, size: 230_000 });
+    // A backlog session has no hard limit.
+    sized("backlog", 16, { pid: 16, size: 230_000 }, "backlog");
     const out = statusParts(dir, join(root, "missing"), { now: NOW, live: () => true });
     expect(out).toMatch(/prd-small .*by hand +90k$/m);
-    expect(out).toMatch(/prd-large .*by hand +172k OVER$/m);
-    expect(out).toMatch(/prd-kept .*by hand +181k OVER, kept: landing under way$/m);
+    expect(out).toMatch(/prd-large .*by hand +172k over soft$/m);
+    expect(out).toMatch(/prd-kept .*by hand +181k over soft, kept: landing under way$/m);
+    expect(out).toMatch(/prd-huge .*by hand +230k OVER hard$/m);
+    expect(out).toMatch(/backlog .*by hand +230k over soft$/m);
     expect(out).toMatch(/prd-stale .*by hand +no size yet$/m);
   });
 

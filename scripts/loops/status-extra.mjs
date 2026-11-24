@@ -14,7 +14,7 @@ import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten } from "./asks.mjs";
-import { contextDirOf, sizeNote, sizeRecord } from "./context.mjs";
+import { contextDirOf, hardLimitFor, sizeNote, sizeRecord } from "./context.mjs";
 import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
 import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
@@ -84,7 +84,12 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
       Number.isNaN(since) ? "?" : age(record.started, now),
       record.auto ? "run-through" : "asks first",
       record.managed ? "managed" : "by hand",
-      up ? sizeNote(sizeRecord(contextDirOf(sessionsDir), name, record.pid ?? 0), { now }) : "",
+      up
+        ? sizeNote(sizeRecord(contextDirOf(sessionsDir), name, record.pid ?? 0), {
+            hard: hardLimitFor(record.kind),
+            now,
+          })
+        : "",
     ]);
   }
   if (rows.length) {
