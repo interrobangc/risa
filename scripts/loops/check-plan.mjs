@@ -1,10 +1,12 @@
 // What `pnpm prd check` runs (the mode, the test files the diff itself adds or
 // edits, whether the tooling tests join) and the CI tier a landing should wait
-// for. Pure: changed files in, a plan out. The CLI at the bottom reads them from stdin.
+// for. Pure: changed files in, a plan out. The CLI at the bottom reads them from stdin,
+// or for --propose with --base computes them (git diff base...head). It checks its
+// flags before reading anything, so a wrong call exits 2 at once.
 //   node check-plan.mjs --mode slice|quick|full
 //   → three lines: mode, tooling (2 with the browser harness test, 1 without, 0
 //     for none), the diff's own integration and component test files (space-separated)
-//   node check-plan.mjs --propose [--declared <tier>] [--repo DIR --base REF --head REF]
+//   node check-plan.mjs --propose [--declared <tier>] [--repo DIR --base REF [--head REF]]
 //   → three lines: the proposed tier, why, and ok | below | refused for the declared tier
 // The three modes (check-body.sh runs them):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
@@ -15,6 +17,7 @@
 // A package.json that changed only its `scripts` asks for no tier (package-diff.mjs).
 // The CLI needs --base to tell: without it, any package.json proposes full.
 
+import { spawnSync } from "node:child_process";
 import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
 import { TIERS } from "../ci/tiers.mjs";
 
@@ -145,22 +148,78 @@ export function planToolingLint(changed) {
   return { eslint: files.filter((f) => /\.[cm]?[jt]sx?$/.test(f)), prettier: files };
 }
 
+const USAGE = `usage: check-plan.mjs --mode slice|quick|full [--repo DIR --base REF --head REF] < changed-files
+       check-plan.mjs --propose [--declared <tier>] [--repo DIR] [--base REF [--head REF] | < changed-files]`;
+
+/** The CLI's flags, each taking a value but --propose. */
+const VALUED = new Set(["--mode", "--declared", "--repo", "--base", "--head"]);
+
+/**
+ * The CLI's arguments, checked before anything reads stdin, so a wrong call
+ * fails at once instead of waiting on a terminal's stdin.
+ * @param {string[]} argv
+ * @returns {{ ok: true, propose: boolean, opts: Record<string, string> } | { ok: false, error: string }}
+ */
+export function parseArgs(argv) {
+  /** @type {Record<string, string>} */
+  const opts = {};
+  let propose = false;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = /** @type {string} */ (argv[i]);
+    if (arg === "--propose") propose = true;
+    else if (VALUED.has(arg)) {
+      const value = argv[++i];
+      if (value === undefined || value.startsWith("--")) return { ok: false, error: `${arg} needs a value` };
+      opts[arg.slice(2)] = value;
+    } else return { ok: false, error: `unknown argument ${arg}` };
+  }
+  if (!propose && !opts.mode) return { ok: false, error: "give --mode or --propose" };
+  if (propose && opts.mode) return { ok: false, error: "--mode and --propose don't go together" };
+  if (opts.head && !opts.base) return { ok: false, error: "--head needs --base" };
+  return { ok: true, propose, opts };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.ok) {
+    console.error(`${args.error}\n${USAGE}`);
+    process.exit(2);
+  }
+  const { propose, opts } = args;
+  const repo = opts.repo || ".";
+  const declared = opts.declared;
+  if (declared && tierRank(declared) < 0) {
+    console.error(`unknown tier ${declared} (${PROPOSED_TIERS.join(", ")})`);
+    process.exit(2);
+  }
   let text = "";
-  for await (const chunk of process.stdin) text += chunk;
-  const changed = text.split("\n").filter(Boolean);
-  const flag = (name) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : "");
-  if (process.argv.includes("--propose")) {
-    const from = { repo: flag("--repo") || ".", base: flag("--base"), head: flag("--head") };
-    const declared = flag("--declared") || undefined;
-    if (declared && tierRank(declared) < 0) {
-      console.error(`unknown tier ${declared} (${PROPOSED_TIERS.join(", ")})`);
+  let base = opts.base || "";
+  const head = opts.base ? opts.head || "HEAD" : "";
+  if (propose && base) {
+    // The diff itself (base...head: from their merge base), so a proposal never
+    // depends on what was piped in; the package.json contents compare from there too.
+    const git = (/** @type {string[]} */ ...a) => spawnSync("git", ["-C", repo, ...a], { encoding: "utf8" });
+    const mb = git("merge-base", base, head);
+    const diff = mb.status === 0 ? git("diff", "--name-only", "--no-renames", mb.stdout.trim(), head) : mb;
+    if (diff.status !== 0) {
+      console.error(diff.stderr.trim() || `can't diff ${base}...${head}`);
+      process.exit(1);
+    }
+    base = mb.stdout.trim();
+    text = diff.stdout;
+  } else {
+    if (process.stdin.isTTY) {
+      console.error(`pipe the changed files in${propose ? ", or pass --base" : ""}\n${USAGE}`);
       process.exit(2);
     }
-    const { tier, reason } = proposeTier(changed, readPackages(changed, from));
+    for await (const chunk of process.stdin) text += chunk;
+  }
+  const changed = text.split("\n").filter(Boolean);
+  if (propose) {
+    const { tier, reason } = proposeTier(changed, readPackages(changed, { repo, base, head }));
     console.log([tier, reason, declaredStatus(tier, declared)].join("\n"));
   } else {
-    const mode = flag("--mode");
+    const mode = opts.mode;
     const plan = planCheck(changed, mode === "slice" || mode === "quick" ? mode : "full");
     const tooling = plan.tooling ? (needsBrowserHarness(changed) ? 2 : 1) : 0;
     console.log([plan.mode, tooling, plan.ownTests.join(" ")].join("\n"));
