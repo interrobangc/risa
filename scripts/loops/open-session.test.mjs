@@ -19,7 +19,14 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { chooseCommand, chooseMainCommand, projectFolder, runThrough } from "./open-session.mjs";
+import {
+  chooseCommand,
+  chooseMainCommand,
+  inboxDirOf,
+  inboxUntrusted,
+  projectFolder,
+  runThrough,
+} from "./open-session.mjs";
 
 const SESSION_SH = "/o/scripts/loops/session.sh";
 const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
@@ -197,8 +204,62 @@ describe("backlog, recovery and hotfix sessions", () => {
 
   it("refuses any other kind of record", () => {
     expect(() => chooseMainCommand({ name: "x", main: "/m", wrapper, record: { kind: "prd" } })).toThrow(
-      /not a backlog or recovery/,
+      /not a backlog, recovery or inbox/,
     );
+  });
+
+  it("the inbox session reopens through prd.sh inbox in its recorded directory, on its recorded model", () => {
+    const prd = wrapper.replace(/session\.sh$/, "prd.sh");
+    const record = { kind: "inbox", model: "sonnet", managed: true, dir: "/h/.caretook/inbox" };
+    expect(chooseMainCommand({ name: "inbox", main: "/m", wrapper, record })).toMatchObject({
+      session: "inbox",
+      kind: "inbox",
+      mode: "fresh",
+      managed: true,
+      command: `cd /m && ${prd} inbox --dir /h/.caretook/inbox --model sonnet --managed`,
+    });
+    // No directory or model recorded: the default directory, on Opus; by hand stays by hand.
+    expect(
+      chooseMainCommand({ name: "inbox", main: "/m", wrapper, record: { kind: "inbox" }, inboxDir: "/d" })
+        .command,
+    ).toBe(`cd /m && ${prd} inbox --dir /d --model opus`);
+  });
+
+  it("the inbox directory is the record's, else CARETOOK_INBOX_DIR, else ~/.caretook/inbox", () => {
+    expect(inboxDirOf({ dir: "/r" }, { CARETOOK_INBOX_DIR: "/e" })).toBe("/r");
+    expect(inboxDirOf(null, { CARETOOK_INBOX_DIR: "/e" })).toBe("/e");
+    expect(inboxDirOf({}, {})).toMatch(/\/\.caretook\/inbox$/);
+  });
+
+  it("the inbox directory is trusted after a saved conversation there, or Claude Code's accepted folder", () => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), "inbox-trust-")));
+    try {
+      const dir = join(tmp, "home/.caretook/inbox");
+      const projects = join(tmp, "projects");
+      const config = join(tmp, "claude.json");
+      const opts = { projects, config };
+      expect(inboxUntrusted(dir, opts)).toMatch(/doesn't exist yet: run `pnpm prd inbox` once by hand/);
+      mkdirSync(dir, { recursive: true });
+      expect(inboxUntrusted(dir, opts)).toBe(
+        `its directory ${dir} isn't trusted yet: run \`pnpm prd inbox\` once by hand and accept the folder`,
+      );
+      // Another folder's trust, or one not accepted, doesn't count; a folder above it does.
+      const trust = (projectsMap) => writeFileSync(config, JSON.stringify({ projects: projectsMap }));
+      trust({
+        [join(tmp, "other")]: { hasTrustDialogAccepted: true },
+        [dir]: { hasTrustDialogAccepted: false },
+      });
+      expect(inboxUntrusted(dir, opts)).toMatch(/isn't trusted yet/);
+      trust({ [join(tmp, "home")]: { hasTrustDialogAccepted: true } });
+      expect(inboxUntrusted(dir, opts)).toBeNull();
+      writeFileSync(config, "not json");
+      expect(inboxUntrusted(dir, opts)).toMatch(/isn't trusted yet/);
+      mkdirSync(join(projects, projectFolder(dir)), { recursive: true });
+      writeFileSync(join(projects, projectFolder(dir), "s.jsonl"), "{}\n");
+      expect(inboxUntrusted(dir, opts)).toBeNull();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("a hotfix continues in its worktree on its recorded model, and is fresh after a rotation", () => {

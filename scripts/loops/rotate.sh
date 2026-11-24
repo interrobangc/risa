@@ -24,9 +24,11 @@
 # live records. A backlog session reopens fresh in the main checkout under the
 # same name, model and Remote Control; --brief puts the file at the top of the
 # new prompt (a file it can't use is refused before anything ends, and the file
-# is deleted once read). --brief-path prints where to write one. An orchestrator
-# behaves as plain rotate (its hand-over is _Status_, so no brief); any other
-# kind, an unrecorded caller and a slice agent's shell are refused.
+# is deleted once read). --brief-path prints where to write one. The inbox
+# session reopens fresh the same way in its own directory, on its model and in
+# fast mode (prd.sh inbox), with no brief: what it handles is on origin/dev. An
+# orchestrator behaves as plain rotate (its hand-over is _Status_, so no brief);
+# any other kind, an unrecorded caller and a slice agent's shell are refused.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -74,12 +76,20 @@ if [[ -n $self ]]; then
       echo "Rotating $self_name: pid $self_pid (the calling session)${brief:+, with a brief}."
       exec "$bin/open-session.sh" --command "$line" --title "$self_name" --background
       ;;
+    inbox)
+      [[ -z $mid_wave ]] || die "rotate --self: --mid-wave is for an orchestrator; $self_name is the inbox session"
+      [[ -z $brief && -z $brief_path ]] || die "rotate --self: the inbox session hands off with no brief (its lines are on origin/dev)"
+      line="cd $(printf %q "$main") && $(printf %q "$bin/rotate-into.sh") $self_name $self_pid"
+      [[ -z $reason ]] || line+=" --reason $(printf %q "$reason")"
+      echo "Rotating $self_name: pid $self_pid (the calling session)."
+      exec "$bin/open-session.sh" --command "$line" --title "$self_name" --background
+      ;;
     prd)
       [[ -z $brief && -z $brief_path ]] || die "rotate --self: an orchestrator hands over through _Status_, not a brief"
       topic=$self_topic
       ;;
     *)
-      die "rotate --self: $self_name is a $self_kind session: only backlog sessions and orchestrators rotate themselves (a hotfix has no _Status_ to resume from, and recovery is one-shot)"
+      die "rotate --self: $self_name is a $self_kind session: only backlog and inbox sessions and orchestrators rotate themselves (a hotfix has no _Status_ to resume from, and recovery is one-shot)"
       ;;
   esac
 fi

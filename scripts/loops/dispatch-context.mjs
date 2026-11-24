@@ -1,5 +1,5 @@
-// The dispatcher's context follow-up: what it does about a managed orchestrator
-// or backlog session that stays over the context limit. Pure: the tick (dispatch.mjs) gathers the
+// The dispatcher's context follow-up: what it does about a managed orchestrator,
+// backlog or inbox session that stays over the context limit. Pure: the tick (dispatch.mjs) gathers the
 // size records, session records, asks and running commands, and acts.
 //
 // For a live managed orchestrator or backlog session over the limit with no keep:
@@ -12,7 +12,8 @@
 //      main checkout). `ask --wait` doesn't count: it can wait for days, and the
 //      fresh session finds the answer in the asks queue. An orchestrator rotates
 //      mid-wave; a backlog session into a fresh one, with its brief only when it
-//      was written after the nudge's delivery.
+//      was written after the nudge's delivery; the inbox session into a fresh
+//      one, with no brief.
 //      A refusal is reported once and tried again only after the wait;
 //   4. on "leave it", an unclear answer or a dismissal: nothing more until the
 //      session ends, even if it dips under the limit and crosses it again.
@@ -40,7 +41,8 @@ export const CONTEXT_OPTIONS = ["rotate it now", "leave it"];
  *   | { type: "answered", session: string, pid: number, answer: "rotate" | "leave", askId: string }
  *   | { type: "hold", session: string }
  *   | { type: "rotate", session: string, pid: number, topic: string }
- *   | { type: "rotate-backlog", session: string, pid: number, topic: string, brief: boolean }} ContextAction
+ *   | { type: "rotate-backlog", session: string, pid: number, topic: string, brief: boolean }
+ *   | { type: "rotate-inbox", session: string, pid: number, topic: string }} ContextAction
  */
 
 /** What a context question's answer means; anything unclear leaves the session alone. */
@@ -111,7 +113,12 @@ export function contextDecision({
   };
   const watched = new Map(
     sessions
-      .filter((s) => s.live && s.managed && ((s.kind === "prd" && s.topic) || s.kind === "backlog"))
+      .filter(
+        (s) =>
+          s.live &&
+          s.managed &&
+          ((s.kind === "prd" && s.topic) || s.kind === "backlog" || s.kind === "inbox"),
+      )
       .map((s) => [s.name, s]),
   );
   for (const [session, e] of Object.entries(entries)) {
@@ -122,8 +129,8 @@ export function contextDecision({
   for (const s of watched.values()) {
     const session = s.name;
     const pid = s.pid;
-    // A backlog session has no topic: its questions and reports go under its name.
-    const topic = s.kind === "backlog" ? session : /** @type {string} */ (s.topic);
+    // A backlog or inbox session has no topic: its questions and reports go under its name.
+    const topic = s.kind === "prd" ? /** @type {string} */ (s.topic) : session;
     const e = entries[session]?.pid === pid ? entries[session] : null;
     const rec = sizes[session]?.pid === pid ? sizes[session] : null;
     if (!(typeof rec?.size === "number" && rec.size > limit)) {
@@ -149,7 +156,8 @@ export function contextDecision({
         const delivered = Date.parse(rec.nudgeDeliveredAt ?? "");
         const brief = briefs[session] !== undefined && briefs[session] > delivered;
         actions.push({ type: "rotate-backlog", session, pid, topic, brief });
-      } else actions.push({ type: "rotate", session, pid, topic });
+      } else if (s.kind === "inbox") actions.push({ type: "rotate-inbox", session, pid, topic });
+      else actions.push({ type: "rotate", session, pid, topic });
       continue;
     }
     if (rec.nudgeDeliveredAt) {

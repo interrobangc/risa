@@ -508,6 +508,16 @@ describe("inbox", () => {
     expect(text).toContain("For a filed one it prints a `set` line: don't run it");
     expect(text).not.toContain("pnpm backlog ingest");
     expect(text).not.toContain("pnpm prd");
+    // Its one prd command is its own hand-off.
+    expect(text.match(/ prd [a-z-]+/g)).toEqual([" prd rotate"]);
+  });
+
+  it("hands off to a fresh inbox session by the main checkout's path, with no brief", () => {
+    const text = ok("inbox");
+    expect(text).toContain(
+      `**Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`pnpm -s -C ${main} prd rotate --self\`, and do nothing after it.`,
+    );
+    expect(text).not.toContain("--brief");
   });
 
   it("sends a priority request to the backlog session and writes nothing", () => {
@@ -529,7 +539,7 @@ describe("inbox", () => {
 
   it("runs with no topic, refuses one, and stays short", () => {
     // Under a fixed size, the main checkout's path (a test's temporary one) counted as one word.
-    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(1700);
+    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(1900);
     const r = prompt("inbox", "T");
     expect(r.code).not.toBe(0);
     expect(r.err).toContain("prompt: inbox takes no topic or options");

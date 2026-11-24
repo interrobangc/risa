@@ -25,10 +25,13 @@ import { createAsk, getAsk } from "./asks.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import {
   HELPER_SESSION,
+  PICKUP_EVERY_S,
   REOPEN_RESET_MS,
   TIDY_EVERY_MS,
   answerAction,
   helperLine,
+  pickupDue,
+  pickupEvery,
   sessionLine,
   tidyDue,
 } from "./dispatch.mjs";
@@ -56,6 +59,19 @@ describe("the pure parts", () => {
     expect(tidyDue({ lastTidy: 0 }, TIDY_EVERY_MS, { action: "start", paused: false })).toBe(false);
     expect(tidyDue({ lastTidy: 0 }, TIDY_EVERY_MS, { action: "none", paused: true })).toBe(false);
     expect(tidyDue({}, TIDY_EVERY_MS, idle)).toBe(false);
+  });
+
+  it("picks up once a period, never paused or off; CARETOOK_PICKUP_EVERY sets the period", () => {
+    const every = pickupEvery(undefined);
+    expect(every).toBe(PICKUP_EVERY_S * 1000);
+    expect(pickupEvery("60")).toBe(60_000);
+    expect(pickupEvery("nope")).toBe(every);
+    expect(pickupEvery("off")).toBeNull();
+    expect(pickupDue({}, 0, { paused: false, everyMs: every })).toBe(true);
+    expect(pickupDue({ lastPickup: 0 }, every - 1, { paused: false, everyMs: every })).toBe(false);
+    expect(pickupDue({ lastPickup: 0 }, every, { paused: false, everyMs: every })).toBe(true);
+    expect(pickupDue({}, 0, { paused: true, everyMs: every })).toBe(false);
+    expect(pickupDue({}, 0, { paused: false, everyMs: null })).toBe(false);
   });
 
   it("builds the run-through, managed session lines, with no item ids", () => {
@@ -101,7 +117,17 @@ else if (a === "prd" && b === "set") {
 } else process.exit(2);
 `;
 
-let root, main, loops, sessions, asks, state, env, clock, rowsFile;
+// The pickup: `prd.sh dev-sync <why>`, recorded; STUB_PICKUP says how it ends.
+const PRD_SH = `#!/usr/bin/env bash
+echo "$*" >> "$STUB_STATE/prd.calls"
+case \${STUB_PICKUP:-same} in
+  same) echo "dev-sync: dev already has origin/dev" ;;
+  moved) echo "dev-sync: fast-forwarded dev to abc1234" ;;
+  refused) echo "dev-sync: the main checkout is in the middle of a merge, rebase or cherry-pick (MERGE_HEAD)" >&2; exit 1 ;;
+esac
+`;
+
+let root, main, loops, sessions, asks, state, env, clock, rowsFile, inboxDir, claudeConfig;
 const scripts = (f) => join(main, "scripts/loops", f);
 const calls = (f) => {
   const p = join(state, `${f}.calls`);
@@ -206,6 +232,7 @@ beforeAll(() => {
   writeFileSync(scripts("new.sh"), NEW_SH);
   writeFileSync(scripts("open-session.sh"), OPEN_SH);
   writeFileSync(scripts("tidy-cli.mjs"), TIDY);
+  writeFileSync(scripts("prd.sh"), PRD_SH);
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), BACKLOG);
   for (const f of ["registry.mjs", "format.mjs"])
     copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
@@ -213,6 +240,8 @@ beforeAll(() => {
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
   writeFileSync(join(root, "load"), "1 1 1");
+  inboxDir = join(root, "home/.caretook/inbox");
+  claudeConfig = join(root, "claude.json");
   env = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
@@ -234,6 +263,11 @@ beforeAll(() => {
     // Off unless a test turns it on, and never the machine's real processes.
     CARETOOK_KEEP_SESSIONS: "off",
     CARETOOK_PROCESS_FILE: join(root, "processes"),
+    // Off unless a test turns it on; never the machine's own inbox folder or Claude Code files.
+    CARETOOK_PICKUP_EVERY: "off",
+    CARETOOK_INBOX_DIR: inboxDir,
+    CARETOOK_CLAUDE_PROJECTS: join(root, "projects"),
+    CARETOOK_CLAUDE_CONFIG: claudeConfig,
     STUB_STATE: state,
     STUB_ROWS: rowsFile,
   };
@@ -252,6 +286,8 @@ beforeEach(() => {
   setClock(T0);
   setRows([]);
   writeFileSync(join(root, "processes"), "");
+  rmSync(join(root, "home"), { recursive: true, force: true });
+  rmSync(claudeConfig, { force: true });
 });
 
 describe("one tick per action", () => {
@@ -860,5 +896,126 @@ describe("the keep-alive tick", () => {
     expect(ok(["--dry-run"], on)).toContain("keep-alive backlog: open");
     expect(keptOpens()).toEqual([]);
     expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
+  });
+});
+
+describe("the inbox session's keep-alive", () => {
+  const on = { CARETOOK_KEEP_SESSIONS: "on" };
+  const inboxOpens = () => openCalls().filter((c) => c[0] === "inbox");
+  /** The inbox folder made and trusted, as a first `pnpm prd inbox` by hand leaves it. */
+  const trust = () => {
+    mkdirSync(inboxDir, { recursive: true });
+    writeFileSync(
+      claudeConfig,
+      JSON.stringify({ projects: { [inboxDir]: { hasTrustDialogAccepted: true } } }),
+    );
+  };
+  const backlogLive = "claude-stub --remote-control backlog You are\n";
+
+  it("opens nothing while its folder is missing or untrusted, and says why", () => {
+    writeFileSync(join(root, "processes"), backlogLive);
+    expect(ok(["--dry-run"], on)).toContain(`keep-alive inbox: its directory ${inboxDir} doesn't exist yet`);
+    mkdirSync(inboxDir, { recursive: true });
+    expect(ok(["--dry-run"], on)).toContain("isn't trusted yet: run `pnpm prd inbox` once by hand");
+    ok(["--once"], on);
+    expect(inboxOpens()).toEqual([]);
+    expect(existsSync(join(sessions, "inbox.json"))).toBe(false);
+  });
+
+  it("opens a managed inbox session through the opener once trusted, outside the PRD slots", () => {
+    trust();
+    writeFileSync(join(root, "processes"), backlogLive);
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { ...on, CARETOOK_MAX_PRDS: "1" });
+    expect(out).toContain("keep-alive inbox: open (no live inbox session)");
+    expect(out).toContain("start a:");
+    expect(inboxOpens()).toEqual([["inbox", "--background"]]);
+    expect(JSON.parse(readFileSync(join(sessions, "inbox.json"), "utf8"))).toEqual({
+      kind: "inbox",
+      managed: true,
+    });
+  });
+
+  it("keeps a dead record's model and directory, and asks at the third quick death", () => {
+    trust();
+    writeFileSync(join(root, "processes"), backlogLive);
+    deadRecord("inbox", { kind: "inbox", model: "sonnet", dir: inboxDir, managed: false });
+    ok(["--once"], on);
+    expect(JSON.parse(readFileSync(join(sessions, "inbox.json"), "utf8"))).toEqual({
+      kind: "inbox",
+      managed: true,
+      model: "sonnet",
+      dir: inboxDir,
+    });
+    for (const at of [180, 360]) {
+      setClock(T0 + at);
+      ok(["--once"], on);
+    }
+    expect(inboxOpens()).toHaveLength(3);
+    setClock(T0 + 540);
+    expect(ok(["--once"], on)).toContain("keep-alive inbox: ask");
+    expect(inboxOpens()).toHaveLength(3);
+    expect(askFile(dstate().keepAlive.inbox.asked.id).text).toContain("The inbox session died 3 times");
+  });
+
+  it("counts a --remote-control inbox process as live", () => {
+    trust();
+    writeFileSync(
+      join(root, "processes"),
+      `${backlogLive}claude-stub --model opus --remote-control inbox You are\n`,
+    );
+    ok(["--once"], on);
+    expect(inboxOpens()).toEqual([]);
+  });
+});
+
+describe("the pickup", () => {
+  const every = { CARETOOK_PICKUP_EVERY: "300" };
+  const pickups = () => calls("prd");
+
+  it("runs dev-sync once a period, not every tick, and says nothing when there was nothing", () => {
+    expect(ok(["--once"], every)).not.toContain("pickup");
+    expect(pickups()).toEqual(["dev-sync the dispatcher's pickup"]);
+    setClock(T0 + 60);
+    ok(["--once"], every);
+    setClock(T0 + 299);
+    ok(["--once"], every);
+    expect(pickups()).toHaveLength(1);
+    setClock(T0 + 300);
+    expect(ok(["--once"], { ...every, STUB_PICKUP: "moved" })).toContain(
+      "pickup: dev-sync: fast-forwarded dev to abc1234",
+    );
+    expect(pickups()).toHaveLength(2);
+    expect(dstate().lastPickup).toBe((T0 + 300) * 1000);
+  });
+
+  it("a refused pickup logs one line and the tick still picks", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { ...every, STUB_PICKUP: "refused" });
+    expect(out).toContain(
+      "pickup: failed (exit 1): dev-sync: the main checkout is in the middle of a merge, rebase or cherry-pick (MERGE_HEAD)",
+    );
+    expect(out.match(/pickup/g)).toHaveLength(1);
+    expect(out).toContain("start a:");
+    expect(calls("new")).toEqual(["prd a"]);
+    expect(logText()).toContain("pickup: failed (exit 1)");
+    // Not retried on the next tick: once a period, failed or not.
+    setClock(T0 + 60);
+    ok(["--once"], { ...every, STUB_PICKUP: "refused" });
+    expect(pickups()).toHaveLength(1);
+  });
+
+  it("runs by default, never paused, off or in a dry run", () => {
+    ok(["--once"], { CARETOOK_PICKUP_EVERY: "" });
+    expect(pickups()).toHaveLength(1);
+    rmSync(join(loops, ".dispatch.json"), { force: true });
+    ok(["--pause", "t"]);
+    ok(["--once"], every);
+    ok(["--resume"]);
+    ok(["--once"]);
+    expect(pickups()).toHaveLength(1);
+    expect(ok(["--dry-run"], every)).toContain("pickup: would run pnpm prd dev-sync");
+    expect(pickups()).toHaveLength(1);
+    expect(dstate().lastPickup).toBeUndefined();
   });
 });

@@ -20,8 +20,9 @@
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
 //   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
 //   - keep-alive (keep-alive.mjs), beside the pick and outside the PRD slots:
-//     a fresh managed backlog session through the opener when none is live, or
-//     its own question after three quick deaths. CARETOOK_KEEP_SESSIONS=off;
+//     a fresh managed backlog session, and the inbox session (once its folder
+//     is trusted), through the opener when none is live, or its own question
+//     after three quick deaths. CARETOOK_KEEP_SESSIONS=off;
 //   - session requests (session-requests.mjs), after the keep-alive and before
 //     starts: the oldest pending one opens backlog-<name>, or is refused, with a
 //     notice either way. CARETOOK_MAX_BACKLOG_SESSIONS (4);
@@ -34,9 +35,14 @@
 // The session record (managed, auto) is written before a new session's tab
 // opens, so a tab that never starts is reopened like a dead session.
 //
-// Each tick also follows up on managed orchestrators and backlog sessions that
+// Each tick also follows up on managed orchestrators, backlog and inbox sessions that
 // stay over the context limit (dispatch-context.mjs): a nudge, a defaulting
 // question, the rotation. CARETOOK_CONTEXT_NUDGE_MIN (15); CARETOOK_CONTEXT_WATCH=off stops it.
+//
+// Every CARETOOK_PICKUP_EVERY seconds (300; `off` never), on a tick that isn't
+// paused, it runs the pickup (`pnpm prd dev-sync`), so lines pushed to
+// origin/dev reach the main checkout; a failed or refused one logs one line and
+// the tick carries on.
 //
 // Every TIDY_EVERY_MS (six hours), on a tick that does nothing else (and isn't
 // paused), it runs `pnpm prd tidy --yes`. A usage limit isn't detected: the
@@ -45,7 +51,7 @@
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
-// state: paused and why, reopen counts, the open reopen asks, the last tidy,
+// state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
@@ -77,6 +83,7 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
+import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
   DEFAULT_MAX_BACKLOG_SESSIONS,
@@ -92,6 +99,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** How often an idle tick runs `pnpm prd tidy --yes`. */
 export const TIDY_EVERY_MS = 6 * 3600_000;
+/** How often the pickup (`pnpm prd dev-sync`) runs by default, in seconds (CARETOOK_PICKUP_EVERY). */
+export const PICKUP_EVERY_S = 300;
+/** The longest a pickup may take before the tick gives up on it (a hung fetch). */
+export const PICKUP_TIMEOUT_MS = 120_000;
 /** A reopened session live this long has recovered: its reopen count is dropped. */
 export const REOPEN_RESET_MS = 30 * 60_000;
 /** The one-shot helper that pushes the dispatcher's own asks. */
@@ -107,6 +118,23 @@ export function answerAction(/** @type {string | null | undefined} */ answer) {
   if (a === REOPEN_OPTIONS[0] || /^(1|reopen|again|yes)\b/.test(a)) return "reset";
   if (a === REOPEN_OPTIONS[1] || /^(2|hold)\b/.test(a)) return "hold";
   return null;
+}
+
+/** The pickup's period in ms from CARETOOK_PICKUP_EVERY (seconds), or null when it is off. */
+export function pickupEvery(/** @type {string | undefined} */ value) {
+  if (value === "off") return null;
+  const n = Number(value);
+  return (value && Number.isFinite(n) && n > 0 ? n : PICKUP_EVERY_S) * 1000;
+}
+
+/** Whether this tick runs the pickup: not paused, not off, a period since the last (or none yet). */
+export function pickupDue(
+  /** @type {{ lastPickup?: number }} */ state,
+  /** @type {number} */ now,
+  /** @type {{ paused: boolean, everyMs: number | null }} */ { paused, everyMs },
+) {
+  if (paused || everyMs === null) return false;
+  return typeof state.lastPickup !== "number" || now - state.lastPickup >= everyMs;
 }
 
 /** Whether this tick runs tidy: nothing else happened, not paused, six hours since the last. */
@@ -469,8 +497,10 @@ function contextStep(
         { cwd: p.main },
       );
       if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${lastLine(helper)}`);
-    } else if (a.type === "rotate" || a.type === "rotate-backlog") {
-      // A backlog session: `rotate --self` finds its caller by ancestry, so the tick opens its line.
+    } else if (a.type === "rotate" || a.type === "rotate-backlog" || a.type === "rotate-inbox") {
+      // A backlog or inbox session: `rotate --self` finds its caller by ancestry, so the tick opens its line.
+      const brief =
+        a.type === "rotate-backlog" ? (a.brief ? ` --brief ${sh(briefFile(a.session))}` : " --no-brief") : "";
       const r =
         a.type === "rotate"
           ? run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
@@ -481,9 +511,7 @@ function contextStep(
               [
                 join(HERE, "open-session.sh"),
                 "--command",
-                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context ${
-                  a.brief ? `--brief ${sh(briefFile(a.session))}` : "--no-brief"
-                }`,
+                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context${brief}`,
                 "--title",
                 a.session,
                 "--background",
@@ -712,6 +740,23 @@ export function tick(
     );
   lines.push(...head);
 
+  // The pickup: lines pushed to origin/dev reach the main checkout. Beside the
+  // pick, never in its way: a failure is one line.
+  const everyMs = pickupEvery(env.CARETOOK_PICKUP_EVERY);
+  if (pickupDue(g.state, now, { paused: facts.paused, everyMs })) {
+    if (dryRun) out("pickup: would run pnpm prd dev-sync");
+    else {
+      updateState(p.state, (s) => void (s.lastPickup = now));
+      const r = run("bash", [join(HERE, "prd.sh"), "dev-sync", "the dispatcher's pickup"], {
+        cwd: p.main,
+        timeout: PICKUP_TIMEOUT_MS,
+      });
+      const last = (r.err || r.out).split("\n").pop() || "";
+      if (!r.ok) out(`pickup: failed (exit ${r.code ?? "timeout"}): ${last}`);
+      else if (!/already has/.test(last)) out(`pickup: ${last}`);
+    }
+  }
+
   // The context follow-up: apart from the pick, and never in the way of its action.
   let watched = false;
   try {
@@ -721,7 +766,15 @@ export function tick(
   }
 
   // The keep-alive, beside the pick: it takes no slot, so the pick's action still happens.
+  // The inbox session waits until its folder is trusted (Claude Code's own files, only read).
+  /** @type {Record<string, string>} */
+  const unready = {};
+  if (env.CARETOOK_KEEP_SESSIONS !== "off") {
+    const why = inboxUntrusted(inboxDirOf(records.find((r) => r.name === "inbox")?.record, env));
+    if (why) unready.inbox = why;
+  }
   const keepDecisions = keepAliveDecision({
+    unready,
     sessions: facts.sessions,
     processes: processLines(env),
     keep: readState(p.state).keepAlive ?? {},

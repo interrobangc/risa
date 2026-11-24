@@ -101,6 +101,7 @@ Run only these:
 - Edit no file and commit nothing; these commands push for you. Ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
 - **Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.
 - Name an item by its short plain title with the id (B-52 export all data), never a bare id.
+- **Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`pnpm -s -C $main prd rotate --self\`, and do nothing after it.
 EOF
   exit 0
 fi

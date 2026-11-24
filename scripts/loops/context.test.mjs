@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { agentTranscript, hookDecision, sizeFromTranscript } from "./context.mjs";
 
@@ -194,6 +194,21 @@ describe("hookDecision", () => {
     expect(nudge.message).toContain("pnpm prd rotate --self --brief <that file>");
     expect(nudge.message).not.toContain("--mid-wave");
   });
+
+  it("gives the inbox session its own words: its hand-off command, no brief", () => {
+    const inbox = "pnpm -s -C /m prd rotate --self";
+    const first = hookDecision(null, { ...facts, size: 170_000, inbox });
+    expect(first.message).toContain("170k");
+    expect(first.message).toContain("never in the middle of a request");
+    expect(first.message).toContain("fresh inbox session takes over");
+    expect(first.message).toContain(`\`${inbox}\``);
+    expect(first.message).not.toMatch(/--brief|--mid-wave|_Status_/);
+    const waiting = { ...first.record, nudgeAt: iso(NOW) };
+    const nudge = hookDecision(waiting, { ...facts, size: 180_000, inbox });
+    expect(nudge.message).toContain("second notice");
+    expect(nudge.message).toContain(`\`${inbox}\``);
+    expect(nudge.record.nudgeDeliveredAt).toBe(iso(NOW));
+  });
 });
 
 let root, sessions, context, transcript;
@@ -311,6 +326,27 @@ describe("the hook as a command", () => {
     expect(existsSync(join(context, ".agents", "backlog"))).toBe(false);
     const r = hook({ transcript_path: transcript }, asBacklog);
     expect(contextOf(r.stdout).additionalContext).toContain("pnpm prd rotate --self --brief-path");
+  });
+
+  it("gives the inbox session its hand-off by the main checkout's path, and its subagents nothing", () => {
+    writeFileSync(
+      join(sessions, "inbox.json"),
+      JSON.stringify({ pid: PID, kind: "inbox", started: new Date().toISOString() }),
+    );
+    const asInbox = { CARETOOK_SESSION_NAME: "inbox" };
+    writeFileSync(transcript, assistant(1, 170_000));
+    mkdirSync(join(root, "s1", "subagents"), { recursive: true });
+    writeFileSync(
+      join(root, "s1", "subagents", "agent-a2.jsonl"),
+      assistant(1, 165_000, 0, { isSidechain: true }),
+    );
+    expect(hook({ transcript_path: transcript, agent_id: "a2" }, asInbox).stdout).toBe("");
+    const r = hook({ transcript_path: transcript }, asInbox);
+    // The sessions folder is <main>/.loops/.sessions; here <root>/.sessions, so main is root's parent.
+    expect(contextOf(r.stdout).additionalContext).toContain(
+      `\`pnpm -s -C ${dirname(root)} prd rotate --self\``,
+    );
+    expect(JSON.parse(readFileSync(join(context, "inbox.json"), "utf8"))).toMatchObject({ size: 170_001 });
   });
 
   it("exits 0 with no output on a missing transcript, bad input or an unwritable folder", () => {

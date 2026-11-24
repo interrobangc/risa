@@ -1,16 +1,17 @@
 // The context watch: how large a recorded session has grown, and the reminder
 // to hand off past the limit.
 //
-// session.sh gives `prd` and `backlog` sessions context-settings.json (claude --settings), a
-// PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
+// session.sh gives `prd` and `backlog` sessions context-settings.json, and the
+// inbox session inbox-settings.json (claude --settings), a PostToolUse hook that runs `context.mjs hook`. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
 // it, it adds a reminder to the agent's context. It never blocks a tool call
 // and any error in it is swallowed (exit 0, no output).
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
-// session's. A backlog session's subagents get no reminder: they have no
-// orchestrator to hand off to. Any other subagent has two fixed limits: past
+// session's. A backlog or inbox session's subagents get no reminder: they have no
+// orchestrator to hand off to. The inbox session's reminder has it hand off by
+// the command its prompt names (the main checkout's path: it runs outside it). Any other subagent has two fixed limits: past
 // the soft one a reminder asks it to judge, again every further 25k; past the
 // hard one it is told to hand off, on every tool call.
 //
@@ -27,7 +28,7 @@
 //   pnpm prd context --all [--json] every live session
 //
 // CARETOOK_CONTEXT_LIMIT (160000 tokens) and CARETOOK_CONTEXT_REMIND_MIN (10)
-// are for orchestrators and backlog sessions; a subagent's limits are constants.
+// are for orchestrators, backlog and inbox sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -135,6 +136,25 @@ export function backlogReminder(/** @type {number} */ size, /** @type {number} *
   return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. At the next pause in the talk with the user, never in the middle of a question, hand off with a brief, without asking which mode: run \`pnpm prd rotate --self --brief-path\` for where to write it, write what's in hand, what was decided and what's next (at most about 40 lines), then run \`pnpm prd rotate --self --brief <that file>\`. Only a step that can't be picked up from a brief may finish first: run \`pnpm prd context --keep "<why>"\`.`;
 }
 
+/** The inbox session's hand-off: it runs outside the repository, so by the main checkout's path. */
+export const inboxRotate = (/** @type {string} */ main) => `pnpm -s -C ${main} prd rotate --self`;
+
+export function inboxReminder(
+  /** @type {number} */ size,
+  /** @type {number} */ limit,
+  /** @type {string} */ rotate,
+) {
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the ${kilo(limit)} limit. At the next pause in the talk with the user, never in the middle of a request, hand off without asking: say in one line that a fresh inbox session takes over, then run \`${rotate}\` and do nothing after it.`;
+}
+
+export function inboxNudge(
+  /** @type {number} */ size,
+  /** @type {number} */ limit,
+  /** @type {string} */ rotate,
+) {
+  return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, run \`${rotate}\`. Otherwise the user is asked next, and the session is rotated if they don't answer.`;
+}
+
 export function backlogNudge(/** @type {number} */ size, /** @type {number} */ limit) {
   return `Context watch, second notice: this session is still at ${kilo(size)} tokens, past the ${kilo(limit)} limit, and hasn't handed off. At the next pause in the talk, never in the middle of a question, write the brief to the path \`pnpm prd rotate --self --brief-path\` prints and run \`pnpm prd rotate --self --brief <that file>\`. If a step can't be picked up from a brief, run \`pnpm prd context --keep "<why>"\`. Otherwise the user is asked next, and the session is rotated if they don't answer: a brief written from now on goes with it, and without one nothing is handed over.`;
 }
@@ -168,10 +188,13 @@ function loopMessage(/** @type {any} */ record, /** @type {number} */ size, /** 
  * What the hook does with a new size. Pure.
  * @param {any} current the record, or null
  * @param {{ pid: number, size: number, now: number, limit: number, remindMs: number, loop?: boolean,
- *   backlog?: boolean }} facts
+ *   backlog?: boolean, inbox?: string }} facts `inbox`: the inbox session's hand-off command
  * @returns {{ record: any, message: string | null }}
  */
-export function hookDecision(current, { pid, size, now, limit, remindMs, loop = false, backlog = false }) {
+export function hookDecision(
+  current,
+  { pid, size, now, limit, remindMs, loop = false, backlog = false, inbox = "" },
+) {
   const at = new Date(now).toISOString();
   const record = { ...(current?.pid === pid ? current : {}), pid, size, readAt: at };
   if (record.keep && !(Date.parse(record.keep.until) > now)) delete record.keep;
@@ -185,10 +208,12 @@ export function hookDecision(current, { pid, size, now, limit, remindMs, loop = 
   if (record.nudgeAt && !record.nudgeDeliveredAt) {
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
+    if (inbox) return { record, message: inboxNudge(size, limit, inbox) };
     return { record, message: (backlog ? backlogNudge : orchestratorNudge)(size, limit) };
   }
   if (record.remindedAt && now - Date.parse(record.remindedAt) < remindMs) return { record, message: null };
   record.remindedAt = at;
+  if (inbox) return { record, message: inboxReminder(size, limit, inbox) };
   const remind = backlog ? backlogReminder : orchestratorReminder;
   return { record, message: remind(size, limit) };
 }
@@ -258,7 +283,8 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   const dir = contextDirOf(sessions);
   const loop = Boolean(input.agent_id);
   const backlog = session.kind === "backlog";
-  if (loop && backlog) return "";
+  const inbox = session.kind === "inbox" ? inboxRotate(dirname(dirname(sessions))) : "";
+  if (loop && (backlog || inbox)) return "";
   const transcript = loop ? agentTranscript(input) : input.transcript_path;
   if (typeof transcript !== "string") return "";
   const size = readSize(transcript, { agent: loop });
@@ -279,6 +305,7 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
       remindMs: remindMsOf(env),
       loop,
       backlog,
+      inbox,
     });
     message = d.message;
     return d.record;

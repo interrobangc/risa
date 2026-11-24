@@ -5,6 +5,7 @@
 #                                      on a prd/, plan/ or hotfix/ branch (a topic,
 #                                      plan-<topic>, hotfix-<name>), else a recorded
 #                                      backlog or recovery session (main checkout)
+#                                      or the inbox session (its own directory)
 #   open-session.sh --command <line> --title <title> [--print] [--background]
 #                                      any command line in a new tab (rotation's)
 #
@@ -16,8 +17,9 @@
 # prompt.sh plan for a planner, with --auto for a run-through one). The record's
 # managed (the dispatcher's) is carried over. Sessions keep their names. A
 # hotfix continues in its worktree; backlog and recovery sessions always start
-# fresh in the main checkout, whose saved conversations may be anyone's. These
-# three kinds are refused while their record is live.
+# fresh in the main checkout, whose saved conversations may be anyone's, and
+# the inbox session fresh in its recorded directory (prd.sh inbox --dir). These
+# kinds are refused while their record is live.
 #
 # It opens the command in a new iTerm2 tab (osascript) and writes it to that
 # tab as `exec`, so the tab closes when the session ends. --background leaves

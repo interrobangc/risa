@@ -620,9 +620,109 @@ describe("pnpm prd rotate --self", () => {
     await finish(briefed);
   });
 
+  describe("the inbox session", () => {
+    const inboxDir = () => join(root, "home/.caretook/inbox");
+    const inboxEnv = () => ({ CARETOOK_INBOX_DIR: join(root, "elsewhere") });
+    const startInbox = async (extraArgs = "") => {
+      mkdirSync(inboxDir(), { recursive: true });
+      const s = start(
+        "bash",
+        [
+          scripts("session.sh"),
+          "inbox",
+          "--kind",
+          "inbox",
+          "--managed",
+          "--",
+          "--model",
+          "sonnet",
+          "--remote-control",
+          "inbox",
+          "x",
+        ],
+        { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: "inbox", STUB_ARGS: extraArgs },
+        inboxDir(),
+      );
+      await until(() => existsSync(join(state, "ready")));
+      return { s, pid: stubPid(), out: stateFile("rotate.out"), code: stateFile("rotate.code").trim() };
+    };
+    /** The new session: in the recorded directory, on the recorded model, fast settings, managed. */
+    const expectFresh = (oldPid) => {
+      const atStart = JSON.parse(stateFile("record-at-start"));
+      expect(atStart).toMatchObject({
+        kind: "inbox",
+        model: "sonnet",
+        remote: "inbox",
+        managed: true,
+        dir: inboxDir(),
+      });
+      expect(atStart.pid).not.toBe(oldPid);
+      expect(atStart).not.toHaveProperty("rotating");
+      const args = newArgs();
+      expect(args.slice(0, 6)).toEqual([
+        "--settings",
+        scripts("inbox-settings.json"),
+        "--model",
+        "sonnet",
+        "--remote-control",
+        "inbox",
+      ]);
+      expect(promptOf(args).startsWith("You are the inbox agent.")).toBe(true);
+    };
+    beforeEach(() => rmSync(join(root, "home"), { recursive: true, force: true }));
+
+    it("rotates itself into a fresh one in its own directory, keeping its model and fast mode", async () => {
+      const old = await startInbox();
+      expect(old.code).toBe("0");
+      expect(old.out).toContain(`Rotating inbox: pid ${old.pid} (the calling session).`);
+      const line = printedLine(old.out);
+      expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} inbox ${old.pid}`);
+      const r = spawnSync("bash", ["-c", line], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...env, ...inboxEnv(), STUB_MODE: "exit", STUB_NAME: "inbox" },
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("a fresh session with the inbox prompt");
+      expect((await old.s.done).code).toBe(143);
+      expect(JSON.parse(stateFile("record-at-term"))).toMatchObject({ pid: old.pid, rotating: true });
+      expectFresh(old.pid);
+    });
+
+    it("refuses a brief or --mid-wave before anything ends", async () => {
+      const old = await startInbox("--brief-path");
+      expect(old.code).toBe("1");
+      expect(old.out).toContain("the inbox session hands off with no brief");
+      expect(spawnSync("kill", ["-0", String(old.pid)]).status).toBe(0);
+      await finish(old);
+      const r = runInto(`cd ${main} && ${scripts("rotate-into.sh")} inbox ${old.pid} --no-brief`, "inbox");
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("the inbox session hands off with no brief");
+    });
+
+    it("the opener reopens a dead one the same way: its directory, model, fast mode and managed", async () => {
+      const old = await startInbox();
+      await finish(old);
+      rmSync(join(state, "record-at-start"), { force: true });
+      const r = run("open-session.sh", ["inbox", "--print"], inboxEnv());
+      expect(r.status).toBe(0);
+      const line = r.stdout.split("\n")[1].trim();
+      expect(line).toBe(
+        `cd ${main} && ${scripts("prd.sh")} inbox --dir ${inboxDir()} --model sonnet --managed`,
+      );
+      const opened = spawnSync("bash", ["-c", line], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...env, ...inboxEnv(), STUB_MODE: "exit", STUB_NAME: "inbox" },
+      });
+      expect(opened.status).toBe(0);
+      expectFresh(old.pid);
+    });
+  });
+
   it.each([
-    ["hotfix-x", /hotfix-x is a hotfix session: only backlog sessions and orchestrators/],
-    ["recover", /recover is a recovery session: only backlog sessions and orchestrators/],
+    ["hotfix-x", /hotfix-x is a hotfix session: only backlog and inbox sessions and orchestrators/],
+    ["recover", /recover is a recovery session: only backlog and inbox sessions and orchestrators/],
   ])("refuses %s, saying why", async (name, why) => {
     const old = await selfSession(name);
     expect(old.code).toBe("1");

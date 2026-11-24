@@ -164,6 +164,7 @@ mkdir -p "$STUB_STATE"
 echo "$$" > "$STUB_STATE/pid"
 printf '%s\\n' "$@" > "$STUB_STATE/args"
 pwd -P > "$STUB_STATE/cwd"
+echo "\${CARETOOK_SESSION_NAME:-} \${CARETOOK_CONTEXT_HOOK:-}" > "$STUB_STATE/hook"
 [[ -z \${STUB_NAME:-} ]] || cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
 case \${STUB_MODE:-exit} in
   exit) exit "\${STUB_EXIT:-0}" ;;
@@ -582,7 +583,24 @@ describe("the inbox session", () => {
     expect(args.slice(0, 4)).toEqual(["--settings", scripts("inbox-settings.json"), "--model", "sonnet"]);
     expect(inbox(["--model=haiku"]).status).toBe(0);
     expect(record("inbox").model).toBe("haiku");
-    expect(inbox(["--bogus"]).stderr).toContain("inbox: unknown argument --bogus (--model <m>)");
+    expect(inbox(["--bogus"]).stderr).toContain(
+      "inbox: unknown argument --bogus (--model <m>, --dir <d>, --managed)",
+    );
+  });
+
+  it("records its directory, and takes --dir and --managed for a reopen", () => {
+    expect(inbox().status).toBe(0);
+    expect(record("inbox")).toMatchObject({ dir: inboxDir(), managed: false });
+    const other = join(home(), "other-inbox");
+    expect(inbox(["--dir", other, "--managed"], { CARETOOK_INBOX_DIR: "" }).status).toBe(0);
+    expect(readFileSync(join(state, "cwd"), "utf8").trim()).toBe(other);
+    expect(record("inbox")).toMatchObject({ kind: "inbox", dir: other, managed: true, model: "opus" });
+    expect(inbox(["--dir", join(main, "scripts")]).stderr).toContain("where AGENTS.md would load");
+  });
+
+  it("exports the context hook to the inbox session, as to a backlog session", () => {
+    expect(inbox().status).toBe(0);
+    expect(readFileSync(join(state, "hook"), "utf8").trim()).toBe(`inbox ${scripts("context.mjs")}`);
   });
 
   it("the settings file holds the context hook and fastMode, and nothing else", () => {

@@ -207,6 +207,34 @@ describe("a managed backlog session", () => {
   });
 });
 
+describe("a managed inbox session", () => {
+  const inbox = (extra = {}) => session({ name: "inbox", kind: "inbox", topic: "", ...extra });
+  const yes = { a1: question({ topic: "inbox", answeredAt: ago(1), answer: CONTEXT_OPTIONS[0] }) };
+
+  it("is nudged, asked under its own name, and rotated with no brief", () => {
+    expect(decide({ sessions: [inbox()], sizes: { inbox: over() } })).toEqual([
+      { type: "nudge", session: "inbox", pid: 100 },
+    ]);
+    const [a] = decide({ sessions: [inbox()], sizes: { inbox: delivered } });
+    expect(a).toMatchObject({ type: "ask", session: "inbox", topic: "inbox" });
+    const f = {
+      sessions: [inbox()],
+      sizes: { inbox: delivered },
+      entries: { inbox: { pid: 100, askId: "a1" } },
+    };
+    expect(decide({ ...f, asks: yes })[1]).toEqual({
+      type: "rotate-inbox",
+      session: "inbox",
+      pid: 100,
+      topic: "inbox",
+    });
+  });
+
+  it("gets nothing when opened by hand", () => {
+    expect(decide({ sessions: [inbox({ managed: false })], sizes: { inbox: delivered } })).toEqual([]);
+  });
+});
+
 describe("a command under the session", () => {
   it("counts pnpm prd commands, but not a wait on a question", () => {
     expect(runsPrdCommand("node /opt/pnpm.cjs prd land x")).toBe(true);
@@ -402,6 +430,7 @@ describe("the tick", () => {
       CARETOOK_CONTEXT_NUDGE_MIN: "",
       CARETOOK_CONTEXT_WATCH: "",
       CARETOOK_KEEP_SESSIONS: "off",
+      CARETOOK_PICKUP_EVERY: "off",
       CARETOOK_CLOCK_FILE: clock,
       STUB_STATE: stubs,
     };
@@ -582,6 +611,36 @@ describe("the tick", () => {
       expect(reports[0]).toMatchObject({ topic: "backlog" });
       expect(reports[0].text).toContain("no tab");
     });
+  });
+
+  it("rotates a managed inbox session into a fresh one, with no brief", () => {
+    const child = spawn("bash", ["-c", "while :; do sleep 1; done"], { detached: true, stdio: "ignore" });
+    procs.push(child);
+    mkdirSync(sessions, { recursive: true });
+    const record = { pid: child.pid, kind: "inbox", managed: true, started: new Date().toISOString() };
+    writeFileSync(join(sessions, "inbox.json"), JSON.stringify(record));
+    mkdirSync(join(loops, ".context"), { recursive: true });
+    writeFileSync(
+      join(loops, ".context", "inbox.json"),
+      JSON.stringify({
+        pid: child.pid,
+        size: 200_000,
+        firstOverAt: iso(T0 - 3600),
+        nudgeAt: iso(T0 - 1800),
+        nudgeDeliveredAt: iso(T0 - 900),
+      }),
+    );
+    tick();
+    const [ask] = listAsks(asksDir);
+    expect(ask).toMatchObject({ topic: "inbox", session: CONTEXT_SESSION });
+    answer(ask.id, CONTEXT_OPTIONS[0]);
+    tick();
+    const lines = callsOf("open").filter((l) => l.includes("rotate-into.sh"));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(
+      `rotate-into.sh inbox ${child.pid} --reason context --title inbox --background`,
+    );
+    expect(callsOf("rotate")).toEqual([]);
   });
 
   it("writes nothing on a dry run", () => {
