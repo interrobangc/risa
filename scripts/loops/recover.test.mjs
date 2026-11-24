@@ -472,6 +472,9 @@ describe("recover --dry-run", () => {
     expect(r.stdout).toMatch(/\[--no-agent\]/);
     expect(r.stdout).toMatch(/claude --remote-control recover/);
     expect(r.stdout).toMatch(/^ {4}open <name> \[--print\] {2,}reopen/m);
+    expect(r.stdout).toMatch(/^ {4}down --stay \[<why>\] {2,}the same, and stay down/m);
+    expect(r.stdout).toMatch(/^ {4}autostart install\|remove\|status {2,}the LaunchAgent/m);
+    expect(r.stdout).toMatch(/^ {4}watchdog \[--dry-run \[--json\]\] {2,}recover --unattended only/m);
   });
 });
 
@@ -1004,5 +1007,40 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     expect(readFileSync(join(state, "marked"), "utf8").split("\n").filter(Boolean)).toEqual(["t", "t", "t"]);
     expect(existsSync(join(loops, ".migrate/t"))).toBe(false);
     expect(json(extra).warnings.join("\n")).not.toMatch(/migrate was cut off/);
+  });
+
+  it("--unattended with CARETOOK_RECOVER_REPORT=off (the watchdog's later tries) files no report", () => {
+    crashed();
+    put("pg-slow", "1");
+    const r = recover(["--unattended"], { CARETOOK_RECOVER_PG_SECS: "0", CARETOOK_RECOVER_REPORT: "off" });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/not reported again this incident/);
+    expect(reports()).toEqual([]);
+  });
+
+  it("down --stay marks stay-down: --unattended then does nothing, and a recover by hand deletes the mark", () => {
+    const stay = join(loops, ".stay-down.json");
+    put("running", "");
+    put("listen", "");
+    endDispatchers();
+    rmSync(lock(), { force: true });
+    const d = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "down", "--stay", "profiling"], {
+      cwd: main,
+      encoding: "utf8",
+      env,
+    });
+    expect(d.status).toBe(0);
+    expect(d.stdout).toMatch(/Down, and staying down/);
+    expect(JSON.parse(readFileSync(stay, "utf8"))).toEqual({ at: expect.any(String), why: "profiling" });
+    rmSync(log);
+    const r = recover(["--unattended"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/stay-down .*: nothing done/);
+    expect(calls()).toBe("");
+    expect(existsSync(stay)).toBe(true);
+    const out = okRecover(["--no-agent"]);
+    expect(out).toMatch(/deleted the stay-down mark/);
+    expect(existsSync(stay)).toBe(false);
+    rmSync(join(loops, ".down.json"), { force: true });
   });
 });

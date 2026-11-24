@@ -77,6 +77,13 @@ pnpm prd <command>
                               --wait probes claude every 10 min; recover --dry-run [--json] only shows what it would do
     down                      before a planned restart: record what's up (the dispatcher too), stop the
                               dispatcher, servers, stacks, the test Postgres
+    down --stay [<why>]       the same, and stay down: nothing brings it back by itself (the watchdog,
+                              recover --unattended) until pnpm prd recover by hand
+    autostart install|remove|status   the LaunchAgent (yours to install) that runs the watchdog at login and
+                              every 5 minutes from the main checkout; status: loaded, each tool on its PATH
+    watchdog [--dry-run [--json]]   recover --unattended only on a reboot or crash (a down record older than
+                              the boot, the dispatcher's dead lock, a hand-opened session gone); never while
+                              stay-down, paused, limited or recovering; failures back off to 30 min, one report
     open <name> [--print]     reopen a recorded session in a new iTerm2 tab: claude --continue when a PRD, planner
                               or hotfix worktree has a saved conversation, else a fresh one with the resume prompt;
                               backlog and recovery sessions (main checkout) always open fresh
@@ -283,6 +290,8 @@ case $cmd in
   dispatch) exec node "$bin/dispatch.mjs" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
+  autostart) exec node "$bin/autostart.mjs" "$@" --main "$main" ;;
+  watchdog) CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} exec node "$bin/watchdog.mjs" --main "$main" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   end) exec "$bin/end-session.sh" "$@" ;;
   bye) exec node "$bin/bye.mjs" "$@" ;;

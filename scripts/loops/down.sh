@@ -15,20 +15,35 @@
 #
 # A record already there is merged, not replaced, so running down twice never
 # forgets what the first one stopped. recover deletes the record once used.
+#
+#   down.sh --stay [<why>]   the same, after first writing the stay-down mark
+#                (.loops/.stay-down.json: when, why), so nothing brings the
+#                machine back by itself: the watchdog and recover --unattended
+#                leave it down, through reboots, until a recover by hand (which
+#                deletes the mark)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
 bin=$(dirname "$0")
 
-for a in "$@"; do
-  case $a in
-    -h | --help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) die "down: unknown option $a (it takes none)" ;;
+stay=0 why=""
+while (($#)); do
+  case $1 in
+    --stay) stay=1; [[ ${2:-} == "" || ${2:-} == -* ]] || { why=$2; shift; } ;;
+    -h | --help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "down: unknown option $1 (--stay [<why>])" ;;
   esac
+  shift
 done
 
 record=$loops/.down.json
 mkdir -p "$loops"
+if ((stay)); then
+  node -e 'const [f, why] = process.argv.slice(1); const fs = require("node:fs");
+    fs.writeFileSync(f + ".tmp", JSON.stringify({ at: new Date().toISOString(), why: why || "pnpm prd down --stay" }, null, 2) + "\n");
+    fs.renameSync(f + ".tmp", f);' "$loops/.stay-down.json" "$why"
+  echo "Stay-down: nothing comes back by itself (the watchdog leaves it) until pnpm prd recover by hand."
+fi
 inv=$(node "$bin/inventory-facts.mjs" --main "$main" --json)
 up=$(node "$bin/recover-lib.mjs" record "$record" <<<"$inv")
 echo "Recorded what's up in $record (pnpm prd recover brings it back)."
@@ -66,4 +81,5 @@ if ((testdb)); then
 fi
 ((${#servers[@]} + ${#stacks[@]} + testdb)) || [[ -n $dispatcher ]] || echo "  nothing was running"
 ((failed == 0)) || die "down: some things didn't stop (above); the record still lists them"
-echo "Down. After the restart: pnpm prd recover"
+if ((stay)); then echo "Down, and staying down. To bring it back: pnpm prd recover"
+else echo "Down. After the restart: pnpm prd recover"; fi

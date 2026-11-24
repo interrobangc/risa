@@ -37,7 +37,10 @@
 #   recover.sh --unattended       for a job with no terminal (the watchdog):
 #                                 the recovery agent opens in a background tab,
 #                                 and a failure files one report (pnpm prd ask
-#                                 --report, topic recover)
+#                                 --report, topic recover; CARETOOK_RECOVER_REPORT=off
+#                                 files none: the watchdog's later tries in one
+#                                 incident). A stay-down mark (pnpm prd down
+#                                 --stay) makes it do nothing
 #   recover.sh --at HH:MM         sleep until then (tomorrow's when it has
 #                                 passed), then recover: after a usage limit
 #   recover.sh --wait             probe with `claude -p` every
@@ -54,7 +57,8 @@
 # inventory.mjs decides the classes and actions; inventory-facts.mjs collects
 # the facts (read-only: git, docker info|ps|inspect, lsof, df). Every step is
 # skipped when it's already done, so a recover after a good one only prints (and opens
-# the recovery agent again).
+# the recovery agent again). A recover by hand (not --unattended, not a dry run)
+# deletes the stay-down mark (.loops/.stay-down.json): the machine comes back.
 #
 # Env: CARETOOK_DOCKER_WAIT_SECS (180), CARETOOK_RECOVER_PG_SECS (60),
 # CARETOOK_RECOVER_DISPATCH_SECS (60: the wait for the reopened dispatcher's lock),
@@ -77,7 +81,7 @@ while (($#)); do
     --wait) wait=1 ;;
     --no-agent) agent=0 ;;
     --unattended) unattended=1 ;;
-    -h | --help) sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,67p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "recover: unknown option $1 (--dry-run, --json, --at HH:MM, --wait, --no-agent, --unattended)" ;;
   esac
   shift
@@ -116,6 +120,7 @@ release_lock() {
 # report TEXT → one report in the asks queue (unattended: nobody watches this
 # terminal). Filing it failing is only a warning.
 report() {
+  [[ ${CARETOOK_RECOVER_REPORT:-on} != off ]] || { echo "recover: (not reported again this incident) $1" >&2; return 0; }
   CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$bin/ask.mjs" ask --topic recover --session recover \
     --report "$1" </dev/null >/dev/null 2>&1 || echo "recover: couldn't file the report: $1" >&2
 }
@@ -375,6 +380,14 @@ if ((dry)); then
   inventory "$format"
   [[ $format == --text ]] && printf '\nDry run: nothing was changed.\n'
   exit 0
+fi
+stay=$loops/.stay-down.json
+if [[ -f $stay ]]; then
+  if ((unattended)); then
+    echo "recover: stay-down ($stay, pnpm prd down --stay): nothing done; pnpm prd recover by hand brings it back"
+    exit 0
+  fi
+  rm -f "$stay" && echo "• deleted the stay-down mark (pnpm prd down --stay): the watchdog may recover again"
 fi
 trap on_exit EXIT
 take_lock
