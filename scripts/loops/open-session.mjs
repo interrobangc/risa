@@ -34,7 +34,12 @@
 // The session names stay prd-<topic> and plan-<topic>, so Remote Control still
 // reaches them.
 //
-// CLI: node open-session.mjs <worktree dir>  → JSON {session, kind, topic, mode, auto, managed, command}
+// --carry-on (the dispatcher's resume after a usage limit, resume.mjs): a continued
+// prd or plan session gets the carry-on prompt (carryOnPrompt) as its first message,
+// since a bare --continue would sit idle at its prompt; a fresh one has its resume
+// prompt already.
+//
+// CLI: node open-session.mjs <worktree dir> [--carry-on]  → JSON {session, kind, topic, mode, auto, managed, command}
 //      (the main backlog session's adds title: its captain, the tab's title and Remote Control name)
 //      node open-session.mjs --main <name> <main checkout>   the same, for a backlog, recovery or inbox record
 // Env: CARETOOK_CLAUDE_PROJECTS (tests: in place of ~/.claude/projects);
@@ -125,9 +130,20 @@ export function inboxUntrusted(
 }
 
 /**
+ * The first message of a session continued after a usage limit (--carry-on). Pure.
+ * @param {"prd" | "plan" | "hotfix"} kind @param {string} topic
+ */
+export function carryOnPrompt(kind, topic) {
+  const head = "This session stopped on a usage limit, and the limit has now reset.";
+  if (kind === "plan")
+    return `${head} Check what you had written against git (git status, git log), then carry on with the plan for ${topic} where you left off.`;
+  return `${head} If \`pnpm prd land\` was cut off, run \`pnpm prd land --resume <branch>\` first. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of prd/${topic}, merges already in), respawn any slice agents that stopped (\`pnpm prd prompt slice ${topic} <n> --continue\`), and carry on in your recorded landing mode.`;
+}
+
+/**
  * @param {{ dir: string, branch: string, conversation: boolean, runThrough: boolean,
  *   record?: { auto?: boolean, managed?: boolean, rotating?: boolean, model?: string } | null, wrapper?: string,
- *   plannerModel?: string }} w
+ *   plannerModel?: string, carryOn?: boolean }} w
  * @returns {{ session: string, kind: "prd" | "plan" | "hotfix", topic: string, mode: "continue" | "fresh", auto: boolean,
  *   managed: boolean, command: string }}
  */
@@ -139,6 +155,7 @@ export function chooseCommand({
   record = null,
   wrapper = ownSessionSh,
   plannerModel = DEFAULT_MODEL,
+  carryOn = false,
 }) {
   const m = /^(prd|plan|hotfix)\/(.+)$/.exec(branch);
   if (!m)
@@ -167,7 +184,7 @@ export function chooseCommand({
       mode: "continue",
       auto,
       managed,
-      command: `${wrap}${modelArg}--continue --remote-control ${session}`,
+      command: `${wrap}${modelArg}--continue --remote-control ${session}${carryOn && kind !== "hotfix" ? ` ${sh(carryOnPrompt(kind, topic))}` : ""}`,
     };
   const prompt =
     kind === "prd"
@@ -266,6 +283,7 @@ export function chooseFor(
   /** @type {string} */ dir,
   projects = defaultProjects(),
   sessions = process.env.CARETOOK_SESSIONS_DIR || join(dirname(dir), ".sessions"),
+  { carryOn = false } = {},
 ) {
   const branch = execFileSync("git", ["-C", dir, "branch", "--show-current"], { encoding: "utf8" }).trim();
   const kind = branch.split("/")[0];
@@ -280,6 +298,7 @@ export function chooseFor(
     runThrough: existsSync(plan) && runThrough(readFileSync(plan, "utf8")),
     record,
     plannerModel: kind === "plan" ? plannerModelFor(topic, mainOf(dir)) : DEFAULT_MODEL,
+    carryOn,
   });
 }
 
@@ -288,12 +307,19 @@ const defaultProjects = () => process.env.CARETOOK_CLAUDE_PROJECTS || join(homed
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const dir = process.argv[2];
   const onMain = dir === "--main";
-  if (!dir || (onMain && !(process.argv[3] && process.argv[4]))) {
-    console.error("usage: open-session.mjs <worktree dir> | --main <name> <main checkout>");
+  const carryOn = !onMain && process.argv[3] === "--carry-on";
+  if (!dir || (onMain && !(process.argv[3] && process.argv[4])) || (!onMain && process.argv[3] && !carryOn)) {
+    console.error("usage: open-session.mjs <worktree dir> [--carry-on] | --main <name> <main checkout>");
     process.exit(2);
   }
   try {
-    console.log(JSON.stringify(onMain ? chooseMainFor(process.argv[3], process.argv[4]) : chooseFor(dir)));
+    console.log(
+      JSON.stringify(
+        onMain
+          ? chooseMainFor(process.argv[3], process.argv[4])
+          : chooseFor(dir, undefined, undefined, { carryOn }),
+      ),
+    );
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e));
     process.exit(1);

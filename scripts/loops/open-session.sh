@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Reopen a recorded session in a new iTerm2 tab. (pnpm prd open)
 #
-#   open-session.sh <name> [--print] [--background]   <name> is a .loops worktree
+#   open-session.sh <name> [--print] [--background] [--carry-on]
+#                                      <name> is a .loops worktree
 #                                      on a prd/, plan/ or hotfix/ branch (a topic,
 #                                      plan-<topic>, hotfix-<name>), else a recorded
 #                                      backlog or recovery session (main checkout)
@@ -22,6 +23,9 @@
 # the inbox session fresh in its recorded directory (prd.sh inbox --dir). These
 # kinds are refused while their record is live.
 #
+# --carry-on (the dispatcher's resume after a usage limit) gives a continued prd or
+# plan session the carry-on prompt as its first message (open-session.mjs).
+#
 # It opens the command in a new iTerm2 tab (osascript) and writes it to that
 # tab as `exec`, so the tab closes when the session ends: in the current
 # window, else (iTerm2 hidden, minimised, no key window) the first window, else
@@ -38,15 +42,16 @@ source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 
-name="" print=0 background=0 command="" title=""
+name="" print=0 background=0 command="" title="" carry=()
 while (($#)); do
   case $1 in
     --print) print=1 ;;
     --background) background=1 ;;
+    --carry-on) carry=(--carry-on) ;;
     --command) command=${2:?--command <line>}; shift ;;
     --title) title=${2:?--title <title>}; shift ;;
-    -h | --help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    -*) die "open: unknown option $1 (--print, --background)" ;;
+    -h | --help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) die "open: unknown option $1 (--print, --background, --carry-on)" ;;
     *) [[ -z $name ]] || die "open: one worktree at a time"; name=$1 ;;
   esac
   shift
@@ -58,7 +63,7 @@ else
   [[ -n $name ]] || die "usage: pnpm prd open <name> [--print] [--background]"
   dir=$loops/$name
   if [[ -d $dir ]]; then
-    choice=$(node "$bin/open-session.mjs" "$dir") || exit 1
+    choice=$(node "$bin/open-session.mjs" "$dir" ${carry[@]+"${carry[@]}"}) || exit 1
   else
     choice=$(node "$bin/open-session.mjs" --main "$name" "$main") || exit 1
   fi

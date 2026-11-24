@@ -85,6 +85,21 @@ describe("rule 2: dead sessions", () => {
     expect(whyOf(p, "b")).toBe("waits a tick: prd-a died (reopen 1 of 2)");
   });
 
+  it("leaves a session the resume claimed to it: never reopened, never counted, nothing asked", () => {
+    const p = go({
+      ...dead,
+      sessions: [session("prd-a", { live: false, resuming: true })],
+      reopens: { "prd-a": MAX_REOPENS },
+    });
+    expect(p.action).toBe("start");
+    expect(whyOf(p, "a")).toBe(
+      "its orchestrator stopped on a usage limit: the resume brings it back (not counted)",
+    );
+    expect(formatPick({ action: "resume", session: "prd-a", why: "x", reasons: [] })).toEqual([
+      "resume prd-a: x",
+    ]);
+  });
+
   it("reopens a managed planner too", () => {
     const p = go({
       rows: [row("a", "to-write", { waiting: 2 })],

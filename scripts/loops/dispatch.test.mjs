@@ -267,6 +267,7 @@ beforeAll(() => {
     "drain.mjs",
     "usage.mjs",
     "land-journal.mjs",
+    "resume.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
@@ -1946,5 +1947,178 @@ describe("the drain", () => {
     const reports = drainAsks();
     expect(reports).toHaveLength(1);
     expect(reports[0].text).toContain("The usage reading is unknown");
+  });
+
+  describe("the resume after a limit", () => {
+    /** A stall whose reset passed a minute ago (by the fake clock). */
+    const stalled = (name, extra = {}) => {
+      mkdirSync(usageDir(), { recursive: true });
+      writeFileSync(
+        join(usageDir(), `${name}.json`),
+        JSON.stringify({
+          session: name,
+          windows: {},
+          stalled: {
+            at: new Date((T0 - 7200) * 1000).toISOString(),
+            error: "limited",
+            resetsAt: new Date((T0 - 60) * 1000).toISOString(),
+            pid: 999_999,
+            ...extra,
+          },
+        }),
+      );
+    };
+    const claimed = () => dstate().resume?.claimed ?? {};
+    const hasChild = (child) => {
+      try {
+        return execFileSync("pgrep", ["-P", String(child.pid)], { encoding: "utf8" }).trim() !== "";
+      } catch {
+        return false;
+      }
+    };
+
+    it("reopens a stalled managed session with --continue and the carry-on prompt, one per tick, never counted", () => {
+      reading(10);
+      worktree("a", "prd/a");
+      worktree("b", "prd/b");
+      deadRecord("prd-a", { kind: "prd", topic: "a" });
+      deadRecord("prd-b", { kind: "prd", topic: "b" });
+      stalled("prd-a");
+      stalled("prd-b");
+      setRows([
+        { topic: "a", state: "running" },
+        { topic: "b", state: "running" },
+        { topic: "n", state: "planned" },
+      ]);
+      // At the reopen limit: an ordinary reopen would be an ask.
+      writeFileSync(join(loops, ".dispatch.json"), JSON.stringify({ reopens: { "prd-a": 2 } }));
+      const first = ok(["--once"], on);
+      expect(first).toMatch(
+        /^\S+Z resume prd-a: stopped on a usage limit that has reset: --continue with the carry-on prompt \(not counted toward the reopen limit\)/,
+      );
+      expect(first).toContain("  n: waits a tick: the resume of prd-a goes first");
+      expect(first).toContain(
+        "  b: its orchestrator stopped on a usage limit: the resume brings it back (not counted)",
+      );
+      expect(first).toContain("resume: claimed prd-a (stalled on a limit, limited; its reset has passed)");
+      expect(first).toContain("resume: prd-b waits (one resume a tick: prd-a first)");
+      expect(openCalls()).toEqual([["a", "--background", "--carry-on"]]);
+      expect(calls("new")).toEqual([]);
+      expect(dstate().reopens).toEqual({ "prd-a": 2 });
+      expect(Object.keys(claimed())).toEqual(["prd-b"]);
+      expect(readingOf("prd-a").stalled).toBeUndefined();
+      expect(readingOf("prd-b").stalled).toBeUndefined();
+      expect(drainAsks()).toEqual([]);
+
+      // The next tick: prd-a is up; prd-b's turn, still uncounted.
+      liveSession("prd-a", { kind: "prd", topic: "a" });
+      setClock(T0 + 60);
+      expect(ok(["--once"], on)).toMatch(/^\S+Z resume prd-b:/);
+      expect(openCalls()).toEqual([
+        ["a", "--background", "--carry-on"],
+        ["b", "--background", "--carry-on"],
+      ]);
+      expect(claimed()).toEqual({});
+      // prd-b's resume added no count (prd-a's went with its recovery: live for REOPEN_RESET_MS).
+      expect(dstate().reopens?.["prd-b"]).toBeUndefined();
+
+      // Nothing left: the pick goes on as usual.
+      liveSession("prd-b", { kind: "prd", topic: "b" });
+      setClock(T0 + 120);
+      expect(ok(["--once"], on)).toMatch(/^\S+Z start n:/);
+    });
+
+    it("waits until the reset, and a tab that never opens keeps the claim", () => {
+      reading(10);
+      worktree("a", "prd/a");
+      deadRecord("prd-a", { kind: "prd", topic: "a" });
+      setRows([{ topic: "a", state: "running" }]);
+      stalled("prd-a", { resetsAt: new Date((T0 + 600) * 1000).toISOString() });
+      const before = ok(["--once"], on);
+      expect(before).toMatch(/^\S+Z nothing: usage is limited: stopped on a limit: prd-a/);
+      expect(openCalls()).toEqual([]);
+      setClock(T0 + 660);
+      const failed = ok(["--once"], { ...on, STUB_OPEN_FAIL: "--carry-on" });
+      expect(failed).toMatch(/^\S+Z resume prd-a:/);
+      expect(failed).toMatch(/prd-a: its tab never opened .*a later tick retries/);
+      expect(Object.keys(claimed())).toEqual(["prd-a"]);
+      setClock(T0 + 720);
+      expect(ok(["--once"], on)).toMatch(/^\S+Z resume prd-a:/);
+      expect(openCalls()).toHaveLength(2);
+      expect(dstate().reopens ?? {}).toEqual({});
+    });
+
+    it("leaves alone a session in a pnpm prd command or with a landing marker; ends a live one, then resumes it", async () => {
+      reading(10);
+      for (const t of ["a", "b", "c"]) worktree(t, `prd/${t}`);
+      setRows(["a", "b", "c"].map((topic) => ({ topic, state: "running" })));
+      const busy = liveSession("prd-a", {
+        kind: "prd",
+        topic: "a",
+        script: `bash -c "while :; do sleep 0.2; done # pnpm prd check x"; true`,
+      });
+      await until(() => hasChild(busy));
+      deadRecord("prd-b", { kind: "prd", topic: "b" });
+      mkdirSync(join(loops, ".landing"), { recursive: true });
+      writeFileSync(
+        join(loops, ".landing", "prd-b.json"),
+        JSON.stringify({ branch: "prd/b", path: "pr", step: "dev-sync", tip: "abc", pid: 999_999 }),
+      );
+      const idle = liveSession("prd-c", { kind: "prd", topic: "c" });
+      for (const n of ["prd-a", "prd-b", "prd-c"]) stalled(n, { pid: null });
+
+      const first = ok(["--once"], on);
+      expect(first).toContain("resume: prd-a waits (it runs a pnpm prd command)");
+      expect(first).toContain("resume: prd-b waits (it has a landing marker: a landing first)");
+      expect(first).toMatch(
+        new RegExp(`resume: ended prd-c \\(pid ${idle.pid}, TERM\\): resumed once it has ended`),
+      );
+      expect(openCalls()).toEqual([]);
+      await until(() => gone(idle));
+      expect(gone(busy)).toBe(false);
+
+      setClock(T0 + 60);
+      const second = ok(["--once"], on);
+      expect(second).toMatch(/^\S+Z resume prd-c:/);
+      expect(second).toContain("resume: prd-a waits (it runs a pnpm prd command)");
+      expect(second).toContain("resume: prd-b waits (it has a landing marker: a landing first)");
+      expect(openCalls()).toEqual([["c", "--background", "--carry-on"]]);
+      expect(gone(busy)).toBe(false);
+      expect(Object.keys(claimed()).sort()).toEqual(["prd-a", "prd-b"]);
+    });
+
+    it("a hand-opened session is only reported, once", () => {
+      reading(10);
+      worktree("h", "prd/h");
+      setRows([{ topic: "h", state: "running" }]);
+      const hand = liveSession("prd-h", { managed: false, kind: "prd", topic: "h" });
+      stalled("prd-h", { error: "rate_limit", pid: hand.pid });
+      const out = ok(["--once"], on);
+      expect(out).toContain("resume: reported prd-h (opened by hand, never resumed)");
+      setClock(T0 + 60);
+      expect(ok(["--once"], on)).not.toContain("resume:");
+      expect(openCalls()).toEqual([]);
+      expect(gone(hand)).toBe(false);
+      const reports = drainAsks();
+      expect(reports).toHaveLength(1);
+      expect(reports[0].text).toMatch(
+        /^prd-h stopped on a usage limit that has now reset\. .*never one opened by hand/,
+      );
+      expect(claimed()).toEqual({});
+    });
+
+    it("--dry-run claims, clears and opens nothing", () => {
+      reading(10);
+      worktree("a", "prd/a");
+      deadRecord("prd-a", { kind: "prd", topic: "a" });
+      setRows([{ topic: "a", state: "running" }]);
+      stalled("prd-a");
+      const out = ok(["--dry-run"], on);
+      expect(out).toMatch(/^resume prd-a:/);
+      expect(out).toContain("resume: would claim prd-a");
+      expect(openCalls()).toEqual([]);
+      expect(readingOf("prd-a").stalled).toBeTruthy();
+      expect(existsSync(join(loops, ".dispatch.json"))).toBe(false);
+    });
   });
 });

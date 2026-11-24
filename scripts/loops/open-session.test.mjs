@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  carryOnPrompt,
   chooseCommand,
   chooseMainCommand,
   inboxDirOf,
@@ -461,6 +462,32 @@ describe("choosing the command", () => {
     });
   });
 
+  it("--carry-on: a continued prd or plan session gets the carry-on prompt; a fresh one keeps its resume prompt", () => {
+    const choose = (branch, conversation, record = { managed: true }) =>
+      chooseCommand({
+        dir: `/w/.loops/${branch.replace("/", "-").replace(/^prd-/, "")}`,
+        branch,
+        conversation,
+        runThrough: false,
+        record,
+        wrapper: SESSION_SH,
+        carryOn: true,
+      });
+    expect(choose("prd/t", true).command).toBe(
+      `${W} --managed -- --continue --remote-control prd-t '${carryOnPrompt("prd", "t").replace(/'/g, "'\\''")}'`,
+    );
+    expect(carryOnPrompt("prd", "t")).toMatch(
+      /usage limit, and the limit has now reset\. .*pnpm prd land --resume/,
+    );
+    expect(choose("plan/u", true).command).toContain(
+      `--continue --remote-control plan-u '${carryOnPrompt("plan", "u")}'`,
+    );
+    expect(choose("prd/t", false).command).toBe(
+      `${W} --managed -- --remote-control prd-t "$(scripts/loops/prompt.sh orchestrator t --resume)"`,
+    );
+    expect(choose("prd/t", true, { managed: true, rotating: true }).mode).toBe("fresh");
+  });
+
   it("names an absolute session.sh outside the worktree, the opener's own by default", () => {
     const dir = "/w/.loops/old";
     const { command } = chooseCommand({ dir, branch: "prd/old", conversation: true, runThrough: false });
@@ -609,6 +636,21 @@ describe("pnpm prd open", () => {
         '--model opus --remote-control plan-v "$(scripts/loops/prompt.sh plan v --auto)"',
       ),
     );
+  });
+
+  it("--carry-on reaches the opener's choice: the saved conversation continues with the carry-on prompt", () => {
+    writeRecord("plan-v", { pid: 1, auto: true, managed: true, ended: "2026-11-21T00:00:00Z" });
+    saveConversation("plan-v");
+    try {
+      ok(["plan-v", "--carry-on"]);
+      expect(tabCommand()).toContain(
+        "--continue --remote-control plan-v 'This session stopped on a usage limit",
+      );
+      ok(["plan-v"]);
+      expect(tabCommand()).toMatch(/--continue --remote-control plan-v$/);
+    } finally {
+      rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
+    }
   });
 
   it("reopens a design row's planner on Fable, fresh or continued, and any other on opus", () => {
