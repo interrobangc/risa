@@ -4,6 +4,8 @@
 // It exits 0 with a verdict, refusals included, and 2 on a bad command line.
 // Anything git can't answer is a refusal (`answered: false`), never a pass. Diffs
 // use --no-renames, so a file dev renamed shows on dev's side under both paths.
+// Markdown both sides changed isn't shared: no check reads it, and a conflict in it
+// stops the landing's merge anyway.
 import { execFileSync } from "node:child_process";
 import { CI_LISTS, FULL } from "./check-plan.mjs";
 
@@ -95,7 +97,7 @@ export function devBrought(repo, devRef, tipRef) {
     const devFiles = names(base, dev);
     const commits = git("rev-list", "--first-parent", `${base}..${dev}`).split("\n").filter(Boolean);
     const own = new Set(branchFiles);
-    const shared = devFiles.filter((f) => own.has(f) && !BACKLOG.has(f));
+    const shared = devFiles.filter((f) => own.has(f) && !BACKLOG.has(f) && !f.endsWith(".md"));
     const risky = devFiles.flatMap((file) => {
       const kind = riskyKind(file);
       return kind ? [{ file, kind }] : [];
