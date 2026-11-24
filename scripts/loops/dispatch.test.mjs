@@ -243,6 +243,7 @@ beforeAll(() => {
     "ask.mjs",
     "skeptics.mjs",
     "sessions.mjs",
+    "captain.mjs",
     "load-gate.mjs",
     "rotate.mjs",
     "open-session.mjs",
@@ -297,7 +298,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   for (const d of [state, sessions, asks, join(loops, ".requests"), join(loops, ".notices")])
     rmSync(d, { recursive: true, force: true });
-  for (const f of [".dispatch.json", ".dispatch.log", ".dispatch.lock"])
+  for (const f of [".dispatch.json", ".dispatch.log", ".dispatch.lock", ".prd-cap"])
     rmSync(join(loops, f), { force: true });
   for (const w of existsSync(loops) ? readdirSync(loops) : [])
     if (!w.startsWith(".")) git(main, "worktree", "remove", "--force", join(loops, w));
@@ -362,6 +363,30 @@ describe("one tick per action", () => {
     setRows([...running, { topic: "z", state: "running" }, { topic: "a", state: "planned" }]);
     expect(ok(["--dry-run"])).toContain("no free slot (4 of 4 running)");
     expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "5" })).toContain("start a:");
+  });
+
+  it("--cap stores the PRD cap, read every tick over CARETOOK_MAX_PRDS; default clears it", () => {
+    const names = ["w", "x", "y"];
+    for (const n of names) worktree(n, `prd/${n}`);
+    setRows([...names.map((topic) => ({ topic, state: "running" })), { topic: "a", state: "planned" }]);
+    const lowered = ok(["--cap", "2"]);
+    expect(lowered).toContain("PRD cap 2 (pnpm prd dispatch --cap; was 4)");
+    expect(lowered).toContain("3 PRD worktrees now: none start until fewer than 2 remain");
+    expect(readFileSync(join(loops, ".prd-cap"), "utf8")).toBe("2\n");
+    expect(logText()).toContain("PRD cap 2 (pnpm prd dispatch --cap; was 4)");
+    expect(readdirSync(join(loops, ".notices")).length).toBeGreaterThan(0);
+    // Lowering ends nothing: the running three stay, and no start.
+    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "6" })).toContain("no free slot (3 of 2 running)");
+    expect(ok(["--cap", "6"])).toContain("3 more may start");
+    expect(ok(["--dry-run"])).toContain("start a:");
+    expect(ok(["--cap", "default"])).toContain("PRD cap 4 (default; was 6)");
+    expect(existsSync(join(loops, ".prd-cap"))).toBe(false);
+    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
+    for (const bad of ["0", "20", "two", ""]) {
+      const r = dispatch(["--cap", bad]);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("--cap takes a number from 1 to 19, or default");
+    }
   });
 
   it("a failed worktree opens nothing", () => {
@@ -1033,6 +1058,24 @@ describe("the keep-alive tick", () => {
     writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control backlog You are\n");
     ok(["--once"], on);
     expect(keptOpens()).toEqual([]);
+  });
+
+  it("counts a captain-named backlog session as live: by its record, or by its process", () => {
+    writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control Picard You are\n");
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+  });
+
+  it("reopens a dead captain-named backlog session, its record still backlog with its last captain", () => {
+    deadRecord("backlog", { kind: "backlog", model: "opus", remote: "Picard" });
+    expect(ok(["--once"], on)).toContain("keep-alive backlog: open (no live backlog session)");
+    expect(keptOpens()).toEqual([["backlog", "--background"]]);
+    // The opener draws the next captain against it (open-session.mjs).
+    expect(JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"))).toMatchObject({
+      kind: "backlog",
+      managed: true,
+      remote: "Picard",
+    });
   });
 
   it("doesn't reopen inside the start grace, and asks at the third quick death", () => {

@@ -10,7 +10,8 @@
 //
 // A kind is live with a live record under its name, a record `rotating` within
 // ROTATING_GRACE_MS, or a claude process with `--remote-control <kind>` (a
-// session opened by hand that has no record, or lost it to a newer one). An
+// session opened by hand that has no record, or lost it to a newer one; for
+// backlog also a captain's name, captain.mjs, the main session's display name). An
 // unreadable process list counts as live: two sessions under one Remote Control
 // name would fight over the main checkout.
 //
@@ -18,6 +19,7 @@
 // The third gets a question ("open again" or "stop keeping it alive") with its
 // own marker (KEEP_SESSION) and state entry, so it is never read as a reopen
 // question. "Stop" holds until the dispatcher next starts.
+import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
 
@@ -57,6 +59,10 @@ export function hasRemoteControl(
   const word = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?:^|\\s)--remote-control[ =]${word}(?=\\s|$)(?!\\s+-\\s)`).test(args);
 }
+
+/** The Remote Control names a kept kind's session may run under: its own, and for backlog each captain's. */
+export const remoteNamesOf = (/** @type {string} */ kind) =>
+  kind === CAPTAIN_SESSION ? [kind, ...CAPTAINS] : [kind];
 
 /** What the keep-alive question's answer means: "open", "stop", or null (unclear). */
 export function keepAnswerAction(/** @type {string | null | undefined} */ answer) {
@@ -114,7 +120,7 @@ export function keepAliveDecision({
       if (Number.isNaN(at) || now - at < ROTATING_GRACE_MS) return none("being rotated");
     }
     if (processes === null) return none("the process list can't be read");
-    if (processes.some((args) => hasRemoteControl(args, kind, claude)))
+    if (processes.some((args) => remoteNamesOf(kind).some((n) => hasRemoteControl(args, n, claude))))
       return none("live, opened by hand", recovered);
 
     if (e.asked) return none(`waits on ask ${e.asked.id}`);

@@ -33,7 +33,8 @@ pnpm prd <command>
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (on opus, a `design` row's planner on Fable; --model <m> runs that one session on model m)
-                              (it reads the backlog and helps you decide what's next)
+                              (it reads the backlog and helps you decide what's next; its Remote Control
+                              name and tab title are a captain's, a new one each session; its record stays backlog)
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
                               adds them to the inbox on origin/dev, under the right heading; Opus in fast mode
                               (--model <m>: another model), Remote Control "inbox", opened in its own directory
@@ -273,8 +274,11 @@ case $cmd in
     if [[ ${1:-} == "" || ${1:-} == --open ]]; then
       (($# <= 1)) || die "plan: give a topic before other arguments"
       wrapper=$(cd "$bin" && pwd)/session.sh
+      # Its display name is a captain's (captain.mjs), unlike the last; the record stays backlog.
+      captain=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} node "$bin/captain.mjs" next) ||
+        die "plan: couldn't pick the backlog session's captain"
       cd "$main" && exec "$wrapper" backlog --kind backlog -- \
-        ${model_args[@]+"${model_args[@]}"} --remote-control backlog "$("$bin/prompt.sh" backlog)"
+        ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$("$bin/prompt.sh" backlog)"
     fi
     topic=$1; shift; open=0 items=()
     for a in "$@"; do

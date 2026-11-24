@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CAPTAINS } from "./captain.mjs";
 import {
   ancestorClaude,
   isLive,
@@ -226,6 +227,7 @@ beforeAll(() => {
     "lib.sh",
     "session.sh",
     "sessions.mjs",
+    "captain.mjs",
     "end-session.sh",
     "prompt.sh",
     "planner-model.mjs",
@@ -519,7 +521,33 @@ describe("sessions start through the wrapper", () => {
     expect(run("prd.sh", ["plan", "--model", "sonnet"]).status).toBe(0);
     expect(record("backlog")).toMatchObject({ pid: stubPid(), kind: "backlog", model: "sonnet", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
-    expect(args.slice(2, 6)).toEqual(["--model", "sonnet", "--remote-control", "backlog"]);
+    expect(args.slice(2, 5)).toEqual(["--model", "sonnet", "--remote-control"]);
+    // Its display name is a captain's; the record stays backlog and remembers it.
+    expect(CAPTAINS).toContain(args[5]);
+    expect(record("backlog").remote).toBe(args[5]);
+  });
+
+  it("each start of the main backlog session is a new captain, its tab titled the same", () => {
+    let last = null;
+    for (let i = 0; i < 6; i++) {
+      const r = run("prd.sh", ["plan"], { CARETOOK_TAB_TITLE: "always" });
+      expect(r.status).toBe(0);
+      const captain = readFileSync(join(state, "args"), "utf8").split("\n")[5];
+      expect(CAPTAINS).toContain(captain);
+      expect(captain).not.toBe(last);
+      expect(r.stdout).toContain(`\x1b]0;${captain}\x07`);
+      expect(record("backlog")).toMatchObject({ kind: "backlog", remote: captain });
+      last = captain;
+    }
+  });
+
+  it("titles no other session's tab: a backlog-<name> one keeps its name", () => {
+    const r = run("session.sh", ["backlog-notes", "--", "--remote-control", "backlog - notes", "x"], {
+      CARETOOK_TAB_TITLE: "always",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain("\x1b]0;");
+    expect(record("backlog-notes")).toMatchObject({ kind: "backlog", remote: "backlog - notes" });
   });
 
   it("pnpm prd hotfix --open records the session; without --open it prints the wrapped command", () => {

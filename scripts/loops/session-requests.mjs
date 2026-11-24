@@ -30,6 +30,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { START_GRACE_MS } from "./keep-alive.mjs";
 import { MAX_TEXT, oneLine } from "./notices.mjs";
@@ -202,9 +203,14 @@ export function settleRequest(
   return next;
 }
 
-/** The session name behind a claude process's backlog Remote Control name, or null. */
+/**
+ * The session name behind a claude process's backlog Remote Control name, or
+ * null. A captain's name (captain.mjs) is the main session's: `backlog`.
+ */
 export function backlogRemoteOf(/** @type {string} */ args, /** @type {string} */ claude = "claude") {
   if (!runs(args, claude)) return null;
+  if (CAPTAINS.some((c) => new RegExp(`(?:^|\\s)--remote-control[ =]${c}(?=\\s|$)`).test(args)))
+    return CAPTAIN_SESSION;
   const m = /(?:^|\s)--remote-control[ =]backlog(?:( - |-)([a-z0-9]+(?:-[a-z0-9]+)*))?(?=\s|$)/.exec(args);
   if (!m) return null;
   return m[2] ? sessionNameOf(m[2]) : "backlog";

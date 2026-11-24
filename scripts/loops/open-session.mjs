@@ -34,6 +34,7 @@
 // reaches them.
 //
 // CLI: node open-session.mjs <worktree dir>  → JSON {session, kind, topic, mode, auto, managed, command}
+//      (the main backlog session's adds title: its captain, the tab's title and Remote Control name)
 //      node open-session.mjs --main <name> <main checkout>   the same, for a backlog, recovery or inbox record
 // Env: CARETOOK_CLAUDE_PROJECTS (tests: in place of ~/.claude/projects);
 // CARETOOK_CLAUDE_CONFIG (tests: in place of ~/.claude.json, only ever read);
@@ -44,6 +45,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { CAPTAIN_SESSION, pickCaptain } from "./captain.mjs";
 import { plannerModelFor } from "./planner-model.mjs";
 import { isLive, processOf, readRecord } from "./sessions.mjs";
 
@@ -186,11 +188,14 @@ export function chooseCommand({
 /**
  * A backlog, recovery or inbox session's command: always fresh, under its own
  * name, on its recorded model; the main checkout, or the inbox's own directory.
+ * The main backlog session (backlog) comes back under a new captain's name
+ * (captain.mjs: CAPTAIN, else one unlike its record's remote), which is also
+ * its tab's `title`; every other one keeps its recorded Remote Control name.
  * @param {{ name: string, main: string,
  *   record: { kind?: string, managed?: boolean, model?: string, remote?: string, dir?: string },
- *   wrapper?: string, inboxDir?: string }} s
+ *   wrapper?: string, inboxDir?: string, captain?: string }} s
  */
-export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, inboxDir }) {
+export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, inboxDir, captain }) {
   const kind = record.kind ?? "";
   const role = MAIN_PROMPTS[kind];
   if (!role)
@@ -209,8 +214,11 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
         `cd ${sh(main)} && ${sh(join(dirname(wrapper), "prd.sh"))} inbox --dir ${sh(inboxDir ?? inboxDirOf(record))} ` +
         `--model ${sh(/** @type {string} */ (model))}${managed ? " --managed" : ""}`,
     };
+  const captained = kind === "backlog" && name === CAPTAIN_SESSION;
+  const remote = captained ? (captain ?? pickCaptain(record.remote)) : record.remote || name;
   return {
     session: name,
+    ...(captained ? { title: remote } : {}),
     kind,
     topic: "",
     mode: /** @type {const} */ ("fresh"),
@@ -218,7 +226,7 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
     managed,
     command:
       `cd ${sh(main)} && ${sh(wrapper)} ${sh(name)} --kind ${kind}${managed ? " --managed" : ""} -- ` +
-      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(record.remote || name)} "$(scripts/loops/prompt.sh ${role})"`,
+      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(remote)} "$(scripts/loops/prompt.sh ${role})"`,
   };
 }
 
