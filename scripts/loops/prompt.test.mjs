@@ -418,7 +418,9 @@ describe("sending failures back", () => {
     expect(out).toContain("no local quick check after a merge or dev sync when a CI run follows");
     expect(out).not.toContain('`pnpm prd check --quick "slice <n> merged"`');
     expect(out).toContain("`pnpm prd ci run <tier> --wait` in the background");
-    expect(out).toContain("the tier the check plan proposes unless you have a reason");
+    expect(out).toContain(
+      "the tier `pnpm prd tier` proposes (it prints the tier and why) unless you have a reason",
+    );
     expect(out).toContain("run `pnpm prd ci blame`");
     expect(out).toContain(
       "to the agent whose slice it names (SendMessage), with the failing tests and the run link",

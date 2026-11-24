@@ -1,9 +1,16 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { declaredStatus, keepsVerdict, planCheck, planToolingLint, proposeTier } from "./check-plan.mjs";
+import {
+  declaredStatus,
+  keepsVerdict,
+  parseArgs,
+  planCheck,
+  planToolingLint,
+  proposeTier,
+} from "./check-plan.mjs";
 
 const ROOT = join(import.meta.dirname, "../..");
 
@@ -281,6 +288,9 @@ describe("check-plan.mjs CLI", () => {
       const version = commit(file, '{"name":"a","version":"2.0.0","scripts":{"x":"2"}}\n');
       expect(withRefs(first, scripts, file)).toBe("none");
       expect(withRefs(scripts, version, file)).toBe("full");
+      // With --base the diff is its own: what's piped in doesn't count.
+      expect(withRefs(first, scripts, "")).toBe("none");
+      expect(withRefs(first, first, file)).toBe("none");
       const bare = spawnSync("node", [join(ROOT, "scripts/loops/check-plan.mjs"), "--propose"], {
         input: file,
         encoding: "utf8",
@@ -289,5 +299,130 @@ describe("check-plan.mjs CLI", () => {
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }
+  });
+
+  /**
+   * Runs the CLI with stdin left open (never written or closed), as a terminal's would be.
+   * @param {string[]} args
+   * @returns {Promise<{ code: number | null, stdout: string, stderr: string }>}
+   */
+  const openStdin = (args) =>
+    new Promise((resolve, reject) => {
+      const child = spawn("node", [join(ROOT, "scripts/loops/check-plan.mjs"), ...args], {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => (stdout += d));
+      child.stderr.on("data", (d) => (stderr += d));
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`check-plan.mjs ${args.join(" ")} waited on stdin`));
+      }, 10_000);
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        child.stdin.destroy();
+        resolve({ code, stdout, stderr });
+      });
+    });
+
+  it("--base dev alone exits 2 at once with usage, stdin left open", async () => {
+    const r = await openStdin(["--base", "dev"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("give --mode or --propose");
+    expect(r.stderr).toContain("usage: check-plan.mjs");
+    expect(r.stdout).toBe("");
+  });
+
+  it.each([[["--propose", "--nope"]], [["--mode", "quick", "--verbose"]], [["--propose", "--base"]]])(
+    "%j exits 2 at once with stdin left open",
+    async (args) => {
+      const r = await openStdin(args);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("usage: check-plan.mjs");
+    },
+  );
+
+  it("--propose --base on a repo with changes computes the diff itself, stdin left open", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "check-plan-"));
+    const git = (...args) =>
+      execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+        encoding: "utf8",
+      }).trim();
+    try {
+      git("init", "-q", "-b", "trunk");
+      writeFileSync(join(repo, "README.md"), "a\n");
+      git("add", ".");
+      git("commit", "-qm", "base");
+      git("checkout", "-qb", "work");
+      mkdirSync(join(repo, "apps/web"), { recursive: true });
+      writeFileSync(join(repo, "apps/web/a.ts"), "export {};\n");
+      git("add", ".");
+      git("commit", "-qm", "app");
+      const r = await openStdin(["--propose", "--repo", repo, "--base", "trunk"]);
+      expect(r.code).toBe(0);
+      const [tier, reason, status] = r.stdout.split("\n");
+      expect(tier).toBe("components");
+      expect(reason).toBe("app code (apps/web/a.ts)");
+      expect(reason).not.toContain("no changes");
+      expect(status).toBe("ok");
+      const declared = await openStdin([
+        "--propose",
+        "--repo",
+        repo,
+        "--base",
+        "trunk",
+        "--head",
+        "work",
+        "--declared",
+        "unit",
+      ]);
+      expect(declared.stdout.split("\n")[2]).toBe("below");
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("--propose with a base git can't resolve exits 1", () => {
+    const r = spawnSync(
+      "node",
+      [join(ROOT, "scripts/loops/check-plan.mjs"), "--propose", "--repo", ROOT, "--base", "no-such-ref-x"],
+      { input: "", encoding: "utf8" },
+    );
+    expect(r.status).toBe(1);
+  });
+
+  it("--propose without --base still reads the changed files from stdin (propose_tier's old way)", () => {
+    const r = spawnSync("node", [join(ROOT, "scripts/loops/check-plan.mjs"), "--propose"], {
+      input: "apps/web/app/a.ts\ndocs/x.md\n",
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout.split("\n").slice(0, 3)).toEqual(["components", "app code (apps/web/app/a.ts)", "ok"]);
+  });
+});
+
+describe("parseArgs", () => {
+  it("takes --mode with prd check's refs", () => {
+    expect(parseArgs(["--mode", "slice", "--repo", "d", "--base", "b", "--head", "HEAD"])).toEqual({
+      ok: true,
+      propose: false,
+      opts: { mode: "slice", repo: "d", base: "b", head: "HEAD" },
+    });
+  });
+
+  it.each([
+    [[], "give --mode or --propose"],
+    [["--base", "dev"], "give --mode or --propose"],
+    [["--propose", "--mode", "quick"], "don't go together"],
+    [["--propose", "--frobnicate"], "unknown argument --frobnicate"],
+    [["--propose", "dev"], "unknown argument dev"],
+    [["--mode"], "--mode needs a value"],
+    [["--propose", "--base", "--head", "x"], "--base needs a value"],
+    [["--propose", "--head", "x"], "--head needs --base"],
+  ])("%j is refused: %s", (argv, error) => {
+    const r = parseArgs(argv);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.error).toContain(error);
   });
 });

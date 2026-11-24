@@ -159,6 +159,7 @@ pnpm prd <command>
                               (static, unit, integration, components, full; each includes the ones before);
                               --wait blocks for the verdict (0 green, 1 not green, 75 at the timeout)
     ci [<branch>]             the latest whole-tier verdict for the branch's tip
+    tier [--base <ref>]       the CI tier this worktree's commits propose against <ref> (default $trunk), and why
 
   Land
     land <topic> [-m subject] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--no-review] [--local]
@@ -263,6 +264,20 @@ case $cmd in
     ;;
   review) exec "$bin/review.sh" "$@" ;;
   pr) exec "$bin/pr.sh" "$@" ;;
+  tier)
+    tbase=$trunk
+    while (($#)); do
+      case $1 in
+        --base) tbase=${2:?"usage: pnpm prd tier [--base <ref>]"}; shift 2 ;;
+        *) die "usage: pnpm prd tier [--base <ref>]" ;;
+      esac
+    done
+    tip=$(git rev-parse HEAD) || die "not in a git worktree"
+    proposed=$(propose_tier "$tbase" "$tip") || die "can't propose a tier for $tbase...HEAD"
+    { read -r ptier; read -r pwhy; } <<< "$proposed"
+    echo "$ptier ($pwhy)"
+    [[ -z $(git status --porcelain) ]] || echo "(uncommitted changes don't count: commit them first)" >&2
+    ;;
   dev-sync) (($# <= 1)) || die "dev-sync: at most one branch name"; dev_sync "${1:-}" ;;
   plan)
     # --model <m> (or --model=<m>), anywhere: this one session's model, passed to claude --model
