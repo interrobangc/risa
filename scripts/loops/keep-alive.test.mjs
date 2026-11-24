@@ -11,7 +11,9 @@ import {
   hasRemoteControl,
   keepAliveDecision,
   keepAnswerAction,
+  remoteNamesOf,
 } from "./keep-alive.mjs";
+import { CAPTAINS } from "./captain.mjs";
 
 const NOW = Date.parse("2026-11-22T12:00:00Z");
 const decide = (facts = {}) => keepAliveDecision({ processes: [], now: NOW, ...facts });
@@ -35,6 +37,19 @@ describe("keepAliveDecision", () => {
     });
     expect(one(rotating(ROTATING_GRACE_MS - 1)).action).toBe("none");
     expect(one(rotating(ROTATING_GRACE_MS)).action).toBe("open");
+  });
+
+  it("gives nothing for a captain-named backlog process, and opens for a dead record", () => {
+    const processes = ["claude --model opus --remote-control Garrett You are the new backlog agent."];
+    expect(one({ processes })).toMatchObject({ action: "none", why: "live, opened by hand" });
+    expect(one({ sessions: [{ name: "backlog", live: false }] }).action).toBe("open");
+    // A captain's name is only the main backlog session's: the inbox one isn't kept live by it.
+    expect(decide({ processes, kinds: ["inbox"] })[0].action).toBe("open");
+  });
+
+  it("names each kind's Remote Control names: backlog's own and every captain's, the others only their own", () => {
+    expect(remoteNamesOf("backlog")).toEqual(["backlog", ...CAPTAINS]);
+    expect(remoteNamesOf("inbox")).toEqual(["inbox"]);
   });
 
   it("gives nothing for an unrecorded --remote-control backlog process", () => {

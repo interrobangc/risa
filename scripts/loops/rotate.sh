@@ -22,7 +22,8 @@
 #
 # --self rotates the calling session, found by its ancestor claude pid among the
 # live records. A backlog session reopens fresh in the main checkout under the
-# same name, model and Remote Control; --brief puts the file at the top of the
+# same name, model and Remote Control (the main one, backlog, under a new
+# captain's name: captain.mjs); --brief puts the file at the top of the
 # new prompt (a file it can't use is refused before anything ends, and the file
 # is deleted once read). --brief-path prints where to write one. The inbox
 # session reopens fresh the same way in its own directory, on its model and in
@@ -73,8 +74,14 @@ if [[ -n $self ]]; then
         line+=" --brief $(printf %q "$brief")"
       fi
       [[ -z $reason ]] || line+=" --reason $(printf %q "$reason")"
-      echo "Rotating $self_name: pid $self_pid (the calling session)${brief:+, with a brief}."
-      exec "$bin/open-session.sh" --command "$line" --title "$self_name" --background
+      title=""
+      if [[ $self_name == backlog ]]; then
+        # The main backlog session's next one is a new captain (captain.mjs): its Remote Control name and tab title.
+        title=$(node "$bin/captain.mjs" next) || die "rotate --self: couldn't pick the next captain; nothing was ended"
+        line+=" --captain $title"
+      fi
+      echo "Rotating $self_name: pid $self_pid (the calling session)${brief:+, with a brief}${title:+, as $title}."
+      exec "$bin/open-session.sh" --command "$line" --title "${title:-$self_name}" --background
       ;;
     inbox)
       [[ -z $mid_wave ]] || die "rotate --self: --mid-wave is for an orchestrator; $self_name is the inbox session"

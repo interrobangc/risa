@@ -197,6 +197,7 @@ beforeAll(() => {
     "lib.sh",
     "bye.mjs",
     "sessions.mjs",
+    "captain.mjs",
     "asks.mjs",
     "notices.mjs",
     "end-session.sh",

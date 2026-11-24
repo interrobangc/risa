@@ -72,6 +72,13 @@ describe("names and process lines", () => {
     expect(backlogRemoteOf("vim --remote-control backlog")).toBeNull();
     expect(backlogRemoteOf("claude You could pass `--remote-control backlog`")).toBeNull();
   });
+
+  it("reads a captain's Remote Control name as the main backlog session's", () => {
+    expect(backlogRemoteOf("claude --model opus --remote-control Picard You are")).toBe("backlog");
+    expect(backlogRemoteOf("claude --remote-control=Kirk")).toBe("backlog");
+    expect(backlogRemoteOf("claude --remote-control Picardy You are")).toBeNull();
+    expect(backlogRemoteOf("vim --remote-control Picard")).toBeNull();
+  });
 });
 
 describe("the store", () => {
@@ -196,6 +203,19 @@ describe("the decision", () => {
     const one = ["claude --remote-control backlog Hi"];
     expect(decide({ requests, sessions, processes: one, max: 2 }).action).toBe("open");
     expect(decide({ requests, sessions, processes: [...one, ...one], max: 2 }).action).toBe("refuse");
+  });
+
+  it("tells a captain-named main session from backlog-<name> ones: its record and process count once", () => {
+    const requests = [req("r1", "new")];
+    const captain = ["claude --remote-control Riker Hi"];
+    // Its process alone holds backlog, so it counts toward the limit, not as a request's name.
+    expect(decide({ requests, processes: captain, max: 1 })).toMatchObject({
+      action: "refuse",
+      why: "1 backlog sessions are live, the limit is 1",
+    });
+    expect(decide({ requests, sessions: [live("backlog")], processes: captain, max: 2 }).action).toBe("open");
+    // It never holds a backlog-<name>: a request beside it opens.
+    expect(decide({ requests: [req("r2", "riker")], processes: captain, max: 3 }).action).toBe("open");
   });
 
   it("a session still starting counts toward the limit", () => {

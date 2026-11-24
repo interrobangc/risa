@@ -27,6 +27,7 @@ import {
   projectFolder,
   runThrough,
 } from "./open-session.mjs";
+import { CAPTAINS } from "./captain.mjs";
 
 const SESSION_SH = "/o/scripts/loops/session.sh";
 const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
@@ -131,6 +132,7 @@ beforeAll(() => {
     "open-session.mjs",
     "planner-model.mjs",
     "sessions.mjs",
+    "captain.mjs",
   ])
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   mkdirSync(join(main, "scripts/backlog"));
@@ -172,16 +174,46 @@ describe("backlog, recovery and hotfix sessions", () => {
         main: "/m",
         wrapper,
         record: { kind: "backlog", model: "sonnet", managed: true },
+        captain: "Pike",
       }),
     ).toMatchObject({
       session: "backlog",
+      title: "Pike",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control backlog "$(scripts/loops/prompt.sh backlog)"`,
+      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(scripts/loops/prompt.sh backlog)"`,
     });
   });
 
-  it("a named backlog session reopens under its recorded Remote Control name", () => {
+  it("the main backlog session reopens as a new captain, never its last one", () => {
+    const seen = new Set();
+    for (let i = 0; i < 40; i++) {
+      const c = chooseMainCommand({
+        name: "backlog",
+        main: "/m",
+        wrapper,
+        record: { kind: "backlog", remote: "Riker" },
+      });
+      expect(CAPTAINS).toContain(c.title);
+      expect(c.title).not.toBe("Riker");
+      expect(c.session).toBe("backlog");
+      expect(c.command).toContain(
+        `${wrapper} backlog --kind backlog -- --model opus --remote-control ${c.title} `,
+      );
+      seen.add(c.title);
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("a named backlog session reopens under its recorded Remote Control name, with no captain", () => {
+    expect(
+      chooseMainCommand({
+        name: "backlog-x",
+        main: "/m",
+        wrapper,
+        record: { kind: "backlog", model: "sonnet", managed: true, remote: "backlog - x" },
+      }),
+    ).toEqual(expect.not.objectContaining({ title: expect.anything() }));
     expect(
       chooseMainCommand({
         name: "backlog-x",
@@ -281,7 +313,9 @@ describe("backlog, recovery and hotfix sessions", () => {
     writeRecord("backlog", { kind: "backlog", model: "sonnet", ended: "2026-01-01T00:00:00Z" });
     const out = ok(["backlog", "--print"]);
     expect(out).toContain(`cd ${main} && `);
-    expect(out).toContain('--model sonnet --remote-control backlog "$(scripts/loops/prompt.sh backlog)"');
+    const captain = /^backlog as ([A-Za-z]+) /m.exec(out)?.[1];
+    expect(CAPTAINS).toContain(captain);
+    expect(out).toContain(`--model sonnet --remote-control ${captain} "$(scripts/loops/prompt.sh backlog)"`);
     expect(out).not.toContain("--continue");
     rmSync(folder, { recursive: true });
   });

@@ -3,13 +3,15 @@
 # rotate` opens in a background tab (never run inside the session it ends).
 #
 #   rotate-into.sh prd-<topic> <old pid> [--reason <text>]
-#   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief]
+#   rotate-into.sh backlog[-<name>] <old pid> [--reason <text>] [--brief <file> | --no-brief] [--captain <C>]
 #   rotate-into.sh inbox <old pid> [--reason <text>]
 #
 # A backlog session needs its live record at that pid (else nothing is ended).
 # It reopens fresh in the main checkout with the backlog prompt, on the record's
 # model and Remote Control name; --brief leads the prompt and is deleted once
 # read; --no-brief (the dispatcher, when none was written) says so at its top.
+# The main one (backlog) reopens under a new captain's name (captain.mjs): the
+# --captain its opener titled the tab with, else one drawn here, unlike the last.
 # The inbox session (its live record at that pid, too) reopens through `prd.sh
 # inbox` in its recorded directory, on its recorded model, in fast mode, with
 # no brief. The steps are otherwise the same:
@@ -32,21 +34,24 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
 wait_secs=${CARETOOK_ROTATE_WAIT:-20}
 
-usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>]|inbox <old pid> [--reason <text>] [--brief <file> | --no-brief]"
+usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>]|inbox <old pid> [--reason <text>] [--brief <file> | --no-brief] [--captain <C>]"
 name=${1:-} old=${2:-}
 [[ ($name == prd-?* || $name == backlog || $name == backlog-?* || $name == inbox) && $old =~ ^[0-9]+$ ]] || die "$usage"
 shift 2
-reason="" brief="" no_brief=""
+reason="" brief="" no_brief="" captain=""
 while (($#)); do
   case $1 in
     --reason) reason=${2:?--reason <text>}; shift ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
     --no-brief) no_brief=1 ;;
+    --captain) captain=${2:?--captain <C>}; shift ;;
     *) die "rotate-into: unknown option $1 ($usage)" ;;
   esac
   shift
 done
 [[ -z $brief || -z $no_brief ]] || die "rotate-into: --brief or --no-brief, not both"
+[[ -z $captain || $name == backlog ]] || die "rotate-into: --captain is for the main backlog session, not $name"
+[[ -z $captain || $captain =~ ^[A-Za-z]+$ ]] || die "rotate-into: --captain takes a captain's name ($captain)"
 kind=backlog topic="" dir=$main
 [[ $name != inbox ]] || kind=inbox
 if [[ $kind == inbox ]]; then
@@ -126,6 +131,10 @@ if [[ $kind == backlog ]]; then
   fi
   [[ -n $prompt ]] || prompt=$("$bin/prompt.sh" backlog ${no_brief:+--no-brief})
   model=$(field "$before" model) remote=$(field "$before" remote)
+  if [[ $name == backlog ]]; then
+    # A new session, a new captain; with none drawn, Remote Control backlog rather than no session.
+    remote=${captain:-$(node "$bin/captain.mjs" next 2>/dev/null || echo backlog)}
+  fi
   args=()
   [[ -z $model ]] || args+=(--model "$model")
   args+=(--remote-control "${remote:-$name}" "$prompt")

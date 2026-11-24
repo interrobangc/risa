@@ -82,6 +82,7 @@ import {
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
+import { CAPTAIN_SESSION, nextCaptain } from "./captain.mjs";
 import { contextDirOf, hardLimitOf, limitOf, sizeRecord, updateRecord } from "./context.mjs";
 import { CONTEXT_OPTIONS, CONTEXT_SESSION, commandUnder, contextDecision } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION, REOPEN_OPTIONS, formatPick, pick } from "./dispatch-pick.mjs";
@@ -559,6 +560,9 @@ function contextStep(
       // A backlog or inbox session: `rotate --self` finds its caller by ancestry, so the tick opens its line.
       const brief =
         a.type === "rotate-backlog" ? (a.brief ? ` --brief ${sh(briefFile(a.session))}` : " --no-brief") : "";
+      // The main backlog session comes back as a new captain: its tab title and Remote Control name.
+      const captain =
+        a.type === "rotate-backlog" && a.session === CAPTAIN_SESSION ? nextCaptain(p.sessions) : null;
       const r =
         a.type === "rotate"
           ? run("bash", [join(HERE, "rotate.sh"), a.topic, "--mid-wave", "--reason", "context"], {
@@ -569,9 +573,10 @@ function contextStep(
               [
                 join(HERE, "open-session.sh"),
                 "--command",
-                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context${brief}`,
+                `cd ${sh(p.main)} && ${sh(join(HERE, "rotate-into.sh"))} ${sh(a.session)} ${a.pid} --reason context${brief}` +
+                  (captain ? ` --captain ${captain}` : ""),
                 "--title",
-                a.session,
+                captain ?? a.session,
                 "--background",
               ],
               { cwd: p.main },

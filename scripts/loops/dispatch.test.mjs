@@ -243,6 +243,7 @@ beforeAll(() => {
     "ask.mjs",
     "skeptics.mjs",
     "sessions.mjs",
+    "captain.mjs",
     "load-gate.mjs",
     "rotate.mjs",
     "open-session.mjs",
@@ -1033,6 +1034,24 @@ describe("the keep-alive tick", () => {
     writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control backlog You are\n");
     ok(["--once"], on);
     expect(keptOpens()).toEqual([]);
+  });
+
+  it("counts a captain-named backlog session as live: by its record, or by its process", () => {
+    writeFileSync(join(root, "processes"), "claude-stub --model opus --remote-control Picard You are\n");
+    ok(["--once"], on);
+    expect(keptOpens()).toEqual([]);
+  });
+
+  it("reopens a dead captain-named backlog session, its record still backlog with its last captain", () => {
+    deadRecord("backlog", { kind: "backlog", model: "opus", remote: "Picard" });
+    expect(ok(["--once"], on)).toContain("keep-alive backlog: open (no live backlog session)");
+    expect(keptOpens()).toEqual([["backlog", "--background"]]);
+    // The opener draws the next captain against it (open-session.mjs).
+    expect(JSON.parse(readFileSync(join(sessions, "backlog.json"), "utf8"))).toMatchObject({
+      kind: "backlog",
+      managed: true,
+      remote: "Picard",
+    });
   });
 
   it("doesn't reopen inside the start grace, and asks at the third quick death", () => {

@@ -75,6 +75,16 @@ for a in "$@"; do
   prev=$a
 done
 
+# The main backlog session's display name is a captain's (captain.mjs, given as
+# its --remote-control): the tab's title too, which Claude Code is told not to
+# retitle. A session it starts doesn't inherit that.
+if [[ -n ${CARETOOK_CAPTAIN_TITLE:-} ]]; then unset CARETOOK_CAPTAIN_TITLE CLAUDE_CODE_DISABLE_TERMINAL_TITLE; fi
+if [[ $name == backlog && $kind == backlog && -n $remote && $remote != backlog ]]; then
+  export CARETOOK_CAPTAIN_TITLE=1 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+  # The tab's title by escape (OSC 0) when this is a terminal (CARETOOK_TAB_TITLE=always: tests).
+  if [[ -t 1 || ${CARETOOK_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$remote"; fi
+fi
+
 # A brief left from before never leads a later prompt: whoever uses one has
 # already read it into this session's args (rotate-into.sh).
 [[ ! $name =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || rm -f "$loops/.briefs/$name.md"
