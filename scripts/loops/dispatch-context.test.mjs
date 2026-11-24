@@ -446,6 +446,9 @@ describe("the tick", () => {
       "rotate.mjs",
       "open-session.mjs",
       "planner-model.mjs",
+      "drain.mjs",
+      "usage.mjs",
+      "land-journal.mjs",
     ])
       copyFileSync(join(HERE, f), scripts(f));
     writeFileSync(scripts("open-session.sh"), OPEN_SH);
@@ -470,6 +473,10 @@ describe("the tick", () => {
       CARETOOK_CONTEXT_NUDGE_MIN: "",
       CARETOOK_CONTEXT_WATCH: "",
       CARETOOK_KEEP_SESSIONS: "off",
+      // The drain (drain.mjs): off, and never the machine's own readings or landings.
+      CARETOOK_USAGE_WATCH: "off",
+      CARETOOK_USAGE_DIR: "",
+      CARETOOK_LANDING_DIR: "",
       CARETOOK_PICKUP_EVERY: "off",
       CARETOOK_CLOCK_FILE: clock,
       STUB_STATE: stubs,

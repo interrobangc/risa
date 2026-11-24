@@ -59,6 +59,14 @@ dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }
 
+# The drain (drain.mjs): no new slice worktree near or past a usage limit. A reading
+# that can't be had never refuses (watching never hurts the work).
+if [[ $kind == slice ]]; then
+  drain_rc=0
+  drain_why=$(CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check 2>/dev/null) || drain_rc=$?
+  if ((drain_rc == 3)); then echo "refused: slice $topic-$n: $drain_why" >&2; exit 1; fi
+fi
+
 # The load gate (load-gate.mjs): a slice waits while the machine is busy (at
 # most CARETOOK_LOAD_WAIT, then it goes ahead); a PRD started by hand only warns.
 if [[ $kind == slice ]]; then
