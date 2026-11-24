@@ -37,7 +37,7 @@
 // An opener that fails (the tab never opened) is no death: a reopen isn't
 // counted, a kept session's quick deaths stay as they were, and a start's or
 // plan's worktree made on that tick is removed (rm.sh); one line is logged and
-// a later tick tries again.
+// a later tick tries again. So is one whose new.sh failed after making it.
 //
 // Each tick also follows up on managed orchestrators and backlog sessions that
 // stay over the context limit (dispatch-context.mjs): a nudge, a defaulting
@@ -858,9 +858,22 @@ export function tick(
       const session = `${kind}-${topic}`;
       const dir = join(p.loops, name);
       const fresh = !existsSync(dir);
+      // Undoes this tick's worktree (rm.sh takes its record too), leaving the
+      // registry row alone (--no-registry: a fresh prd/ branch counts as merged,
+      // so rm.sh could mark the topic done or clear a standing row's hot files).
+      const undo = (/** @type {boolean} */ force) => {
+        const gone = run("bash", [join(bin, "rm.sh"), name, "--no-registry", ...(force ? ["--force"] : [])], {
+          cwd: p.main,
+        });
+        return gone.ok ? `; ${name} removed` : `; removing ${name} ${result(gone)}`;
+      };
       if (fresh) {
         const made = run("bash", [join(bin, "new.sh"), kind, topic], { cwd: p.main });
-        out(`  new.sh ${kind} ${topic}: ${result(made)}`);
+        // A new.sh that failed after making the worktree: it goes (forced: it
+        // holds nothing but this tick's half setup), so no worktree without a
+        // managed record holds a slot as one opened by hand; a later tick retries.
+        const partial = !made.ok && existsSync(dir) ? undo(true) : "";
+        out(`  new.sh ${kind} ${topic}: ${result(made)}${partial}`);
         if (!made.ok) break;
       }
       writeRecord(p.sessions, session, { kind, topic, managed: true, auto: true });
@@ -871,12 +884,9 @@ export function tick(
       );
       if (opened.ok) out(`  ${session}: ${result(opened)}`);
       else {
-        // The tab never opened: not a death. The worktree made for it goes (rm.sh
-        // takes its record too), so it holds no slot and a later tick starts again.
-        const gone = fresh ? run("bash", [join(bin, "rm.sh"), name], { cwd: p.main }) : null;
-        out(
-          `  ${session}: ${neverOpened(opened)}${!gone ? "" : gone.ok ? `; ${name} removed` : `; removing ${name} ${result(gone)}`}`,
-        );
+        // The tab never opened: not a death. The worktree made for it goes, so it
+        // holds no slot and a later tick starts again.
+        out(`  ${session}: ${neverOpened(opened)}${fresh ? undo(false) : ""}`);
       }
       break;
     }

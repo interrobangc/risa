@@ -15,18 +15,21 @@
 # table, or when _Status_ can't be read, it marks nothing and says so.
 # A standing topic's PRD worktree (a fixes wave) clears its row's hot files
 # instead (pnpm backlog prd set <topic> hot=—), merged or not; its flags stay.
+# --no-registry does neither: the dispatcher's undo of a start it couldn't
+# finish (a fresh prd/ branch from dev counts as merged) leaves the row alone.
 #
-#   scripts/loops/rm.sh <name> [--force] [--keep-branch]
+#   scripts/loops/rm.sh <name> [--force] [--keep-branch] [--no-registry]
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
 
 name=${1:?name}; shift
-force="" keep=""
+force="" keep="" registry=1
 for a in "$@"; do
   case $a in
     --force) force=1 ;;
     --keep-branch) keep=1 ;;
+    --no-registry) registry="" ;;
     *) echo "unknown option $a" >&2; exit 1 ;;
   esac
 done
@@ -47,7 +50,7 @@ fi
 # Whether a finished PRD marks its topic done: decided now, while its plan (and
 # this script's own checkout, maybe the worktree) is still here.
 mark_done="" flags=""
-if [[ $branch == prd/* ]]; then
+if [[ -n $registry && $branch == prd/* ]]; then
   topic=${branch#prd/}
   if ! git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then
     mark_done="" # not merged: nothing to say
@@ -68,7 +71,7 @@ fi
 
 # A standing topic's wave set its row's hot files; with its worktree gone they go too.
 clear_hot=""
-if [[ $branch == prd/* ]] && hot_rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) &&
+if [[ -n $registry && $branch == prd/* ]] && hot_rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) &&
   node "$(dirname "$0")/rotate.mjs" clears-hot "${branch#prd/}" <<<"$hot_rows"; then
   clear_hot=${branch#prd/}
 fi
