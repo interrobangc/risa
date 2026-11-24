@@ -6,7 +6,8 @@
 # a day), and who holds the machine-wide leases (browser checks and pnpm prd
 # check: lease.sh holders), and after the worktree table the dispatcher (running,
 # paused and why, or stopped; its last log entry), the recorded sessions (managed
-# or by hand), the open asks and the live notices. (pnpm prd status, and pnpm prd status-watch)
+# or by hand), the open asks, the workers (status-extra.mjs: every lease, pnpm prd
+# command and slice agent with its age, usual time and state) and the live notices. (pnpm prd status, and pnpm prd status-watch)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"

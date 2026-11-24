@@ -7,7 +7,16 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAsk, settleAsk } from "./asks.mjs";
 import { createRequest } from "./session-requests.mjs";
-import { dispatcherPart, lastEntry, statusParts } from "./status-extra.mjs";
+import {
+  againstUsual,
+  dispatcherPart,
+  gatherWorkers,
+  lastEntry,
+  prdArgs,
+  prdCommands,
+  statusParts,
+  workersPart,
+} from "./status-extra.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const NOW = Date.parse("2026-11-21T12:00:00Z");
@@ -219,5 +228,173 @@ describe("the dispatcher's part", () => {
     expect(lastEntry(files().log)).toBe("2026-11-21T10:01:00Z start alpha");
     expect(cli()).toContain("\nlast: 2026-11-21T10:01:00Z start alpha\n");
     expect(lastEntry(join(loops, "missing.log"))).toBeNull();
+  });
+});
+
+describe("the workers part", () => {
+  const at = (ms) => new Date(NOW - ms).toISOString();
+  const M = 60_000;
+  const fact = (extra = {}) => ({
+    name: "topic-3",
+    dir: "/fixture/.loops/topic-3",
+    branch: "slice/topic/3",
+    agents: [],
+    unknown: false,
+    lastActivityAt: null,
+    stopped: false,
+    running: [],
+    leases: [],
+    lastCommitAt: at(5 * H),
+    changes: [],
+    lastChangeAt: null,
+    lastProgressAt: at(5 * H),
+    ...extra,
+  });
+  const agent = (extra = {}) => ({
+    session: "prd-topic",
+    agent: "ab12cd34ef",
+    agentType: "general-purpose",
+    firstAt: at(40 * M),
+    lastActivityAt: at(M),
+    stoppedAt: null,
+    running: [],
+    ...extra,
+  });
+  const usual = { samples: 5, medianSeconds: 600, slowestSeconds: 900 };
+  const part = (extra) =>
+    workersPart({ facts: [], leases: [], commands: [], usual: () => null, now: NOW, ...extra });
+
+  it("prints nothing when no worker is running", () => {
+    expect(part({})).toBe("");
+    // A plan worktree, and a slice with no heartbeat and nothing recent, aren't workers.
+    expect(part({ facts: [fact({ branch: "plan/topic" }), fact({ unknown: true })] })).toBe("");
+    expect(gatherWorkers(empty, { now: NOW, env: {} })).toBe("");
+  });
+
+  it("lists every lease holder and waiter with its age, usual time and state", () => {
+    const out = part({
+      facts: [fact()],
+      leases: [
+        {
+          kind: "check",
+          n: 1,
+          waiting: false,
+          worktree: "topic-3",
+          what: "pnpm check (slice)",
+          pid: 1,
+          started: at(20 * M),
+          live: true,
+        },
+        {
+          kind: "check",
+          n: null,
+          waiting: true,
+          worktree: "other-1",
+          what: "pnpm check (quick)",
+          pid: 2,
+          started: at(2 * M),
+          live: true,
+        },
+        {
+          kind: "browser",
+          n: 2,
+          waiting: false,
+          worktree: "topic-3",
+          what: "roundtrip",
+          pid: 3,
+          started: at(3 * M),
+          live: true,
+        },
+      ],
+      usual: (q) => (q.kind === "check" && q.mode === "slice" && q.branchKind === "slice" ? usual : null),
+    });
+    expect(out).toMatch(/^WORKERS \(age, usual time, state\)$/m);
+    expect(out).toMatch(/^lease check 1 +topic-3 +pnpm check \(slice\) +20m +usual 10m +held, slow$/m);
+    expect(out).toMatch(/^lease check queued +other-1 +pnpm check \(quick\) +2m +usual - +waiting$/m);
+    expect(out).toMatch(/^lease browser 2 +topic-3 +roundtrip +3m +usual - +held$/m);
+    expect(out.endsWith("\n\n")).toBe(true);
+  });
+
+  it("lists each pnpm prd command under a session, and each slice agent's state", () => {
+    const out = part({
+      commands: [{ session: "prd-topic", pid: 7, args: "watch --wait", ageSeconds: 1800 }],
+      facts: [
+        fact({
+          agents: [
+            agent({ running: [{ id: "t1", tool: "Bash", at: at(M), command: "pnpm prd check --quick" }] }),
+            agent({ agent: "stopped1", stoppedAt: at(5 * M), lastActivityAt: at(5 * M) }),
+            agent({ agent: "quiet1", lastActivityAt: at(25 * M), firstAt: at(2 * H) }),
+            agent({ agent: "active1" }),
+          ],
+        }),
+        fact({
+          name: "topic-4",
+          unknown: true,
+          running: [{ source: "process", pid: 9, command: "node vitest run", since: at(M) }],
+        }),
+      ],
+      usual: (q) => (q.kind === "slice" ? { samples: 4, medianSeconds: 3000, slowestSeconds: 4000 } : null),
+    });
+    expect(out).toMatch(/^command +prd-topic +pnpm prd watch --wait +30m +usual - +running$/m);
+    expect(out).toMatch(
+      /^agent ab12cd34 +topic-3 +prd-topic +40m +usual 50m +running Bash: pnpm prd check --quick$/m,
+    );
+    expect(out).toMatch(/^agent stopped1 +topic-3 +prd-topic +40m +usual 50m +stopped 5m ago$/m);
+    expect(out).toMatch(/^agent quiet1 +topic-3 +prd-topic +2h +usual 50m +quiet 25m, slow$/m);
+    expect(out).toMatch(/^agent active1 +topic-3 +prd-topic +40m +usual 50m +active, last call 1m ago$/m);
+    expect(out).toMatch(/^agent \? +topic-4 +no heartbeat +\? +usual 50m +unknown; pid 9: node vitest run$/m);
+  });
+
+  it("slow only past the slowest of at least three samples", () => {
+    expect(againstUsual(1000, usual)).toBe("slow");
+    expect(againstUsual(800, usual)).toBe("");
+    expect(againstUsual(1000, { ...usual, samples: 2 })).toBe("");
+    expect(againstUsual(null, usual)).toBe("");
+  });
+
+  it("finds the outermost pnpm prd command under a live session", () => {
+    expect(prdArgs("node /opt/pnpm/bin/pnpm.cjs prd check --quick slice hand-off")).toBe(
+      "check --quick slice hand-off",
+    );
+    expect(prdArgs("pnpm -s -C /x prd status")).toBe("status");
+    expect(prdArgs("bash scripts/loops/prd.sh dev-sync")).toBe("dev-sync");
+    expect(prdArgs("/bin/zsh -c for n in 1 2; do pnpm prd rm x-$n; done")).toBeNull();
+    expect(prdArgs("node vitest run")).toBeNull();
+    const table = [
+      { pid: 100, ppid: 1, ageSeconds: 3600, command: "claude" },
+      { pid: 101, ppid: 100, ageSeconds: 60, command: "/bin/zsh -c pnpm prd check" },
+      { pid: 102, ppid: 101, ageSeconds: 60, command: "node /opt/pnpm.cjs prd check" },
+      { pid: 103, ppid: 102, ageSeconds: 59, command: "bash scripts/loops/prd.sh check" },
+      { pid: 200, ppid: 1, ageSeconds: 10, command: "pnpm prd status" },
+    ];
+    expect(prdCommands(table, new Map([[100, "prd-topic"]]))).toEqual([
+      { session: "prd-topic", pid: 102, args: "check", ageSeconds: 60 },
+    ]);
+  });
+
+  it("the CLI adds a live lease holder from beside the sessions folder", () => {
+    const base = join(root, "workers-cli");
+    const own = join(base, "sessions");
+    const lease = join(base, ".lease", "check", "1");
+    mkdirSync(own, { recursive: true });
+    mkdirSync(lease, { recursive: true });
+    writeFileSync(
+      join(lease, "name"),
+      `kind=check\nworktree=topic-3\ncheck=pnpm check (slice)\npid=${process.pid}\nstarted=${Math.floor(Date.now() / 1000)}\n`,
+    );
+    const out = spawnSync("node", [join(HERE, "status-extra.mjs")], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CARETOOK_SESSIONS_DIR: own,
+        CARETOOK_ASKS_DIR: empty,
+        CARETOOK_DISPATCH_MAIN: empty,
+        CARETOOK_LEASE_ROOT: "",
+        CARETOOK_BROWSER_LEASES: "",
+        CARETOOK_RUN_LOG: join(base, "none.jsonl"),
+        CARETOOK_CHECK_LOG: join(base, "none.log"),
+      },
+    }).stdout;
+    expect(out).toMatch(/^lease check 1 +topic-3 +pnpm check \(slice\) +\d+s +usual - +held$/m);
   });
 });
