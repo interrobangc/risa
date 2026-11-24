@@ -94,6 +94,10 @@ const [a, b, topic, ...kv] = process.argv.slice(2);
 if (a === "prd" && b === "list") console.log(readFileSync(file, "utf8"));
 else if (a === "prd" && b === "set") {
   appendFileSync(process.env.STUB_STATE + "/backlog.calls", ["prd set", topic, ...kv].join(" ") + "\\n");
+  if (process.env.STUB_BACKLOG_FAIL) {
+    console.error("registry locked");
+    process.exit(1);
+  }
   const rows = JSON.parse(readFileSync(file, "utf8"));
   const row = rows.find((r) => r.topic === topic);
   for (const w of kv) if (w.startsWith("flags=")) row.flags = w.slice(6).split(",").filter(Boolean);
@@ -539,6 +543,31 @@ describe("deaths and the reopen ask", () => {
     updateReopens({ "prd-a": 1, "prd-gone": 2 });
     ok();
     expect(dstate().reopens).toEqual({});
+  });
+
+  it("a failed hold write keeps the answer and the count, skips the topic, and is retried next tick", () => {
+    dying();
+    ok();
+    ok();
+    expect(ok()).toContain("filed ask a1");
+    answer("a1", "hold the topic");
+    const failed = ok(["--once"], { STUB_BACKLOG_FAIL: "1" });
+    expect(failed).toContain(
+      'ask a1 answered "hold the topic", but flagging a hold failed (retried next tick)',
+    );
+    expect(failed).toContain("registry locked");
+    expect(failed).toContain("a: its orchestrator died after 2 reopens; waits on ask a1");
+    expect(failed).not.toContain("filed ask");
+    expect(dstate()).toMatchObject({ reopens: { "prd-a": 2 }, asked: { "prd-a": { id: "a1", topic: "a" } } });
+    // Two reopens and the helper's tab: nothing opened on the failed tick.
+    expect(openCalls()).toHaveLength(3);
+
+    const held = ok();
+    expect(held).toContain('ask a1 answered "hold the topic": a flagged hold');
+    expect(calls("backlog")).toEqual(["prd set a flags=hold", "prd set a flags=hold"]);
+    expect(held).toContain("a: on hold; its orchestrator isn't live (not reopened)");
+    expect(dstate()).toMatchObject({ reopens: {}, asked: {} });
+    expect(openCalls()).toHaveLength(3);
   });
 });
 
