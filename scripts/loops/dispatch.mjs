@@ -18,7 +18,8 @@
 //   - plan: `new.sh plan <topic>`, then a managed, run-through planner
 //     (session.sh plan-<t> --auto --managed, --model opus or fable for a `design` row, prompt.sh plan <t>
 //     --auto) the same way; no item ids: the prompt reads the topic's items;
-//   - reopen: the opener (`open-session.sh <worktree> --background`), counted;
+//   - reopen: the opener (`open-session.sh <worktree> --background`), counted
+//     once its tab opens;
 //   - keep-alive (keep-alive.mjs), beside the pick and outside the PRD slots:
 //     a fresh managed backlog session through the opener when none is live, or
 //     its own question after three quick deaths. CARETOOK_KEEP_SESSIONS=off;
@@ -32,7 +33,11 @@
 //     CARETOOK_ASK_NOTIFY still fire). Its answer is acted on in a later tick:
 //     "reopen again" resets the count, "hold the topic" flags the row `hold`.
 // The session record (managed, auto) is written before a new session's tab
-// opens, so a tab that never starts is reopened like a dead session.
+// opens, so a tab that opens but never starts is reopened like a dead session.
+// An opener that fails (the tab never opened) is no death: a reopen isn't
+// counted, a kept session's quick deaths stay as they were, and a start's or
+// plan's worktree made on that tick is removed (rm.sh); one line is logged and
+// a later tick tries again.
 //
 // Each tick also follows up on managed orchestrators and backlog sessions that
 // stay over the context limit (dispatch-context.mjs): a nudge, a defaulting
@@ -759,6 +764,9 @@ export function tick(
     });
   const result = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
     r.ok ? r.out.split("\n").pop() || "ok" : `failed (exit ${r.code}): ${(r.err || r.out).split("\n").pop()}`;
+  /** An opener that exited non-zero: the tab never opened (no death, no count; a later tick retries). */
+  const neverOpened = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
+    `its tab never opened, not counted as a death (${result(r)}); a later tick retries`;
 
   let keptActed = false;
   for (const d of keepDecisions) {
@@ -774,6 +782,7 @@ export function tick(
         continue;
       }
       keptActed = true;
+      const before = readState(p.state).keepAlive?.[d.kind];
       writeRecord(p.sessions, d.kind, {
         kind: d.kind,
         managed: true,
@@ -787,7 +796,14 @@ export function tick(
         s.keepAlive = { ...s.keepAlive, [d.kind]: { deaths: d.deaths ?? 0, openedAt: now } };
       });
       const r = run("bash", [join(bin, "open-session.sh"), d.kind, "--background"], { cwd: p.main });
-      out(`  ${d.kind}: ${result(r)}`);
+      // A tab that never opened is no quick death: the entry goes back as it was.
+      if (!r.ok)
+        updateState(p.state, (s) => {
+          s.keepAlive = { ...s.keepAlive };
+          if (before) s.keepAlive[d.kind] = before;
+          else delete s.keepAlive[d.kind];
+        });
+      out(`  ${d.kind}: ${r.ok ? result(r) : neverOpened(r)}`);
     } else if (d.action === "ask") {
       keptActed = true;
       // It waits, like the reopen question: an open burns usage, so it never defaults.
@@ -841,7 +857,8 @@ export function tick(
       const name = kind === "prd" ? topic : `plan-${topic}`;
       const session = `${kind}-${topic}`;
       const dir = join(p.loops, name);
-      if (!existsSync(dir)) {
+      const fresh = !existsSync(dir);
+      if (fresh) {
         const made = run("bash", [join(bin, "new.sh"), kind, topic], { cwd: p.main });
         out(`  new.sh ${kind} ${topic}: ${result(made)}`);
         if (!made.ok) break;
@@ -852,14 +869,19 @@ export function tick(
         sessionLine({ kind, topic, dir, wrapper: join(bin, "session.sh"), model }),
         session,
       );
-      out(`  ${session}: ${result(opened)}`);
+      if (opened.ok) out(`  ${session}: ${result(opened)}`);
+      else {
+        // The tab never opened: not a death. The worktree made for it goes (rm.sh
+        // takes its record too), so it holds no slot and a later tick starts again.
+        const gone = fresh ? run("bash", [join(bin, "rm.sh"), name], { cwd: p.main }) : null;
+        out(
+          `  ${session}: ${neverOpened(opened)}${!gone ? "" : gone.ok ? `; ${name} removed` : `; removing ${name} ${result(gone)}`}`,
+        );
+      }
       break;
     }
     case "reopen": {
       const session = /** @type {string} */ (choice.session);
-      updateState(p.state, (s) => {
-        s.reopens = { ...s.reopens, [session]: (s.reopens?.[session] ?? 0) + 1 };
-      });
       const r = run(
         "bash",
         [join(bin, "open-session.sh"), /** @type {string} */ (choice.worktree), "--background"],
@@ -867,7 +889,12 @@ export function tick(
           cwd: p.main,
         },
       );
-      out(`  ${session}: ${result(r)}`);
+      // Counted only once its tab opened: one that never did is retried uncounted.
+      if (r.ok)
+        updateState(p.state, (s) => {
+          s.reopens = { ...s.reopens, [session]: (s.reopens?.[session] ?? 0) + 1 };
+        });
+      out(`  ${session}: ${r.ok ? result(r) : neverOpened(r)}`);
       break;
     }
     case "ask": {

@@ -436,11 +436,36 @@ describe("pnpm prd open", () => {
     expect(script.match(/activate/g)).toEqual(["activate"]);
     expect(script).toMatch(/if not quiet then activate/);
     expect(script).toMatch(/set previousTab to current tab of theWindow/);
-    expect(script).toMatch(/if quiet then tell previousTab to select/);
+    expect(script).toMatch(/tell previousTab to select/);
     expect(script).toMatch(/set newSession to current session of newTab/);
     expect(script).toMatch(/tell newSession\s+set name to tabTitle\s+write text cmd/);
     // "title" is a session property in iTerm2: a variable of that name breaks "set name"
     expect(script).not.toMatch(/set title to/);
+  });
+
+  it("falls back when iTerm2 has no current window: the first window, else a new one (B-468)", () => {
+    ok(["auto", "--background"]);
+    const script = tabScript();
+    // current window is missing value when iTerm2 is hidden, minimised or has no key window.
+    expect(script).toMatch(/try\s+set theWindow to current window\s+end try/);
+    expect(script).toMatch(
+      /if theWindow is missing value then\s+try\s+set theWindow to first window\s+end try\s+end if/,
+    );
+    // Its tab is addressed only once a window is in hand, and never fails the open.
+    const inWindow = script.slice(script.indexOf("if theWindow is not missing value then"));
+    expect(script.indexOf("if theWindow is not missing value then")).toBeLessThan(
+      script.indexOf("current tab of theWindow"),
+    );
+    expect(inWindow).toMatch(/try\s+set previousTab to current tab of theWindow\s+end try/);
+    expect(script).toMatch(
+      /if quiet and previousTab is not missing value then\s+try\s+tell previousTab to select/,
+    );
+    // No usable window, or no tab made in it: a new window, and the command goes to its session.
+    expect(script).toMatch(
+      /if newSession is missing value then\s+set newWindow to \(create window with default profile\)\s+set newSession to current session of newWindow\s+end if\s+tell newSession/,
+    );
+    expect(script).not.toMatch(/current (tab|session) of current window/);
+    expect(script).not.toMatch(/count of windows/);
   });
 
   it("opens any command line in a tab with --command, exec'd so the tab closes with it", () => {

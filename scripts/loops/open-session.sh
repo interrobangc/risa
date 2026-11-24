@@ -20,7 +20,9 @@
 # three kinds are refused while their record is live.
 #
 # It opens the command in a new iTerm2 tab (osascript) and writes it to that
-# tab as `exec`, so the tab closes when the session ends. --background leaves
+# tab as `exec`, so the tab closes when the session ends: in the current
+# window, else (iTerm2 hidden, minimised, no key window) the first window, else
+# a new window. --background leaves
 # iTerm2 where it is (no activate) and selects the tab that was selected
 # before. Without iTerm2, or with --print, it prints the command instead, to
 # paste into a terminal.
@@ -40,7 +42,7 @@ while (($#)); do
     --background) background=1 ;;
     --command) command=${2:?--command <line>}; shift ;;
     --title) title=${2:?--title <title>}; shift ;;
-    -h | --help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "open: unknown option $1 (--print, --background)" ;;
     *) [[ -z $name ]] || die "open: one worktree at a time"; name=$1 ;;
   esac
@@ -79,17 +81,38 @@ on run argv
   set quiet to (item 3 of argv is "1")
   tell application "iTerm2"
     if not quiet then activate
-    if (count of windows) is 0 then
+    -- current window is missing value when iTerm2 is hidden, minimised or has
+    -- no key window (B-468): then the first window, else a new window.
+    set theWindow to missing value
+    try
+      set theWindow to current window
+    end try
+    if theWindow is missing value then
+      try
+        set theWindow to first window
+      end try
+    end if
+    set newSession to missing value
+    if theWindow is not missing value then
+      set previousTab to missing value
+      try
+        set previousTab to current tab of theWindow
+      end try
+      try
+        tell theWindow
+          set newTab to (create tab with default profile)
+        end tell
+        set newSession to current session of newTab
+      end try
+      if quiet and previousTab is not missing value then
+        try
+          tell previousTab to select
+        end try
+      end if
+    end if
+    if newSession is missing value then
       set newWindow to (create window with default profile)
       set newSession to current session of newWindow
-    else
-      set theWindow to current window
-      set previousTab to current tab of theWindow
-      tell theWindow
-        set newTab to (create tab with default profile)
-      end tell
-      set newSession to current session of newTab
-      if quiet then tell previousTab to select
     end if
     tell newSession
       set name to tabTitle

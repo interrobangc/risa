@@ -76,7 +76,19 @@ describe("the pure parts", () => {
 const NEW_SH = `#!/usr/bin/env bash
 echo "$*" >> "$STUB_STATE/new.calls"
 [[ -z \${STUB_NEW_FAIL:-} ]] || { echo "no room" >&2; exit 1; }
+if [[ -n \${STUB_NEW_MAKE:-} ]]; then
+  if [[ $1 == plan ]]; then name=plan-$2; else name=$2; fi
+  git worktree add -q -b "$1/$2" ".loops/$name" dev
+fi
 echo "made $2"
+`;
+// rm.sh: removes the worktree and its session record, as the real one does.
+const RM_SH = `#!/usr/bin/env bash
+echo "$*" >> "$STUB_STATE/rm.calls"
+if [[ $1 == plan-* ]]; then session=$1; else session=prd-$1; fi
+git worktree remove --force ".loops/$1"
+rm -f ".loops/.sessions/$session.json"
+echo "removed $1"
 `;
 const OPEN_SH = `#!/usr/bin/env bash
 printf '%s\\x1f' "$@" >> "$STUB_STATE/open.calls"; echo >> "$STUB_STATE/open.calls"
@@ -205,6 +217,7 @@ beforeAll(() => {
     copyFileSync(join(HERE, f), scripts(f));
   writeFileSync(scripts("new.sh"), NEW_SH);
   writeFileSync(scripts("open-session.sh"), OPEN_SH);
+  writeFileSync(scripts("rm.sh"), RM_SH);
   writeFileSync(scripts("tidy-cli.mjs"), TIDY);
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), BACKLOG);
   for (const f of ["registry.mjs", "format.mjs"])
@@ -313,6 +326,63 @@ describe("one tick per action", () => {
     expect(out).toContain("new.sh prd a: failed (exit 1): no room");
     expect(openCalls()).toEqual([]);
     expect(existsSync(join(sessions, "prd-a.json"))).toBe(false);
+  });
+
+  it("a start whose tab never opens leaves no record, no worktree and no count, and starts on a later tick (B-468)", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const out = ok(["--once"], { STUB_NEW_MAKE: "1", STUB_OPEN_FAIL: "prd-a" });
+    expect(out).toContain(
+      "  prd-a: its tab never opened, not counted as a death (failed (exit 1): no tab); a later tick retries; a removed",
+    );
+    expect(calls("rm")).toEqual(["a"]);
+    expect(existsSync(join(loops, "a"))).toBe(false);
+    expect(existsSync(join(sessions, "prd-a.json"))).toBe(false);
+    expect(dstate().reopens ?? {}).toEqual({});
+    // One line for the failed open, after the new.sh line.
+    expect(
+      logText()
+        .split("\n")
+        .filter((l) => l.includes("prd-a")),
+    ).toHaveLength(1);
+    // The opener works again: the next tick starts it afresh, no reopen.
+    git(main, "branch", "-q", "-D", "prd/a");
+    expect(ok(["--once"], { STUB_NEW_MAKE: "1" })).toContain("start a: planned, and nothing stops it");
+    expect(calls("new")).toEqual(["prd a", "prd a"]);
+    expect(openCalls().at(-1)?.slice(2)).toEqual(["--title", "prd-a", "--background"]);
+    expect(dstate().reopens ?? {}).toEqual({});
+  });
+
+  it("a planner whose tab never opens doesn't hold the planner slot", () => {
+    setRows([
+      { topic: "p", state: "to-write", waiting: 2 },
+      { topic: "q", state: "to-write", waiting: 2 },
+    ]);
+    ok(["--once"], { STUB_NEW_MAKE: "1", STUB_OPEN_FAIL: "plan-p" });
+    expect(calls("rm")).toEqual(["plan-p"]);
+    expect(existsSync(join(loops, "plan-p"))).toBe(false);
+    // No planner runs: another may be planned (here p again, by row order), none is reopened.
+    const next = ok(["--dry-run"]);
+    expect(next).toContain("plan p: 2 waiting, no plan yet");
+    expect(next).not.toContain("a planner is running");
+    expect(next).not.toMatch(/reopen plan-p/);
+  });
+
+  it("a reopen whose tab never opens adds no count and files no ask: a later tick retries (B-468)", () => {
+    worktree("a", "prd/a");
+    deadRecord("prd-a");
+    setRows([{ topic: "a", state: "running" }]);
+    for (let i = 0; i < 4; i++) {
+      const out = ok(["--once"], { STUB_OPEN_FAIL: "a" });
+      expect(out).toContain("reopen prd-a: prd-a died (reopen 1 of 2)");
+      expect(out).toContain("  prd-a: its tab never opened, not counted as a death");
+    }
+    expect(dstate().reopens ?? {}).toEqual({});
+    expect(existsSync(asks)).toBe(false);
+    expect(calls("rm")).toEqual([]);
+    expect(existsSync(join(loops, "a"))).toBe(true);
+    // Once a tab opens, it counts as the first reopen.
+    expect(ok()).toContain("reopen prd-a: prd-a died (reopen 1 of 2)");
+    expect(dstate().reopens).toEqual({ "prd-a": 1 });
   });
 
   it("reopen: the opener in the background, counted", () => {
@@ -773,6 +843,22 @@ describe("the keep-alive tick", () => {
     expect(out).toContain("start a:");
     expect(keptOpens()).toHaveLength(1);
     expect(calls("new")).toEqual(["prd a"]);
+  });
+
+  it("a kept session whose tab never opens records no quick death, and opens on a later tick", () => {
+    ok(["--once"], on);
+    const before = dstate().keepAlive.backlog;
+    setClock(T0 + 180);
+    const out = ok(["--once"], { ...on, STUB_OPEN_FAIL: "backlog" });
+    expect(out).toContain("  backlog: its tab never opened, not counted as a death");
+    expect(dstate().keepAlive.backlog).toEqual(before);
+    // A first open that fails leaves no entry at all.
+    rmSync(join(loops, ".dispatch.json"));
+    ok(["--once"], { ...on, STUB_OPEN_FAIL: "backlog" });
+    expect(dstate().keepAlive?.backlog).toBeUndefined();
+    setClock(T0 + 360);
+    ok(["--once"], on);
+    expect(dstate().keepAlive.backlog).toEqual({ deaths: 0, openedAt: (T0 + 360) * 1000 });
   });
 
   it("counts an unrecorded --remote-control backlog process as live", () => {
