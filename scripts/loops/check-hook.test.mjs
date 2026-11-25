@@ -1,7 +1,7 @@
 // check-hook.sh, the core's side of the check hook, on the sample project: it runs
 // the project's check (the config's hooks.check, the sample's two-line script)
 // with the mode, the base and the own test files, and then, when the plan says the
-// diff touches the tooling, the tooling tests (tooling-tests.mjs --check) with the
+// diff touches the tooling, the tooling tests (check-tooling.mjs) with the
 // check's rerun rules and state files. A stub vitest stands in for the tests.
 import { spawnSync } from "node:child_process";
 import {
@@ -17,7 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkProjects, failedFiles } from "./tooling-tests.mjs";
+import { checkProjects, failedFiles } from "./check-tooling.mjs";
 import { makeRepo } from "./sample-project/repo.mjs";
 
 let root, repo, calls, state;
@@ -169,7 +169,7 @@ describe("the check's tooling step reruns a failed test file", () => {
   });
 });
 
-describe("tooling-tests.mjs's check parts", () => {
+describe("check-tooling.mjs", () => {
   it("names the projects, and none for a config with no tooling tests", () => {
     const config = { testProjects: { tooling: ["t:unit"], browserHarness: "t:browser" } };
     expect(checkProjects(config, false)).toEqual(["t:unit"]);

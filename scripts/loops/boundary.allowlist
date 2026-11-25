@@ -61,6 +61,8 @@ scripts/loops/check-budget.mjs project-env 7
 scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 16
 scripts/loops/check-gate.test.mjs project-name 1
+scripts/loops/check-hook.sh project-env 4 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
+scripts/loops/check-hook.test.mjs project-env 3 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
 scripts/loops/check-run.sh project-env 30
 scripts/loops/check-run.test.mjs project-env 50
 scripts/loops/check-times.mjs project-env 2
@@ -117,7 +119,6 @@ scripts/loops/land.test.mjs project-env 30
 scripts/loops/land.test.mjs project-name 4
 scripts/loops/lease.mjs project-env 2
 scripts/loops/lease.sh project-env 26
-scripts/loops/lease.test.mjs core-to-project 1
 scripts/loops/lease.test.mjs project-env 20
 scripts/loops/lib.sh app-path 1
 scripts/loops/lib.sh project-env 28
@@ -141,7 +142,7 @@ scripts/loops/open-session.sh project-env 5
 scripts/loops/open-session.test.mjs project-env 10
 scripts/loops/open-session.test.mjs project-name 7
 scripts/loops/pr.sh project-env 2
-scripts/loops/prd.sh core-to-project 4
+scripts/loops/prd.sh core-to-project 3
 scripts/loops/prd.sh project-env 40
 scripts/loops/prd.sh project-name 3
 scripts/loops/prompts/backlog.sh project-env 4 # tool knobs (CARETOOK_CAPTAIN, CARETOOK_MAX_PRDS): the RISA_ rename, orchestration-split-3 slice 4

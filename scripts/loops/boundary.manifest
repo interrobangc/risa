@@ -114,6 +114,7 @@ scripts/loops/check-run.sh core
 scripts/loops/check-run.test.mjs core
 scripts/loops/check-times.mjs core
 scripts/loops/check-times.test.mjs core
+scripts/loops/check-tooling.mjs core
 scripts/loops/checks project
 scripts/loops/checks.mjs project
 scripts/loops/checks.test.mjs project
