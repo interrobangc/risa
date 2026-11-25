@@ -1,6 +1,6 @@
 // `pnpm prd ci blame`, `ci file`, the infra rerun, the commit status and `ci status`,
 // against a fake git, gh, backlog and board. Nothing here reaches a real one.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -8,15 +8,23 @@ import { describe, expect, it } from "vitest";
 import { devRunPlan, slicesNear, sortFlakes, splitFailures, verdictFailures } from "./blame.mjs";
 import { EXIT, blame, ciStatus, fileFlakes, main, requestRun } from "./ci.mjs";
 import { applyFindings, findingKey, keyMark, pruneQuarantine } from "./filing.mjs";
-import { buildVerdict } from "./verdict.mjs";
+import { tierData } from "./tier-data.mjs";
 
 const SHA = "a".repeat(40);
 const DEV = "d".repeat(40);
 const NARROWED = "e".repeat(40);
 const UNIT = "scripts/loops/a.test.mjs";
 const UNIT2 = "scripts/loops/b.test.mjs";
-const INT = "packages/data/src/x.int.test.ts";
+const INT = "lib/x.int.test.ts";
 const test1 = { job: "unit", file: UNIT, name: "one" };
+const SPEC = tierData().browserCheckFile("sign-in");
+/**
+ * A verdict file the project's CI wrote (verdict.fixtures/): read as a file, as
+ * `pnpm prd ci` reads one.
+ * @param {string} name
+ */
+const fixture = (name) =>
+  JSON.parse(readFileSync(new URL(`./verdict.fixtures/${name}.json`, import.meta.url), "utf8"));
 const test2 = { job: "unit", file: UNIT2, name: "two" };
 
 /** A verdict with the fields the tools read. */
@@ -273,7 +281,7 @@ describe("the split", () => {
 });
 
 describe("a browser check's failure", () => {
-  const spec = "scripts/browser-checks/sign-in.spec.mjs";
+  const spec = SPEC;
   const failed = {
     afterRerun: { files: [spec], tests: [] },
     failed: { jobs: ["browser"], files: [spec], tests: [], unnamedJobs: [] },
@@ -344,37 +352,23 @@ describe("unknown is never green", () => {
 });
 
 describe("blame never clears a failure it didn't compare", () => {
-  const ok = { result: "success" };
-  const job = (/** @type {any} */ failures, result = "failure") => ({
-    result,
-    outputs: { failures: JSON.stringify({ reported: true, quarantined: [], ...failures }) },
-  });
-  const listed = [{ file: UNIT, name: "one", item: "B-1" }];
-  /** A real narrowed dev verdict: the unit job passed, with test1 on dev's quarantine. */
-  const quarantinedOnDev = (/** @type {any[]} */ quarantined) =>
-    buildVerdict({
-      commit: NARROWED,
-      runId: "2",
-      tier: "unit",
-      needs: { plan: ok, unit: job({ total: 1, files: [], tests: [], quarantined }, "success") },
-      quarantine: listed,
-      narrowed: { target: DEV, files: [UNIT] },
-    });
+  // The verdicts below are the project CI's own (verdict.fixtures/): a narrowed
+  // dev run is on commit NARROWED for target DEV, the branch's on SHA.
 
   it("B-587: a test dev skipped as quarantined stays unknown", async () => {
-    const w = world({ dev: quarantinedOnDev([]) });
+    const w = world({ dev: fixture("dev-quarantined-skipped") });
     expect(await run(w)).toBe(EXIT.unknown);
     expect(w.lines.some((l) => l.includes("unknown:") && l.includes(UNIT))).toBe(true);
     expect(w.filings).toEqual([]);
   });
 
   it("B-587: a quarantined test that failed in dev's quarantine step stays unknown", async () => {
-    const w = world({ dev: quarantinedOnDev([{ file: UNIT, name: "one", status: "failed" }]) });
+    const w = world({ dev: fixture("dev-quarantined-failed") });
     expect(await run(w)).toBe(EXIT.unknown);
   });
 
   it("B-587: a quarantined test that passed in dev's quarantine step is the branch's", async () => {
-    const w = world({ dev: quarantinedOnDev([{ file: UNIT, name: "one", status: "passed" }]) });
+    const w = world({ dev: fixture("dev-quarantined-passed") });
     expect(await run(w)).toBe(2);
   });
 
@@ -384,63 +378,32 @@ describe("blame never clears a failure it didn't compare", () => {
   });
 
   it("B-588: a flake doesn't explain a failed job", async () => {
-    const branchVerdict = buildVerdict({
-      commit: SHA,
-      runId: "1",
-      tier: "unit",
-      needs: {
-        plan: ok,
-        static: ok,
-        unit: job({
-          total: 2,
-          files: [UNIT],
-          tests: [{ file: UNIT, name: "one" }],
-          rerun: { files: [], tests: [] },
-        }),
-      },
-    });
+    const branchVerdict = fixture("branch-flake-failed-job");
     expect(branchVerdict.kind).toBe("file");
     const w = world({ branchVerdict });
     expect(await run(w)).toBe(EXIT.unknown);
     expect(w.filings).toEqual([]);
   });
 
-  /** The unit job's flake, beside an integration failure dev has too. */
-  const flakeBeside = (/** @type {string} */ unitResult) =>
-    buildVerdict({
-      commit: SHA,
-      runId: "1",
-      tier: "integration",
-      needs: {
-        plan: ok,
-        static: ok,
-        unit: job(
-          { total: 2, files: [UNIT], tests: [{ file: UNIT, name: "one" }], rerun: { files: [], tests: [] } },
-          unitResult,
-        ),
-        integration: job({ total: 1, files: [INT], tests: [{ file: INT, name: "n" }], rerun: null }),
-      },
-    });
+  // The unit job's flake, beside an integration failure dev has too: the unit
+  // job failed (branch-flake-beside-failure) or passed on its rerun (…-passed-rerun).
   const intOnDev = () =>
     onDev({ kind: "file", tests: [{ job: "integration", file: INT, name: "n" }] }, [INT]);
 
   it("B-588: an unexplained job beside a failure dev has too isn't all dev's", async () => {
-    expect(await run(world({ branchVerdict: flakeBeside("failure"), dev: intOnDev() }))).toBe(EXIT.unknown);
+    expect(await run(world({ branchVerdict: fixture("branch-flake-beside-failure"), dev: intOnDev() }))).toBe(
+      EXIT.unknown,
+    );
   });
 
   it("B-588: a job that passed on its rerun still leaves the rest all dev's", async () => {
-    expect(await run(world({ branchVerdict: flakeBeside("success"), dev: intOnDev() }))).toBe(0);
+    expect(
+      await run(world({ branchVerdict: fixture("branch-flake-beside-passed-rerun"), dev: intOnDev() })),
+    ).toBe(0);
   });
 
   /** A real narrowed dev verdict whose unit job failed to load the file. */
-  const loadFailureOnDev = () =>
-    buildVerdict({
-      commit: NARROWED,
-      runId: "2",
-      tier: "unit",
-      needs: { plan: ok, unit: job({ total: 0, files: [UNIT], tests: [] }) },
-      narrowed: { target: DEV, files: [UNIT] },
-    });
+  const loadFailureOnDev = () => fixture("dev-load-failure");
 
   it("B-589: a named failure against a dev load failure stays unknown", async () => {
     const w = world({ dev: loadFailureOnDev() });
@@ -449,22 +412,8 @@ describe("blame never clears a failure it didn't compare", () => {
   });
 
   it("B-590: a branch load failure against dev's named failure stays unknown", async () => {
-    const branchVerdict = buildVerdict({
-      commit: SHA,
-      runId: "1",
-      tier: "unit",
-      needs: { plan: ok, static: ok, unit: job({ total: 0, files: [UNIT], tests: [] }) },
-    });
-    const dev = buildVerdict({
-      commit: NARROWED,
-      runId: "2",
-      tier: "unit",
-      needs: {
-        plan: ok,
-        unit: job({ total: 1, files: [UNIT], tests: [{ file: UNIT, name: "one" }] }),
-      },
-      narrowed: { target: DEV, files: [UNIT] },
-    });
+    const branchVerdict = fixture("branch-load-failure");
+    const dev = fixture("dev-named-failure");
     const w = world({ branchVerdict, dev });
     expect(await run(w)).toBe(EXIT.unknown);
     expect(w.lines.some((l) => l.includes("unknown:") && l.includes(UNIT))).toBe(true);

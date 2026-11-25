@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "target": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "runId": "1",
+  "tier": "integration",
+  "ranTier": "integration",
+  "narrowed": false,
+  "narrowedFiles": [],
+  "forcedFlake": null,
+  "kind": "file",
+  "failed": {
+    "jobs": ["unit", "integration"],
+    "files": ["scripts/loops/a.test.mjs", "lib/x.int.test.ts"],
+    "tests": [
+      {
+        "job": "unit",
+        "file": "scripts/loops/a.test.mjs",
+        "name": "one"
+      },
+      {
+        "job": "integration",
+        "file": "lib/x.int.test.ts",
+        "name": "n"
+      }
+    ],
+    "truncated": false,
+    "unnamedJobs": []
+  },
+  "afterRerun": {
+    "files": ["lib/x.int.test.ts"],
+    "tests": [
+      {
+        "job": "integration",
+        "file": "lib/x.int.test.ts",
+        "name": "n"
+      }
+    ]
+  },
+  "flaky": [
+    {
+      "job": "unit",
+      "file": "scripts/loops/a.test.mjs",
+      "name": "one",
+      "brake": false
+    }
+  ],
+  "brake": {
+    "jobs": [],
+    "tests": [],
+    "files": []
+  },
+  "infra": {
+    "jobs": [],
+    "notRun": []
+  },
+  "browser": null,
+  "secondZone": null,
+  "quarantined": [],
+  "quarantineList": []
+}

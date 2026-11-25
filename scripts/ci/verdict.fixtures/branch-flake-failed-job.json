@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "target": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "runId": "1",
+  "tier": "unit",
+  "ranTier": "unit",
+  "narrowed": false,
+  "narrowedFiles": [],
+  "forcedFlake": null,
+  "kind": "file",
+  "failed": {
+    "jobs": ["unit"],
+    "files": ["scripts/loops/a.test.mjs"],
+    "tests": [
+      {
+        "job": "unit",
+        "file": "scripts/loops/a.test.mjs",
+        "name": "one"
+      }
+    ],
+    "truncated": false,
+    "unnamedJobs": ["unit"]
+  },
+  "afterRerun": {
+    "files": [],
+    "tests": []
+  },
+  "flaky": [
+    {
+      "job": "unit",
+      "file": "scripts/loops/a.test.mjs",
+      "name": "one",
+      "brake": false
+    }
+  ],
+  "brake": {
+    "jobs": [],
+    "tests": [],
+    "files": []
+  },
+  "infra": {
+    "jobs": [],
+    "notRun": []
+  },
+  "browser": null,
+  "secondZone": null,
+  "quarantined": [],
+  "quarantineList": []
+}

@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { REFUSED } from "./candidate.mjs";
 import { EXIT, main } from "./ci.mjs";
 import { GATE_CONTEXT, TEST_STATUS, gateStatus, parseOverrideArgs } from "./release-gate.mjs";
+import { tierData } from "./tier-data.mjs";
+
+const { browserCheckFile } = tierData();
 
 const CI_REF = "ci/release/staging";
 const gitEnv = () => ({
@@ -133,7 +136,7 @@ const release = (/** @type {string[]} */ ...argv) => main(["release", ...argv], 
 const override = (over = {}, sha = tip) =>
   main(["override", sha.slice(0, 8), "--reason", "fictional emergency"], /** @type {any} */ (io(over)));
 const flaky = (/** @type {boolean} */ brake) => [
-  { job: "browser", file: "scripts/browser-checks/roundtrip.spec.mjs", name: null, brake },
+  { job: "browser", file: browserCheckFile("roundtrip"), name: null, brake },
 ];
 
 beforeEach(() => {

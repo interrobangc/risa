@@ -64,6 +64,16 @@ scripts/ci/tier-data.test.mjs core
 scripts/ci/tiers.json project
 scripts/ci/tiers.mjs project
 scripts/ci/tiers.test.mjs project
+scripts/ci/verdict.fixtures/branch-flake-beside-failure.json core
+scripts/ci/verdict.fixtures/branch-flake-beside-passed-rerun.json core
+scripts/ci/verdict.fixtures/branch-flake-failed-job.json core
+scripts/ci/verdict.fixtures/branch-load-failure.json core
+scripts/ci/verdict.fixtures/candidate-green.json core
+scripts/ci/verdict.fixtures/dev-load-failure.json core
+scripts/ci/verdict.fixtures/dev-named-failure.json core
+scripts/ci/verdict.fixtures/dev-quarantined-failed.json core
+scripts/ci/verdict.fixtures/dev-quarantined-passed.json core
+scripts/ci/verdict.fixtures/dev-quarantined-skipped.json core
 scripts/ci/verdict.mjs project
 scripts/ci/verdict.test.mjs project
 scripts/ci/zones.mjs project

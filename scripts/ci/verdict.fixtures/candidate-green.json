@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "commit": "cccccccccccccccccccccccccccccccccccccccc",
+  "target": "cccccccccccccccccccccccccccccccccccccccc",
+  "runId": "7",
+  "tier": "candidate",
+  "ranTier": "candidate",
+  "narrowed": false,
+  "narrowedFiles": [],
+  "forcedFlake": null,
+  "kind": "green",
+  "failed": {
+    "jobs": [],
+    "files": [],
+    "tests": [],
+    "truncated": false,
+    "unnamedJobs": []
+  },
+  "afterRerun": null,
+  "flaky": [],
+  "brake": {
+    "jobs": [],
+    "tests": [],
+    "files": []
+  },
+  "infra": {
+    "jobs": [],
+    "notRun": []
+  },
+  "browser": null,
+  "secondZone": null,
+  "quarantined": [],
+  "quarantineList": []
+}

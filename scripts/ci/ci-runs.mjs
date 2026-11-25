@@ -8,7 +8,6 @@ import { join } from "node:path";
 
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME, exitFor } from "./ci-io.mjs";
 import { tierData } from "./tier-data.mjs";
-import { isVerdict } from "./verdict.mjs";
 
 const { TIERS, ciRefName, parseCiRef } = tierData();
 
@@ -45,7 +44,26 @@ export function listRuns(/** @type {Io} */ io, /** @type {string[]} */ filter) {
   }
 }
 
-/** The verdict artifact of a run, or null. */
+/** The verdict file's version this reader knows. The project's CI writes the file. */
+export const VERDICT_VERSION = 1;
+
+/**
+ * Whether a parsed verdict file is one this reader knows: its version, and the
+ * fields every reader of it needs.
+ * @param {unknown} v
+ */
+export function isVerdict(v) {
+  const o = /** @type {Record<string, unknown> | null} */ (v);
+  return (
+    !!o &&
+    o.version === VERDICT_VERSION &&
+    typeof o.commit === "string" &&
+    typeof o.tier === "string" &&
+    typeof o.kind === "string"
+  );
+}
+
+/** The verdict artifact of a run (its `verdict.json`), or null. */
 export function readVerdict(
   /** @type {Io} */ io,
   /** @type {number} */ runId,

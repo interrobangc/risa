@@ -5,22 +5,17 @@
 .github/workflows/ci.yml project-to-core 1
 apps/web/test/browserLease.ts project-to-core 1
 package.json project-to-core 4
-scripts/ci/blame.test.mjs app-path 2
-scripts/ci/blame.test.mjs core-to-project 2
+scripts/ci/blame.test.mjs app-path 1
 scripts/ci/blame.test.mjs project-name 1
 scripts/ci/browser-job.mjs project-to-core 1
 scripts/ci/candidate.mjs project-name 1
 scripts/ci/candidate.test.mjs project-name 1
 scripts/ci/ci-io.mjs project-env 3
-scripts/ci/ci-runs.mjs core-to-project 1
 scripts/ci/ci-runs.mjs project-name 2
 scripts/ci/ci.mjs project-env 1
 scripts/ci/ci.mjs project-name 1
 scripts/ci/ci.test.mjs app-path 4
-scripts/ci/ci.test.mjs core-to-project 1
-scripts/ci/promote.test.mjs core-to-project 2
 scripts/ci/promote.test.mjs project-name 1
-scripts/ci/release-gate.test.mjs core-to-project 1
 scripts/ci/release-gate.test.mjs project-name 1
 scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (the browser harness test): residual until the move
 scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
