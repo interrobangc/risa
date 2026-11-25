@@ -482,14 +482,14 @@ case $cmd in
     fi
     [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
     # shellcheck disable=SC2086
-    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "$(project_command check)${pmode:+ ($pmode)}" -- \
+    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
       "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
       echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
-      echo "$(project_command check) passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
+      echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     fi
     ;;
   sync)
