@@ -34,6 +34,7 @@
 // `reclaim --yes`), the main checkout, an unmerged branch, a session itself.
 
 import { createHash } from "node:crypto";
+import { branchKinds } from "./config.mjs";
 
 /** Tickets younger than this are left alone: their holder may still be writing its pid. */
 export const TICKET_GRACE_SECS = 60;
@@ -43,8 +44,8 @@ export const HANG_LOG_DAYS = 7;
 export const CI_REF_SECS = 86400;
 /** Item statuses `pnpm backlog archive` moves out. */
 export const ARCHIVABLE = ["landed", "staging", "live", "dropped"];
-/** The long-lived branches tidy never lists. */
-export const PROTECTED_BRANCHES = ["dev", "main", "staging"];
+/** The long-lived branches tidy never lists: the trunk and the protected ones (dev, main, staging here). */
+export const protectedBranches = () => branchKinds().kept;
 
 /** stack-lib.sh's test_db_name: a worktree's own test database. */
 export const testDbName = (/** @type {string} */ name) =>
@@ -152,11 +153,11 @@ export function tidy(facts) {
   const liveSession = new Map(sessions.filter((s) => s.live || s.rotating).map((s) => [s.worktree, s]));
 
   for (const w of facts.worktrees ?? []) {
-    const slice = /^slice\/[^/]+\/[^/]+$/.test(w.branch) && w.merged;
-    const plan = w.branch.startsWith("plan/") && w.landed && w.level;
+    const slice = branchKinds().sliceOf(w.branch) && w.merged;
+    const plan = branchKinds().is(w.branch, "plan") && w.landed && w.level;
     if (!slice && !plan) continue;
     const what = slice
-      ? `${w.branch} is merged into prd/${w.branch.split("/")[1]}`
+      ? `${w.branch} is merged into ${branchKinds().parentOf(w.branch)}`
       : `${w.branch} landed in dev and is level with it`;
     const s = liveSession.get(w.name);
     if (w.dirty)
@@ -202,7 +203,7 @@ export function tidy(facts) {
   }
 
   for (const b of facts.branches ?? []) {
-    if (b.worktree || PROTECTED_BRANCHES.includes(b.name)) continue;
+    if (b.worktree || protectedBranches().includes(b.name)) continue;
     ask.push(
       b.merged
         ? {
@@ -306,7 +307,7 @@ export function tidy(facts) {
       why:
         running === null
           ? `finished, but the worktrees can't be read (${someOf(ids)})`
-          : `finished, but prd/${topic} still has a worktree (${someOf(ids)})`,
+          : `finished, but ${branchKinds().branch("prd", topic)} still has a worktree (${someOf(ids)})`,
     });
 
   for (const r of facts.registry ?? []) {

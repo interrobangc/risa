@@ -80,6 +80,11 @@ describe("citations", () => {
     const ids = backlogIds({ backlog: { idPrefix: "SAM" } });
     expect([...citations("(SAM-3, B-4, XSAM-5)", ids).items]).toEqual(["SAM-3"]);
   });
+
+  it("cites a former prefix's id as its own", () => {
+    const ids = backlogIds({ backlog: { idPrefix: "RISA", formerIdPrefix: "B" } });
+    expect([...citations("(RISA-3, B-772, RISA-772, C-4)", ids).items]).toEqual(["RISA-3", "RISA-772"]);
+  });
 });
 
 describe("citedParts", () => {

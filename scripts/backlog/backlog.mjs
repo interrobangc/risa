@@ -92,9 +92,9 @@ import * as edits from "./inbox-edit.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
-import { loadConfig } from "../loops/config.mjs";
+import { loadConfigOrExit } from "../loops/config.mjs";
 
-const { config } = loadConfig();
+const { config } = loadConfigOrExit("backlog");
 const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = config.paths.backlog;

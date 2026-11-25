@@ -54,6 +54,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { CAPTAIN_SESSION, pickCaptain } from "./captain.mjs";
 import { plannerModelFor } from "./planner-model.mjs";
 import { isLive, processOf, readRecord } from "./sessions.mjs";
+import { branchKinds } from "./config.mjs";
 
 /** Claude Code's projects folder name for a working directory. */
 export const projectFolder = (/** @type {string} */ dir) => dir.replace(/[^A-Za-z0-9]/g, "-");
@@ -137,7 +138,7 @@ export function carryOnPrompt(kind, topic) {
   const head = "This session stopped on a usage limit, and the limit has now reset.";
   if (kind === "plan")
     return `${head} Check what you had written against git (git status, git log), then carry on with the plan for ${topic} where you left off.`;
-  return `${head} If \`pnpm prd land\` was cut off, run \`pnpm prd land --resume <branch>\` first. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of prd/${topic}, merges already in), respawn any slice agents that stopped (\`pnpm prd prompt slice ${topic} <n> --continue\`), and carry on in your recorded landing mode.`;
+  return `${head} If \`pnpm prd land\` was cut off, run \`pnpm prd land --resume <branch>\` first. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of ${branchKinds().branch("prd", topic)}, merges already in), respawn any slice agents that stopped (\`pnpm prd prompt slice ${topic} <n> --continue\`), and carry on in your recorded landing mode.`;
 }
 
 /**
@@ -157,13 +158,14 @@ export function chooseCommand({
   plannerModel = DEFAULT_MODEL,
   carryOn = false,
 }) {
-  const m = /^(prd|plan|hotfix)\/(.+)$/.exec(branch);
-  if (!m)
+  const kindOf = branchKinds().kindOf(branch);
+  const name = kindOf && kindOf !== "slice" ? branchKinds().nameOf(branch, kindOf) : null;
+  if (!kindOf || !name)
     throw new Error(
-      `${dir} is on ${branch || "no branch"}: only prd/, plan/ and hotfix/ worktrees have sessions`,
+      `${dir} is on ${branch || "no branch"}: only ${branchKinds().prefixes.prd}, ${branchKinds().prefixes.plan} and ${branchKinds().prefixes.hotfix} worktrees have sessions`,
     );
-  const kind = /** @type {"prd" | "plan" | "hotfix"} */ (m[1]);
-  const topic = m[2];
+  const kind = /** @type {"prd" | "plan" | "hotfix"} */ (kindOf);
+  const topic = name;
   const session = `${kind}-${topic}`;
   const auto = statusAuto || record?.auto === true;
   const managed = record?.managed === true;

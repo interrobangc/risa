@@ -25,6 +25,9 @@ import { fileURLToPath } from "node:url";
 /** The file's name, here and nowhere else. */
 export const CONFIG_NAME = "risa.json";
 
+/** An id prefix (B, RISA, R2): the loader's type and backlogIds both test it with this. */
+const ID_PREFIX = /^[A-Z][A-Z0-9]*$/;
+
 /** @param {unknown} v */
 const oneLine = (v) => typeof v === "string" && /^\S(.*\S)?$/.test(v) && !/[\n\r\t]/.test(v);
 
@@ -59,9 +62,12 @@ const TYPES = {
     ok: (v) => oneLine(v) && /^#+ \S/.test(String(v)),
     want: "a Markdown heading (`## …`)",
   },
-  item: { ok: (v) => typeof v === "string" && /^[A-Z]+-\d+$/.test(v), want: "a backlog id (B-12)" },
+  item: {
+    ok: (v) => typeof v === "string" && /^[^-]+-\d+$/.test(v) && ID_PREFIX.test(v.split("-")[0] ?? ""),
+    want: "a backlog id (B-12)",
+  },
   idPrefix: {
-    ok: (v) => typeof v === "string" && /^[A-Z][A-Z0-9]*$/.test(v),
+    ok: (v) => typeof v === "string" && ID_PREFIX.test(v),
     want: "an id prefix (capitals: B, RISA)",
   },
   version: {
@@ -119,6 +125,9 @@ export const SHAPE = [
   ["backlog.prdsHeading", "heading"],
   // Backlog ids are <idPrefix>-<n> (B-12); backlogIds below builds the rest from it.
   ["backlog.idPrefix", "idPrefix"],
+  // A prefix the project's ids had before (B, for items moved in from another project): a lookup
+  // reads B-772 as RISA-772; new ids, headings and tags keep idPrefix.
+  ["backlog.formerIdPrefix", "idPrefix?"],
   ["backlog.zoneOverflowItem", "item?"],
   // The project's commands that the tool runs.
   ["commands.install", "command"],
@@ -254,6 +263,9 @@ export function configProblems(raw) {
   const guarded = has.get("branches.protected");
   if (Array.isArray(guarded) && guarded.includes(trunk))
     problems.push("branches.protected: must not list the trunk");
+  const idPrefix = has.get("backlog.idPrefix");
+  if (has.has("backlog.formerIdPrefix") && has.get("backlog.formerIdPrefix") === idPrefix)
+    problems.push("backlog.formerIdPrefix: must differ from backlog.idPrefix");
   const prefixes = found.filter(([key]) => key.startsWith("branches.prefixes.")).map(([, v]) => v);
   if (new Set(prefixes).size !== prefixes.length)
     problems.push("branches.prefixes: two kinds share a prefix");
@@ -296,6 +308,22 @@ export function loadConfig({ path, env = process.env } = {}) {
 }
 
 /**
+ * loadConfig for a command: a config that doesn't load prints one `<who>: …` line
+ * (every problem on it) and exits 2, never a Node stack at import.
+ * @param {string} who the command's name, first on the line (backlog)
+ * @param {{ path?: string, env?: Record<string, string | undefined> }} [opts]
+ */
+export function loadConfigOrExit(who, opts) {
+  try {
+    return loadConfig(opts);
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    process.stderr.write(`${who}: ${e.problems.join("; ")}\n`);
+    process.exit(2);
+  }
+}
+
+/**
  * Every set value as `key=value` lines' pairs: a list gives key.0, key.1, ….
  * @param {Record<string, any>} config a valid config
  * @returns {[string, string][]}
@@ -324,26 +352,113 @@ export function getValue(config, key) {
 /**
  * The backlog's ids, from the config's prefix: `<prefix>-<n>` (B-12, RISA-772).
  * The one place that knows their form; the backlog tools build every id, heading,
- * tag and lookup from it.
+ * tag and lookup from it. With a former prefix (backlog.formerIdPrefix), a lookup
+ * reads a former id as its own (B-772 is RISA-772); nothing new is made with it.
+ * Throws a ConfigError on a prefix the loader would refuse.
  * @param {Record<string, any>} [config] a valid config (default: this repo's)
  */
 export function backlogIds(config = loadConfig().config) {
-  const prefix = `${config.backlog.idPrefix}-`;
+  const { idPrefix, formerIdPrefix } = config.backlog ?? {};
+  for (const [key, value] of [
+    ["idPrefix", idPrefix],
+    ["formerIdPrefix", formerIdPrefix],
+  ])
+    if ((key === "idPrefix" || value !== undefined) && !TYPES.idPrefix.ok(value))
+      throw new ConfigError([`backlog.${key}: must be ${TYPES.idPrefix.want}`]);
+  const prefix = `${idPrefix}-`;
   /** A regular expression's source for one id (the prefix is capitals and digits, nothing to escape). */
   const pattern = `${prefix}\\d+`;
   const whole = new RegExp(`^${pattern}$`, "i");
+  /** An id with the former prefix (B-772 for RISA), any case; never when there is none. */
+  const former = formerIdPrefix ? new RegExp(`^${formerIdPrefix}-(\\d+)$`, "i") : null;
+  /** "12", "b-12" → "B-12"; a former id → this prefix's; anything else upper-cased. @param {string} s */
+  const normalize = (s) => {
+    if (/^\d+$/.test(s)) return `${prefix}${s}`;
+    const old = former?.exec(s);
+    return old ? `${prefix}${old[1]}` : s.toUpperCase();
+  };
   return {
     /** "B-" */
     prefix,
     pattern,
-    /** Whether `s` is an id, in any case ("b-12" too). @param {string} s */
-    is: (s) => whole.test(s),
+    /** The former prefix's "B-", or null. */
+    formerPrefix: formerIdPrefix ? `${formerIdPrefix}-` : null,
+    /** A pattern's source that also finds former ids, for a lookup in text (normalize what it finds). */
+    lookupPattern: formerIdPrefix ? `(?:${idPrefix}|${formerIdPrefix})-\\d+` : pattern,
+    /** Whether `s` is an id, in any case ("b-12" too), or a former one. @param {string} s */
+    is: (s) => whole.test(s) || !!former?.test(s),
     /** @param {number} n */
     id: (n) => `${prefix}${n}`,
-    /** The id's number. @param {string} id */
-    num: (id) => Number(id.slice(prefix.length)),
-    /** "12", "b-12" → "B-12"; anything else upper-cased. @param {string} s */
-    normalize: (s) => (/^\d+$/.test(s) ? `${prefix}${s}` : s.toUpperCase()),
+    /** The id's number (a former id's too). @param {string} id */
+    num: (id) => Number(normalize(id).slice(prefix.length)),
+    normalize,
+  };
+}
+
+/** The branch kinds, in the order a branch is matched against their prefixes. */
+export const BRANCH_KINDS = /** @type {const} */ (["prd", "slice", "plan", "hotfix"]);
+
+/** @type {Map<string, ReturnType<typeof makeBranches>>} this repo's (or RISA_CONFIG's), once per file */
+const branchCache = new Map();
+
+/**
+ * The branches' forms, from the config's trunk and prefixes: the one place in Node
+ * that knows them (lib.sh's prd_prefix and the rest in bash). `prd/x`, `slice/x/2`,
+ * `plan/x` and `hotfix/x` here; another project's prefixes give its own.
+ * @param {Record<string, any>} [config] a valid config (default: this repo's, read once)
+ */
+export function branchKinds(config) {
+  if (config) return makeBranches(config);
+  const path = configPath();
+  let made = branchCache.get(path);
+  if (!made) branchCache.set(path, (made = makeBranches(loadConfig({ path }).config)));
+  return made;
+}
+
+/** @param {Record<string, any>} config */
+function makeBranches(config) {
+  /** @type {Record<(typeof BRANCH_KINDS)[number], string>} */
+  const prefixes = config.branches.prefixes;
+  const trunk = /** @type {string} */ (config.branches.trunk);
+  /** The branch's kind by its prefix, else null. @param {string | null | undefined} branch */
+  const kindOf = (branch) => BRANCH_KINDS.find((k) => (branch ?? "").startsWith(prefixes[k])) ?? null;
+  /** What follows the kind's prefix, or null when the branch isn't that kind. */
+  const rest = (
+    /** @type {string | null | undefined} */ branch,
+    /** @type {(typeof BRANCH_KINDS)[number]} */ kind,
+  ) => ((branch ?? "").startsWith(prefixes[kind]) ? (branch ?? "").slice(prefixes[kind].length) : null);
+  /** A slice branch (<slice prefix><topic>/<n>) → { topic, n }, else null. @param {string | null | undefined} branch */
+  const sliceOf = (branch) => {
+    const m = /^([^/]+)\/([^/]+)$/.exec(rest(branch, "slice") ?? "");
+    return m ? { topic: m[1], n: m[2] } : null;
+  };
+  return {
+    trunk,
+    prefixes,
+    kindOf,
+    /** Whether the branch has the kind's prefix. @param {string | null | undefined} branch @param {(typeof BRANCH_KINDS)[number]} kind */
+    is: (branch, kind) => rest(branch, kind) !== null,
+    /** The branch of a kind: branch("prd", "x") → "prd/x"; branch("slice", "x", 2) → "slice/x/2". */
+    branch: (
+      /** @type {(typeof BRANCH_KINDS)[number]} */ kind,
+      /** @type {string} */ topic,
+      /** @type {string | number} [n] */ n,
+    ) => `${prefixes[kind]}${topic}${n === undefined ? "" : `/${n}`}`,
+    /** The name after a kind's prefix (prd/x, plan/x, hotfix/x → x), else null. */
+    nameOf: rest,
+    sliceOf,
+    /** The topic of any kind's branch (its first part after the prefix), else "". @param {string | null | undefined} branch */
+    topicOf: (branch) => {
+      const kind = kindOf(branch);
+      return kind ? (/** @type {string} */ (rest(branch, kind)).split("/")[0] ?? "") : "";
+    },
+    /** lib.sh's parent_of: a slice → its PRD branch, anything else → the trunk. @param {string} branch */
+    parentOf: (branch) => {
+      const s = sliceOf(branch);
+      return s ? `${prefixes.prd}${s.topic}` : trunk;
+    },
+    /** The trunk and the protected branches: never removed, never landed on by hand. */
+    kept: [trunk, .../** @type {string[]} */ (config.branches.protected)],
   };
 }
 

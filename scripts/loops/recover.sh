@@ -303,7 +303,7 @@ after_infrastructure() {
 session_name() {
   local b
   b=$(git -C "$1" branch --show-current 2>/dev/null)
-  case $b in prd/*) echo "prd-${b#prd/}" ;; plan/*) echo "plan-${b#plan/}" ;; *) basename "$1" ;; esac
+  case $b in "$prd_prefix"*) echo "prd-${b#"$prd_prefix"}" ;; "$plan_prefix"*) echo "plan-${b#"$plan_prefix"}" ;; *) basename "$1" ;; esac
 }
 
 run_actions() {

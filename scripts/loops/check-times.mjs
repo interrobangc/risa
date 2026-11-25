@@ -9,6 +9,7 @@
 // and the limit that stopped it (`budget` or `silence`; empty when none did).
 // Older lines have nine to fifteen, and none of what they lack.
 import { existsSync, readFileSync } from "node:fs";
+import { branchKinds } from "./config.mjs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
  *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
@@ -61,8 +62,7 @@ export function parseLog(text) {
 
 /** The PRD a run belongs to: slice/<topic>/<n> and prd/<topic> give the topic, else the worktree name. */
 export function prdOf(run) {
-  const m = /^(?:slice|prd|plan|hotfix)\/([^/]+)/.exec(run.branch);
-  return m ? m[1] : run.worktree || "(unknown)";
+  return branchKinds().topicOf(run.branch) || run.worktree || "(unknown)";
 }
 
 const median = (xs) => {

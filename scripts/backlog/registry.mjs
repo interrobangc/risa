@@ -15,10 +15,10 @@
 // "old": it is recognised and refused, never read as rows (it was converted
 // once, by hand-run tooling since removed).
 
-import { loadConfig } from "../loops/config.mjs";
+import { loadConfigOrExit } from "../loops/config.mjs";
 import { BacklogError } from "./format.mjs";
 
-const { config } = loadConfig();
+const { config } = loadConfigOrExit("backlog");
 
 /** hold: waits on the user; done: finished; standing: never finishes, runs while it has waiting items; alone: nothing else runs beside it; design: its planner runs on Fable. */
 export const FLAGS = ["hold", "done", "standing", "alone", "design"];

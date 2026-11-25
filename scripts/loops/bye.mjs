@@ -43,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { awaitsAnswer, listAsks } from "./asks.mjs";
 import { listNotices } from "./notices.mjs";
 import { ancestorClaude, claudeName, isLive, processOf, processTable, readRecords } from "./sessions.mjs";
+import { branchKinds } from "./config.mjs";
 
 /** Exit code when something is open. */
 export const OPEN = 3;
@@ -265,12 +266,13 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
   let role = "session",
     name = "this shell's claude",
     topic = "";
-  const slice = /^slice\/(.+)\/(\d+)$/.exec(branch);
+  const slice = /^(.+)\/(\d+)$/.exec(branchKinds().nameOf(branch, "slice") ?? "");
   if (slice) [role, name, topic] = ["slice", `${slice[1]}-${slice[2]}`, slice[1]];
   else if (rec) [role, name, topic] = [rec.record.kind || "session", rec.name, rec.record.topic || ""];
   else {
-    const m = /^(prd|plan|hotfix)\/(.+)$/.exec(branch);
-    if (m) [role, name, topic] = [m[1], m[1] === "prd" ? `prd-${m[2]}` : `${m[1]}-${m[2]}`, m[2]];
+    const kind = branchKinds().kindOf(branch);
+    const rest = kind && kind !== "slice" ? branchKinds().nameOf(branch, kind) : "";
+    if (kind && rest) [role, name, topic] = [kind, `${kind}-${rest}`, rest];
   }
 
   // The role's worktree: its own for slice, prd, plan and hotfix (when still there).
@@ -315,9 +317,12 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
   // Worktrees and unmerged branches still out, beyond the role's own worktree (counted above).
   const left = { worktrees: /** @type {string[]} */ ([]), branches: /** @type {string[]} */ ([]) };
   const patterns = {
-    prd: [new RegExp(`^${escape(topic)}(?:-\\d+)?$`), [`prd/${topic}`, `slice/${topic}/*`]],
-    plan: [new RegExp(`^plan-${escape(topic)}$`), [`plan/${topic}`]],
-    hotfix: [new RegExp(`^hotfix-${escape(topic)}$`), [`hotfix/${topic}`]],
+    prd: [
+      new RegExp(`^${escape(topic)}(?:-\\d+)?$`),
+      [branchKinds().branch("prd", topic), branchKinds().branch("slice", topic, "*")],
+    ],
+    plan: [new RegExp(`^plan-${escape(topic)}$`), [branchKinds().branch("plan", topic)]],
+    hotfix: [new RegExp(`^hotfix-${escape(topic)}$`), [branchKinds().branch("hotfix", topic)]],
   }[role];
   if (patterns && topic) {
     const [re, refs] = /** @type {[RegExp, string[]]} */ (patterns);

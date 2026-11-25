@@ -23,6 +23,7 @@ import { describeRun, isTopicRun, outstandingRuns } from "../ci/outstanding.mjs"
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, testDbOwner, tidy } from "./tidy.mjs";
+import { branchKinds } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -212,7 +213,7 @@ export function collectTidyFacts({
   const byName = new Map(worktrees.map((w) => [w.name, w]));
 
   // A merged slice stays until its wave lands and no run of its topic is out.
-  const merged = worktrees.filter((w) => w.merged && /^slice\/[^/]+\/[^/]+$/.test(w.branch));
+  const merged = worktrees.filter((w) => w.merged && branchKinds().sliceOf(w.branch));
   const runs = merged.length ? outstanding() : [];
   for (const w of merged) {
     const topic = w.branch.split("/")[1] ?? "";
@@ -253,7 +254,7 @@ export function collectTidyFacts({
   );
   // Unreadable is null, never "no PRD is running": their finished items stay.
   const prdWorktrees = listedWorktrees.ok
-    ? [...checkedOut].filter((b) => b.startsWith("prd/")).map((b) => b.slice("prd/".length))
+    ? [...checkedOut].flatMap((b) => branchKinds().nameOf(b, "prd") ?? [])
     : null;
   const branches = lines(git(main, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]).out).map(
     (name) => {

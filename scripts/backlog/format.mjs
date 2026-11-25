@@ -14,9 +14,10 @@
 //      - commit: 1a2b3c4
 //
 //      Free notes (any Markdown) until the next item.
-import { backlogIds, loadConfig } from "../loops/config.mjs";
+import { backlogIds, loadConfigOrExit } from "../loops/config.mjs";
 
-const { config } = loadConfig();
+// A broken config is one `backlog:` line and exit 2 (this loads first, before any command).
+const { config } = loadConfigOrExit("backlog");
 /** The id form (prefix and pattern), from the project config. */
 export const IDS = backlogIds(config);
 
@@ -483,7 +484,7 @@ export function similarItems(text, items) {
       };
     })
     .filter((m) => m.score >= SIMILAR_THRESHOLD)
-    .sort((a, b) => b.score - a.score || Number(a.id.slice(2)) - Number(b.id.slice(2)))
+    .sort((a, b) => b.score - a.score || IDS.num(a.id) - IDS.num(b.id))
     .slice(0, SIMILAR_MAX);
 }
 

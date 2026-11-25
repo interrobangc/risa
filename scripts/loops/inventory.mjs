@@ -48,6 +48,7 @@
 //   { "at": "<ISO time>", "stacks": ["<name>", …], "servers": ["<name>", …], "testDb": true,
 //     "dispatcher": true }
 // Names that no longer have a worktree are skipped, with a warning.
+import { branchKinds } from "./config.mjs";
 
 export const CLASSES = ["prd", "plan", "active", "merged", "stackless"];
 export const STEPS = [
@@ -121,9 +122,9 @@ export const DEFAULT_MIN_FREE_GB = 10;
 /** The class of one worktree and why. @param {WorktreeFacts} w */
 export function classify(w) {
   const b = w.branch ?? "";
-  if (b.startsWith("prd/")) return { class: "prd", why: `PRD integration branch ${b}` };
-  if (b.startsWith("plan/")) return { class: "plan", why: `planning branch ${b}` };
-  if (/^slice\/[^/]+\/[^/]+$/.test(b)) {
+  if (branchKinds().is(b, "prd")) return { class: "prd", why: `PRD integration branch ${b}` };
+  if (branchKinds().is(b, "plan")) return { class: "plan", why: `planning branch ${b}` };
+  if (branchKinds().sliceOf(b)) {
     if (w.merged)
       return {
         class: "merged",
@@ -135,7 +136,7 @@ export function classify(w) {
   return {
     class: "stackless",
     why: b
-      ? `${b} isn't a prd/, plan/ or slice/ branch: nothing to bring back`
+      ? `${b} isn't a ${branchKinds().prefixes.prd}, ${branchKinds().prefixes.plan} or ${branchKinds().prefixes.slice} branch: nothing to bring back`
       : "detached HEAD: nothing to bring back",
   };
 }

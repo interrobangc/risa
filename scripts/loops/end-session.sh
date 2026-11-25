@@ -30,8 +30,8 @@ else
   here=$(here_name 2>/dev/null || true) session=""
   if [[ -n $here ]]; then
     case $(git -C "$loops/$here" branch --show-current 2>/dev/null) in
-      prd/*) session=prd-$here ;;
-      plan/* | hotfix/*) session=$here ;;
+      "$prd_prefix"*) session=prd-$here ;;
+      "$plan_prefix"* | "$hotfix_prefix"*) session=$here ;;
     esac
   fi
   found=$(node "$bin/sessions.mjs" self ${session:+"$session"}) ||

@@ -78,6 +78,7 @@ scripts/loops/boundary.allowlist core
 scripts/loops/boundary.manifest core
 scripts/loops/boundary.mjs core
 scripts/loops/boundary.test.mjs core
+scripts/loops/branch-prefixes.test.mjs core
 scripts/loops/browser.sh core
 scripts/loops/browser.test.mjs core
 scripts/loops/bye.mjs core

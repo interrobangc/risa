@@ -48,6 +48,7 @@ import { awaitsAnswer, getAsk, listAsks, shorten, span } from "./asks.mjs";
 import { readData, usualTime } from "./metrics.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { workerFacts } from "./workers.mjs";
+import { branchKinds } from "./config.mjs";
 
 export const MARKS = ["nudged", "replied", "restarted", "left", "asked"];
 export const STATES = ["ok", "slow", "quiet", "no-progress", "stopped", "unknown"];
@@ -141,7 +142,7 @@ export function watchFacts({ topic, facts, plan, asks, merging = {} }) {
       continue;
     }
     const n = re.exec(f.name)?.[1];
-    if (!n || f.branch !== `slice/${topic}/${n}`) continue;
+    if (!n || f.branch !== branchKinds().branch("slice", topic, n)) continue;
     const agents = f.agents.filter((a) => a.agent);
     const firsts = agents.map((a) => ms(a.firstAt)).filter((t) => t !== null);
     const names = new RegExp(`\\b(slice ${n}|${f.name})\\b`, "i");
@@ -486,7 +487,8 @@ export function reading({ topic, env, now = Date.now(), raise = false }) {
   }
   /** @type {Record<string, boolean>} */
   const merging = {};
-  for (const f of facts) if (f.branch.startsWith(`slice/${topic}/`)) merging[f.name] = mergingIn(f.dir);
+  for (const f of facts)
+    if (f.branch.startsWith(branchKinds().branch("slice", topic, ""))) merging[f.name] = mergingIn(f.dir);
   const { workers, orchestrator } = watchFacts({ topic, facts, plan, asks, merging });
   const data = readData({
     runLog: env.CARETOOK_RUN_LOG || join(loops, ".run-log.jsonl"),

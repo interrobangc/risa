@@ -26,11 +26,11 @@
 // A branch gives the topic when none is passed (slice/<t>/<n>, prd/<t>, …).
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { branchKinds } from "./config.mjs";
 
 /** The topic of a branch: slice/<t>/<n>, prd/<t>, plan/<t> and hotfix/<t> give <t>; others none. */
 export function topicOfBranch(branch) {
-  const m = /^(?:slice|prd|plan|hotfix)\/([^/]+)/.exec(branch ?? "");
-  return m ? m[1] : "";
+  return branchKinds().topicOf(branch);
 }
 
 /** The event as it's written: time and kind first, a topic from its branch when it has none. */

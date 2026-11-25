@@ -35,6 +35,7 @@
 // `scripts/loops/session.sh`); a topic with no hot files collides with nothing.
 
 import { awaitsAnswer } from "./asks.mjs";
+import { branchKinds } from "./config.mjs";
 
 /** A managed session that died is reopened this many times; the next death is an ask. */
 export const MAX_REOPENS = 2;
@@ -77,8 +78,9 @@ const asTime = (/** @type {number | string | null | undefined} */ t) =>
 
 /** prd/<topic> or plan/<topic> → { kind, topic }; anything else → null. @param {string} branch */
 export function worktreeKind(branch) {
-  const m = /^(prd|plan)\/([^/]+)$/.exec(branch ?? "");
-  return m ? { kind: /** @type {"prd" | "plan"} */ (m[1]), topic: m[2] } : null;
+  const kind = branchKinds().kindOf(branch);
+  const topic = kind === "prd" || kind === "plan" ? branchKinds().nameOf(branch, kind) : null;
+  return kind && topic && !topic.includes("/") ? { kind: /** @type {"prd" | "plan"} */ (kind), topic } : null;
 }
 
 /**

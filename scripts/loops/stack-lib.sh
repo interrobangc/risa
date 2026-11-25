@@ -141,7 +141,7 @@ stack_teardown() {
 slice_merged() {
   local branch tip parent
   branch=$(git -C "$1" branch --show-current 2>/dev/null) || return 1
-  [[ $branch == slice/*/* ]] || return 1
+  [[ $branch == "$slice_prefix"*/* ]] || return 1
   parent=$(parent_of "$branch")
   tip=$(git -C "$1" rev-parse HEAD 2>/dev/null) || return 1
   git -C "$1" rev-parse --verify --quiet "$parent" >/dev/null || return 1
@@ -155,7 +155,7 @@ slice_merged() {
 slice_held() {
   local branch topic out rc=0
   branch=$(git -C "$1" branch --show-current 2>/dev/null) || return 1
-  topic=${branch#slice/}; topic=${topic%%/*}
+  topic=${branch#"$slice_prefix"}; topic=${topic%%/*}
   if ! git -C "$1" merge-base --is-ancestor HEAD "$trunk" 2>/dev/null; then
     echo "its wave hasn't landed"
     return 0

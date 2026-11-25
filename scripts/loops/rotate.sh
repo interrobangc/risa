@@ -55,7 +55,7 @@ done
 [[ -z $brief || -z $brief_path ]] || die "rotate: --brief or --brief-path, not both"
 if [[ -n $self ]]; then
   [[ -z $topic ]] || die "rotate --self: takes no topic (it rotates the calling session)"
-  [[ $(git branch --show-current 2>/dev/null) != slice/* ]] ||
+  [[ $(git branch --show-current 2>/dev/null) != "$slice_prefix"* ]] ||
     die "rotate --self: refused on a slice branch: this shell carries its orchestrator's session (hand off to your orchestrator)"
   caller=$(node "$bin/sessions.mjs" caller 2>&1) || die "rotate --self: $caller (only a recorded session rotates itself)"
   IFS=$'\t' read -r self_name self_kind self_pid self_topic <<<"$caller"
@@ -103,11 +103,11 @@ fi
 
 here=$(here_name)
 here_topic=""
-[[ -n $here && $(git -C "$loops/$here" branch --show-current 2>/dev/null) == prd/* ]] && here_topic=$(topic_of "$here")
+[[ -n $here && $(git -C "$loops/$here" branch --show-current 2>/dev/null) == "$prd_prefix"* ]] && here_topic=$(topic_of "$here")
 topic=${topic:-$here_topic}
 [[ -n $topic ]] || die "rotate: name a topic, or run it inside a PRD's worktree"
 dir=$loops/$topic
-[[ $(git -C "$dir" branch --show-current 2>/dev/null) == "prd/$topic" ]] || die "rotate: no PRD worktree for $topic ($dir on prd/$topic)"
+[[ $(git -C "$dir" branch --show-current 2>/dev/null) == "$prd_prefix$topic" ]] || die "rotate: no PRD worktree for $topic ($dir on $prd_prefix$topic)"
 name=prd-$topic
 
 plan=plans/$topic-plan.md
@@ -127,7 +127,7 @@ fi
 
 slices=""
 for d in "$loops"/*/; do
-  [[ $(git -C "$d" branch --show-current 2>/dev/null) == "slice/$topic/"* ]] && slices+="${slices:+ }$(basename "$d")"
+  [[ $(git -C "$d" branch --show-current 2>/dev/null) == "$slice_prefix$topic/"* ]] && slices+="${slices:+ }$(basename "$d")"
 done
 if [[ -n $slices && -z $mid_wave ]]; then
   die "rotate: slice worktrees of $topic still exist ($slices): merge them first, or pass --mid-wave on the user's word (their agents end too)"
