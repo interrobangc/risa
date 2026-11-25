@@ -1,12 +1,11 @@
 // pnpm prd tidy (tidy-cli.mjs) against a throwaway repo and .loops with these
-// scripts copied in, and fake docker, lsof, osascript, pnpm, nvm and backlog:
-// nothing here touches real containers, volumes, sessions, the asks queue, a
-// real claude or GitHub.
+// scripts copied in, the stack hooks on the sample project's stub, and fake
+// lsof, osascript, pnpm, nvm and backlog: nothing here touches real containers,
+// volumes, sessions, the asks queue, a real claude or GitHub.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -22,7 +21,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { collectTidyFacts, processCwds } from "./tidy-cli.mjs";
 import { tidy as sortFacts } from "./tidy.mjs";
-import "./config-fixture.mjs";
+import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -42,17 +41,11 @@ Stack: no · Reads: none · Tests: unit
 Stack: no · Reads: none · Tests: unit
 `;
 
-// A running shared test Postgres (container c1) whose databases are
-// FAKE_DBS (only for the listing query), and FAKE_VOLUMES as the dangling volumes.
-const FAKE_DOCKER = `#!/usr/bin/env bash
-echo "docker $*" >> "$FAKE_LOG"
-case "$1 $2" in
-  "ps -q") [[ "$*" == *caretook-shared-test* && "$*" == *postgres* ]] && echo c1 ;;
-  "exec c1") [[ "$*" == *psql* && "$*" == *LIKE* ]] && printf '%s\\n' $FAKE_DBS ;;
-  "volume ls") printf '%s\\n' "$FAKE_VOLUMES" ;;
-esac
-exit 0
-`;
+// The stub stack hook's state (stack-hook.sh): an orphan test database and the
+// stack's leftovers (one volume, and an image tidy leaves to reclaim).
+const ORPHANS = "sample_test_gone\n";
+const LEFTOVERS =
+  "volume=sample-loop9_data 300 dangling; no worktree uses sample-loop9\nimage=img1 900 dangling image\n";
 // The backlog's list --json and prd list --json: nothing finished, no rows.
 const FAKE_BACKLOG = 'console.log("[]");\n';
 
@@ -84,13 +77,12 @@ beforeAll(() => {
   const nvm = join(root, "nvm");
   mkdirSync(bin);
   mkdirSync(nvm);
-  writeFileSync(join(bin, "docker"), FAKE_DOCKER);
   writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
   writeFileSync(join(bin, "osascript"), '#!/usr/bin/env bash\necho "osascript $*" >> "$FAKE_LOG"\n');
   writeFileSync(join(bin, "claude"), '#!/usr/bin/env bash\necho "claude $*" >> "$FAKE_LOG"\n');
   // No process listens or works anywhere.
   writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
-  for (const f of ["docker", "pnpm", "osascript", "claude", "lsof"]) chmodSync(join(bin, f), 0o755);
+  for (const f of ["pnpm", "osascript", "claude", "lsof"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
   env = {
     ...process.env,
@@ -104,11 +96,12 @@ beforeAll(() => {
     CARETOOK_SESSIONS_DIR: sessions,
     CARETOOK_SESSION: "",
     CARETOOK_LEASE_ROOT: leases,
-    CARETOOK_SHARED_TEST_PORT: "",
-    CARETOOK_SHARED_TEST_PROJECT: "",
-    FAKE_DBS: "caretook_test_t_3 caretook_test_gone",
-    FAKE_VOLUMES: "caretook-loop9_data\tcaretook-loop9\nother_db\tother",
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
+    SAMPLE_STACK_LOG: log,
   };
+  mkdirSync(env.SAMPLE_STACK_STATE);
+  writeFileSync(join(env.SAMPLE_STACK_STATE, "testdb-orphans"), ORPHANS);
+  writeFileSync(join(env.SAMPLE_STACK_STATE, "leftovers"), LEFTOVERS);
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
@@ -121,10 +114,7 @@ beforeAll(() => {
   mkdirSync(join(main, "scripts/backlog"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => /\.(sh|mjs)$/.test(f) && !f.endsWith(".test.mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The project's scripts too: the test DB's old place here forwards to the
-  // project's until slice 3 of orchestration-split-2 swaps its callers to the
-  // config's hook (and this copy goes with it).
-  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
+  env.RISA_CONFIG = stubHookConfig(main);
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
@@ -202,10 +192,10 @@ describe("tidy (no --yes)", () => {
       /^ {2}branch +slice\/t\/9 \(no worktree, not merged into prd\/t: kept, never deleted\)$/m,
     );
     expect(out).toMatch(/^Kept:\n {2}worktree +t-2 \(.*uncommitted changes\)$/m);
-    expect(out).toMatch(/^ {2}test-db +caretook_test_gone \(no worktree owns it\)$/m);
-    expect(out).toMatch(/^ {2}volume +caretook-loop9_data \(dangling; no worktree uses caretook-loop9\)$/m);
+    expect(out).toMatch(/^ {2}test-db +sample_test_gone \(no worktree owns it\)$/m);
+    expect(out).toMatch(/^ {2}volume +sample-loop9_data \(dangling; no worktree uses sample-loop9\)$/m);
     expect(out).toMatch(/^ {2}hang-log +.*t-ui-1\.log \(30 days old\)$/m);
-    expect(out).not.toMatch(/t-3 \(|caretook_test_t_3|other_db/);
+    expect(out).not.toMatch(/t-3 \(|img1/);
     expect(out).toMatch(/Nothing changed\. pnpm prd tidy --yes removes the safe ones\./);
 
     for (const n of ["t-1", "t-2", "t-3"]) expect(existsSync(join(loops, n))).toBe(true);
@@ -213,7 +203,9 @@ describe("tidy (no --yes)", () => {
     expect(existsSync(join(sessions, "prd-gone.json"))).toBe(true);
     expect(filedAsks()).toEqual([]);
     expect(existsSync(join(loops, ".browser-hangs", "t-ui-1.log"))).toBe(true);
-    expect(readFileSync(log, "utf8")).not.toMatch(/dropdb|volume rm/);
+    // The hooks were asked with every worktree's name; nothing was removed.
+    expect(readFileSync(log, "utf8")).toMatch(/^test-db orphans t-1 t-2 t-3$/m);
+    expect(readFileSync(log, "utf8")).not.toMatch(/drop-db|leftovers remove/);
   });
 
   it("--json gives the same lists", () => {
@@ -328,11 +320,12 @@ describe("tidy --yes", () => {
     expect(ask.text).toMatch(/branch slice\/t\/9: no worktree, not merged/);
     expect(out).not.toMatch(/^Now send a PushNotification/m);
 
-    // Through the (fake) Docker: the orphan database and the dangling volume only.
+    // Through the (stub) hooks: the orphan database and the dangling volume only.
     const calls = readFileSync(log, "utf8");
-    expect(calls).toMatch(/^docker exec c1 dropdb -U caretook --if-exists --force caretook_test_gone$/m);
-    expect(calls).not.toMatch(/dropdb .*caretook_test_t_3/);
-    expect(calls.match(/^docker volume rm .*/gm)).toEqual(["docker volume rm caretook-loop9_data"]);
+    expect(calls.match(/^test-db drop-db .*/gm)).toEqual(["test-db drop-db sample_test_gone"]);
+    expect(calls.match(/^stack leftovers remove .*/gm)).toEqual([
+      "stack leftovers remove volume sample-loop9_data",
+    ]);
     expect(existsSync(join(loops, ".browser-hangs", "t-ui-1.log"))).toBe(false);
     expect(calls).not.toMatch(/^claude /m);
   });
