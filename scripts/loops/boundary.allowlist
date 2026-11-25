@@ -84,7 +84,6 @@ scripts/loops/drain.mjs project-env 10
 scripts/loops/drain.test.mjs app-path 4
 scripts/loops/drain.test.mjs project-env 23
 scripts/loops/end-session.sh project-env 4
-scripts/loops/fixes-plans.test.mjs project-to-core 1
 scripts/loops/gc.sh core-to-project 1
 scripts/loops/gc.sh project-env 1
 scripts/loops/heartbeat.mjs project-env 3
@@ -98,7 +97,6 @@ scripts/loops/inventory.mjs project-name 1
 scripts/loops/inventory.test.mjs project-name 9
 scripts/loops/keep-alive.mjs project-env 1
 scripts/loops/land-journal.mjs project-env 1
-scripts/loops/land.sh app-path 3
 scripts/loops/land.sh project-env 14
 scripts/loops/land.test.mjs app-path 64
 scripts/loops/land.test.mjs core-to-project 6
@@ -133,7 +131,6 @@ scripts/loops/prd.sh core-to-project 3
 scripts/loops/prd.sh project-env 40
 scripts/loops/prd.sh project-name 3
 scripts/loops/prompts/backlog.sh project-env 4 # tool knobs (CARETOOK_CAPTAIN, CARETOOK_MAX_PRDS): the RISA_ rename, orchestration-split-3 slice 4
-scripts/loops/ready.sh app-path 4
 scripts/loops/reclaim.sh app-path 8
 scripts/loops/reclaim.sh project-name 4
 scripts/loops/reclaim.test.mjs app-path 6

@@ -85,6 +85,14 @@ run_hook() {
   (cd "$top" && eval "$c" '"$@"')
 }
 
+# landing_hook ARG… → the project's landing hook (hooks.landing: how to try a
+# landing, what the main checkout needs after one), its lines on stdout; nothing
+# when the config sets none. Never fails.
+landing_hook() {
+  config_get hooks.landing >/dev/null 2>&1 || return 0
+  run_hook landing "$@" || true
+}
+
 # not_files FILE… → stdin without the lines that are exactly one of FILEs (none
 # named: all of it). Never fails.
 not_files() {

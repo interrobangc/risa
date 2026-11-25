@@ -288,6 +288,8 @@ scripts/project/doc-budget.config.mjs project
 scripts/project/doc-budget.mjs project
 scripts/project/doc-budget.test.mjs project
 scripts/project/host-headers.mjs project
+scripts/project/landing.mjs project
+scripts/project/landing.test.mjs project
 scripts/project/log.sh project
 scripts/project/package-diff.mjs project
 scripts/project/prompt-golden.txt project

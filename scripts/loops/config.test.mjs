@@ -550,6 +550,18 @@ describe("commands through the config", () => {
     expect(r.stderr).toBe(`${CONFIG_NAME}: no value for hooks.docBudget\n`);
   });
 
+  it("runs the landing hook for the reports, and prints nothing when the config sets none", () => {
+    const hooked = join(tmp, "landing.json");
+    writeFileSync(hooked, JSON.stringify(changed((c) => (c.hooks = { landing: "printf '%s|'" }))));
+    const none = join(tmp, "no-landing.json");
+    writeFileSync(none, JSON.stringify(changed((c) => (c.hooks = {}))));
+    const script = 'landing_hook try "/m"; echo "rc=$?"';
+    expect(bash(script, { RISA_CONFIG: hooked }).stdout).toBe("try|/m|rc=0\n");
+    const r = bash(script, { RISA_CONFIG: none });
+    expect(r.stdout).toBe("rc=0\n");
+    expect(r.stderr).toBe("");
+  });
+
   it("finds the repo's main checkout and its .loops, from the main checkout and from a worktree", () => {
     const repo = realpathSync(mkdtempSync(join(tmp, "repo-")));
     const g = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" });

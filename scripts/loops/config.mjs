@@ -162,6 +162,8 @@ export const SHAPE = [
   ["hooks.browser", "command?"],
   ["hooks.checkAreas", "command?"],
   ["hooks.docBudget", "command?"],
+  // How to try a landing and what the main checkout needs after one (ready.sh, land.sh).
+  ["hooks.landing", "command?"],
   // The boundary lint: the project's own folders, which no core file may name.
   ["boundary.appPaths", "path[]?"],
 ];

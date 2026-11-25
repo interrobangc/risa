@@ -70,7 +70,7 @@ elif [[ -n $(server_pids "$port") ]]; then
 else
   echo "- http://localhost:$port (not running: \`pnpm prd serve $topic\`)"
 fi
-echo "- Sign in as \`member@example.com\` (owner, two groups), \`caretaker@example.com\` or \`viewer@example.com\`; the password is \`SEED_USER_PASSWORD\` in \`packages/data/.env\`."
+landing_hook try | sed 's/^/- /'
 
 echo
 echo "## Pull request"
@@ -119,10 +119,7 @@ echo
 git -C "$main" diff --shortstat "$trunk...$branch"
 changed=$(git -C "$main" diff --name-only "$trunk...$branch")
 notes=()
-reset=$(project_command datastoreReset)
-grep -q '^packages/data/src/db/migrations/' <<< "$changed" && notes+=("adds or changes a **migration**: run \`$reset\` in the main checkout after landing")
-grep -q '^packages/data/src/db/seeds/' <<< "$changed" && notes+=("changes **seeds**: run \`$reset\` in the main checkout after landing")
-grep -q '^powersync/' <<< "$changed" && notes+=("changes the **sync config**: run \`docker compose restart powersync\` in the main checkout after landing")
+while IFS= read -r n; do [[ -z $n ]] || notes+=("$n"); done < <(landing_hook notes <<< "$changed")
 grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && notes+=("changes **dependencies or scripts**: run \`pnpm install\` in the main checkout after landing")
 if ((${#notes[@]})); then
   echo

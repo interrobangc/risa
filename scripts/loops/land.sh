@@ -451,8 +451,7 @@ render_to_test() {
     echo
     echo "## What to try, and where"
     echo
-    echo "- Run \`pnpm dev\` in $main (after \`pnpm install\`, or \`pnpm datastore:reset\` if the notes below say so) and open http://localhost:5173."
-    echo "- Sign in as \`member@example.com\`, \`caretaker@example.com\` or \`viewer@example.com\` (the password is \`SEED_USER_PASSWORD\` in \`packages/data/.env\`)."
+    landing_hook try "$main" | sed 's/^/- /'
     echo "- Changed files, to find the screen or tool:"
     sed 's/^/  - /' <<< "$(head -20 <<< "$changed")"
     echo
@@ -541,9 +540,7 @@ mark_landed() {
 }
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
-  grep -qE '^packages/data/src/db/(migrations|seeds)/' <<< "$changed" &&
-    echo "  migrations or seeds changed: run \`$(project_command datastoreReset)\` in $main"
-  grep -q '^powersync/' <<< "$changed" && echo "  the sync config changed: run \`docker compose restart powersync\` in $main"
+  landing_hook notes <<< "$changed" | sed 's/^/  /'
   grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
   if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
