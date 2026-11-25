@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Shared by the scripts in scripts/loops/. Source it; don't run it.
 
+# loops_lib_dir → this file's folder, absolute, resolved once as it is sourced:
+# `pnpm prd` runs it by a relative path, and a later `cd` (new.sh's into a new
+# worktree) would point a relative one at another checkout.
+loops_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 # find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
 # which stays on the trunk), and loops, $main/.loops (every other worktree, and
 # the tool's state), for the repo DIR is in: by default the one this file is in.
 # The one place a command finds its repo; risa's machine config will answer here.
 # False, main empty, outside a repo.
 find_repo() {
-  main=$(git -C "${1:-$(dirname "${BASH_SOURCE[0]}")}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
+  main=$(git -C "${1:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
   loops=$main/.loops
   [[ -n $main ]]
 }
@@ -22,7 +27,7 @@ leases=$loops/.slots
 #   on stderr, when the config has no value for KEY.
 config_load() {
   [[ -n ${_config_loaded:-} ]] && return 0
-  _config=$(node "$(dirname "${BASH_SOURCE[0]}")/config.mjs" dump) || return 1
+  _config=$(node "$loops_lib_dir/config.mjs" dump) || return 1
   _config_loaded=1
 }
 config_get() {
@@ -90,7 +95,7 @@ run_hook() {
 # hook's script, and the tool's own checkout always has the one it was written
 # with. ARGs that name a worktree must be absolute.
 stack_hook() {
-  (cd "$(dirname "${BASH_SOURCE[0]}")" && run_hook "$@")
+  (cd "$loops_lib_dir" && run_hook "$@")
 }
 
 # fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else
@@ -179,7 +184,7 @@ die() { echo "$*" >&2; exit 1; }
 run_log() {
   local once=()
   if [[ ${1:-} == --once ]]; then once=(--once "${2:-}"); shift 2; fi
-  node "$(dirname "${BASH_SOURCE[0]}")/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
+  node "$loops_lib_dir/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
     ${once[@]+"${once[@]}"} "$@" </dev/null >/dev/null 2>&1 || true
 }
 
@@ -278,7 +283,7 @@ docs_only() {
 # diff (BASE...TIP, which check-plan.mjs computes) should wait for, why, and
 # ok | below | refused for the declared tier.
 propose_tier() {
-  node "$(dirname "${BASH_SOURCE[0]}")/check-plan.mjs" --propose --repo "$main" --base "$1" --head "$2" \
+  node "$loops_lib_dir/check-plan.mjs" --propose --repo "$main" --base "$1" --head "$2" \
     ${3:+--declared "$3"}
 }
 
@@ -392,7 +397,7 @@ file_mtime() {
 # <load> <threshold> <cores>"; a missing or failing script reads as unread (not busy).
 load_gate() {
   local s out
-  s="$(dirname "${BASH_SOURCE[0]}")/load-gate.mjs"
+  s="$loops_lib_dir/load-gate.mjs"
   out=$([[ -f $s ]] && node "$s" 2>/dev/null || true)
   echo "${out:-unread - - -}"
 }
@@ -490,7 +495,7 @@ pr_for() {
 pr_state() {
   local repo query
   repo=$(gh_repo) || return 1
-  query=$(node --input-type=module -e "import { PR_QUERY } from '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codex-review.mjs'; process.stdout.write(PR_QUERY)")
+  query=$(node --input-type=module -e "import { PR_QUERY } from '$loops_lib_dir/codex-review.mjs'; process.stdout.write(PR_QUERY)")
   gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
 }
 
@@ -499,7 +504,7 @@ pr_state() {
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
+  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.
@@ -520,7 +525,7 @@ land_dir() {
 # bug or for a hotfix, docs(…) for a plan branch.
 land_subject() {
   local topic=${1#*/} ids type
-  ids=$(node "$(dirname "${BASH_SOURCE[0]}")/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
+  ids=$(node "$loops_lib_dir/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
     node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));
       const t=r.length&&r.every(i=>i.type==="bug")?"fix":"feat";
       console.log(t+"\t"+r.map(i=>i.id).join(", "))')
@@ -677,7 +682,7 @@ _dev_sync() {
 }
 # _inbox_merge BASE OURS THEIRS OUT → the inbox merge of three files, into OUT.
 _inbox_merge() {
-  node "$(dirname "${BASH_SOURCE[0]}")/../backlog/inbox-merge.mjs" "$1" "$2" "$3" > "$4"
+  node "$loops_lib_dir/../backlog/inbox-merge.mjs" "$1" "$2" "$3" > "$4"
 }
 # _merge_trees BASE OURS THEIRS → the merged tree (BASE empty: git's own). A
 # conflict only in the inbox is resolved by the inbox merge; any other fails.

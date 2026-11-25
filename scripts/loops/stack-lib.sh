@@ -101,7 +101,7 @@ slice_held() {
     echo "its wave hasn't landed"
     return 0
   fi
-  out=$(node "$(dirname "${BASH_SOURCE[0]}")/../ci/outstanding.mjs" "$topic" "$1" 2>/dev/null) || rc=$?
+  out=$(node "$loops_lib_dir/../ci/outstanding.mjs" "$topic" "$1" 2>/dev/null) || rc=$?
   case $rc in
     0) return 1 ;;
     10) echo "its topic's run has no verdict: ${out//$'\n'/, }" ;;

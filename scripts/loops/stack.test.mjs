@@ -16,10 +16,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -178,6 +178,42 @@ describe("new.sh slice", () => {
     expect(read(loops, "t-4", ".env")).toMatch(/caretook-loop2/);
     ok("rm.sh", ["t-4"]);
     expect(leases()).toEqual(["1"]);
+  });
+});
+
+describe("new.sh by a relative path, as pnpm prd runs it", () => {
+  // new.sh cds into the new worktree before it writes the env files; the stack
+  // hooks must still run from the tool's checkout, not from that worktree's,
+  // which on a branch older than the hooks has no hook scripts at all. (new.sh
+  // fails when any hook does, so its success says the test-db hook ran too.)
+  it("writes a worktree's env files with the tool's hooks on a branch that predates them", () => {
+    const hooks = dirname(JSON.parse(read(FIXTURE_CONFIG)).hooks.stackStatus.split(" ")[0]);
+    const tmp = join(root, "old-branch");
+    git(main, "worktree", "add", "-q", "-b", "hotfix/old", tmp, "dev");
+    git(tmp, "rm", "-q", "-r", hooks);
+    git(tmp, "commit", "-q", "-m", "chore: before the stack hooks");
+    git(main, "worktree", "remove", tmp);
+    git(main, "branch", "-q", "hotfix/old-stack", "hotfix/old");
+    const rel = (args) => {
+      const r = spawnSync("bash", ["scripts/loops/new.sh", ...args], { cwd: main, encoding: "utf8", env });
+      if (r.status !== 0) throw new Error(`new.sh ${args.join(" ")} failed:\n${r.stdout}\n${r.stderr}`);
+    };
+    try {
+      rel(["hotfix", "old"]);
+      const dir = join(loops, "hotfix-old");
+      expect(existsSync(join(dir, hooks))).toBe(false);
+      expect(read(dir, ".env.loop")).toBe("SLOT=\nBASE_BRANCH=dev\n");
+
+      const before = leases().length;
+      rel(["--stack", "hotfix", "old-stack"]);
+      const sdir = join(loops, "hotfix-old-stack");
+      expect(read(sdir, ".env.loop")).toMatch(/^SLOT=\d+$/m);
+      expect(leases().length).toBe(before + 1);
+    } finally {
+      for (const n of ["hotfix-old", "hotfix-old-stack"]) if (existsSync(join(loops, n))) ok("rm.sh", [n]);
+      for (const b of ["hotfix/old", "hotfix/old-stack"])
+        if (git(main, "branch", "--list", b)) git(main, "branch", "-q", "-D", b);
+    }
   });
 });
 
