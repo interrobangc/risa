@@ -19,6 +19,7 @@
 import { END_WAIT_MS } from "./drain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { stallHolds, timeOf } from "./usage.mjs";
+import { branchKinds } from "./config.mjs";
 
 /**
  * @typedef {{ session: string, stalled: { at?: string | number | null, error?: string,
@@ -38,8 +39,9 @@ import { stallHolds, timeOf } from "./usage.mjs";
 
 /** prd/<topic> or plan/<topic> → its session (prd-<topic>, plan-<topic>), else null. */
 export const sessionOfBranch = (/** @type {string} */ branch) => {
-  const m = /^(prd|plan)\/([^/]+)$/.exec(branch ?? "");
-  return m ? `${m[1]}-${m[2]}` : null;
+  const kind = branchKinds().kindOf(branch);
+  const topic = kind === "prd" || kind === "plan" ? branchKinds().nameOf(branch, kind) : null;
+  return kind && topic && !topic.includes("/") ? `${kind}-${topic}` : null;
 };
 
 /**

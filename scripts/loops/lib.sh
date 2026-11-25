@@ -39,15 +39,14 @@ config_load || { echo "lib.sh: the project config didn't load" >&2; return 1 2>/
 trunk=${TRUNK:-$(config_get branches.trunk)}
 # The rest of the project's names, from the config: its name (which the lock and
 # marker files in the git dir carry), the branch kinds' prefixes (prd/, slice/,
-# plan/, hotfix/ here), the protected branches, the backlog's files and CI's two
-# lists (either may be unset).
+# plan/, hotfix/ here), the backlog's files and CI's two lists (either may be
+# unset). The protected branches are the git hooks' own constant and tidy.mjs's
+# (from the config), so no script here reads them.
 project_name=$(config_get name)
 prd_prefix=$(config_get branches.prefixes.prd)
 slice_prefix=$(config_get branches.prefixes.slice)
 plan_prefix=$(config_get branches.prefixes.plan)
 hotfix_prefix=$(config_get branches.prefixes.hotfix)
-protected_branches=()
-while IFS= read -r _b; do protected_branches+=("$_b"); done < <(config_get branches.protected)
 backlog_files=("$(config_get paths.backlog)" "$(config_get paths.inbox)" "$(config_get paths.archive)")
 ci_lists=()
 for _k in paths.brakeList paths.quarantine; do
@@ -83,13 +82,6 @@ run_hook() {
   top=$(git rev-parse --show-toplevel) || return 1
   shift
   (cd "$top" && eval "$c" '"$@"')
-}
-
-# is_protected BRANCH → true when BRANCH is one of the config's protected branches.
-is_protected() {
-  local b
-  for b in "${protected_branches[@]}"; do [[ $1 == "$b" ]] && return 0; done
-  return 1
 }
 
 # not_files FILE… → stdin without the lines that are exactly one of FILEs (none

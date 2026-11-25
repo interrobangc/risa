@@ -55,7 +55,7 @@ done
 branch=$(pr_branch "$what")
 
 number=$(pr_for "$branch") || fail "gh couldn't list $branch's PRs (gh auth status?)"
-[[ -n $number ]] || fail "no open PR from $branch into $trunk (pnpm prd pr ${branch#prd/})"
+[[ -n $number ]] || fail "no open PR from $branch into $trunk (pnpm prd pr ${branch#"$prd_prefix"})"
 
 for id in ${resolve[@]+"${resolve[@]}"}; do
   # shellcheck disable=SC2016

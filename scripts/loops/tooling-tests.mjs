@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPlan } from "./check-plan.mjs";
-import { loadConfig } from "./config.mjs";
+import { branchKinds, loadConfig } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const git = (root, ...args) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -22,7 +22,7 @@ const lines = (r) => r.stdout.split("\n").filter(Boolean);
  */
 export function changedSinceBase(root) {
   const branch = git(root, "branch", "--show-current").stdout.trim();
-  const asked = branch.startsWith("slice/") ? "slice" : "quick";
+  const asked = branchKinds().is(branch, "slice") ? "slice" : "quick";
   const found = spawnSync(
     "bash",
     ["-c", 'source "$1/lib.sh" && check_base "$2" "$3"', "tooling-tests", HERE, root, asked],

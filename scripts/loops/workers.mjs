@@ -21,6 +21,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { parseEtime } from "./sessions.mjs";
+import { branchKinds } from "./config.mjs";
 
 const iso = (/** @type {number} */ ms) => new Date(ms).toISOString();
 const latest = (/** @type {(string | null | undefined)[]} */ times) => {
@@ -273,7 +274,7 @@ export function factsOf({ worktrees, heartbeats, leases, processes, self = [], n
       }));
     const held = leases.filter((l) => l.live && l.worktree === w.name);
     const lastProgressAt = latest([w.lastCommitAt, w.lastChangeAt]);
-    const isSlice = w.branch.startsWith("slice/");
+    const isSlice = branchKinds().is(w.branch, "slice");
     return {
       name: w.name,
       dir: w.dir,

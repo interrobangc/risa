@@ -26,6 +26,7 @@ import { branchKind, readData, usualTime } from "./metrics.mjs";
 import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { ancestorsOf, processCwds, readLeases, workerFacts } from "./workers.mjs";
+import { branchKinds } from "./config.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How much of the dispatcher's log's end is read for its last entry. */
@@ -249,7 +250,7 @@ export function workersPart({ facts, leases, commands, usual, now }) {
   }
 
   for (const f of facts) {
-    if (!f.branch.startsWith("slice/")) continue;
+    if (!branchKinds().is(f.branch, "slice")) continue;
     const u = usual({ kind: "slice", branchKind: "slice" });
     const processes = f.running.filter((r) => r.source === "process");
     for (const a of f.agents) {
@@ -321,7 +322,8 @@ export function gatherWorkers(sessionsDir, { now = Date.now(), env = process.env
   });
   const leases = readLeases(leaseRoot, { browserRoot }).filter((l) => l.live);
   const commands = table ? prdCommands(table, live) : [];
-  if (!leases.length && !commands.length && !facts.some((f) => f.branch.startsWith("slice/"))) return "";
+  if (!leases.length && !commands.length && !facts.some((f) => branchKinds().is(f.branch, "slice")))
+    return "";
   const data = readData({
     runLog: env.CARETOOK_RUN_LOG || join(loops, ".run-log.jsonl"),
     checkLog: env.CARETOOK_CHECK_LOG || join(loops, ".check-times.log"),

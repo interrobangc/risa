@@ -40,14 +40,14 @@ while (($#)); do
   esac
 done
 [[ -n $what ]] || what=$(topic_of "$(here_name)")
-[[ -n $what ]] || die "which branch? (pnpm prd pr <topic|hotfix/<name>>)"
+[[ -n $what ]] || die "which branch? (pnpm prd pr <topic|$hotfix_prefix<name>>)"
 branch=$(pr_branch "$what")
 case $branch in
-  prd/* | hotfix/*) ;;
-  plan/*) die "$branch lands locally (pnpm prd land $branch): plans and docs skip review" ;;
-  *) die "$branch: pr takes a prd/ or hotfix/ branch" ;;
+  "$prd_prefix"* | "$hotfix_prefix"*) ;;
+  "$plan_prefix"*) die "$branch lands locally (pnpm prd land $branch): plans and docs skip review" ;;
+  *) die "$branch: pr takes a $prd_prefix or $hotfix_prefix branch" ;;
 esac
-topic=${branch#*/}
+topic=${branch#"$prd_prefix"}; topic=${topic#"$hotfix_prefix"}
 dir=$(land_dir "$branch")
 pr_seam "$branch"
 
@@ -107,4 +107,4 @@ else
     die "couldn't open a PR from $branch into $trunk"
   echo "opened $url"
 fi
-echo "Codex reviews each push by itself (a clean verdict carries over a plain dev merge); then: pnpm prd review ${branch#prd/} --wait (in the background)"
+echo "Codex reviews each push by itself (a clean verdict carries over a plain dev merge); then: pnpm prd review ${branch#"$prd_prefix"} --wait (in the background)"

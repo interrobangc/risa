@@ -22,6 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_MIN_FREE_GB, formatInventory, inventory } from "./inventory.mjs";
 import { listRecords } from "./land-journal.mjs";
+import { branchKinds } from "./config.mjs";
 
 /** The backlog lock is stale after this long (backlog.mjs takes it over then too). */
 export const BACKLOG_LOCK_STALE_MS = 30_000;
@@ -94,9 +95,9 @@ export function pidAlive(/** @type {number|null|undefined} */ pid) {
 }
 
 /** lib.sh's parent_of: slice/<topic>/<n> → prd/<topic>, anything else → trunk. */
-export function parentOf(/** @type {string} */ branch, trunk = "dev") {
-  const m = /^slice\/([^/]+)\/[^/]+$/.exec(branch);
-  return m ? `prd/${m[1]}` : trunk;
+export function parentOf(/** @type {string} */ branch, trunk = branchKinds().trunk) {
+  const s = branchKinds().sliceOf(branch);
+  return s ? branchKinds().branch("prd", s.topic) : trunk;
 }
 
 /** stack-lib.sh's slice_merged: the slice's tip is a merge's second parent in its PRD branch. */
@@ -105,7 +106,7 @@ function sliceMerged(
   /** @type {string} */ branch,
   /** @type {NodeJS.ProcessEnv} */ env,
 ) {
-  if (!/^slice\/[^/]+\/[^/]+$/.test(branch)) return false;
+  if (!branchKinds().sliceOf(branch)) return false;
   const parent = parentOf(branch);
   const tip = git(dir, ["rev-parse", "HEAD"], env);
   if (!tip.ok || !git(dir, ["rev-parse", "--verify", "--quiet", parent], env).ok) return false;

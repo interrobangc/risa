@@ -87,7 +87,8 @@ export function sliceSection(planText, n) {
 /**
  * What a slice's section cites: italic names, user-story numbers and backlog ids.
  * @param {string} sectionText
- * @param {{ pattern: string }} [ids] the backlog's ids (default: this repo's config)
+ * @param {{ pattern: string, lookupPattern?: string, normalize?: (id: string) => string }} [ids] the backlog's
+ *   ids (default: this repo's config); a former id (B-772 under RISA) is cited as its own (RISA-772)
  */
 export function citations(sectionText, ids = backlogIds()) {
   const names = new Set();
@@ -103,7 +104,8 @@ export function citations(sectionText, ids = backlogIds()) {
       } else stories.add(a);
     }
   }
-  const items = new Set(sectionText.match(new RegExp(`\\b${ids.pattern}\\b`, "g")) ?? []);
+  const found = sectionText.match(new RegExp(`\\b${ids.lookupPattern ?? ids.pattern}\\b`, "g")) ?? [];
+  const items = new Set(found.map((id) => (ids.normalize ? ids.normalize(id) : id)));
   return { names, stories: [...stories].sort((a, b) => a - b), items };
 }
 

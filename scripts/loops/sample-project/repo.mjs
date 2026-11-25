@@ -1,8 +1,8 @@
 // The sample project: a project config (risa.json, beside this file) that is not
 // this repo's, and a throwaway repo built on it, for the core's tests. Its names
 // differ from this repo's wherever the tooling reads them through the config (the
-// tool's commands, paths, role docs, the trunk, the id prefix, the project's
-// commands), except the branch prefixes, which some scripts still hardcode.
+// tool's commands, paths, role docs, the trunk, the branch prefixes (topic/,
+// part/, draft/, quick/), the id prefix, the project's commands).
 //
 //   makeRepo(main, { config, files })   a git repo at `main`: the tool's scripts
 //     (scripts/loops), the config as its risa.json, the data files it names that sit

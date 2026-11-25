@@ -41,7 +41,7 @@ for dir in "$loops"/*/; do
   fi
   found=1
   [[ -z $branch ]] || branches+=("$branch")
-  if [[ $branch == slice/*/* ]]; then
+  if [[ $branch == "$slice_prefix"*/* ]]; then
     slice_dirs+=("$dir")
     # Only what gc would take: a slice stays until its wave has landed.
     if slice_merged "$dir" && git -C "$dir" merge-base --is-ancestor HEAD "$trunk" 2>/dev/null; then
@@ -78,9 +78,9 @@ if ((${#slice_dirs[@]})); then
   echo
   echo "Slices"
   for dir in "${slice_dirs[@]}"; do
-    b=$(git -C "$dir" branch --show-current); t=${b#slice/}; t=${t%%/*}
+    b=$(git -C "$dir" branch --show-current); t=${b#"$slice_prefix"}; t=${t%%/*}
     going=0
-    grep -qE "^  prd/$t: (running|.*\(a run is going\))" <<<"$ci" && going=1
+    grep -qE "^  $prd_prefix$t: (running|.*\(a run is going\))" <<<"$ci" && going=1
     echo "  $(basename "$dir"): $(slice_state "$dir" "$going")"
   done
 fi

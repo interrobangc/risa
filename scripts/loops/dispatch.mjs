@@ -136,6 +136,7 @@ import {
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 import { resumeDecision, resumingOf, sessionOfBranch } from "./resume.mjs";
 import { clearStalled, markStalled, readReadings, readUsage, staleMsOf } from "./usage.mjs";
+import { branchKinds } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -1841,7 +1842,7 @@ async function main() {
       /* the cap is stored; a notice that can't post changes nothing */
     }
     const holder = lockHolder(p.lock);
-    const running = worktreesOf(p.main).filter((w) => w.branch.startsWith("prd/")).length;
+    const running = worktreesOf(p.main).filter((w) => branchKinds().is(w.branch, "prd")).length;
     console.log(
       `${line}. ${running} PRD worktrees now: ${
         running >= after.cap

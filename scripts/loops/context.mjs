@@ -63,6 +63,7 @@ import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { recordHeartbeat } from "./heartbeat.mjs";
 import { defaultDir, isLive, processOf, readRecord, readRecords } from "./sessions.mjs";
+import { branchKinds } from "./config.mjs";
 
 const MIN_MS = 60_000;
 /** How much of a transcript's end is read first; it doubles until a usage is found. */
@@ -475,7 +476,7 @@ function cli(/** @type {string[]} */ args) {
     } catch {
       /* not in a repo: nothing to refuse on */
     }
-    if (branch.startsWith("slice/")) {
+    if (branchKinds().is(branch, "slice")) {
       console.error("context --keep is the orchestrator's: a loop hands off instead");
       return 1;
     }

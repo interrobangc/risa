@@ -28,10 +28,10 @@
     "trunk": "main",
     "protected": ["release"],
     "prefixes": {
-      "prd": "prd/",
-      "slice": "slice/",
-      "plan": "plan/",
-      "hotfix": "hotfix/"
+      "prd": "topic/",
+      "slice": "part/",
+      "plan": "draft/",
+      "hotfix": "quick/"
     }
   },
   "backlog": {

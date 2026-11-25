@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import { parseLog as parseCheckLine } from "./check-times.mjs";
+import { branchKinds } from "./config.mjs";
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -28,8 +29,7 @@ const ms = (t) => Date.parse(t);
 
 /** A branch's kind: slice, prd, plan, hotfix, or other (dev, main, a bare name). */
 export function branchKind(branch) {
-  const m = /^(slice|prd|plan|hotfix)\//.exec(branch ?? "");
-  return m ? m[1] : "other";
+  return branchKinds().kindOf(branch) ?? "other";
 }
 
 /** A browser check's name, whatever the log called it: roundtrip, roundtrip.mjs, roundtrip.spec.mjs. */
@@ -300,7 +300,7 @@ export function usualTime(data, { kind, mode, branchKind: bk, last = 20 }) {
       .map((r) => r.seconds);
   else if (kind === "slice")
     samples = slices(data.events)
-      .done.filter((s) => !bk || branchKind(s.branch || "slice/") === bk)
+      .done.filter((s) => !bk || (s.branch ? branchKind(s.branch) : "slice") === bk)
       .map((s) => s.seconds);
   else if (kind === "landing")
     samples = landings(data.events)
