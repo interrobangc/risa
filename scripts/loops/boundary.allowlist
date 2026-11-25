@@ -3,8 +3,8 @@
 # exact, so this list only shrinks: a slice lowers or deletes the lines of the
 # files it changes (`node scripts/loops/boundary.mjs --write` rewrites the counts).
 .github/workflows/ci.yml project-to-core 1
-apps/web/test/browserLease.ts project-to-core 1
 package.json project-to-core 4
+risa.json project-to-core 1 # hooks.lease is the core's lease.sh hold, which the app's browser lease helper runs: its path changes at the move
 scripts/ci/blame.test.mjs app-path 1
 scripts/ci/blame.test.mjs project-name 1
 scripts/ci/browser-job.mjs project-to-core 1

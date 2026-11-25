@@ -43,7 +43,10 @@
 # every worktree has run `pnpm prd sync`. Drop this once nothing uses the old path.
 #
 # Source it for the functions (browser.sh does): lease_take, lease_write,
-# lease_release, lease_holders. Node callers use lease.mjs (takeLease).
+# lease_release, lease_holders. Node callers in the core use lease.mjs
+# (takeLease). A project's code runs `lease.sh hold` through the config's lease
+# command (hooks.lease: `<command> <kind> [--wait S] [--label L] [--watch P]`,
+# "lease <N> <dir>" once held, 75 on giving up): keep that CLI stable.
 
 # shellcheck source=lib.sh
 declare -F env_get >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
