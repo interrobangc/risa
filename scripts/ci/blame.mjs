@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 
 import { backlogIds } from "../loops/config.mjs";
 import { findingKey, keyMark } from "./filing.mjs";
-import { isQuarantined } from "./lists.mjs";
+import { isQuarantined } from "./ci-lists.mjs";
 import { tierData } from "./tier-data.mjs";
 
 const { TIERS, fileTier, isBrowserCheckFile } = tierData();
