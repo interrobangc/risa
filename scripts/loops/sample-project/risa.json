@@ -55,5 +55,8 @@
   "testProjects": {
     "tooling": ["tools:unit"],
     "browserHarness": "tools:browser"
+  },
+  "hooks": {
+    "check": "tools/check.sh"
   }
 }
