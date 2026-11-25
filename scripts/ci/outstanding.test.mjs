@@ -42,6 +42,11 @@ describe("isTopicRun", () => {
     for (const n of ["prd-x", "prd-x-narrowed-abc123", "slice-x-3", "slice-x-3-narrowed-abc123"])
       expect(isTopicRun(n, "x"), n).toBe(true);
     for (const n of ["prd-x-2", "slice-x-2-3", "prd-y", "dev"]) expect(isTopicRun(n, "x"), n).toBe(false);
+    // Another project's prefixes (the sample's topic/ and part/).
+    const sample = { prd: "topic/", slice: "part/", plan: "draft/", hotfix: "quick/" };
+    expect(isTopicRun("topic-x", "x", sample)).toBe(true);
+    expect(isTopicRun("part-x-3-narrowed-abc123", "x", sample)).toBe(true);
+    expect(isTopicRun("prd-x", "x", sample)).toBe(false);
   });
 });
 

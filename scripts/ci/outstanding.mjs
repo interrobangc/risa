@@ -8,6 +8,7 @@
 //                                  1 must not read as an answer), 5 GitHub unreadable
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { branchKinds } from "../loops/config.mjs";
 import { tierDataOrExit } from "./tier-data.mjs";
 
 const { parseCiRef } = tierDataOrExit("ci");
@@ -60,11 +61,19 @@ export function outstandingRuns(io) {
   return out;
 }
 
-/** Whether a ci ref's name belongs to the topic: its PRD branch or one of its slices, narrowed or not. */
-export function isTopicRun(/** @type {string} */ name, /** @type {string} */ topic) {
+/**
+ * Whether a ci ref's name belongs to the topic: its PRD branch or one of its slices,
+ * narrowed or not. A ref's name is the branch's with each `/` a `-`, so the kinds'
+ * prefixes come from the config's branches (prd/ → prd-).
+ * @param {string} name
+ * @param {string} topic
+ * @param {Record<string, string>} [prefixes] the config's branches.prefixes
+ */
+export function isTopicRun(name, topic, prefixes = branchKinds().prefixes) {
+  const dashed = (/** @type {string} */ p) => p.replaceAll("/", "-");
   const base = name.replace(/-narrowed-[0-9a-f]+$/, "");
-  if (base === `prd-${topic}`) return true;
-  const prefix = `slice-${topic}-`;
+  if (base === `${dashed(prefixes.prd ?? "")}${topic}`) return true;
+  const prefix = `${dashed(prefixes.slice ?? "")}${topic}-`;
   return base.startsWith(prefix) && /^\d+$/.test(base.slice(prefix.length));
 }
 
