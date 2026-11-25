@@ -23,7 +23,7 @@ import { brakeNotice } from "../ci/blame.mjs";
 import { declinesSince, markLanded } from "./land-skeptic.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
 import { recordVerdict } from "./skeptics.mjs";
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root, repo;
@@ -986,6 +986,36 @@ exit 0
     );
     expect(r.stdout).toMatch(/--body Landed\\? on\\? an\\? unsynced\\? tip:/);
     atTip();
+  });
+
+  // A sample config with other commands and another id prefix: the landing runs
+  // and takes what it says.
+  const sample = (change) => {
+    const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    change(raw);
+    writeFileSync(join(root, "sample.json"), JSON.stringify(raw));
+    return { RISA_CONFIG: join(root, "sample.json") };
+  };
+
+  it("runs the config's typegen and typecheck", () => {
+    started();
+    toDev({ "lib/dev.ts": "d" });
+    const conf = sample((c) =>
+      Object.assign(c.commands, { typegen: "pnpm gen:types", typecheck: "pnpm tsc -b" }),
+    );
+    const r = go(conf);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(steps()).toEqual(["gen:types", "tsc"]);
+    atTip();
+  });
+
+  it("takes --fixes in the config's id form", () => {
+    started();
+    const conf = sample((c) => (c.backlog.idPrefix = "RISA"));
+    const r = go(conf, "--fixes", "B-9");
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("--fixes takes backlog ids: --fixes RISA-1,RISA-2");
+    expect(go(conf, "--fixes", "RISA-9,RISA-10").stderr).not.toContain("--fixes takes");
   });
 
   it("counts only the commits that are drift", () => {

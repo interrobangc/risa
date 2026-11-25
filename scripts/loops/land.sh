@@ -112,7 +112,8 @@ while (($#)); do
       shift 2 ;;
     --fixes)
       fixes=${2:-}
-      [[ $fixes =~ ^B-[0-9]+(,B-[0-9]+)*$ ]] || die "--fixes takes backlog ids: --fixes B-1,B-2"
+      [[ $fixes =~ ^$backlog_id_prefix[0-9]+(,$backlog_id_prefix[0-9]+)*$ ]] ||
+        die "--fixes takes backlog ids: --fixes ${backlog_id_prefix}1,${backlog_id_prefix}2"
       shift 2 ;;
     --recheck) die "--recheck is gone: land waits for the CI tier itself (--tier <t>)" ;;
     --pr) path=pr; shift ;;
@@ -132,19 +133,19 @@ done
 [[ -z $resume || -z $msg$force$path$noreview$tier$why$fixes$skeptics$byuser ]] ||
   die "--resume takes only the branch: the journal holds the rest"
 case $what in
-  prd/* | plan/* | hotfix/*) branch=$what ;;
-  *) branch=prd/$what ;;
+  "$prd_prefix"* | "$plan_prefix"* | "$hotfix_prefix"*) branch=$what ;;
+  *) branch=$prd_prefix$what ;;
 esac
 topic=${branch#*/}
 dir=$(land_dir "$branch")
 name=$(basename "$dir")
 case $branch in
-  prd/*)
+  "$prd_prefix"*)
     if [[ $path == local ]]; then echo "landing $branch locally (--local): the fallback, on the user's word only"
     else path=pr; fi
     ;;
-  plan/*) [[ $path != pr ]] || die "a plan/ branch lands locally: drop --pr"; path=local ;;
-  hotfix/*)
+  "$plan_prefix"*) [[ $path != pr ]] || die "a $plan_prefix branch lands locally: drop --pr"; path=local ;;
+  "$hotfix_prefix"*)
     [[ -n $path || -n $resume ]] || die "a hotfix lands through a PR or locally, and the user chooses: ask them \"PR or local?\", then pass --pr or --local"
     ;;
 esac
@@ -152,7 +153,7 @@ esac
 [[ -z $tier$why$fixes || -z $force ]] || die "--force skips the gate: drop --tier, --why and --fixes"
 [[ -z $skeptics || -z $byuser ]] || die "--skeptic or --by-user, not both"
 [[ -z $skeptics$byuser || -n $force$noreview ]] || die "--skeptic and --by-user go with --force or --no-review"
-[[ -z $tier$why$fixes || $branch != plan/* ]] || die "a plan/ branch has no check gate: drop --tier, --why and --fixes"
+[[ -z $tier$why$fixes || $branch != "$plan_prefix"* ]] || die "a $plan_prefix branch has no check gate: drop --tier, --why and --fixes"
 pr_seam "$branch"
 # The run log (run-log.mjs): this landing's start, and on every exit its end:
 # the exit code, whether it merged, and its seconds. It never fails or stops a landing.
@@ -264,7 +265,7 @@ if [[ -z $resume ]]; then
   fi
   node "$(dirname "$0")/doc-budget.mjs" land "$trunk" --head "$branch" --repo "$main" ||
     die "$branch grows a doc that is over its budget (scripts/loops/doc-budget.config.mjs): trim it, then land"
-  if [[ ($branch == prd/* || $branch == hotfix/*) && -z $force ]]; then
+  if [[ ($branch == "$prd_prefix"* || $branch == "$hotfix_prefix"*) && -z $force ]]; then
     proposed=$(propose_tier "$drift_ref" "$branch" "$tier") || die "unknown tier $tier (none, static, unit, integration, components, full)"
     { read -r proposal; read -r proposal_why; read -r tier_status; } <<< "$proposed"
     tier=${tier:-$proposal}
@@ -394,7 +395,7 @@ if [[ -z $resume ]]; then
   [[ -n $msg ]] || msg=$(land_subject "$branch")
   # Decided before the merge, while the diff against dev still exists.
   want_to_test=""
-  if [[ $branch != plan/* ]] && ! docs_only "$drift_ref" "$branch"; then want_to_test=1; fi
+  if [[ $branch != "$plan_prefix"* ]] && ! docs_only "$drift_ref" "$branch"; then want_to_test=1; fi
   changed=$(git -C "$main" diff --name-only "$drift_ref...$branch")
   commits=$(git -C "$main" log --first-parent --format='- %s (`%h`)' "$drift_ref..$branch" | grep -vE "\): merge (origin/)?$trunk( |\$)" | head -30 || true)
 fi
@@ -504,7 +505,12 @@ post_landed() {
   else
     sha=$(git -C "$main" rev-parse --short "$trunk")
   fi
-  case $branch in prd/*) session=prd-$topic ;; *) session=${branch%%/*}-${topic//\//-} ;; esac
+  case $branch in
+    "$prd_prefix"*) session=prd-$topic ;;
+    "$plan_prefix"*) session=plan-${topic//\//-} ;;
+    "$hotfix_prefix"*) session=hotfix-${topic//\//-} ;;
+    *) session=${branch%%/*}-${topic//\//-} ;;
+  esac
   CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
     --session "$session" --topic "$topic" --for 360 \
     "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" >/dev/null 2>&1 &&
@@ -533,11 +539,11 @@ mark_landed() {
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
   grep -qE '^packages/data/src/db/(migrations|seeds)/' <<< "$changed" &&
-    echo "  migrations or seeds changed: run \`pnpm datastore:reset\` in $main"
+    echo "  migrations or seeds changed: run \`$(project_command datastoreReset)\` in $main"
   grep -q '^powersync/' <<< "$changed" && echo "  the sync config changed: run \`docker compose restart powersync\` in $main"
   grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
-  if [[ $branch == prd/* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
+  if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
 }
 
 # journal_start STEP → the to-test body, then the journal's first record: STEP
@@ -672,7 +678,7 @@ head=$(field headSha) state=$(field state) url=$(field url)
 [[ $head == "$tip" ]] ||
   die "PR #$number's head is ${head:0:7}, not $branch's local tip ${tip:0:7}: push it (\`pnpm prd pr $what\`), let Codex review it (\`pnpm prd review $what --wait\`), then land"
 line=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" --line <<< "$raw")
-if [[ $state != clean && $branch == prd/* ]] && docs_only "$drift_ref" "$branch"; then
+if [[ $state != clean && $branch == "$prd_prefix"* ]] && docs_only "$drift_ref" "$branch"; then
   echo "$line: no Codex verdict needed, the diff against $drift_ref is Markdown only (PR #$number is open with the local tip as its head)"
 elif [[ $state != clean ]]; then
   [[ -n $noreview ]] ||

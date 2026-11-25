@@ -3,7 +3,7 @@
 # typecheck runs on, and clearing a merge a kill left behind.
 #
 #   unsynced.sh typecheck DIR TIP DEV   merge DEV into DIR without committing, run
-#                                       `pnpm typegen` and `pnpm typecheck`, and put
+#                                       the config's typegen and typecheck, and put
 #                                       DIR back at TIP on every exit it can catch.
 #                                       land.sh runs it inside a check lease.
 # Exits: 0 passed, 3 the merge conflicts, 4 the typecheck failed, 5 the worktree
@@ -114,7 +114,7 @@ unsynced_commits() {
   local c n=0
   for c in $(git -C "$main" rev-list --first-parent "$1..$2"); do
     if [[ -n $(git -C "$main" diff --name-only --no-renames "$c^1" "$c" |
-      grep -vxF -e plans/backlog.md -e plans/inbox.md -e plans/backlog-archive.md -e scripts/ci/brake-list.txt -e scripts/ci/quarantine.txt) ]]; then
+      not_files "${backlog_files[@]}" ${ci_lists[@]+"${ci_lists[@]}"}) ]]; then
       n=$((n + 1))
     fi
   done
@@ -147,7 +147,7 @@ unsynced_typecheck() {
   }
   step() {
     local rc=0
-    (cd "$dir" && exec "$@") >> "$log" 2>&1 &
+    (cd "$dir" && run_project "$1") >> "$log" 2>&1 &
     child=$!
     wait "$child" || rc=$?
     child=""
@@ -159,7 +159,7 @@ unsynced_typecheck() {
   trap 'restore; exit 130' INT
   : > "$log"
   git -C "$dir" merge --no-commit --no-ff -q "$dev" >> "$log" 2>&1 || return 3
-  if ! step pnpm typegen || ! step pnpm typecheck; then
+  if ! step typegen || ! step typecheck; then
     tail -30 "$log" >&2
     return 4
   fi

@@ -19,7 +19,7 @@ source "$(dirname "$0")/unsynced.sh"
 
 topic=${1:-$(n=$(here_name); [[ -n $n ]] && topic_of "$n")}
 [[ -n $topic ]] || die "which PRD? (pnpm prd ready <topic>)"
-branch=prd/$topic dir=$loops/$topic
+branch=$prd_prefix$topic dir=$loops/$topic
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
 tip=$(git -C "$main" rev-parse --short "$branch")
 ahead=$(git -C "$main" rev-list --count "$trunk..$branch")
@@ -119,8 +119,9 @@ echo
 git -C "$main" diff --shortstat "$trunk...$branch"
 changed=$(git -C "$main" diff --name-only "$trunk...$branch")
 notes=()
-grep -q '^packages/data/src/db/migrations/' <<< "$changed" && notes+=("adds or changes a **migration**: run \`pnpm datastore:reset\` in the main checkout after landing")
-grep -q '^packages/data/src/db/seeds/' <<< "$changed" && notes+=("changes **seeds**: run \`pnpm datastore:reset\` in the main checkout after landing")
+reset=$(project_command datastoreReset)
+grep -q '^packages/data/src/db/migrations/' <<< "$changed" && notes+=("adds or changes a **migration**: run \`$reset\` in the main checkout after landing")
+grep -q '^packages/data/src/db/seeds/' <<< "$changed" && notes+=("changes **seeds**: run \`$reset\` in the main checkout after landing")
 grep -q '^powersync/' <<< "$changed" && notes+=("changes the **sync config**: run \`docker compose restart powersync\` in the main checkout after landing")
 grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && notes+=("changes **dependencies or scripts**: run \`pnpm install\` in the main checkout after landing")
 if ((${#notes[@]})); then
