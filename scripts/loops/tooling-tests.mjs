@@ -3,7 +3,8 @@
 // test's (testProjects.browserHarness) too when the change touches what it tests
 // (check-plan.mjs), when the check's base can't be found, or when files are named
 // on the command line (they filter). The check's own tooling step (check-hook.sh)
-// is check-tooling.mjs: the same projects, under the check's rerun rules.
+// is check-tooling.mjs: the same projects, under the check's rerun rules. No
+// testProjects.tooling in the config: the project has none, so both run nothing.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +38,7 @@ export function changedSinceBase(root) {
 }
 
 /**
- * The Vitest projects for this run.
+ * The Vitest projects for this run: none when the config names no tooling tests.
  * @param {string[] | null} changed the changed files, null when unknown
  * @param {string[]} [named] files named on the command line
  * @param {{ config?: Record<string, any>, plan?: import("./check-plan.mjs").CheckPlan }} [opts]
@@ -46,8 +47,8 @@ export function changedSinceBase(root) {
  */
 export function toolingProjects(changed, named = [], { config = loadConfig().config, plan } = {}) {
   const { tooling, browserHarness } = config.testProjects ?? {};
-  if (!tooling)
-    throw new Error("the project config sets no testProjects.tooling (the tooling tests' projects)");
+  // None in the config: the project has no tooling tests, as for the check's step.
+  if (!tooling) return [];
   const projects = [...tooling];
   if (
     browserHarness &&
@@ -61,6 +62,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const named = process.argv.slice(2);
   const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
   const projects = toolingProjects(root ? changedSinceBase(root) : null, named);
+  if (!projects.length) {
+    console.log("test:tooling: the config names no tooling tests (testProjects.tooling): nothing to run");
+    process.exit(0);
+  }
   const harness = loadConfig().config.testProjects?.browserHarness;
   if (harness && !projects.includes(harness))
     console.log("test:tooling: the browser harness test is skipped (nothing it tests changed)");

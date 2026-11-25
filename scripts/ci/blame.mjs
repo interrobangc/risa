@@ -11,6 +11,7 @@ import { dirname } from "node:path";
 import { backlogIds } from "../loops/config.mjs";
 import { findingKey, keyMark } from "./filing.mjs";
 import { isQuarantined } from "./ci-lists.mjs";
+import { ciFailureTopic } from "./release.mjs";
 import { tierDataOrExit } from "./tier-data.mjs";
 
 const { TIERS, fileTier, isBrowserCheckFile } = tierDataOrExit("ci");
@@ -171,15 +172,15 @@ const title = (/** @type {string} */ text) => {
 };
 
 /**
- * One `fixes-bug` finding per dev failure.
+ * One finding per dev failure, in the config's CI failure topic (release.mjs's ciFailureTopic).
  * @param {Placed[]} failures
- * @param {{ branch: string, url?: string }} from
+ * @param {{ branch: string, url?: string, topic?: string }} from
  */
-export const devFindings = (failures, { branch, url }) =>
+export const devFindings = (failures, { branch, url, topic = ciFailureTopic() }) =>
   failures.map((f) => ({
     key: f.key,
     title: title(`CI: ${label(f)} fails on dev`),
-    prd: "fixes-bug",
+    prd: topic,
     note: `Fails on dev too${f.brake ? " (a brake)" : ""}; found by ${branch}${url ? ` in ${url}` : ""}.`,
     quarantine: null,
   }));

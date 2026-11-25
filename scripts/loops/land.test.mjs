@@ -335,6 +335,44 @@ describe("land.sh on the PR path", () => {
 // fails), so land.sh runs its whole PR path in the temporary main checkout.
 // The gate, through the real ci.mjs against the stubbed runs: a real merge, so
 // "filed after the merge" and "nothing landed" are what git says.
+describe("land.sh's doc budget", () => {
+  // A copy of the config with a change, its data files beside it.
+  const withConfig = (change) => {
+    const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    change(raw);
+    writeFileSync(join(root, "budget.json"), JSON.stringify(raw));
+    for (const rel of [raw.paths.tierData, raw.paths.checkPlanRules]) {
+      mkdirSync(dirname(join(root, rel)), { recursive: true });
+      cpSync(join(dirname(FIXTURE_CONFIG), rel), join(root, rel));
+    }
+    return { RISA_CONFIG: join(root, "budget.json") };
+  };
+
+  it("tells a budget hook that failed to run from a breach", () => {
+    branch({ "docs/x.md": "d" });
+    const breach = landWith(withConfig((c) => (c.hooks.docBudget = "sh -c 'exit 1'")));
+    expect(breach.status).not.toBe(0);
+    expect(breach.stderr).toContain("grows a doc that is over its budget");
+    const broken = landWith(withConfig((c) => (c.hooks.docBudget = "sh -c 'exit 3'")));
+    expect(broken.status).not.toBe(0);
+    expect(broken.stderr).toContain("the doc budget (the config's docBudget hook) failed to run (exit 3)");
+    expect(broken.stderr).not.toContain("grows a doc");
+  });
+
+  it("refuses on a mistyped hooks key instead of skipping the budget", () => {
+    branch({ "docs/x.md": "d" });
+    const r = landWith(
+      withConfig((c) => {
+        c.hooks.docBuget = c.hooks.docBudget;
+        delete c.hooks.docBudget;
+      }),
+    );
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/hooks\.docBuget: unknown key/);
+    expect(r.stdout).not.toContain("It would push");
+  });
+});
+
 describe("land.sh's CI gate", () => {
   const TEST = "apps/web/x.test.ts";
   const failing = { job: "unit", file: TEST, name: "fails" };

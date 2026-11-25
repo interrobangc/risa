@@ -264,9 +264,13 @@ if [[ -z $resume ]]; then
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "uncommitted changes in $dir"
   fi
   # The project's doc budget (the config's docBudget hook; none set: no budget).
+  # Exit 1 is a breach; any other failure is a hook that didn't run. (A mistyped
+  # hooks key never skips it: lib.sh refuses a config that doesn't load.)
   if config_get hooks.docBudget >/dev/null 2>&1; then
-    run_hook docBudget land "$trunk" --head "$branch" --repo "$main" ||
-      die "$branch grows a doc that is over its budget: trim it, then land"
+    budget_rc=0
+    run_hook docBudget land "$trunk" --head "$branch" --repo "$main" || budget_rc=$?
+    ((budget_rc != 1)) || die "$branch grows a doc that is over its budget: trim it, then land"
+    ((budget_rc == 0)) || die "the doc budget (the config's docBudget hook) failed to run (exit $budget_rc): fix it, then land"
   fi
   if [[ ($branch == "$prd_prefix"* || $branch == "$hotfix_prefix"*) && -z $force ]]; then
     proposed=$(propose_tier "$drift_ref" "$branch" "$tier") || die "unknown tier $tier (none, static, unit, integration, components, full)"

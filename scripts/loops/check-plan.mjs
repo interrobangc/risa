@@ -8,7 +8,7 @@
 //     for none), the diff's own integration and component test files (space-separated)
 //   node check-plan.mjs --propose [--declared <tier>] [--repo DIR --base REF [--head REF]]
 //   → three lines: the proposed tier, why, and ok | below | refused for the declared tier
-// The three modes (check-body.sh runs them):
+// The three modes (the project's check hook runs them, through check-hook.sh):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
 //          the integration and component test files the slice added or edited.
 //   quick  a prd/ or hotfix/ branch: the same, plus the integration tests related

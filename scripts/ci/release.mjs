@@ -17,6 +17,14 @@ const MAX_OVERFLOW_NAMES = 20;
  */
 export const zoneOverflowItem = (config = loadConfig().config) => config.backlog?.zoneOverflowItem ?? null;
 
+/**
+ * The topic CI's failures are filed under: the config's backlog.ciFailureTopic, or
+ * "" (no topic) when it sets none.
+ * @param {any} [config]
+ * @returns {string}
+ */
+export const ciFailureTopic = (config = loadConfig().config) => config.backlog?.ciFailureTopic ?? "";
+
 const shortTitle = (/** @type {string} */ text) =>
   text.length > MAX_TITLE ? `…${text.slice(text.length - MAX_TITLE + 1)}` : text;
 
@@ -26,9 +34,13 @@ const shortTitle = (/** @type {string} */ text) =>
  * change between runs and `once` marks the commit, so a rerun of the same commit
  * adds no item and no note.
  * @param {any} verdict
- * @param {{ url?: string, overflowItem?: string | null }} [from] overflowItem: zoneOverflowItem()'s
+ * @param {{ url?: string, overflowItem?: string | null, topic?: string }} [from] overflowItem:
+ *   zoneOverflowItem()'s; topic: ciFailureTopic()'s
  */
-export function zoneFindings(verdict, { url, overflowItem = zoneOverflowItem() } = {}) {
+export function zoneFindings(
+  verdict,
+  { url, overflowItem = zoneOverflowItem(), topic = ciFailureTopic() } = {},
+) {
   const z = verdict?.secondZone;
   if (!z || z.mode !== "report" || !z.files.length) return [];
   const commit = String(verdict.commit).slice(0, 8);
@@ -40,7 +52,7 @@ export function zoneFindings(verdict, { url, overflowItem = zoneOverflowItem() }
     return {
       key: findingKey({ file, name: `second zone ${z.zone}` }),
       title: shortTitle(`CI: ${file} fails in ${z.zone}`),
-      prd: "fixes-bug",
+      prd: topic,
       once,
       note: `${once} Fails in ${z.zone} on ${where}; reported, not blocking.`,
       quarantine: null,
@@ -56,7 +68,7 @@ export function zoneFindings(verdict, { url, overflowItem = zoneOverflowItem() }
       item: overflowItem,
       once,
       title: "",
-      prd: "fixes-bug",
+      prd: topic,
       note: `${once} ${rest.length} more test file(s) fail in ${z.zone} on ${where}, past the cap of ${MAX_ZONE_FILINGS}: ${names}${more}.`,
       quarantine: null,
     });

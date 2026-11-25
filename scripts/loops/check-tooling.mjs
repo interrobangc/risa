@@ -9,8 +9,7 @@
 //   node check-tooling.mjs [--harness] [--state DIR] [--rerun-max N]
 //
 // No tooling tests in the config (testProjects.tooling unset): the project has
-// none, so the step runs nothing and passes (tooling-tests.mjs, asked by hand to
-// run tests it can't name, refuses instead).
+// none, so the step runs nothing and passes (tooling-tests.mjs too).
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

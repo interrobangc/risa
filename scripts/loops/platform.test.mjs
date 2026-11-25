@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { checkProjects } from "./check-tooling.mjs";
 import { toolingProjects } from "./tooling-tests.mjs";
 import { checkPlanFor } from "./check-plan.mjs";
 import { loadConfig } from "./config.mjs";
@@ -100,13 +101,18 @@ describe("what pnpm test:tooling runs", () => {
     expect(toolingProjects([], ["scripts/loops/lease.test.mjs"], opts)).toEqual(WITH);
   });
 
-  it("runs no harness a config doesn't name, and refuses a config with no projects", () => {
+  it("runs no harness a config doesn't name, and nothing for a config with no projects", () => {
     const { browserHarness: _, ...tooling } = sample.config.testProjects;
     expect(
       toolingProjects(null, [], { ...opts, config: { ...sample.config, testProjects: tooling } }),
     ).toEqual(BASE);
-    expect(() =>
-      toolingProjects([], [], { ...opts, config: { ...sample.config, testProjects: undefined } }),
-    ).toThrow(/sets no testProjects\.tooling/);
+    // As the check's tooling step (check-tooling.mjs's checkProjects): none named, none run.
+    expect(
+      toolingProjects(null, ["a.test.mjs"], {
+        ...opts,
+        config: { ...sample.config, testProjects: undefined },
+      }),
+    ).toEqual([]);
+    expect(checkProjects({ ...sample.config, testProjects: undefined }, true)).toBeNull();
   });
 });

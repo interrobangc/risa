@@ -129,6 +129,8 @@ export const SHAPE = [
   // reads B-772 as RISA-772; new ids, headings and tags keep idPrefix.
   ["backlog.formerIdPrefix", "idPrefix?"],
   ["backlog.zoneOverflowItem", "item?"],
+  // The topic CI files its failures under (the release tier's and dev's, ci blame and zone-file).
+  ["backlog.ciFailureTopic", "slug?"],
   // The project's commands that the tool runs.
   ["commands.install", "command"],
   ["commands.check", "command"],

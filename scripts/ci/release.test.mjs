@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { MANIFEST, parseManifest } from "../loops/boundary.mjs";
 import { backlogIds, loadConfig } from "../loops/config.mjs";
 import { applyFindings } from "./filing.mjs";
-import { MAX_ZONE_FILINGS, zoneFindings, zoneOverflowItem } from "./release.mjs";
+import { MAX_ZONE_FILINGS, ciFailureTopic, zoneFindings, zoneOverflowItem } from "./release.mjs";
 
 const SHA = "c".repeat(40);
 const ZONE = "Pacific/Auckland";
@@ -44,6 +44,9 @@ describe("second-zone filing", () => {
   it("files one item per test file, in fixes-bug", () => {
     const findings = zoneFindings(withFiles(2));
     expect(findings.map((f) => f.prd)).toEqual(["fixes-bug", "fixes-bug"]);
+    expect(zoneFindings(withFiles(1), { topic: "fixes-ci" }).map((f) => f.prd)).toEqual(["fixes-ci"]);
+    expect(ciFailureTopic({ backlog: { ciFailureTopic: "fixes-ci" } })).toBe("fixes-ci");
+    expect(ciFailureTopic({ backlog: {} })).toBe("");
     expect(new Set(findings.map((f) => f.key)).size).toBe(2);
   });
 

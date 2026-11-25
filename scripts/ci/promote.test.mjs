@@ -483,4 +483,19 @@ describe("releasePasses", () => {
   ])("%s", (_name, verdict, pass) => {
     expect(releasePasses(verdict, "candidate", SHA).pass).toBe(pass);
   });
+
+  // A release-tier verdict as the project's CI builds it (verdict.fixtures/, from its
+  // buildVerdict), joined to the gate at the release tier.
+  it("passes a built release verdict at the release tier, and a candidate one doesn't", () => {
+    const read = (/** @type {string} */ name) =>
+      JSON.parse(readFileSync(new URL(`./verdict.fixtures/${name}`, import.meta.url), "utf8"));
+    const release = read("release-green.json");
+    expect(releasePasses(release, "release", release.commit)).toEqual({ pass: true, why: "green" });
+    expect(releasePasses(release, "candidate", release.commit).pass).toBe(true);
+    const candidate = read("candidate-green.json");
+    expect(releasePasses(candidate, "release", candidate.commit)).toEqual({
+      pass: false,
+      why: "the run reached candidate, below release",
+    });
+  });
 });

@@ -74,6 +74,7 @@ scripts/ci/verdict.fixtures/dev-named-failure.json core
 scripts/ci/verdict.fixtures/dev-quarantined-failed.json core
 scripts/ci/verdict.fixtures/dev-quarantined-passed.json core
 scripts/ci/verdict.fixtures/dev-quarantined-skipped.json core
+scripts/ci/verdict.fixtures/release-green.json core
 scripts/ci/verdict.mjs project
 scripts/ci/verdict.test.mjs project
 scripts/ci/zones.mjs project
