@@ -35,7 +35,7 @@ $ask_line
 - **Don't load the \`write-a-prd\`, \`prd-to-plan\` or \`grill-me\` skills:** they make you interview the user and wait for approval. The handbook has their templates.
 - Run the handbook's _The skeptic pass_ before landing: write an evidence file outside the repo naming the PRD, the plan and the items; \`$prd_cmd prompt skeptic plan --evidence <file>\` prints the brief for one fresh agent on Opus (\`model: "opus"\`); record its answer with \`$prd_cmd skeptic record --kind plan --verdict go|send-back --why "<its one line>" --topic $topic\`, which prints the id. On **go**, act on what it found. On **send-back**, rework the plan and run a fresh skeptic **once more** (one retry). $second_send_back
 - Don't file GitHub issues.
-$(bye_line $(role_doc planner))
+$(bye_line "$(role_doc planner)")
 - Commit both files on $plan_prefix$topic (\`docs($topic): …\`), triage the items, and give the topic its row in the PRD table: when \`$backlog_cmd prd list\` already has a row for $topic, set it with \`$backlog_cmd prd set $topic after=<topic> hot=<path prefixes>\`; when it has none, add it first with \`$backlog_cmd prd add $topic\` (never a hand edit of the table and no \`$backlog_cmd commit\`: those commands commit). Then land it yourself as the handbook's _Landing a plan branch_ says: \`$prd_cmd land $plan_prefix$topic -m "docs($topic): PRD and plan for … (${backlog_id_prefix}<n>, …)"\` (plain: a plan branch never needs a forced landing), $report_line, and as your last step run \`cd $main && $prd_cmd end\` (it ends this session and closes its tab; \`cd\` first, since \`rm\` deleted your worktree).
 
 Start by summarising what the backlog says about "$topic", then explore.

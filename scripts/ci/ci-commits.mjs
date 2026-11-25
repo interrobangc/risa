@@ -2,9 +2,9 @@
 // commits a run can be asked for: a narrowed run (`ci run --files`) and a proof
 // run (`ci run candidate --force-flake`). Plumbing only, so the worktree, the
 // index and the branch stay as they are.
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { FORCED_FLAKE_FILE, NARROWED_FILE, TIERS, browserCheckFile, fileTier } = tierData();
+const { FORCED_FLAKE_FILE, NARROWED_FILE, TIERS, browserCheckFile, fileTier } = tierDataOrExit("ci");
 
 /** @typedef {import("./ci-io.mjs").Io} Io */
 

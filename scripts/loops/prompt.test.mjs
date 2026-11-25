@@ -2,11 +2,20 @@
 // copied in: the plain prompts, the resume and continue variants, and the
 // every-step _Status_ rule. Nothing here starts a session.
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -801,6 +810,26 @@ describe("bye", () => {
       `- **Just 'bye':** with every idea added, run \`pnpm -s -C ${main} prd bye\` and say nothing after; if it lists open things, ask about each, then rerun it.`,
     );
     expect(text).not.toContain("_Bye_");
+  });
+
+  it.each([
+    ["orchestrator", ["orchestrator", "T"], "orchestrator"],
+    ["plan", ["plan", "T"], "planner"],
+    ["hotfix", ["hotfix", "x", "the fix"], "hotfix"],
+    ["backlog", ["backlog"], "backlog"],
+    ["recover", ["recover"], "recovery"],
+  ])("%s: a role the config names no doc for falls back to its name, whole", (_, args, role) => {
+    const config = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    delete config.roles;
+    const file = join(root, "no-roles.json");
+    writeFileSync(file, JSON.stringify(config));
+    const r = spawnSync("bash", [join(main, "scripts/loops/prompt.sh"), ...args], {
+      cwd: main,
+      encoding: "utf8",
+      env: { ...process.env, RISA_CONFIG: file },
+    });
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toContain(`${BYE} the ${role} role's doc names under _Bye_, ${AFTER}`);
   });
 
   it("the briefs that aren't a role get none", () => {

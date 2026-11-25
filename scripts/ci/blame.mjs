@@ -11,9 +11,9 @@ import { dirname } from "node:path";
 import { backlogIds } from "../loops/config.mjs";
 import { findingKey, keyMark } from "./filing.mjs";
 import { isQuarantined } from "./ci-lists.mjs";
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { TIERS, fileTier, isBrowserCheckFile } = tierData();
+const { TIERS, fileTier, isBrowserCheckFile } = tierDataOrExit("ci");
 /** A dev-brake notice: its item and key. */
 const BRAKE_NOTICE = new RegExp(`^dev brake ${backlogIds().pattern} \\[ci-key ([^\\]]+)\\]`);
 

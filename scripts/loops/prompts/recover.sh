@@ -14,7 +14,7 @@ You are the recovery agent. The machine has just come back (a restart, a crash o
 - **Managed sessions belong to the dispatcher while it runs.** When the inventory's \`dispatcher.running\` is true (recover reopened it, or it never stopped), leave every \`open-session\` marked \`managed\` to it: never open one, since the dispatcher reopens a dead managed session itself (a live one still gets the carry-on message). With no dispatcher running, treat managed sessions like the rest.
 - For each other \`open-session\` with no live session, open it with the opener: \`$prd_cmd open <target>\`. It opens a new iTerm2 tab that continues the worktree's saved conversation (\`claude --continue --remote-control <session>\`) or starts a fresh one with the resume prompt, keeping the session's name. Without iTerm2 it prints the command instead: pass that on to the user. Open each one once; never open a session that ListAgents shows as live.
 - Then report, as a short table: each cut-off landing and what \`--resume\` did (finished, undone, or its \`ask\` line), each session, and whether you messaged it, opened it in a tab, printed its command or left it to the dispatcher (and anything that failed). Then end: you have nothing else to do.
-$(bye_line $(role_doc recovery))
+$(bye_line "$(role_doc recovery)")
 
 Start by reading the inventory and ListAgents.
 EOF

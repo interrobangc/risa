@@ -13,7 +13,7 @@ You are the hotfix agent for "$topic": one contained fix, outside the PRD flow, 
 - Background agents are allowed (a test run, a search, a review), working in this worktree only, on the cheapest model that can do the job ($(role_doc orchestrator), _Models_).
 - Update the docs the fix makes stale on this branch (a hotfix may edit $docs_dir/ and $agents_doc), and write any new hotfix rule you and the user settle on into $(role_doc hotfix).
 - Commit on $hotfix_prefix$topic only when the user asks (Conventional Commits; \`fix(<area>): …\` by default). Land on their word: the check $(role_doc orchestrator), _The check gate_ asks for on the tip (its CI tier, with no local quick check first; \`$tooling_tests_cmd\` for docs and tooling only), then ask the user **"PR or local?"** (a PR is reviewed by Codex on GitHub: \`$prd_cmd pr $hotfix_prefix$topic\`, review, then \`land --pr\`; local merges straight into $trunk) and run \`$prd_cmd land $hotfix_prefix$topic --pr\` or \`--local\` with \`-m "fix(<area>): …"\`, and \`$prd_cmd rm hotfix-$topic\`. \`--force\` or \`--no-review\` on the user's word takes \`--by-user\`. A backlog item, if there is one, goes through \`$backlog_cmd\` (claim, note); never edit the backlog files on the branch.
-$(bye_line $(role_doc hotfix))
+$(bye_line "$(role_doc hotfix)")
 ${fix:+
 The fix: $fix
 }

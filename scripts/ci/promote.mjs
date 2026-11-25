@@ -18,9 +18,9 @@ import {
   short,
 } from "./candidate.mjs";
 import { releasePasses } from "./gate.mjs";
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { ciRefName } = tierData();
+const { ciRefName } = tierDataOrExit("ci");
 
 const TIER = "candidate";
 const UNCONFIRMED = 5;

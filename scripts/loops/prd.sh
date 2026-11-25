@@ -470,8 +470,12 @@ case $cmd in
       [[ $(git -C "$dir" branch --show-current) == "$slice_prefix"* ]] && asked=slice
     fi
     base=$(check_base "$dir" "$asked")
-    { read -r pmode; read -r ptooling; read -r pown; } < <(
-      git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD)
+    # A plan that fails (its line is above) or gives no mode runs no check.
+    plan=$(git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD) ||
+      die "check: the check plan (check-plan.mjs) failed, so no check ran"
+    pmode="" ptooling="" pown=""
+    { read -r pmode || true; read -r ptooling || true; read -r pown || true; } <<< "$plan"
+    [[ -n $pmode ]] || die "check: the check plan (check-plan.mjs) gave no mode, so no check ran"
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.

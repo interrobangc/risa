@@ -2,10 +2,10 @@
 // Pure: `ci gate` (ci.mjs) finds the verdict, runs blame when it's needed, and
 // acts on what this returns. The code is the verdict kind's exit code, 0 to land.
 import { label } from "./blame.mjs";
-import { PROPOSED_TIERS, tierRank } from "../loops/check-plan.mjs";
-import { tierData } from "./tier-data.mjs";
+import { proposedTiers, tierRank } from "../loops/check-plan.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { TIERS } = tierData();
+const { TIERS } = tierDataOrExit("ci");
 
 const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
 
@@ -100,7 +100,7 @@ export function walkVerdicts({ commits, tier, touched, verdictAt, changeOf }) {
   if (!demand) return { ...base, carried: null, need: tier };
   // Never above the declared tier: dev's own landing vouched for its files alone.
   if (demand >= tierRank(tier)) return none;
-  const need = /** @type {string} */ (PROPOSED_TIERS[demand]);
+  const need = /** @type {string} */ (proposedTiers()[demand]);
   if (!carries(base.verdict, touched)) return none;
   const newest = steps.findIndex((s) => s.rank > 0);
   for (const { sha } of steps.slice(0, newest + 1)) {

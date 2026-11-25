@@ -2,7 +2,16 @@
 // kinds topic/, part/, draft/ and quick/ (not prd/, slice/, plan/, hotfix/), and
 // the scripts that read a branch's kind honour them, in Node and in bash.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -15,6 +24,8 @@ import { sessionOfBranch } from "./resume.mjs";
 import { topicOfBranch } from "./run-log.mjs";
 import { makeRepo, SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 import { protectedBranches } from "./tidy.mjs";
+
+const HERE = import.meta.dirname;
 
 describe("the Node modules, on the sample project's prefixes", () => {
   const before = process.env.RISA_CONFIG;
@@ -77,6 +88,12 @@ describe("the bash scripts, on the sample project's prefixes", () => {
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+  it("the sample repo has the scripts, not their tests or goldens", () => {
+    expect(existsSync(join(main, "scripts/loops/lib.sh"))).toBe(true);
+    expect(existsSync(join(main, "scripts/loops/config.test.mjs"))).toBe(false);
+    expect(existsSync(join(main, "scripts/loops/sample-project/prompt-golden.txt"))).toBe(false);
+  });
+
   it("pr takes the PRD and hotfix kinds and refuses a draft by their prefixes", () => {
     expect(sh(main, "pr.sh", "draft/x")).toMatchObject({
       status: 1,
@@ -125,5 +142,24 @@ describe("the bash scripts, on the sample project's prefixes", () => {
       "part/x/1",
     );
     expect(merged()).toBe(0);
+  });
+
+  it("the slice check on a part/ branch runs nothing when the check plan fails", () => {
+    const slice = join(main, ".loops/x-1");
+    const tiers = join(main, "tools/tiers.json");
+    const good = readFileSync(tiers, "utf8");
+    // The check plan reads the tier data through the core's reader in scripts/ci.
+    mkdirSync(join(main, "scripts/ci"), { recursive: true });
+    copyFileSync(join(HERE, "../ci/tier-data.mjs"), join(main, "scripts/ci/tier-data.mjs"));
+    writeFileSync(tiers, "not json");
+    try {
+      const r = sh(slice, "prd.sh", "check", "--quick", "t");
+      expect(r.status).not.toBe(0);
+      expect(r.out).toMatch(/check-plan: .*tiers\.json: can't read the tier data/);
+      expect(r.out).toContain("no check ran");
+      expect(r.out).not.toContain("The  check");
+    } finally {
+      writeFileSync(tiers, good);
+    }
   });
 });

@@ -8,9 +8,9 @@
 //                                  1 must not read as an answer), 5 GitHub unreadable
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { parseCiRef } = tierData();
+const { parseCiRef } = tierDataOrExit("ci");
 
 /**
  * @typedef {{ ok: boolean, out: string }} Result

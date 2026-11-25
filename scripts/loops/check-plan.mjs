@@ -36,11 +36,11 @@
 // A `match` is a regular expression's source (`flags` its flags); a path is a file
 // or a folder, from the repo's root.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
 import { loadConfig } from "./config.mjs";
-import { tierData } from "../ci/tier-data.mjs";
+import { TierDataError, tierData } from "../ci/tier-data.mjs";
 
 /** The core's own folders, tooling while they sit in the repo (lib.sh's exempt_re too). */
 const CORE_TOOLING = ["scripts/loops", "scripts/backlog"];
@@ -163,11 +163,13 @@ export function checkPlanRulesProblems(data, tiers) {
 }
 
 /**
- * Whether a file is one of these paths or under one.
+ * Whether a file is under one of these paths, or is one that isn't a folder: a
+ * changed file named as a folder (a symlink or gitlink in its place) isn't in it.
  * @param {readonly string[]} paths
+ * @param {ReadonlySet<string>} folders the paths that are folders
  */
-const under = (paths) => (/** @type {string} */ file) =>
-  paths.some((p) => file === p || file.startsWith(`${p}/`));
+const under = (paths, folders) => (/** @type {string} */ file) =>
+  paths.some((p) => (file === p && !folders.has(p)) || file.startsWith(`${p}/`));
 
 /** @param {{ match: string, flags?: string, why: string, tier?: string }[]} list */
 const compile = (list = []) =>
@@ -204,14 +206,19 @@ export function checkPlanFor(project) {
   const byPath = compile(data.byPath);
   const reaches = compile(data.reachesCode);
   const harnessTier = data.browserHarness?.tier;
-  const isHarness = harnessTier
-    ? under([...CORE_HARNESS, ...data.browserHarness.paths])
-    : (/** @type {string} */ _file) => false;
-  const isTooling = under([
-    ...CORE_TOOLING,
-    ...(project.config.paths?.tooling ?? []),
-    ...(data.tooling ?? []),
-  ]);
+  const harnessPaths = harnessTier ? [...CORE_HARNESS, ...data.browserHarness.paths] : [];
+  const toolingPaths = [...CORE_TOOLING, ...(project.config.paths?.tooling ?? []), ...(data.tooling ?? [])];
+  /** @param {string} p */
+  const isFolder = (p) => {
+    try {
+      return statSync(join(project.root, p)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  const folders = new Set([...CORE_TOOLING, ...[...harnessPaths, ...toolingPaths].filter(isFolder)]);
+  const isHarness = harnessTier ? under(harnessPaths, folders) : (/** @type {string} */ _file) => false;
+  const isTooling = under(toolingPaths, folders);
   const ciLists = new Set(
     [project.config.paths?.brakeList, project.config.paths?.quarantine].filter(Boolean),
   );
@@ -353,13 +360,10 @@ export const checkPlan = () => (ours ??= checkPlanFor(loadConfig()));
 
 // This repo's plan, function by function: what the scripts and the CLI call.
 
-/** The tiers a landing can declare, lowest first. */
-export const PROPOSED_TIERS = /** @type {const} */ (["none", ...tierData().TIERS]);
+/** The tiers a landing can declare, lowest first: read when first asked for, not at import. */
+export const proposedTiers = () => ["none", ...tierData().TIERS];
 
-/** @typedef {(typeof PROPOSED_TIERS)[number]} ProposedTier */
-
-export const tierRank = (/** @type {string} */ tier) =>
-  PROPOSED_TIERS.indexOf(/** @type {ProposedTier} */ (tier));
+export const tierRank = (/** @type {string} */ tier) => proposedTiers().indexOf(tier);
 
 /** @param {string[]} changed */
 export const needsBrowserHarness = (changed) => checkPlan().needsBrowserHarness(changed);
@@ -407,17 +411,12 @@ export function parseArgs(argv) {
   return { ok: true, propose, opts };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.ok) {
-    console.error(`${args.error}\n${USAGE}`);
-    process.exit(2);
-  }
-  const { propose, opts } = args;
+/** The CLI, after its arguments are checked. @param {{ propose: boolean, opts: Record<string, string> }} args */
+async function cli({ propose, opts }) {
   const repo = opts.repo || ".";
   const declared = opts.declared;
   if (declared && tierRank(declared) < 0) {
-    console.error(`unknown tier ${declared} (${PROPOSED_TIERS.join(", ")})`);
+    console.error(`unknown tier ${declared} (${proposedTiers().join(", ")})`);
     process.exit(2);
   }
   let text = "";
@@ -451,5 +450,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const plan = planCheck(changed, mode === "slice" || mode === "quick" ? mode : "full");
     const tooling = plan.tooling ? (needsBrowserHarness(changed) ? 2 : 1) : 0;
     console.log([plan.mode, tooling, plan.ownTests.join(" ")].join("\n"));
+  }
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.ok) {
+    console.error(`${args.error}\n${USAGE}`);
+    process.exit(2);
+  }
+  try {
+    await cli(args);
+  } catch (e) {
+    // A rules or tier data file that doesn't load: one line, never a Node stack.
+    if (!(e instanceof CheckPlanRulesError || e instanceof TierDataError)) throw e;
+    console.error(`check-plan: ${e.problems.join("; ")}`);
+    process.exit(2);
   }
 }

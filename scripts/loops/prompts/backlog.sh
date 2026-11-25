@@ -56,7 +56,7 @@ You are the new backlog/inbox planning agent. Ask what this session is for first
 - **First, and nothing else:** run \`$prd_cmd asks --short\` and print its one line on what waits on the user. Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
 - **Then collect for the picks only:** run \`$prd_cmd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on "hand off" or a request for another backlog session.
 - Ask with AskUserQuestion, never numbered question lists.
-$(bye_line $(role_doc backlog))
+$(bye_line "$(role_doc backlog)")
 ${captain_line}- The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (${backlog_id_prefix}52 export all data). Name a PRD topic by what it does, not only its slug.
 EOF
 exit 0

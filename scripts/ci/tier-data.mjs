@@ -15,7 +15,7 @@
 //   narrowedFile    the file list a narrowed run's throwaway commit adds
 //   forcedFlakeFile the marker of a proof run's throwaway commit
 //   refPrefix       what a requested run's ref starts with (`ci/`): `<prefix><tier>/<name>`
-// A pattern's `*` matches anything, `/` too.
+// A pattern's `*` matches anything, `/` and a newline too.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../loops/config.mjs";
@@ -106,13 +106,14 @@ export function tierDataProblems(data) {
   return problems;
 }
 
-/** A pattern whose `*` matches anything, `/` too. @param {string} pattern */
+/** A pattern whose `*` matches anything, `/` and a newline too. @param {string} pattern */
 const glob = (pattern) =>
   new RegExp(
     `^${pattern
       .split("*")
       .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
       .join(".*")}$`,
+    "s",
   );
 const escape = (/** @type {string} */ s) => s.replace(/[.+?^${}()|[\]\\/]/g, "\\$&");
 
@@ -218,4 +219,20 @@ export function tierData(project = loadConfig()) {
   const tiers = tiersFrom(data, file);
   loaded.set(file, tiers);
   return tiers;
+}
+
+/**
+ * tierData for a command's import: a tier data file that doesn't load prints one
+ * `<who>: …` line (every problem on it) and exits 2, never a Node stack.
+ * @param {string} who the command's name, first on the line (ci)
+ * @returns {Tiers}
+ */
+export function tierDataOrExit(who) {
+  try {
+    return tierData();
+  } catch (e) {
+    if (!(e instanceof TierDataError)) throw e;
+    process.stderr.write(`${who}: ${e.problems.join("; ")}\n`);
+    process.exit(2);
+  }
 }

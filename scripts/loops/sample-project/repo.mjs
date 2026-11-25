@@ -5,7 +5,7 @@
 // part/, draft/, quick/), the id prefix, the project's commands).
 //
 //   makeRepo(main, { config, files })   a git repo at `main`: the tool's scripts
-//     (scripts/loops), the config as its risa.json, the data files it names that sit
+//     (scripts/loops, without its tests and goldens), the config as its risa.json, the data files it names that sit
 //     beside it (the tier data, the check plan's rules: tools/ here), the script its
 //     check hook runs when it sits beside it (tools/check.sh), the files given
 //     (path → text), one commit on the config's trunk. The scripts find the config at its root, so
@@ -29,7 +29,11 @@ export const SAMPLE_CONFIG = fileURLToPath(new URL(`./${CONFIG_NAME}`, import.me
 export function makeRepo(main, { config = SAMPLE_CONFIG, files = {} } = {}) {
   const parsed = JSON.parse(readFileSync(config, "utf8"));
   mkdirSync(main, { recursive: true });
-  cpSync(LOOPS, join(main, "scripts/loops"), { recursive: true });
+  // The scripts alone: no tests or prompt goldens, which no copied script reads.
+  cpSync(LOOPS, join(main, "scripts/loops"), {
+    recursive: true,
+    filter: (src) => !src.endsWith(".test.mjs") && !src.endsWith("golden.txt"),
+  });
   copyFileSync(config, join(main, CONFIG_NAME));
   const hookScript = parsed.hooks?.check?.split(" ")[0];
   for (const rel of [parsed.paths.tierData, parsed.paths.checkPlanRules, hookScript]) {

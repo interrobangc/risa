@@ -1,12 +1,18 @@
 // The core's tier data reader, on a sample project's data: what it answers, and
 // every shape it refuses.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { CONFIG_NAME, configPath } from "../loops/config.mjs";
 import { TierDataError, tierData, tierDataProblems, tiersFrom } from "./tier-data.mjs";
+
+const HERE = new URL(".", import.meta.url).pathname;
+/** This repo's config, whose tier data path a test points at a broken file. */
+const FIXTURE_CONFIG = configPath();
 
 /** A sample project's tiers: three, other names, another ref prefix. */
 const SAMPLE = {
@@ -57,6 +63,12 @@ describe("tiersFrom", () => {
     expect(t.fileTier("x.slow.test.js")).toBe("tests");
     // A pattern's dots are dots, not any character.
     expect(t.fileGroup("x.slowXtest.js")).toBe("fast");
+  });
+
+  it("puts a file name with a newline in a group too, never a TypeError", () => {
+    expect(t.fileGroup("lib/a\nb.test.js")).toBe("fast");
+    expect(t.fileGroup("lib/a\nb.slow.test.js")).toBe("slow");
+    expect(t.fileTier("lib/a\nb.test.js")).toBe("tests");
   });
 
   it("names a browser check's spec and knows one", () => {
@@ -130,6 +142,28 @@ describe("tierDataProblems", () => {
     const bad = changed((d) => (delete d.jobs, (d.refPrefix = "x")));
     expect(() => tiersFrom(bad, "t.json")).toThrow(TierDataError);
     expect(() => tiersFrom(bad, "t.json")).toThrow("t.json: jobs: missing\nt.json: refPrefix: must be");
+  });
+});
+
+describe("tierDataOrExit", () => {
+  it("gives a command one line and exit 2 for a broken tier file, never a stack", () => {
+    const root = mkdtempSync(join(tmpdir(), "tier-data-exit-"));
+    try {
+      writeFileSync(join(root, "broken.json"), JSON.stringify({ ...SAMPLE, tiers: [] }));
+      const config = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+      config.paths = { ...config.paths, tierData: "broken.json" };
+      writeFileSync(join(root, CONFIG_NAME), JSON.stringify(config));
+      const r = spawnSync(
+        "node",
+        ["--input-type=module", "-e", `import(${JSON.stringify(HERE + "ci-args.mjs")})`],
+        { encoding: "utf8", env: { ...process.env, RISA_CONFIG: join(root, CONFIG_NAME) } },
+      );
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/^ci: .*broken\.json: tiers: must be a list/);
+      expect(r.stderr).not.toMatch(/\n\s+at /);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

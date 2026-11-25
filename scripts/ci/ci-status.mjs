@@ -3,9 +3,9 @@
 // cache, short when GitHub is away.
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME } from "./ci-io.mjs";
 import { readVerdict } from "./ci-runs.mjs";
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { parseCiRef } = tierData();
+const { parseCiRef } = tierDataOrExit("ci");
 
 /**
  * @typedef {import("./ci-io.mjs").Io} Io

@@ -12,7 +12,7 @@ import {
   checkPlanRulesProblems,
   parseArgs,
 } from "./check-plan.mjs";
-import { loadConfig } from "./config.mjs";
+import { CONFIG_NAME, loadConfig } from "./config.mjs";
 import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 
 const HERE = import.meta.dirname;
@@ -119,6 +119,45 @@ describe("proposeTier", () => {
 
   it("checks the suite's rules before the tier by path", () => {
     expect(proposeTier(["web/package.json"]).tier).toBe("e2e");
+  });
+
+  // A changed file named as a tooling folder is a symlink or gitlink in its place:
+  // not in the folder, so not tooling (the old patterns wanted the slash too).
+  it.each(["scripts/loops", "scripts/backlog", "tools"])(
+    "a file at the folder path %s isn't tooling",
+    (file) => {
+      expect(proposeTier([file])).toEqual({ tier: "e2e", reason: `a file no rule covers (${file})` });
+      expect(proposeTier([`${file}/x.sh`]).tier).not.toBe("e2e");
+    },
+  );
+});
+
+describe("reading the tier data", () => {
+  it("waits until it is asked for: a broken tier file fails no import, and the CLI says so in one line", () => {
+    const root = mkdtempSync(join(tmpdir(), "check-plan-tiers-"));
+    try {
+      const config = JSON.parse(readFileSync(SAMPLE_CONFIG, "utf8"));
+      for (const rel of [config.paths.checkPlanRules, config.paths.tierData]) {
+        mkdirSync(dirname(join(root, rel)), { recursive: true });
+        copyFileSync(join(SAMPLE.root, rel), join(root, rel));
+      }
+      writeFileSync(join(root, config.paths.tierData), "not json");
+      writeFileSync(join(root, CONFIG_NAME), JSON.stringify(config));
+      const env = { ...process.env, RISA_CONFIG: join(root, CONFIG_NAME) };
+      const load = spawnSync("node", ["--input-type=module", "-e", `await import(${JSON.stringify(CLI)})`], {
+        encoding: "utf8",
+        env,
+      });
+      expect(load.stderr).toBe("");
+      expect(load.status).toBe(0);
+      const r = spawnSync("node", [CLI, "--mode", "slice"], { input: "web/a.js\n", encoding: "utf8", env });
+      expect(r.status).toBe(2);
+      expect(r.stdout).toBe("");
+      expect(r.stderr).toMatch(/^check-plan: .*tiers\.json: can't read the tier data/);
+      expect(r.stderr.trim().split("\n")).toHaveLength(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

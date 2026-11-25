@@ -3,9 +3,9 @@
 // means.
 import { backlogIds } from "../loops/config.mjs";
 import { DEFAULT_WAIT_MIN } from "./ci-io.mjs";
-import { tierData } from "./tier-data.mjs";
+import { tierDataOrExit } from "./tier-data.mjs";
 
-const { TIERS, isTier } = tierData();
+const { TIERS, isTier } = tierDataOrExit("ci");
 const IDS = backlogIds();
 const ID = new RegExp(`^${IDS.pattern}$`);
 
