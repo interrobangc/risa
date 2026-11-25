@@ -6,6 +6,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -213,6 +214,9 @@ describe("the scripts that wait or warn", () => {
       (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "load-gate.mjs",
     ))
       copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+    // The project's stack and test DB scripts: the old stack functions call them
+    // through the config's hooks until slice 3 of orchestration-split-2.
+    cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
     writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");
     mkdirSync(join(main, "plans"));
     writeFileSync(join(main, "plans/t-plan.md"), PLAN);

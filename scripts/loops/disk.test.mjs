@@ -104,6 +104,9 @@ beforeAll(() => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The project's stack and test DB scripts: the old stack functions and places
+  // call them through the config's hooks until slice 3 of orchestration-split-2.
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   // A fake serve.sh: browser.sh calls it to start (and build) the check server.
   writeFileSync(
     join(main, "scripts/loops/serve.sh"),

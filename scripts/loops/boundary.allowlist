@@ -67,7 +67,7 @@ scripts/loops/context-settings.json project-env 14
 scripts/loops/context.mjs project-env 17
 scripts/loops/context.test.mjs project-env 11
 scripts/loops/disk.test.mjs app-path 4
-scripts/loops/disk.test.mjs core-to-project 9
+scripts/loops/disk.test.mjs core-to-project 5
 scripts/loops/disk.test.mjs project-env 29
 scripts/loops/dispatch-context.mjs project-env 2
 scripts/loops/dispatch-context.test.mjs project-env 21
@@ -84,7 +84,6 @@ scripts/loops/drain.mjs project-env 10
 scripts/loops/drain.test.mjs app-path 4
 scripts/loops/drain.test.mjs project-env 23
 scripts/loops/end-session.sh project-env 4
-scripts/loops/gc.sh core-to-project 1
 scripts/loops/gc.sh project-env 1
 scripts/loops/heartbeat.mjs project-env 3
 scripts/loops/heartbeat.test.mjs app-path 1
@@ -105,9 +104,8 @@ scripts/loops/land.test.mjs project-name 4
 scripts/loops/lease.mjs project-env 2
 scripts/loops/lease.sh project-env 26
 scripts/loops/lease.test.mjs project-env 20
-scripts/loops/lib.sh app-path 1
-scripts/loops/lib.sh project-env 28
-scripts/loops/lib.sh project-name 2
+scripts/loops/lib.sh project-env 27
+scripts/loops/lib.sh project-name 1
 scripts/loops/load-gate.mjs project-env 14
 scripts/loops/load-gate.test.mjs app-path 4
 scripts/loops/load-gate.test.mjs project-env 48
@@ -127,7 +125,7 @@ scripts/loops/open-session.sh project-env 5
 scripts/loops/open-session.test.mjs project-env 10
 scripts/loops/open-session.test.mjs project-name 7
 scripts/loops/pr.sh project-env 2
-scripts/loops/prd.sh core-to-project 3
+scripts/loops/prd.sh core-to-project 2
 scripts/loops/prd.sh project-env 40
 scripts/loops/prd.sh project-name 3
 scripts/loops/prompts/backlog.sh project-env 4 # tool knobs (CARETOOK_CAPTAIN, CARETOOK_MAX_PRDS): the RISA_ rename, orchestration-split-3 slice 4
@@ -156,7 +154,6 @@ scripts/loops/rotate.test.mjs project-name 1
 scripts/loops/run-log.mjs project-env 3
 scripts/loops/run-log.test.mjs project-env 4
 scripts/loops/sample-project/prompt-golden.txt project-env 2 # backlog.sh's CARETOOK_MAX_PRDS, rendered: goes with the RISA_ rename, orchestration-split-3 slice 4
-scripts/loops/serve.sh project-to-core 1
 scripts/loops/session-requests.mjs project-env 5
 scripts/loops/session-requests.test.mjs project-env 2
 scripts/loops/session.sh project-env 17
@@ -168,15 +165,11 @@ scripts/loops/skeptic.mjs project-env 4
 scripts/loops/skeptics.mjs project-env 4
 scripts/loops/skeptics.test.mjs project-env 5
 scripts/loops/slice-fields.test.mjs app-path 3
-scripts/loops/stack-lib.sh app-path 20
-scripts/loops/stack-lib.sh core-to-project 1
-scripts/loops/stack-lib.sh project-env 6
-scripts/loops/stack-lib.sh project-name 10
-scripts/loops/stack.sh project-to-core 1
+scripts/loops/stack-lib.sh project-env 2 # gc_stopped_after's CARETOOK_GC_STOPPED_HOURS, a tool knob (the gc ages stay core): the RISA_ rename, orchestration-split-3
 scripts/loops/stack.test.mjs app-path 11
-scripts/loops/stack.test.mjs core-to-project 12
+scripts/loops/stack.test.mjs core-to-project 7
 scripts/loops/stack.test.mjs project-env 5
-scripts/loops/stack.test.mjs project-name 24
+scripts/loops/stack.test.mjs project-name 23
 scripts/loops/status-extra.mjs project-env 17
 scripts/loops/status-extra.test.mjs project-env 20
 scripts/loops/tidy-cli.mjs core-to-project 3

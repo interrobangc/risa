@@ -85,6 +85,24 @@ run_hook() {
   (cd "$top" && eval "$c" '"$@"')
 }
 
+# stack_hook NAME [ARG…] → run_hook from the checkout this file is in, not the
+# one the shell is in: a worktree made from an older branch may not have the
+# hook's script, and the tool's own checkout always has the one it was written
+# with. ARGs that name a worktree must be absolute.
+stack_hook() {
+  (cd "$(dirname "${BASH_SOURCE[0]}")" && run_hook "$@")
+}
+
+# fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else
+# stdin), the last one when there are several; nothing when it has none.
+fact() {
+  local line value=""
+  while IFS= read -r line; do
+    [[ $line == "$1="* ]] && value=${line#*=}
+  done < <(if (($# > 1)); then printf '%s\n' "$2"; else cat; fi)
+  [[ -z $value ]] || echo "$value"
+}
+
 # landing_hook ARG… → the project's landing hook (hooks.landing: how to try a
 # landing, what the main checkout needs after one), its lines on stdout; nothing
 # when the config sets none. Never fails.
@@ -123,31 +141,6 @@ parent_of() {
     "$slice_prefix"*/*) local t=${1#"$slice_prefix"}; echo "$prd_prefix${t%/*}" ;;
     *) echo "$trunk" ;;
   esac
-}
-
-# slot_ports N → sets web, pg, pgt, ps and off for slot N (1-19).
-#   1-9:   web 6N73, Postgres 6N34, test Postgres 6N35, PowerSync 6N80
-#   10-19: the same with 7(N-10) in place of 6N: 7073 … 7980
-#   CDP and proxy ports shift by N*1000 (CDP_PORT_OFFSET).
-slot_ports() {
-  local n=$1 p
-  if ((n < 10)); then p=6$n; else p=7$((n - 10)); fi
-  web=${p}73 pg=${p}34 pgt=${p}35 ps=${p}80 off=$((n * 1000))
-}
-
-# slot_busy N → true when slot N is leased, named by a worktree's .env, or one of
-# its ports is listening.
-slot_busy() {
-  local n=$1 f p
-  [[ -e $leases/$n ]] && return 0
-  for f in "$loops"/*/.env; do
-    [[ -f $f ]] && grep -qx "CARETOOK_STACK=caretook-loop$n" "$f" && return 0
-  done
-  slot_ports "$n"
-  for p in $web $pg $pgt $ps; do
-    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
-  done
-  return 1
 }
 
 # lease_slot N NAME → atomically claim slot N for NAME (mkdir is the lock).
@@ -209,20 +202,12 @@ topic_of() {
   esac
 }
 
-# web_port DIR → the dev server port of a stacked worktree, or nothing.
-web_port() { env_get "$1/apps/web/.env" WEB_PORT; }
+# web_port DIR → the dev server port of a stacked worktree, or nothing (the
+# stack status hook's web_port).
+web_port() { fact web_port "$(stack_hook stackStatus "$1" 2>/dev/null || true)"; }
 
 # server_pids PORT → pids listening on PORT.
 server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
-
-# stop_server DIR → stop the worktree's dev server, if one is running.
-stop_server() {
-  local port pids
-  port=$(web_port "$1"); [[ -n $port ]] || return 0
-  pids=$(server_pids "$port"); [[ -n $pids ]] || return 0
-  # shellcheck disable=SC2086
-  kill $pids 2>/dev/null || true
-}
 
 # checked_file DIR → where `pnpm prd check` records the commit it passed on
 # (in the worktree's git dir, so it never shows up as a change).

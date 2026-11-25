@@ -1,5 +1,5 @@
 // Stacks, test databases and gc (new.sh, stack.sh, rm.sh, ls.sh, gc.sh,
-// test-db.sh's old place) against a throwaway repo with these scripts copied in, and fake
+// test-db.sh's old place, through the project's hooks) against a throwaway repo with these scripts copied in, and fake
 // docker, pnpm, lsof and nvm on PATH: nothing here touches real containers,
 // slots or worktrees.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -46,6 +46,7 @@ echo "docker $*" >> "$FAKE_LOG"
 case $1 in
   ps)
     if [[ "$*" == *caretook-shared-test* ]]; then [[ -z \${FAKE_SHARED_ID:-} ]] || echo "$FAKE_SHARED_ID"
+    elif [[ "$*" == *status=running* ]]; then [[ -z \${FAKE_RUNNING_IDS:-} ]] || echo "$FAKE_RUNNING_IDS"
     elif [[ "$*" == *-aq* ]]; then [[ -z \${FAKE_STACK_IDS:-} ]] || echo "$FAKE_STACK_IDS"; fi ;;
   inspect) [[ -z \${FAKE_INSPECT:-} ]] || echo "$FAKE_INSPECT" ;;
   exec) [[ "$*" != *psql* ]] || printf '%s\n' "\${FAKE_PSQL:-0}" ;;
@@ -108,9 +109,11 @@ const fixture = () => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "run-log.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The test DB's script, Caretook's own, which the old place forwards to.
+  // The project's stack and test DB scripts (the config's hooks), which the old
+  // functions and places call until slice 3 of orchestration-split-2.
   mkdirSync(join(main, "scripts/project"), { recursive: true });
-  copyFileSync(join(HERE, "../project/test-db.sh"), join(main, "scripts/project/test-db.sh"));
+  for (const f of ["test-db.sh", "stack.sh", "stack-facts.sh", "serve.sh"])
+    copyFileSync(join(HERE, "../project", f), join(main, "scripts/project", f));
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
@@ -217,6 +220,23 @@ describe("stack up and down", () => {
     expect(leases().sort()).toEqual(["1", "2"]);
     expect(calls()).toMatch(/pnpm datastore:start/);
 
+    // Its facts, from the stack status hook: the same slot, project and ports.
+    const facts = ok("stack.sh", ["status", "t-1"]);
+    for (const f of ["slot=2", "web_port=6273", "pg_port=6234", "powersync_port=6280"])
+      expect(facts.split("\n")).toContain(f);
+    expect(up).toMatch(/→ http:\/\/localhost:6273\n {2}Postgres {5}:6234 {3}PowerSync :6280\n/);
+    // Ready only while all of its containers run.
+    const ready = (e) => sh("stack.sh", ["ready", "t-1"], { env: e });
+    expect(ready({}).status).toBe(1);
+    expect(ready({ FAKE_STACK_IDS: "a\nb", FAKE_RUNNING_IDS: "a" }).stdout).toMatch(
+      /^containers=1\/2\nready=no$/m,
+    );
+    const r = ready({ FAKE_STACK_IDS: "a\nb", FAKE_RUNNING_IDS: "a\nb" });
+    expect([r.status, r.stdout]).toEqual([0, expect.stringMatching(/^ready=yes$/m)]);
+    // Up again on a stack it has: started, not leased again.
+    expect(ok("stack.sh", ["up", "t-1"])).toMatch(/t-1 already has a stack \([^)]+\); starting it/);
+    expect(leases().sort()).toEqual(["1", "2"]);
+
     const down = ok("stack.sh", ["down", "t-1"]);
     expect(down).toMatch(/caretook-loop2 removed, slot released/);
     expect(calls()).toMatch(/docker compose -p caretook-loop2 down --remove-orphans/);
@@ -231,6 +251,7 @@ describe("stack up and down", () => {
 
   it("never runs Compose on a worktree without a stack (that would be the main checkout's project)", () => {
     expect(ok("stack.sh", ["down", "t-1"])).toMatch(/has no stack/);
+    expect(ok("stack.sh", ["status", "t-1"])).toBe("");
     expect(calls()).not.toMatch(/docker compose/);
   });
 });

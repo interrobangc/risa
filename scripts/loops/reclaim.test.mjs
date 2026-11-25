@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -132,6 +133,9 @@ beforeAll(() => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The project's stack and test DB scripts: the old stack functions and places
+  // call them through the config's hooks until slice 3 of orchestration-split-2.
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));

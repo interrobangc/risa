@@ -1,34 +1,43 @@
 #!/usr/bin/env bash
-# Stacks and test databases for .loops worktrees, shared by new.sh, stack.sh,
-# rm.sh, ls.sh and gc.sh. Source it; don't run it. (It sources
-# lib.sh.)
+# Stacks, slots and slices for .loops worktrees, shared by new.sh, stack.sh,
+# rm.sh, ls.sh and gc.sh. Source it; don't run it. (It sources lib.sh.)
+#
+# The stack's facts (its Compose projects, ports, env files and containers) and
+# the test databases are the project's, behind the config's stack and test-db
+# hooks; the functions below that touch them are thin calls to those hooks, kept
+# under their old names for the core's callers until orchestration-split-2
+# slice 3 swaps the callers to the hooks. The slot leases, slice state and gc
+# ages are the core's.
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-# The shared test Postgres (docker-compose.shared-test.yml, test-db.sh).
-shared_test_port=${CARETOOK_SHARED_TEST_PORT:-5436}
-shared_test_project=${CARETOOK_SHARED_TEST_PROJECT:-caretook-shared-test}
+# The shared test Postgres's port and Compose project: the test-db hook's facts.
+_test_db_facts=$(stack_hook testDb facts 2>/dev/null || true)
+shared_test_port=$(fact port "$_test_db_facts")
+shared_test_project=$(fact project "$_test_db_facts")
+unset _test_db_facts
 
-# test_db_name NAME → the worktree's database on the shared test Postgres:
-# caretook_test_<name>, anything but a-z0-9 as _, at most 63 characters.
-test_db_name() {
-  local n
-  n=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_')
-  printf 'caretook_test_%s\n' "$n" | cut -c1-63
+# test_db_name NAME → the worktree's database on the shared test Postgres.
+test_db_name() { stack_hook testDb name "$1"; }
+
+# write_test_env DIR NAME → point the worktree's integration tests at NAME's own
+# database on the shared test Postgres (DIR is NAME's worktree).
+write_test_env() { stack_hook testDb use "$2" >/dev/null; }
+
+# slot_ports N → sets web, pg, pgt, ps and off for slot N (1-19): its web,
+# database, test database and sync ports and its CDP and proxy port offset.
+slot_ports() {
+  local f
+  f=$(stack_hook stackStatus --slot "$1") || die "no stack facts for slot $1"
+  web=$(fact web_port "$f") pg=$(fact pg_port "$f") pgt=$(fact pg_test_port "$f")
+  ps=$(fact powersync_port "$f") off=$(fact cdp_offset "$f")
 }
 
-# write_test_env DIR NAME → packages/data/.env.test.local pointing the
-# integration tests at NAME's own database on the shared test Postgres. The
-# globalSetup creates it on first use and clears and migrates only it.
-write_test_env() {
-  mkdir -p "$1/packages/data"
-  cat > "$1/packages/data/.env.test.local" <<ENV
-# Integration tests: this worktree's own database on the shared test Postgres
-# (scripts/project/test-db.sh). Created on first use; dropped by pnpm prd rm.
-DATABASE_URL="postgresql://caretook:password@localhost:$shared_test_port/$(test_db_name "$2")"
-PG_TEST_PORT=$shared_test_port
-SHARED_TEST_DB=1
-ENV
+# slot_busy N → true when slot N is leased, or the stack hook says a worktree or
+# a listening port has it.
+slot_busy() {
+  [[ -e $leases/$1 ]] && return 0
+  [[ $(fact in_use "$(stack_hook stackStatus --slot "$1" --probe)") != no ]]
 }
 
 # lease_free_slot NAME [SLOT] → lease SLOT (or the lowest free one) for NAME and
@@ -50,90 +59,22 @@ lease_free_slot() {
   fi
 }
 
-# require_main_env → the main checkout's env files a stack copies secrets from.
-require_main_env() {
-  local f
-  for f in packages/data/.env apps/web/.env; do
-    [[ -f $main/$f ]] || die "missing $main/$f (copy its .env.example)"
-  done
-}
+# require_main_env → the main checkout has the env files a stack copies its
+# secrets from.
+require_main_env() { stack_hook stackUp --check || exit 1; }
 
-# write_stack_env DIR SLOT BASE → the env files of a stacked worktree: the root
-# .env (Compose's project and ports), packages/data/.env, apps/web/.env and
-# .env.loop. Secrets come from the main checkout's copies.
-write_stack_env() {
-  local dir=$1 base=$3
-  slot_ports "$2"
-  cat > "$dir/.env" <<ENV
-CARETOOK_STACK=caretook-loop$2
-PG_PORT=$pg
-PG_TEST_PORT=$pgt
-POWERSYNC_PORT=$ps
-POWERSYNC_URL=http://localhost:$ps
-PS_JWKS_URL=http://host.docker.internal:$web/api/auth/jwks
-ENV
-  mkdir -p "$dir/packages/data" "$dir/apps/web"
-  sed -E "s#^DATABASE_URL=.*#DATABASE_URL=\"postgresql://caretook:password@localhost:$pg/caretook\"#" \
-    "$main/packages/data/.env" > "$dir/packages/data/.env"
-  sed -E \
-    -e "s#^BETTER_AUTH_URL=.*#BETTER_AUTH_URL=\"http://localhost:$web\"#" \
-    -e "s#^AUTH_TRUSTED_ORIGINS=.*#AUTH_TRUSTED_ORIGINS=\"http://localhost:$web\"#" \
-    -e "s#^POWERSYNC_URL=.*#POWERSYNC_URL=\"http://localhost:$ps\"#" \
-    -e "s#^VITE_POWERSYNC_URL=.*#VITE_POWERSYNC_URL=\"http://localhost:$ps\"#" \
-    -e "/^WEB_PORT=/d" \
-    -e "/^APP_URL=/d" \
-    "$main/apps/web/.env" > "$dir/apps/web/.env"
-  # Emailed links point at this worktree's dev server. The mail secrets
-  # (CRON_SECRET, INVITE_LINK_KEY, …) come over with the rest of the file.
-  printf 'WEB_PORT=%s\nAPP_URL="http://localhost:%s"\n' "$web" "$web" >> "$dir/apps/web/.env"
-  # A main checkout without a CRON_SECRET still gives the worktree one (random,
-  # local), so /api/cron/outbox can be called there.
-  if ! grep -Eq '^CRON_SECRET="?[^"]' "$dir/apps/web/.env"; then
-    sed -i.bak '/^CRON_SECRET=/d' "$dir/apps/web/.env" && rm -f "$dir/apps/web/.env.bak"
-    printf 'CRON_SECRET="%s"\n' "$(openssl rand -hex 32)" >> "$dir/apps/web/.env"
-  fi
-  # Contact messages from the marketing site go to SUPPORT_EMAIL (the dev
-  # mailbox outside production); the main checkout's value comes over above.
-  if ! grep -Eq '^SUPPORT_EMAIL="?[^"]' "$dir/apps/web/.env"; then
-    sed -i.bak '/^SUPPORT_EMAIL=/d' "$dir/apps/web/.env" && rm -f "$dir/apps/web/.env.bak"
-    printf 'SUPPORT_EMAIL="support@example.com"\n' >> "$dir/apps/web/.env"
-  fi
-  # For browser checks: `set -a; source .env.loop; set +a`.
-  cat > "$dir/.env.loop" <<ENV
-SLOT=$2
-BASE_BRANCH=$base
-BASE=http://localhost:$web
-CDP_PORT_OFFSET=$off
-PG_CONTAINER=caretook-loop$2-postgres-1
-ENV
-  grep '^SEED_USER_PASSWORD=' "$dir/packages/data/.env" >> "$dir/.env.loop" || true
-}
+# write_stack_env DIR SLOT BASE → the env files of a stacked worktree on SLOT.
+write_stack_env() { stack_hook stackUp "$1" --slot "$2" --base "$3" --env-only >/dev/null; }
 
-# write_stackless_env DIR BASE → .env.loop for a worktree without a stack.
-write_stackless_env() { printf 'SLOT=\nBASE_BRANCH=%s\n' "$2" > "$1/.env.loop"; }
+# write_stackless_env DIR BASE → the env file of a worktree without a stack.
+write_stackless_env() { stack_hook stackDown "$1" --base "$2" --env-only; }
 
-# stack_project DIR → the worktree's Compose project (caretook-loopN), or nothing.
-stack_project() { env_get "$1/.env" CARETOOK_STACK; }
+# stack_project DIR → the worktree's stack's project, or nothing.
+stack_project() { fact project "$(stack_hook stackStatus "$1" 2>/dev/null || true)"; }
 
-# stack_teardown DIR → stop the worktree's dev server and its Compose projects
-# (the stack and, for worktrees made before the shared test Postgres, its own
-# test database), and delete their data. Only this worktree's projects.
-stack_teardown() {
-  local dir=$1 proj
-  proj=$(stack_project "$dir")
-  # Never fall back to Compose's default project: that's the main checkout's.
-  [[ $proj == caretook-loop* ]] || return 0
-  stop_server "$dir"
-  rm -f "$dir/.dev.log"
-  docker compose -p "$proj" down --remove-orphans
-  if [[ -n $(docker ps -aq --filter "label=com.docker.compose.project=$proj-test" 2>/dev/null) ]]; then
-    docker compose -p "$proj-test" down --remove-orphans
-  fi
-  # Postgres writes its data as the container user; remove it through a container.
-  if [[ -d $dir/.postgres ]]; then
-    docker run --rm --network none -v "$dir:/w" postgres:18.7-alpine rm -rf /w/.postgres
-  fi
-}
+# stack_teardown DIR → stop the worktree's dev server and its stack, and delete
+# their data; its env files stay. Nothing for a worktree without a stack.
+stack_teardown() { stack_hook stackDown "$1" --teardown-only >/dev/null; }
 
 # slice_merged DIR → true when the worktree is on slice/<topic>/<n> and its tip
 # was merged into prd/<topic> (it's a merge's second parent there), so the
