@@ -46,9 +46,10 @@ const TOOLING =
 
 // What the browser harness test (scripts/loops/browser.test.mjs, the
 // tooling:browser project) exercises: browser.sh, what it sources and starts, the
-// manifest, the area map, and the checks' own directory.
+// manifest, the area map and its engine (the project's, in scripts/project/), and the
+// checks' own directory.
 const BROWSER_HARNESS =
-  /^scripts\/(loops\/(browser\.sh|browser\.test\.mjs|lib\.sh|lease\.sh|serve\.sh|checks|check-areas\.mjs|check-areas\.d\/.+)|browser-checks\/.+)$/;
+  /^scripts\/(loops\/(browser\.sh|browser\.test\.mjs|lib\.sh|lease\.sh|serve\.sh|checks|check-areas\.d\/.+)|project\/check-areas\.mjs|browser-checks\/.+)$/;
 
 /**
  * Whether a change needs the browser harness test.

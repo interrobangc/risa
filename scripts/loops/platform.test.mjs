@@ -85,7 +85,7 @@ describe("what pnpm test:tooling runs", () => {
     "scripts/loops/lease.sh",
     "scripts/loops/serve.sh",
     "scripts/loops/checks",
-    "scripts/loops/check-areas.mjs",
+    "scripts/project/check-areas.mjs",
     "scripts/loops/check-areas.d/timeline",
     "scripts/browser-checks/fixtures.mjs",
   ])("adds the browser harness for %s", (f) => {
