@@ -48,8 +48,8 @@
 # neither. The to-test file and land's output carry the verdict, and every Codex
 # decline verdict recorded for the topic since its last landing.
 # --force skips the check requirement, not the sync, and not the doc budget:
-# it also refuses (doc-budget.mjs) when the branch grows a doc that is already
-# over its budget, for every kind of branch (a plan branch lands docs).
+# it also refuses (the config's docBudget hook) when the branch grows a doc that
+# is already over its budget, for every kind of branch (a plan branch lands docs).
 # The PR path also refuses unless the PR is open, its head is the branch's
 # local tip, and Codex's verdict on it is clean (pnpm prd review): a clean
 # verdict on an older head carries over plain dev merges that leave the PR's
@@ -263,8 +263,11 @@ if [[ -z $resume ]]; then
   if [[ -d $dir ]]; then
     [[ -z $(git -C "$dir" status --porcelain) ]] || die "uncommitted changes in $dir"
   fi
-  node "$(dirname "$0")/doc-budget.mjs" land "$trunk" --head "$branch" --repo "$main" ||
-    die "$branch grows a doc that is over its budget (scripts/loops/doc-budget.config.mjs): trim it, then land"
+  # The project's doc budget (the config's docBudget hook; none set: no budget).
+  if config_get hooks.docBudget >/dev/null 2>&1; then
+    run_hook docBudget land "$trunk" --head "$branch" --repo "$main" ||
+      die "$branch grows a doc that is over its budget: trim it, then land"
+  fi
   if [[ ($branch == "$prd_prefix"* || $branch == "$hotfix_prefix"*) && -z $force ]]; then
     proposed=$(propose_tier "$drift_ref" "$branch" "$tier") || die "unknown tier $tier (none, static, unit, integration, components, full)"
     { read -r proposal; read -r proposal_why; read -r tier_status; } <<< "$proposed"

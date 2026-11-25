@@ -103,7 +103,6 @@ scripts/loops/check-areas.d/security-headers project
 scripts/loops/check-areas.d/sync project
 scripts/loops/check-areas.d/timeline project
 scripts/loops/check-areas.d/todos project
-scripts/loops/check-areas.mjs project
 scripts/loops/check-budget.mjs core
 scripts/loops/check-budget.test.mjs core
 scripts/loops/check-gate.test.mjs core
@@ -145,8 +144,6 @@ scripts/loops/dispatch-pick.test.mjs core
 scripts/loops/dispatch-stuck.mjs core
 scripts/loops/dispatch.mjs core
 scripts/loops/dispatch.test.mjs core
-scripts/loops/doc-budget.config.mjs project
-scripts/loops/doc-budget.mjs project
 scripts/loops/down.sh core
 scripts/loops/drain.mjs core
 scripts/loops/drain.test.mjs core

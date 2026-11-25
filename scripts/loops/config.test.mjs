@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -419,6 +420,28 @@ describe("commands through the config", () => {
     );
     expect(r.stdout).toBe("echo gen\ngen a b c\ninstall|x|y z|\nrc=127\nRISA-\n");
     expect(r.stderr).toBe(`${CONFIG_NAME}: no value for commands.hooksInstall\n`);
+  });
+
+  it("runs a hook from the top of the checkout it is called in, with its arguments and stdin", () => {
+    const hooked = join(tmp, "hooks.json");
+    writeFileSync(
+      hooked,
+      JSON.stringify(changed((c) => (c.hooks = { checkAreas: "pwd; cat; printf '%s|'" }))),
+    );
+    const repo = realpathSync(mkdtempSync(join(tmp, "hook-repo-")));
+    execFileSync("git", ["init", "-q", repo]);
+    mkdirSync(join(repo, "a", "b"), { recursive: true });
+    const r = spawnSync(
+      "bash",
+      [
+        "-c",
+        `source "${join(HERE, "lib.sh")}" && echo in | run_hook checkAreas resolve "x y"; ` +
+          'run_hook docBudget land; echo "rc=$?"',
+      ],
+      { cwd: join(repo, "a", "b"), encoding: "utf8", env: env({ RISA_CONFIG: hooked }) },
+    );
+    expect(r.stdout).toBe(`${repo}\nin\nresolve|x y|rc=127\n`);
+    expect(r.stderr).toBe(`${CONFIG_NAME}: no value for hooks.docBudget\n`);
   });
 
   it("finds the repo's main checkout and its .loops, from the main checkout and from a worktree", () => {

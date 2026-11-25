@@ -519,6 +519,12 @@ describe("--changed with the real map", SLOW, () => {
     cpSync(new URL("./check-areas.d", import.meta.url), join(real, "scripts/loops/check-areas.d"), {
       recursive: true,
     });
+    // The resolver runs from the checkout's top through the config's checkAreas hook, so
+    // the throwaway repo carries the project's scripts too.
+    cpSync(join(dirname(BROWSER), "..", "project"), join(real, "scripts", "project"), {
+      recursive: true,
+      filter: (src) => !src.endsWith(".test.mjs"),
+    });
     for (const line of realFile("./checks").split("\n"))
       if (line.trim() && !line.startsWith("#"))
         writeFileSync(join(checks, `${line.split(/\s+/)[0]}.spec.mjs`), "\n");
