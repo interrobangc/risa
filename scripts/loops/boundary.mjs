@@ -370,9 +370,10 @@ function formOf(before, lang) {
  * @param {Map<string, string>} input.owners path → `core` or `project`, for every file a
  *   path may reach (the manifest's, and the project's other files under scripts/)
  * @param {{ names: string[], envPrefixes: string[], appPaths: string[] }} input.project
+ * @param {string[]} [input.data] files that are data, not code: the path rules skip them
  * @returns {Finding[]} sorted by file, line and rule
  */
-export function findings({ files, owners, project }) {
+export function findings({ files, owners, project, data = [] }) {
   const reach = reacher([...owners.keys()]);
   const ownerOf = (path) => owners.get(path) ?? "project";
   const envRe = project.envPrefixes.length
@@ -389,6 +390,7 @@ export function findings({ files, owners, project }) {
   for (const [file, text] of files) {
     if (file === MANIFEST || file === ALLOWLIST) continue;
     const core = ownerOf(file) === "core";
+    const paths = !data.includes(file);
     const lang = language(file, text);
     const raw = text.split("\n");
     const code = codeOf(file, text).split("\n");
@@ -403,6 +405,7 @@ export function findings({ files, owners, project }) {
           });
         if (nameRe) for (const m of rest.matchAll(nameRe)) add("project-name", null, m[0]);
       }
+      if (!paths) continue;
       const line = (code[i] ?? "").replace(/\\([/.-])/g, "$1");
       if (core && appRe)
         for (const m of line.matchAll(appRe)) add("app-path", null, m[0].replace(/\/+$/, "/"));
@@ -520,6 +523,9 @@ export function lintRepo(root) {
       envPrefixes: [`${config.name.toUpperCase().replace(/-/g, "_")}_`],
       appPaths: config.boundary?.appPaths ?? [],
     },
+    // CI's two lists name flaky tests, core ones too, and change on the trunk at any time; at
+    // the move those lines leave with the tests.
+    data: [config.paths?.brakeList, config.paths?.quarantine].filter(Boolean),
   });
   const gone = [...allowed.keys()]
     .filter((key) => !all.includes(key.split(" ")[0]))

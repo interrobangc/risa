@@ -356,6 +356,26 @@ describe("the allowlist", () => {
   });
 });
 
+describe("CI's two lists", () => {
+  it("are data: a core path in one is no finding, while the same line in another file is", () => {
+    const line = "scripts/loops/tool.test.mjs\ta flaky test\tB-1\n";
+    const owners = new Map([...OWNERS, ["scripts/loops/tool.test.mjs", "core"]]);
+    const found = findings({
+      files: new Map([
+        ["scripts/ci/flaky.txt", line],
+        ["scripts/ci/held.txt", line],
+        ["scripts/ci/other.txt", line],
+      ]),
+      owners,
+      project,
+      data: ["scripts/ci/flaky.txt", "scripts/ci/held.txt"],
+    });
+    expect(found.map(findingLine)).toEqual([
+      "scripts/ci/other.txt:1: project-to-core (path): scripts/loops/tool.test.mjs",
+    ]);
+  });
+});
+
 describe("this repo", () => {
   const result = lintRepo(ROOT);
 
