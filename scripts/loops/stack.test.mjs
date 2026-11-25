@@ -1,7 +1,9 @@
-// Stacks, test databases and gc (new.sh, stack.sh, rm.sh, ls.sh, gc.sh,
-// test-db.sh's old place, through the project's hooks) against a throwaway repo with these scripts copied in, and fake
-// docker, pnpm, lsof and nvm on PATH: nothing here touches real containers,
-// slots or worktrees.
+// Stacks, test databases and gc (new.sh, stack.sh, rm.sh, ls.sh, gc.sh) through
+// the config's stack hooks, against a throwaway repo with these scripts copied
+// in, the hooks on the sample project's stub (its copy in the repo, named by a
+// relative path) and fake pnpm, lsof and nvm on PATH: nothing here touches real
+// containers, slots or worktrees. What the project's hooks do is their own
+// tests' (scripts/project/).
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -18,8 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
-import { FIXTURE_CONFIG } from "./config-fixture.mjs";
+import { STUB_HOOK_COPY, stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -41,20 +42,7 @@ Stack: no · Reads: none · Tests: unit
 ## Slice 4: No fields
 `;
 
-const FAKE_DOCKER = `#!/usr/bin/env bash
-echo "docker $*" >> "$FAKE_LOG"
-case $1 in
-  ps)
-    if [[ "$*" == *caretook-shared-test* ]]; then [[ -z \${FAKE_SHARED_ID:-} ]] || echo "$FAKE_SHARED_ID"
-    elif [[ "$*" == *status=running* ]]; then [[ -z \${FAKE_RUNNING_IDS:-} ]] || echo "$FAKE_RUNNING_IDS"
-    elif [[ "$*" == *-aq* ]]; then [[ -z \${FAKE_STACK_IDS:-} ]] || echo "$FAKE_STACK_IDS"; fi ;;
-  inspect) [[ -z \${FAKE_INSPECT:-} ]] || echo "$FAKE_INSPECT" ;;
-  exec) [[ "$*" != *psql* ]] || printf '%s\n' "\${FAKE_PSQL:-0}" ;;
-esac
-exit 0
-`;
-
-let root, main, loops, log, env;
+let root, main, loops, log, env, state;
 const sh = (script, args = [], opts = {}) =>
   spawnSync("bash", [join(main, "scripts/loops", script), ...args], {
     cwd: opts.cwd ?? main,
@@ -82,10 +70,9 @@ const fixture = () => {
   const nvm = join(root, "nvm");
   mkdirSync(bin);
   mkdirSync(nvm);
-  writeFileSync(join(bin, "docker"), FAKE_DOCKER);
   writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
   writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
-  for (const f of ["docker", "pnpm", "lsof"]) chmodSync(join(bin, f), 0o755);
+  for (const f of ["pnpm", "lsof"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
   const env = {
     ...process.env,
@@ -93,8 +80,9 @@ const fixture = () => {
     NVM_DIR: nvm,
     FAKE_LOG: log,
     TRUNK: "dev",
-    CARETOOK_SHARED_TEST_PORT: "",
     CARETOOK_GC_STOPPED_HOURS: "",
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
+    SAMPLE_STACK_LOG: log,
   };
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
@@ -109,29 +97,28 @@ const fixture = () => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "run-log.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The project's stack and test DB scripts (the config's hooks), which the old
-  // functions and places call until slice 3 of orchestration-split-2.
-  mkdirSync(join(main, "scripts/project"), { recursive: true });
-  for (const f of ["test-db.sh", "stack.sh", "stack-facts.sh", "serve.sh"])
-    copyFileSync(join(HERE, "../project", f), join(main, "scripts/project", f));
+  env.RISA_CONFIG = stubHookConfig(main, { copy: true });
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
-  writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");
+  writeFileSync(join(main, ".gitignore"), ".loops/\n.sample-*\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/t-plan.md"), PLAN);
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
   git(main, "branch", "prd/t");
-  // The main checkout's env files, which a stack copies its secrets from.
-  mkdirSync(join(main, "packages/data"), { recursive: true });
-  mkdirSync(join(main, "apps/web"), { recursive: true });
-  writeFileSync(join(main, "packages/data/.env"), 'DATABASE_URL="x"\nSEED_USER_PASSWORD="pw-fictional"\n');
-  writeFileSync(join(main, "apps/web/.env"), 'BETTER_AUTH_URL="x"\nCRON_SECRET="s"\n');
-  return { root, main, loops, log, env };
+  return { root, main, loops, log, env, state: env.SAMPLE_STACK_STATE };
 };
-const use = (f) => ({ root, main, loops, log, env } = f);
+const use = (f) => ({ root, main, loops, log, env, state } = f);
+// A worktree's stack, as the stub keeps it: its facts, or null without one.
+const stack = (dir) => (existsSync(join(dir, ".sample-stack")) ? read(dir, ".sample-stack") : null);
+// The stub's running projects: PROJECT runs (or not).
+const setRunning = (project, on) => {
+  const f = join(state, "running");
+  const others = (existsSync(f) ? read(f) : "").split("\n").filter((l) => l && l !== project);
+  writeFileSync(f, [...others, ...(on ? [project] : [])].map((l) => `${l}\n`).join(""));
+};
 
 // One repo for the file, made once; only gc's merged-slice test has its own (below).
 let shared;
@@ -144,38 +131,36 @@ describe("new.sh slice", () => {
     const out = ok("new.sh", ["slice", "t", "1"]);
     expect(out).toMatch(/Stack: no/);
     const dir = join(loops, "t-1");
-    expect(existsSync(join(dir, ".env"))).toBe(false);
-    expect(read(dir, ".env.loop")).toBe("SLOT=\nBASE_BRANCH=prd/t\n");
-    const testEnv = read(dir, "packages/data/.env.test.local");
-    expect(testEnv).toMatch(/localhost:5436\/caretook_test_t_1"/);
-    expect(testEnv).toMatch(/^PG_TEST_PORT=5436$/m);
-    expect(testEnv).toMatch(/^SHARED_TEST_DB=1$/m);
+    expect(stack(dir)).toBeNull();
+    // The stackless env through the stack down hook, and its own test database.
+    expect(calls()).toMatch(/^stack down t-1 --base prd\/t\ntest-db use t-1\n/m);
+    expect(out).toMatch(/integration tests use sample test database sample_t-1/);
     expect(leases()).toEqual([]);
     expect(calls()).toMatch(/pnpm install --frozen-lockfile/);
-    expect(calls()).not.toMatch(/datastore/);
-    expect(calls()).not.toMatch(/docker/);
+    expect(calls()).not.toMatch(/^stack up/m);
   });
 
   it("gives a Stack: yes slice a slot and a stack, and no test container of its own", () => {
     const out = ok("new.sh", ["slice", "t", "2"]);
     expect(out).toMatch(/Stack: yes/);
     const dir = join(loops, "t-2");
-    expect(read(dir, ".env")).toMatch(/^CARETOOK_STACK=caretook-loop1$/m);
-    expect(read(dir, ".env.loop")).toMatch(/^SLOT=1$/m);
-    expect(read(dir, ".env.loop")).toMatch(/^SEED_USER_PASSWORD=/m);
-    expect(read(dir, "apps/web/.env")).toMatch(/^WEB_PORT=6173$/m);
-    expect(read(dir, "packages/data/.env.test.local")).toMatch(/caretook_test_t_2"/);
+    expect(stack(dir)).toMatch(/^project=sample-loop1$/m);
     expect(leases()).toEqual(["1"]);
-    expect(calls()).toMatch(/pnpm datastore:start\n/);
-    expect(calls()).not.toMatch(/start:test/);
+    expect(calls()).toMatch(/^stack up t-2 --slot 1 --base prd\/t$/m);
+    expect(calls()).not.toMatch(/^stack down/m);
+    // The hook's facts, printed.
+    expect(out).toMatch(
+      /→ http:\/\/localhost:6173\n {2}sample stack sample-loop1 \(project sample-loop1\)\n/,
+    );
+    expect(out).toMatch(/pnpm test:integration → sample test database sample_t-2/);
   });
 
   it("treats missing fields as no stack, and honours --stack", () => {
     ok("new.sh", ["slice", "t", "4"]);
-    expect(existsSync(join(loops, "t-4", ".env"))).toBe(false);
+    expect(stack(join(loops, "t-4"))).toBeNull();
     ok("rm.sh", ["t-4"]);
     ok("new.sh", ["--stack", "slice", "t", "4"]);
-    expect(read(loops, "t-4", ".env")).toMatch(/caretook-loop2/);
+    expect(stack(join(loops, "t-4"))).toMatch(/sample-loop2/);
     ok("rm.sh", ["t-4"]);
     expect(leases()).toEqual(["1"]);
   });
@@ -187,7 +172,7 @@ describe("new.sh by a relative path, as pnpm prd runs it", () => {
   // which on a branch older than the hooks has no hook scripts at all. (new.sh
   // fails when any hook does, so its success says the test-db hook ran too.)
   it("writes a worktree's env files with the tool's hooks on a branch that predates them", () => {
-    const hooks = dirname(JSON.parse(read(FIXTURE_CONFIG)).hooks.stackStatus.split(" ")[0]);
+    const hooks = dirname(STUB_HOOK_COPY);
     const tmp = join(root, "old-branch");
     git(main, "worktree", "add", "-q", "-b", "hotfix/old", tmp, "dev");
     git(tmp, "rm", "-q", "-r", hooks);
@@ -202,12 +187,12 @@ describe("new.sh by a relative path, as pnpm prd runs it", () => {
       rel(["hotfix", "old"]);
       const dir = join(loops, "hotfix-old");
       expect(existsSync(join(dir, hooks))).toBe(false);
-      expect(read(dir, ".env.loop")).toBe("SLOT=\nBASE_BRANCH=dev\n");
+      expect(stack(dir)).toBeNull();
 
       const before = leases().length;
       rel(["--stack", "hotfix", "old-stack"]);
       const sdir = join(loops, "hotfix-old-stack");
-      expect(read(sdir, ".env.loop")).toMatch(/^SLOT=\d+$/m);
+      expect(stack(sdir)).toMatch(/^slot=\d+$/m);
       expect(leases().length).toBe(before + 1);
     } finally {
       for (const n of ["hotfix-old", "hotfix-old-stack"]) if (existsSync(join(loops, n))) ok("rm.sh", [n]);
@@ -251,76 +236,58 @@ describe("stack up and down", () => {
     const dir = join(loops, "t-1");
     const up = ok("stack.sh", ["up"], { cwd: dir });
     expect(up).toMatch(/Stack up for t-1 \(slot 2/);
-    expect(read(dir, ".env")).toMatch(/^CARETOOK_STACK=caretook-loop2$/m);
-    expect(read(dir, ".env.loop")).toMatch(/^SLOT=2$/m);
+    expect(stack(dir)).toMatch(/^project=sample-loop2$/m);
     expect(leases().sort()).toEqual(["1", "2"]);
-    expect(calls()).toMatch(/pnpm datastore:start/);
+    expect(calls()).toMatch(/^stack up t-1 --slot 2 --base prd\/t$/m);
 
-    // Its facts, from the stack status hook: the same slot, project and ports.
+    // Its facts, from the stack status hook: the same slot, project and port.
     const facts = ok("stack.sh", ["status", "t-1"]);
-    for (const f of ["slot=2", "web_port=6273", "pg_port=6234", "powersync_port=6280"])
+    for (const f of ["slot=2", "project=sample-loop2", "web_port=6273"])
       expect(facts.split("\n")).toContain(f);
-    expect(up).toMatch(/→ http:\/\/localhost:6273\n {2}Postgres {5}:6234 {3}PowerSync :6280\n/);
-    // Ready only while all of its containers run.
-    const ready = (e) => sh("stack.sh", ["ready", "t-1"], { env: e });
-    expect(ready({}).status).toBe(1);
-    expect(ready({ FAKE_STACK_IDS: "a\nb", FAKE_RUNNING_IDS: "a" }).stdout).toMatch(
-      /^containers=1\/2\nready=no$/m,
-    );
-    const r = ready({ FAKE_STACK_IDS: "a\nb", FAKE_RUNNING_IDS: "a\nb" });
-    expect([r.status, r.stdout]).toEqual([0, expect.stringMatching(/^ready=yes$/m)]);
+    expect(up).toMatch(/→ http:\/\/localhost:6273\n {2}sample stack sample-loop2\n/);
+    // The ready hook's facts and exit, passed on.
+    const ready = () => sh("stack.sh", ["ready", "t-1"]);
+    const r = ready();
+    expect([r.status, r.stdout]).toEqual([0, expect.stringMatching(/^containers=1\/1\nready=yes$/m)]);
+    setRunning("sample-loop2", false);
+    expect(ready().status).toBe(1);
+    expect(ready().stdout).toMatch(/^containers=0\/1\nready=no$/m);
     // Up again on a stack it has: started, not leased again.
     expect(ok("stack.sh", ["up", "t-1"])).toMatch(/t-1 already has a stack \([^)]+\); starting it/);
     expect(leases().sort()).toEqual(["1", "2"]);
 
+    expect(calls()).toMatch(/^stack up t-1 --base prd\/t$/m);
     const down = ok("stack.sh", ["down", "t-1"]);
-    expect(down).toMatch(/caretook-loop2 removed, slot released/);
-    expect(calls()).toMatch(/docker compose -p caretook-loop2 down --remove-orphans/);
-    expect(calls()).toMatch(/docker ps -aq --filter label=com.docker.compose.project=caretook-loop2-test/);
-    expect(calls()).not.toMatch(/compose -p caretook-loop1/);
-    for (const f of [".env", "packages/data/.env", "apps/web/.env"])
-      expect(existsSync(join(dir, f)), f).toBe(false);
-    expect(read(dir, ".env.loop")).toBe("SLOT=\nBASE_BRANCH=prd/t\n");
-    expect(read(dir, "packages/data/.env.test.local")).toMatch(/caretook_test_t_1/);
+    expect(down).toMatch(/sample-loop2 removed, slot released/);
+    expect(calls()).toMatch(/^stack down t-1 --base prd\/t$/m);
+    expect(stack(dir)).toBeNull();
     expect(leases()).toEqual(["1"]);
   });
 
-  it("never runs Compose on a worktree without a stack (that would be the main checkout's project)", () => {
+  it("says so for a worktree without a stack, and releases no other's slot", () => {
     expect(ok("stack.sh", ["down", "t-1"])).toMatch(/has no stack/);
     expect(ok("stack.sh", ["status", "t-1"])).toBe("");
-    expect(calls()).not.toMatch(/docker compose/);
+    expect(leases()).toEqual(["1"]);
   });
 });
 
 describe("rm.sh", () => {
-  it("drops the worktree's test database when the shared server runs", () => {
-    ok("new.sh", ["slice", "t", "5"]);
-    rmSync(log, { force: true });
-    ok("rm.sh", ["t-5"], { env: { FAKE_SHARED_ID: "c0ffee" } });
-    expect(calls()).toMatch(/docker exec c0ffee dropdb -U caretook --if-exists --force caretook_test_t_5/);
-    expect(calls()).not.toMatch(/docker compose/);
-    expect(existsSync(join(loops, "t-5"))).toBe(false);
-  });
-
-  it("drops its integration workers' databases too", () => {
-    ok("new.sh", ["slice", "t", "6"]);
-    rmSync(log, { force: true });
-    // What the shared server answers for the worker copies: t-6's three, t-60's
-    // one, and t-6-w1's own database, which isn't a copy of t-6's (B-405).
-    const copies = [1, 2, 3].map((n) => workerDatabaseName("caretook_test_t_6", n));
-    const psql = [...copies, workerDatabaseName("caretook_test_t_60", 1), "caretook_test_t_6_w1"];
-    const out = ok("rm.sh", ["t-6"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql.join("\n") } });
-    expect(out).toMatch(/dropped test database caretook_test_t_6 and 3 worker copies/);
-    const drops = calls().match(/dropdb .*/g) ?? [];
-    expect(drops.map((d) => d.split(" ").at(-1)).sort()).toEqual(["caretook_test_t_6", ...copies].sort());
-    expect(existsSync(join(loops, "t-6"))).toBe(false);
-  });
-
-  it("skips the drop when the shared server isn't running", () => {
-    ok("new.sh", ["slice", "t", "5"]);
+  it("takes down its stack and drops its test database through the hooks", () => {
+    ok("new.sh", ["--stack", "slice", "t", "5"]);
     rmSync(log, { force: true });
     ok("rm.sh", ["t-5"]);
-    expect(calls()).not.toMatch(/dropdb/);
+    expect(calls()).toMatch(/^stack down t-5\ntest-db drop t-5$/m);
+    expect(existsSync(join(loops, "t-5"))).toBe(false);
+    expect(leases()).toEqual(["1"]);
+  });
+
+  it("keeps the worktree when its stack down hook fails", () => {
+    ok("new.sh", ["slice", "t", "5"]);
+    const r = sh("rm.sh", ["t-5"], { env: { SAMPLE_STACK_FAIL: "down:t-5" } });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/couldn't take down t-5's stack; the worktree stays/);
+    expect(existsSync(join(loops, "t-5"))).toBe(true);
+    ok("rm.sh", ["t-5"]);
   });
 
   it("removes the worktree's session record and leaves the others", () => {
@@ -369,37 +336,41 @@ describe("status and gc", () => {
       const status = ok("ls.sh", []);
       expect(status).toMatch(/merged: t-3 \(slice\/t\/3 is merged into prd\/t\): pnpm prd gc/);
       expect(status).not.toMatch(/merged: t-1/);
-      expect(status).toMatch(/shared test Postgres: not running/);
+      expect(status).toMatch(/sample test database: stopped/);
 
       expect(ok("gc.sh", ["--list"])).toMatch(/^remove {6}t-3 /m);
       expect(ok("gc.sh", [], { input: "n\n" })).toMatch(/Nothing changed/);
       expect(existsSync(join(loops, "t-3"))).toBe(true);
 
-      const out = ok("gc.sh", [], { input: "y\n", env: { FAKE_SHARED_ID: "c0ffee" } });
+      const out = ok("gc.sh", [], { input: "y\n" });
       expect(out).toMatch(/Cleaned up 1/);
       expect(existsSync(join(loops, "t-3"))).toBe(false);
       expect(git(main, "branch", "--list", "slice/t/3")).toBe("");
-      expect(calls()).toMatch(/dropdb -U caretook --if-exists --force caretook_test_t_3/);
+      expect(calls()).toMatch(/^test-db drop t-3$/m);
       expect(existsSync(join(loops, "t-1"))).toBe(true);
     });
   });
 
   it("flags a stack stopped for over a day, and gc takes it down but keeps the worktree", () => {
-    const stopped = { FAKE_STACK_IDS: "abc", FAKE_INSPECT: "false 2020-01-02T03:04:05.123456789Z" };
-    expect(ok("ls.sh", [], { env: stopped })).toMatch(
-      /stopped stack: t-2 \(caretook-loop1 stopped \d+d ago\)/,
-    );
-    const running = { FAKE_STACK_IDS: "abc", FAKE_INSPECT: "true 0001-01-01T00:00:00Z" };
-    expect(ok("ls.sh", [], { env: running })).not.toMatch(/stopped stack/);
-    const recent = { FAKE_STACK_IDS: "abc", FAKE_INSPECT: `false ${new Date().toISOString()}` };
-    expect(ok("ls.sh", [], { env: recent })).not.toMatch(/stopped stack/);
+    // The ready hook's stopped_secs: three days, then running, then a minute.
+    const dir = join(loops, "t-2");
+    const secs = join(dir, ".sample-stopped-secs");
+    setRunning("sample-loop1", false);
+    writeFileSync(secs, `${3 * 86400}\n`);
+    expect(ok("ls.sh", [])).toMatch(/stopped stack: t-2 \(sample-loop1 stopped 3d ago\)/);
+    setRunning("sample-loop1", true);
+    expect(ok("ls.sh", [])).not.toMatch(/stopped stack/);
+    expect(ok("gc.sh", ["--list"])).toMatch(/Nothing to clean up/);
+    setRunning("sample-loop1", false);
+    writeFileSync(secs, "60\n");
+    expect(ok("ls.sh", [])).not.toMatch(/stopped stack/);
 
-    expect(ok("gc.sh", ["--list"], { env: running })).toMatch(/Nothing to clean up/);
-    const out = ok("gc.sh", ["--yes"], { env: stopped });
+    writeFileSync(secs, `${3 * 86400}\n`);
+    const out = ok("gc.sh", ["--yes"]);
     expect(out).toMatch(/^stack down {2}t-2 /m);
-    expect(calls()).toMatch(/docker compose -p caretook-loop1 down/);
-    expect(existsSync(join(loops, "t-2"))).toBe(true);
-    expect(existsSync(join(loops, "t-2", ".env"))).toBe(false);
+    expect(calls()).toMatch(/^stack down t-2/m);
+    expect(existsSync(dir)).toBe(true);
+    expect(stack(dir)).toBeNull();
     expect(leases()).toEqual([]);
   });
 });
@@ -437,20 +408,12 @@ describe("a slice's place in its wave", () => {
   it("a hand-off leaves no stack up, and stack up takes it again for a fix", () => {
     ok("new.sh", ["--stack", "slice", "t", "7"]);
     const dir = join(loops, "t-7");
-    expect(read(dir, ".env.loop")).toMatch(/^SLOT=[0-9]/m);
+    expect(stack(dir)).toMatch(/^slot=[0-9]/m);
     ok("stack.sh", ["down"], { cwd: dir });
-    expect(read(dir, ".env.loop")).toMatch(/^SLOT=$/m);
-    expect(existsSync(join(dir, ".env"))).toBe(false);
+    expect(stack(dir)).toBeNull();
     expect(ok("stack.sh", ["down"], { cwd: dir })).toMatch(/has no stack/);
     expect(ok("stack.sh", ["up"], { cwd: dir })).toMatch(/Stack up for t-7/);
     ok("stack.sh", ["down"], { cwd: dir });
     ok("rm.sh", ["t-7", "--force"]);
-  });
-});
-
-describe("test-db.sh", () => {
-  // The project's own now (scripts/project/test-db.test.mjs); the old place forwards to it.
-  it("forwards from the old place to the project's", () => {
-    expect(ok("test-db.sh", ["name", "Orchestration-5"]).trim()).toBe("caretook_test_orchestration_5");
   });
 });
