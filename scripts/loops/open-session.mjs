@@ -17,7 +17,7 @@
 //     recorded model.
 //   - the inbox session, always fresh through `prd.sh inbox` (which checks its
 //     bare directory and gives it its settings), in its recorded directory, on
-//     prd.sh's inbox model (Sonnet at low effort) whatever the record says, so
+//     prd.sh's inbox model (Opus at low effort) whatever the record says, so
 //     a record from an older default never holds it there:
 //       cd <main> && <this checkout>/scripts/loops/prd.sh inbox --dir <dir> [--managed]
 //

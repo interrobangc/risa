@@ -13,7 +13,7 @@
 # The main one (backlog) reopens under a new captain's name (captain.mjs): the
 # --captain its opener titled the tab with, else one drawn here, unlike the last.
 # The inbox session (its live record at that pid, too) reopens through `prd.sh
-# inbox` in its recorded directory, on prd.sh's inbox model (Sonnet at low
+# inbox` in its recorded directory, on prd.sh's inbox model (Opus at low
 # effort; never the record's, which may be an older default), with no brief. The steps are otherwise the same:
 #
 # 1. Marks the record (.loops/.sessions/prd-<topic>.json) rotating, making one
