@@ -1,6 +1,7 @@
 // pnpm prd doc <role> [section] (doc.mjs): on the sample project (generic alone,
 // generic then additions, a replacement, a section, each error), and on this repo's
-// config, where every role is today's file, printed byte for byte.
+// config: a replacement role prints today's file byte for byte, a split one (loop,
+// hotfix, recovery) the core's generic doc and then the project's additions.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -113,14 +114,35 @@ describe("roleDoc's other errors", () => {
 describe("this repo's roles", () => {
   const { config, root } = loadConfig();
 
-  it.each(Object.entries(config.roles))("%s prints today's file byte for byte", (role, entry) => {
-    expect(entry.replacement).toBeTruthy();
+  const replaced = Object.entries(config.roles).filter(([, e]) => e.replacement);
+  const split = Object.entries(config.roles).filter(([, e]) => e.additions);
+
+  it.each(replaced)("%s, a replacement, prints today's file byte for byte", (role, entry) => {
     expect(roleDoc(role, { config, root })).toBe(readFileSync(join(root, entry.replacement), "utf8"));
+  });
+
+  it("the split roles are loop, hotfix and recovery", () => {
+    expect(split.map(([role]) => role).sort()).toEqual(["hotfix", "loop", "recovery"]);
+  });
+
+  it.each(split)("%s prints the core's generic doc, then the project's additions", (role, entry) => {
+    const generic = readFileSync(join(HERE, "docs", `${role}.md`), "utf8");
+    const additions = readFileSync(join(root, entry.additions), "utf8");
+    expect(roleDoc(role, { config, root })).toBe(`${generic}\n${additions}`);
+  });
+
+  it.each([
+    ["loop", "Loop rules", /- \*\*A fix request is only:\*\*[\s\S]*- Work only inside your worktree\./],
+    ["loop", "Hand-off", /^## Hand-off\n\nYour final message:/],
+    ["loop", "Tests", /^## Tests\n/],
+    ["loop", "Your worktree and stack", /Slots and ports/],
+  ])("%s's %s section, which prompts and docs name, is in the merged text", (role, heading, want) => {
+    expect(roleDoc(role, { config, root, section: heading })).toMatch(want);
   });
 
   it("every doc in docs/agents but the preferences is a role", () => {
     const docs = readdirSync(join(root, "docs/agents")).filter((f) => f !== "preferences.md");
-    const named = Object.values(config.roles).map((e) => e.replacement);
+    const named = Object.values(config.roles).map((e) => e.replacement ?? e.additions);
     for (const f of docs) expect(named).toContain(`docs/agents/${f}`);
   });
 
