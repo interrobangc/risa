@@ -151,6 +151,7 @@ const liveSession = async (extra = {}) => {
       ...(extra.auto ? ["--auto"] : []),
       ...(extra.managed ? ["--managed"] : []),
       "--",
+      ...(extra.model ? ["--model", extra.model] : []),
       "x",
     ],
     { STUB_MODE: extra.mode ?? "wait", STUB_NAME: "prd-w" },
@@ -420,6 +421,23 @@ describe("rotate-into.sh", () => {
     expect(JSON.parse(stateFile("record-at-start")).managed).toBe(false);
   });
 
+  it("carries the record's model over, and passes none when none was recorded", async () => {
+    const first = await liveSession({ model: "fable" });
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await first.s.done;
+    expect(JSON.parse(stateFile("record-at-start"))).toMatchObject({ model: "fable" });
+    const args = stateFile("args").split("\n");
+    expect(args.slice(2, 6)).toEqual(["--model", "fable", "--remote-control", "prd-w"]);
+    expect(record("prd-w")).toMatchObject({ model: "fable" });
+
+    rmSync(state, { recursive: true, force: true });
+    rmSync(sessions, { recursive: true, force: true });
+    const second = await liveSession();
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await second.s.done;
+    expect(stateFile("args")).not.toContain("--model");
+  });
+
   it("kills a session that ignores TERM after the wait, making a record when there was none", async () => {
     const s = start(stub, [], { STUB_MODE: "stubborn" }, wt);
     await until(() => existsSync(join(state, "ready")));
@@ -653,9 +671,9 @@ describe("pnpm prd rotate --self", () => {
           "inbox",
           "--managed",
           "--",
-          // Recorded on the old default: the new session must come up on prd.sh's Sonnet.
+          // Recorded on the old default: the new session must come up on prd.sh's Opus.
           "--model",
-          "opus",
+          "sonnet",
           "--remote-control",
           "inbox",
           "x",
@@ -666,12 +684,12 @@ describe("pnpm prd rotate --self", () => {
       await until(() => existsSync(join(state, "ready")));
       return { s, pid: stubPid(), out: stateFile("rotate.out"), code: stateFile("rotate.code").trim() };
     };
-    /** The new session: in the recorded directory, on Sonnet with the low-effort settings, managed. */
+    /** The new session: in the recorded directory, on Opus with the low-effort settings, managed. */
     const expectFresh = (oldPid) => {
       const atStart = JSON.parse(stateFile("record-at-start"));
       expect(atStart).toMatchObject({
         kind: "inbox",
-        model: "sonnet",
+        model: "opus",
         remote: "inbox",
         managed: true,
         dir: inboxDir(),
@@ -683,7 +701,7 @@ describe("pnpm prd rotate --self", () => {
         "--settings",
         scripts("inbox-settings.json"),
         "--model",
-        "sonnet",
+        "opus",
         "--remote-control",
         "inbox",
       ]);
@@ -691,10 +709,10 @@ describe("pnpm prd rotate --self", () => {
     };
     beforeEach(() => rmSync(join(root, "home"), { recursive: true, force: true }));
 
-    it("rotates itself into a fresh one in its own directory, on Sonnet at low effort though recorded on Opus", async () => {
+    it("rotates itself into a fresh one in its own directory, on Opus at low effort though recorded on Sonnet", async () => {
       const old = await startInbox();
       expect(old.code).toBe("0");
-      expect(JSON.parse(stateFile("record-at-start")).model).toBe("opus");
+      expect(JSON.parse(stateFile("record-at-start")).model).toBe("sonnet");
       expect(old.out).toContain(`Rotating inbox: pid ${old.pid} (the calling session).`);
       const line = printedLine(old.out);
       expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} inbox ${old.pid}`);
@@ -721,10 +739,10 @@ describe("pnpm prd rotate --self", () => {
       expect(r.stderr).toContain("the inbox session hands off with no brief");
     });
 
-    it("the keep-alive's opener reopens a dead Opus one the same way: its directory, Sonnet low, managed", async () => {
+    it("the keep-alive's opener reopens a dead Sonnet one the same way: its directory, Opus low, managed", async () => {
       const old = await startInbox();
       await finish(old);
-      expect(record("inbox").model).toBe("opus");
+      expect(record("inbox").model).toBe("sonnet");
       rmSync(join(state, "record-at-start"), { force: true });
       const r = run("open-session.sh", ["inbox", "--print"], inboxEnv());
       expect(r.status).toBe(0);

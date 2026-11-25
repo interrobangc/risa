@@ -8,8 +8,8 @@ source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
 # The model plan, backlog and hotfix sessions run on unless --model names another.
 agent_model=opus
-# The inbox session's: Sonnet, for speed (inbox-settings.json sets low effort, fast mode off).
-inbox_model=sonnet
+# The inbox session's: Opus at low effort, for fast, accurate replies (inbox-settings.json sets low effort, fast mode off).
+inbox_model=opus
 # Every command runs on .nvmrc's Node, whatever shell called it.
 use_node || true
 
@@ -44,8 +44,8 @@ pnpm prd <command>
                               (it reads the backlog and helps you decide what's next; its Remote Control
                               name and tab title are a captain's, a new one each session; its record stays backlog)
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
-                              adds, rewords, moves or removes inbox lines on origin/dev; Sonnet at low effort
-                              (--model <m>: another model, this session only; a reopen or rotation is Sonnet),
+                              adds, rewords, moves or removes inbox lines on origin/dev; Opus at low effort
+                              (--model <m>: another model, this session only; a reopen or rotation is Opus),
                               Remote Control "inbox", opened in its own directory outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
@@ -362,7 +362,7 @@ case $cmd in
     echo "  $cmd_line"
     ;;
   inbox)
-    # The inbox session (prompt.sh inbox): Sonnet at low effort, fast mode off
+    # The inbox session (prompt.sh inbox): Opus at low effort, fast mode off
     # (session.sh gives the inbox kind inbox-settings.json: the context hook,
     # effortLevel and fastMode in one file), opened bare: in its own directory
     # outside the repository, so neither AGENTS.md nor the project's memory loads.

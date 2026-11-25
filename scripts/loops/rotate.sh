@@ -26,7 +26,7 @@
 # captain's name: captain.mjs); --brief puts the file at the top of the
 # new prompt (a file it can't use is refused before anything ends, and the file
 # is deleted once read). --brief-path prints where to write one. The inbox
-# session reopens fresh the same way in its own directory, on Sonnet at low
+# session reopens fresh the same way in its own directory, on Opus at low
 # effort (prd.sh inbox), with no brief: what it handles is on origin/dev. An
 # orchestrator behaves as plain rotate (its hand-over is _Status_, so no brief);
 # any other kind, an unrecorded caller and a slice agent's shell are refused.
