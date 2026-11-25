@@ -1,5 +1,5 @@
 // Stacks, test databases and gc (new.sh, stack.sh, rm.sh, ls.sh, gc.sh,
-// test-db.sh) against a throwaway repo with these scripts copied in, and fake
+// test-db.sh's old place) against a throwaway repo with these scripts copied in, and fake
 // docker, pnpm, lsof and nvm on PATH: nothing here touches real containers,
 // slots or worktrees.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -108,6 +108,9 @@ const fixture = () => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "run-log.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The test DB's script, Caretook's own, which the old place forwards to.
+  mkdirSync(join(main, "scripts/project"), { recursive: true });
+  copyFileSync(join(HERE, "../project/test-db.sh"), join(main, "scripts/project/test-db.sh"));
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
@@ -389,41 +392,8 @@ describe("a slice's place in its wave", () => {
 });
 
 describe("test-db.sh", () => {
-  it("names databases for worktrees, and refuses to drop without a name", () => {
+  // The project's own now (scripts/project/test-db.test.mjs); the old place forwards to it.
+  it("forwards from the old place to the project's", () => {
     expect(ok("test-db.sh", ["name", "Orchestration-5"]).trim()).toBe("caretook_test_orchestration_5");
-    expect(ok("test-db.sh", ["name", "x".repeat(80)]).trim()).toHaveLength(63);
-    expect(sh("test-db.sh", ["drop"]).status).not.toBe(0);
-  });
-
-  it("use points an older worktree's tests at its shared database", () => {
-    const f = join(loops, "t-1", "packages/data/.env.test.local");
-    writeFileSync(f, 'DATABASE_URL="postgresql://caretook:password@localhost:1/caretook"\nPG_TEST_PORT=1\n');
-    expect(ok("test-db.sh", ["use"], { cwd: join(loops, "t-1") })).toMatch(/caretook_test_t_1/);
-    expect(read(f)).toMatch(/localhost:5436\/caretook_test_t_1"/);
-  });
-
-  it("lists each worktree database with its worker copies, and orphaned copies", () => {
-    const gone = workerDatabaseName("caretook_test_gone", 1);
-    const psql = [
-      "caretook_test_a_1",
-      "caretook_test_a_10",
-      // An old-style copy lists as a database: tidy decides its owner by name.
-      "caretook_test_a_1_w3",
-      workerDatabaseName("caretook_test_a_1", 1),
-      workerDatabaseName("caretook_test_a_1", 2),
-      gone,
-    ].join("\n");
-    expect(ok("test-db.sh", ["list"], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: psql } })).toBe(
-      "caretook_test_a_1 (+2 worker copies)\ncaretook_test_a_10\ncaretook_test_a_1_w3\n" +
-        `${gone} (worker copy, its database is gone)\n`,
-    );
-    // tidy drops such an orphan by name.
-    ok("test-db.sh", ["drop-db", gone], { env: { FAKE_SHARED_ID: "c0ffee", FAKE_PSQL: "" } });
-    expect(calls()).toContain(`dropdb -U caretook --if-exists --force ${gone}`);
-  });
-
-  it("down stops only the shared project", () => {
-    ok("test-db.sh", ["down"]);
-    expect(calls().trim()).toBe("docker compose -p caretook-shared-test down --remove-orphans");
   });
 });

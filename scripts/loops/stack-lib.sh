@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stacks and test databases for .loops worktrees, shared by new.sh, stack.sh,
-# rm.sh, ls.sh, gc.sh and test-db.sh. Source it; don't run it. (It sources
+# rm.sh, ls.sh and gc.sh. Source it; don't run it. (It sources
 # lib.sh.)
 # shellcheck source=lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -24,7 +24,7 @@ write_test_env() {
   mkdir -p "$1/packages/data"
   cat > "$1/packages/data/.env.test.local" <<ENV
 # Integration tests: this worktree's own database on the shared test Postgres
-# (scripts/loops/test-db.sh). Created on first use; dropped by pnpm prd rm.
+# (scripts/project/test-db.sh). Created on first use; dropped by pnpm prd rm.
 DATABASE_URL="postgresql://caretook:password@localhost:$shared_test_port/$(test_db_name "$2")"
 PG_TEST_PORT=$shared_test_port
 SHARED_TEST_DB=1

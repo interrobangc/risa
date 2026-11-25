@@ -297,5 +297,7 @@ scripts/project/prompt-golden.txt project
 scripts/project/risa.mjs project
 scripts/project/status-trim.mjs project
 scripts/project/sync-matrix.test.mjs project
+scripts/project/test-db.sh project
+scripts/project/test-db.test.mjs project
 scripts/project/test-projects.mjs project
 scripts/project/test-projects.test.mjs project

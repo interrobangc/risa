@@ -173,13 +173,12 @@ scripts/loops/stack-lib.sh core-to-project 1
 scripts/loops/stack-lib.sh project-env 6
 scripts/loops/stack-lib.sh project-name 10
 scripts/loops/stack.sh project-to-core 1
-scripts/loops/stack.test.mjs app-path 12
-scripts/loops/stack.test.mjs core-to-project 15
+scripts/loops/stack.test.mjs app-path 11
+scripts/loops/stack.test.mjs core-to-project 12
 scripts/loops/stack.test.mjs project-env 5
-scripts/loops/stack.test.mjs project-name 38
+scripts/loops/stack.test.mjs project-name 24
 scripts/loops/status-extra.mjs project-env 17
 scripts/loops/status-extra.test.mjs project-env 20
-scripts/loops/test-db.sh project-to-core 1
 scripts/loops/tidy-cli.mjs core-to-project 3
 scripts/loops/tidy-cli.mjs project-env 7
 scripts/loops/tidy-cli.mjs project-name 3
