@@ -121,7 +121,7 @@ beforeAll(() => {
   for (const f of readdirSync(HERE).filter((f) => /\.(sh|mjs)$/.test(f) && !f.endsWith(".test.mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
-  for (const f of ["outstanding.mjs", "tiers.mjs"])
+  for (const f of ["outstanding.mjs", "tiers.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), FAKE_BACKLOG);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\nnode_modules/\n");

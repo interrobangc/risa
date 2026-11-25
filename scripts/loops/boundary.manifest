@@ -55,7 +55,11 @@ scripts/ci/release.mjs core
 scripts/ci/release.test.mjs core
 scripts/ci/test-job.mjs project
 scripts/ci/test-job.test.mjs project
+scripts/ci/tier-data.mjs core
+scripts/ci/tier-data.test.mjs core
+scripts/ci/tiers.json project
 scripts/ci/tiers.mjs project
+scripts/ci/tiers.test.mjs project
 scripts/ci/verdict.mjs project
 scripts/ci/verdict.test.mjs project
 scripts/ci/zones.mjs project

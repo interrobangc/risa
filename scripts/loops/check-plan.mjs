@@ -19,7 +19,7 @@
 
 import { spawnSync } from "node:child_process";
 import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
-import { TIERS } from "../ci/tiers.mjs";
+import { tierData } from "../ci/tier-data.mjs";
 
 /** Integration and component test files: the only tests a slice or quick check picks by name. */
 const OWN_TEST = /\.(int\.test\.ts|browser\.test\.tsx)$/;
@@ -70,7 +70,7 @@ export function planCheck(changed, asked) {
 }
 
 /** The tiers a landing can declare, lowest first. */
-export const PROPOSED_TIERS = /** @type {const} */ (["none", ...TIERS]);
+export const PROPOSED_TIERS = /** @type {const} */ (["none", ...tierData().TIERS]);
 
 /** @typedef {(typeof PROPOSED_TIERS)[number]} ProposedTier */
 
