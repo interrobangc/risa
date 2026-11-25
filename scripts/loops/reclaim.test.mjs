@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -17,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -132,6 +133,9 @@ beforeAll(() => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The project's stack and test DB scripts: the old stack functions and places
+  // call them through the config's hooks until slice 3 of orchestration-split-2.
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
@@ -217,6 +221,32 @@ describe("reclaim --list", () => {
     expect(out).toMatch(/Docker isn't running: volumes and images not checked/);
     expect(out).not.toMatch(/^ {2}(volume|image) /m);
     expect(out).toMatch(/^ {2}worktree /m);
+  });
+});
+
+// A config whose hooks are this repo's but for the named ones.
+const configWith = (hooks) => {
+  const c = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+  const file = join(root, `config-${Object.keys(hooks).join("-")}.json`);
+  writeFileSync(file, JSON.stringify({ ...c, hooks: { ...c.hooks, ...hooks } }));
+  return file;
+};
+
+describe("reclaim with a failing hook", () => {
+  // Each would leave a project out of the ones in use, and its volumes would
+  // look unused: reclaim stops instead, listing and removing nothing.
+  it.each([
+    ["the stack status hook fails", { stackStatus: "exit 3;" }, /stack status hook failed for t-\d/],
+    ["the test-db facts fail", { testDb: "exit 3;" }, /the test-db hook gave no project/],
+    ["the test-db facts have no project", { testDb: "echo port=1;" }, /the test-db hook gave no project/],
+  ])("%s", (_, hooks, why) => {
+    const r = sh(["--yes"], { env: { RISA_CONFIG: configWith(hooks) } });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(why);
+    expect(r.stdout).not.toMatch(/Can be freed|Freed/);
+    expect(removals()).toEqual([]);
+    for (const n of ["t-1", "t-3", "t-5"]) expect(existsSync(join(loops, n))).toBe(true);
+    for (const c of CACHES) expect(existsSync(join(loops, "t-1", c))).toBe(true);
   });
 });
 

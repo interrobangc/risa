@@ -163,6 +163,9 @@ scripts/loops/dispatch.mjs core
 scripts/loops/dispatch.test.mjs core
 scripts/loops/doc.mjs core
 scripts/loops/doc.test.mjs core
+scripts/loops/docs/hotfix.md core
+scripts/loops/docs/loop.md core
+scripts/loops/docs/recovery.md core
 scripts/loops/down.sh core
 scripts/loops/drain.mjs core
 scripts/loops/drain.test.mjs core
@@ -257,7 +260,7 @@ scripts/loops/slice-brief.test.mjs core
 scripts/loops/slice-fields.mjs core
 scripts/loops/slice-fields.test.mjs core
 scripts/loops/stack-lib.sh core
-scripts/loops/stack.sh project
+scripts/loops/stack.sh core
 scripts/loops/stack.test.mjs core
 scripts/loops/status-extra.mjs core
 scripts/loops/status-extra.test.mjs core
@@ -297,6 +300,10 @@ scripts/project/log.sh project
 scripts/project/package-diff.mjs project
 scripts/project/prompt-golden.txt project
 scripts/project/risa.mjs project
+scripts/project/serve.sh project
+scripts/project/stack-facts.sh project
+scripts/project/stack.sh project
+scripts/project/stack.test.mjs project
 scripts/project/status-trim.mjs project
 scripts/project/sync-matrix.test.mjs project
 scripts/project/test-db.sh project

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Shared by the scripts in scripts/loops/. Source it; don't run it.
 
+# loops_lib_dir → this file's folder, absolute, resolved once as it is sourced:
+# `pnpm prd` runs it by a relative path, and a later `cd` (new.sh's into a new
+# worktree) would point a relative one at another checkout.
+loops_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 # find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
 # which stays on the trunk), and loops, $main/.loops (every other worktree, and
 # the tool's state), for the repo DIR is in: by default the one this file is in.
 # The one place a command finds its repo; risa's machine config will answer here.
 # False, main empty, outside a repo.
 find_repo() {
-  main=$(git -C "${1:-$(dirname "${BASH_SOURCE[0]}")}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
+  main=$(git -C "${1:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
   loops=$main/.loops
   [[ -n $main ]]
 }
@@ -22,7 +27,7 @@ leases=$loops/.slots
 #   on stderr, when the config has no value for KEY.
 config_load() {
   [[ -n ${_config_loaded:-} ]] && return 0
-  _config=$(node "$(dirname "${BASH_SOURCE[0]}")/config.mjs" dump) || return 1
+  _config=$(node "$loops_lib_dir/config.mjs" dump) || return 1
   _config_loaded=1
 }
 config_get() {
@@ -85,6 +90,24 @@ run_hook() {
   (cd "$top" && eval "$c" '"$@"')
 }
 
+# stack_hook NAME [ARG…] → run_hook from the checkout this file is in, not the
+# one the shell is in: a worktree made from an older branch may not have the
+# hook's script, and the tool's own checkout always has the one it was written
+# with. ARGs that name a worktree must be absolute.
+stack_hook() {
+  (cd "$loops_lib_dir" && run_hook "$@")
+}
+
+# fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else
+# stdin), the last one when there are several; nothing when it has none.
+fact() {
+  local line value=""
+  while IFS= read -r line; do
+    [[ $line == "$1="* ]] && value=${line#*=}
+  done < <(if (($# > 1)); then printf '%s\n' "$2"; else cat; fi)
+  [[ -z $value ]] || echo "$value"
+}
+
 # landing_hook ARG… → the project's landing hook (hooks.landing: how to try a
 # landing, what the main checkout needs after one), its lines on stdout; nothing
 # when the config sets none. Never fails.
@@ -125,31 +148,6 @@ parent_of() {
   esac
 }
 
-# slot_ports N → sets web, pg, pgt, ps and off for slot N (1-19).
-#   1-9:   web 6N73, Postgres 6N34, test Postgres 6N35, PowerSync 6N80
-#   10-19: the same with 7(N-10) in place of 6N: 7073 … 7980
-#   CDP and proxy ports shift by N*1000 (CDP_PORT_OFFSET).
-slot_ports() {
-  local n=$1 p
-  if ((n < 10)); then p=6$n; else p=7$((n - 10)); fi
-  web=${p}73 pg=${p}34 pgt=${p}35 ps=${p}80 off=$((n * 1000))
-}
-
-# slot_busy N → true when slot N is leased, named by a worktree's .env, or one of
-# its ports is listening.
-slot_busy() {
-  local n=$1 f p
-  [[ -e $leases/$n ]] && return 0
-  for f in "$loops"/*/.env; do
-    [[ -f $f ]] && grep -qx "CARETOOK_STACK=caretook-loop$n" "$f" && return 0
-  done
-  slot_ports "$n"
-  for p in $web $pg $pgt $ps; do
-    lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 && return 0
-  done
-  return 1
-}
-
 # lease_slot N NAME → atomically claim slot N for NAME (mkdir is the lock).
 lease_slot() {
   mkdir -p "$leases"
@@ -186,7 +184,7 @@ die() { echo "$*" >&2; exit 1; }
 run_log() {
   local once=()
   if [[ ${1:-} == --once ]]; then once=(--once "${2:-}"); shift 2; fi
-  node "$(dirname "${BASH_SOURCE[0]}")/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
+  node "$loops_lib_dir/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
     ${once[@]+"${once[@]}"} "$@" </dev/null >/dev/null 2>&1 || true
 }
 
@@ -209,20 +207,12 @@ topic_of() {
   esac
 }
 
-# web_port DIR → the dev server port of a stacked worktree, or nothing.
-web_port() { env_get "$1/apps/web/.env" WEB_PORT; }
+# web_port DIR → the dev server port of a stacked worktree, or nothing (the
+# stack status hook's web_port).
+web_port() { fact web_port "$(stack_hook stackStatus "$1" 2>/dev/null || true)"; }
 
 # server_pids PORT → pids listening on PORT.
 server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
-
-# stop_server DIR → stop the worktree's dev server, if one is running.
-stop_server() {
-  local port pids
-  port=$(web_port "$1"); [[ -n $port ]] || return 0
-  pids=$(server_pids "$port"); [[ -n $pids ]] || return 0
-  # shellcheck disable=SC2086
-  kill $pids 2>/dev/null || true
-}
 
 # checked_file DIR → where `pnpm prd check` records the commit it passed on
 # (in the worktree's git dir, so it never shows up as a change).
@@ -293,7 +283,7 @@ docs_only() {
 # diff (BASE...TIP, which check-plan.mjs computes) should wait for, why, and
 # ok | below | refused for the declared tier.
 propose_tier() {
-  node "$(dirname "${BASH_SOURCE[0]}")/check-plan.mjs" --propose --repo "$main" --base "$1" --head "$2" \
+  node "$loops_lib_dir/check-plan.mjs" --propose --repo "$main" --base "$1" --head "$2" \
     ${3:+--declared "$3"}
 }
 
@@ -407,7 +397,7 @@ file_mtime() {
 # <load> <threshold> <cores>"; a missing or failing script reads as unread (not busy).
 load_gate() {
   local s out
-  s="$(dirname "${BASH_SOURCE[0]}")/load-gate.mjs"
+  s="$loops_lib_dir/load-gate.mjs"
   out=$([[ -f $s ]] && node "$s" 2>/dev/null || true)
   echo "${out:-unread - - -}"
 }
@@ -505,7 +495,7 @@ pr_for() {
 pr_state() {
   local repo query
   repo=$(gh_repo) || return 1
-  query=$(node --input-type=module -e "import { PR_QUERY } from '$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codex-review.mjs'; process.stdout.write(PR_QUERY)")
+  query=$(node --input-type=module -e "import { PR_QUERY } from '$loops_lib_dir/codex-review.mjs'; process.stdout.write(PR_QUERY)")
   gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
 }
 
@@ -514,7 +504,7 @@ pr_state() {
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$(dirname "${BASH_SOURCE[0]}")/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
+  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.
@@ -535,7 +525,7 @@ land_dir() {
 # bug or for a hotfix, docs(…) for a plan branch.
 land_subject() {
   local topic=${1#*/} ids type
-  ids=$(node "$(dirname "${BASH_SOURCE[0]}")/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
+  ids=$(node "$loops_lib_dir/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
     node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));
       const t=r.length&&r.every(i=>i.type==="bug")?"fix":"feat";
       console.log(t+"\t"+r.map(i=>i.id).join(", "))')
@@ -692,7 +682,7 @@ _dev_sync() {
 }
 # _inbox_merge BASE OURS THEIRS OUT → the inbox merge of three files, into OUT.
 _inbox_merge() {
-  node "$(dirname "${BASH_SOURCE[0]}")/../backlog/inbox-merge.mjs" "$1" "$2" "$3" > "$4"
+  node "$loops_lib_dir/../backlog/inbox-merge.mjs" "$1" "$2" "$3" > "$4"
 }
 # _merge_trees BASE OURS THEIRS → the merged tree (BASE empty: git's own). A
 # conflict only in the inbox is resolved by the inbox merge; any other fails.

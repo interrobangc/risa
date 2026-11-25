@@ -209,6 +209,9 @@ beforeAll(() => {
     "test-db.sh",
   ])
     copyFileSync(join(HERE, f), scripts(f));
+  // The project's stack and test DB scripts: the old stack functions and places
+  // call them through the config's hooks until slice 3 of orchestration-split-2.
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
   const backlogDir = join(HERE, "../backlog");
   for (const f of readdirSync(backlogDir).filter((f) => f.endsWith(".mjs") && !f.includes(".test.")))
