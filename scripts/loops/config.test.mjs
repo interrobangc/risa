@@ -1,7 +1,15 @@
 // The project config (risa.json): the loader and its errors, `config get`, and
 // lib.sh's config_get, which starts Node once however many values a script reads.
-import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +24,7 @@ import {
   flatten,
   getValue,
   loadConfig,
+  toolCommands,
 } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -366,5 +375,69 @@ describe("config get", () => {
     const lines = readFileSync(starts, "utf8").trimEnd().split("\n");
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/config\.mjs dump$/);
+  });
+});
+
+// The tool's names for its own commands, the project's commands it runs, and how
+// a command finds its repo: lib.sh's tool_command, project_command, run_project
+// and find_repo, and config.mjs's toolCommands.
+describe("commands through the config", () => {
+  const sample = join(tmp, "commands.json");
+  writeFileSync(
+    sample,
+    JSON.stringify(
+      changed((c) => {
+        c.tool = { prd: "risa", backlog: "risa backlog" };
+        c.commands.typegen = "echo gen";
+        c.commands.install = "printf '%s|' install";
+        delete c.commands.hooksInstall;
+        c.backlog.idPrefix = "RISA";
+      }),
+    ),
+  );
+
+  it("names the tool's own commands as configured, in Node and in bash", () => {
+    const { config } = loadConfig({ path: FILE });
+    expect(toolCommands()).toEqual({ prd: config.tool.prd, backlog: config.tool.backlog });
+    expect(toolCommands(loadConfig({ path: sample }).config)).toEqual({
+      prd: "risa",
+      backlog: "risa backlog",
+    });
+    expect(bash("tool_command prd; tool_command backlog").stdout).toBe(
+      `${config.tool.prd}\n${config.tool.backlog}\n`,
+    );
+    expect(bash("tool_command prd; tool_command backlog", { RISA_CONFIG: sample }).stdout).toBe(
+      "risa\nrisa backlog\n",
+    );
+  });
+
+  it("runs the configured command with its arguments, and 127 for one the config doesn't set", () => {
+    const r = bash(
+      'project_command typegen; run_project typegen "a b" c; run_project install x "y z"; echo; ' +
+        'run_project hooksInstall; echo "rc=$?"; echo "$backlog_id_prefix"',
+      { RISA_CONFIG: sample },
+    );
+    expect(r.stdout).toBe("echo gen\ngen a b c\ninstall|x|y z|\nrc=127\nRISA-\n");
+    expect(r.stderr).toBe(`${CONFIG_NAME}: no value for commands.hooksInstall\n`);
+  });
+
+  it("finds the repo's main checkout and its .loops, from the main checkout and from a worktree", () => {
+    const repo = realpathSync(mkdtempSync(join(tmp, "repo-")));
+    const g = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" });
+    g("init", "-q", "-b", "dev");
+    g("-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q", "--allow-empty", "-m", "init");
+    g("worktree", "add", "-q", "-b", "prd/x", join(repo, ".loops", "x"));
+    const found = (dir) => bash(`find_repo "${dir}" && echo "$main|$loops"`).stdout;
+    expect(found(repo)).toBe(`${repo}|${repo}/.loops\n`);
+    expect(found(join(repo, ".loops", "x"))).toBe(`${repo}|${repo}/.loops\n`);
+    const r = bash(`find_repo "${tmp}"; echo "rc=$? <$main>"`);
+    expect(r.stdout).toBe("rc=1 <>\n");
+    // With no directory, the repo this tooling is in: today's answer, the first worktree.
+    const first = execFileSync("git", ["-C", HERE, "worktree", "list", "--porcelain"], { encoding: "utf8" })
+      .split("\n")[0]
+      .replace(/^worktree /, "");
+    expect(bash('echo "$main|$loops"; find_repo && echo "$main"').stdout).toBe(
+      `${first}|${first}/.loops\n${first}\n`,
+    );
   });
 });

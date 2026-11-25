@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # Shared by the scripts in scripts/loops/. Source it; don't run it.
 
-# The main checkout (the first worktree; it stays on dev). Every other worktree
-# lives in $main/.loops.
-main=$(git -C "$(dirname "${BASH_SOURCE[0]}")" worktree list --porcelain | awk 'NR==1{print $2}')
-loops=$main/.loops
+# find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
+# which stays on the trunk), and loops, $main/.loops (every other worktree, and
+# the tool's state), for the repo DIR is in: by default the one this file is in.
+# The one place a command finds its repo; risa's machine config will answer here.
+# False, main empty, outside a repo.
+find_repo() {
+  main=$(git -C "${1:-$(dirname "${BASH_SOURCE[0]}")}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
+  loops=$main/.loops
+  [[ -n $main ]]
+}
+find_repo || true
 leases=$loops/.slots
 
 # The project config (risa.json; config.mjs is its loader and the only code that
@@ -47,6 +54,25 @@ for _k in paths.brakeList paths.quarantine; do
   _b=$(config_get "$_k" 2>/dev/null) && ci_lists+=("$_b")
 done
 unset _b _k
+# Backlog ids are <idPrefix>-<n> (config.mjs's backlogIds builds the rest from the
+# same value): backlog_id_prefix is "B-" here.
+backlog_id_prefix=$(config_get backlog.idPrefix)-
+
+# tool_command NAME → what the tool's own command NAME (prd, backlog) is called
+# in this repo: `pnpm prd` here (config.mjs's toolCommands in Node).
+tool_command() { config_get "tool.$1"; }
+
+# project_command NAME → the project's command NAME (commands.NAME in the config:
+# install, check, typecheck, typegen, datastoreStart…); fails when it isn't set.
+project_command() { config_get "commands.$1"; }
+# run_project NAME [ARG…] → runs that command here, ARGs after it, and gives its
+# exit code; 127, with a line, when the config doesn't set it.
+run_project() {
+  local c
+  c=$(project_command "$1") || return 127
+  shift
+  eval "$c" '"$@"'
+}
 
 # is_protected BRANCH → true when BRANCH is one of the config's protected branches.
 is_protected() {

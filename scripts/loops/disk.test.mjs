@@ -251,3 +251,24 @@ describe("pnpm prd status", () => {
     );
   });
 });
+
+// new.sh runs the project's commands from the config, and names branches by its
+// prefixes: a sample config with other ones changes what runs.
+describe("new.sh through the config", () => {
+  it("runs the config's install, datastore start and hooks install, on the config's branch", () => {
+    const raw = JSON.parse(readFileSync(process.env.RISA_CONFIG, "utf8"));
+    Object.assign(raw.commands, {
+      install: "pnpm i --offline",
+      datastoreStart: "pnpm db:up",
+      hooksInstall: 'echo hooks-install >> "$FAKE_LOG"',
+    });
+    raw.branches.prefixes.hotfix = "quick/";
+    const sample = join(root, "sample.json");
+    writeFileSync(sample, JSON.stringify(raw));
+    const r = sh("new.sh", ["--stack", "hotfix", "q"], { env: { ...ROOMY, RISA_CONFIG: sample } });
+    expect(r.status, r.stderr).toBe(0);
+    expect(calls()).toMatch(/^hooks-install\npnpm i --offline\npnpm db:up\n/m);
+    expect(calls()).not.toMatch(/pnpm install|datastore:start/);
+    expect(git(join(loops, "hotfix-q"), "branch", "--show-current")).toBe("quick/q");
+  });
+});

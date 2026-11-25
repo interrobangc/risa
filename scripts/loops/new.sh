@@ -36,23 +36,23 @@ done
 kind=${1:?kind: prd, slice, plan or hotfix}; topic=${2:?topic}
 [[ $topic =~ ^[a-z0-9-]+$ ]] || { echo "topic: lowercase, digits, dashes" >&2; exit 1; }
 case $kind in
-  prd) name=$topic branch=prd/$topic base=${base:-$trunk} stack=${stack:-1}
+  prd) name=$topic branch=$prd_prefix$topic base=${base:-$trunk} stack=${stack:-1}
     if [[ ! -e $loops/$name ]] && (($(prd_count) >= max_prds)); then
       echo "already $(prd_count) PRD worktrees (cap $max_prds; from $max_prds_from: pnpm prd dispatch --cap <n> changes it)" >&2; exit 1
     fi ;;
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
     # The plan's Stack field (docs/agents/planner.md, _Slice fields_) decides: a stack only
     # for Stack: yes, or --stack. Missing, or no plan: no stack.
-    plan_text=$(git -C "$main" show "${base:-prd/$topic}:plans/$topic-plan.md" 2>/dev/null || true)
+    plan_text=$(git -C "$main" show "${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md" 2>/dev/null || true)
     planned=no
     if [[ -n $plan_text ]]; then
       planned=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
     fi
     echo "plan: slice $n says Stack: $planned${stack:+ (overridden by --stack/--no-stack)}"
     [[ $planned == yes ]] && planned=1 || planned=0
-    name=$topic-$n branch=slice/$topic/$n base=${base:-prd/$topic} stack=${stack:-$planned} ;;
-  plan) name=plan-$topic branch=plan/$topic base=${base:-$trunk} stack=${stack:-0} ;;
-  hotfix) name=hotfix-$topic branch=hotfix/$topic base=${base:-$trunk} stack=${stack:-0} ;;
+    name=$topic-$n branch=$slice_prefix$topic/$n base=${base:-$prd_prefix$topic} stack=${stack:-$planned} ;;
+  plan) name=plan-$topic branch=$plan_prefix$topic base=${base:-$trunk} stack=${stack:-0} ;;
+  hotfix) name=hotfix-$topic branch=$hotfix_prefix$topic base=${base:-$trunk} stack=${stack:-0} ;;
   *) echo "kind must be prd, slice, plan or hotfix" >&2; exit 1 ;;
 esac
 dir=$loops/$name
@@ -95,8 +95,9 @@ fi
 # The run log (run-log.mjs): a slice's start, for pnpm prd metrics. Never fails.
 [[ $kind != slice ]] || run_log slice-start "name=$name" "branch=$branch" "slice:=$n" "base=$base"
 cd "$dir"
-# The protection hooks (.githooks/); core.hooksPath is shared by every worktree.
-git config core.hooksPath .githooks
+# The protection hooks (the config's hooksInstall: core.hooksPath, shared by every
+# worktree, here).
+if project_command hooksInstall >/dev/null 2>&1; then run_project hooksInstall; fi
 
 if ((stack)); then
   write_stack_env "$dir" "$slot" "$base"
@@ -108,10 +109,10 @@ fi
 write_test_env "$dir" "$name"
 
 use_node
-pnpm install --frozen-lockfile
+run_project install
 
 if ((stack)); then
-  pnpm datastore:start
+  run_project datastoreStart
   echo
   echo "Worktree $name ready (slot $slot) at $dir on $branch (from $base)"
   echo "  dev server   pnpm prd serve      → http://localhost:$web"

@@ -127,6 +127,8 @@ export const SHAPE = [
   ["commands.datastoreStart", "command"],
   ["commands.datastoreReset", "command"],
   ["commands.datastoreSeed", "command"],
+  // Turns on the repo's git hooks in a new worktree (none: the tool sets no hooks).
+  ["commands.hooksInstall", "command?"],
   // The test projects the tool's own test runner names.
   ["testProjects.tooling", "text[]?"],
   ["testProjects.browserHarness", "text?"],
@@ -333,6 +335,17 @@ export function backlogIds(config = loadConfig().config) {
     /** "12", "b-12" → "B-12"; anything else upper-cased. @param {string} s */
     normalize: (s) => (/^\d+$/.test(s) ? `${prefix}${s}` : s.toUpperCase()),
   };
+}
+
+/**
+ * What the tool's own commands are called in this repo (`pnpm prd` and `pnpm backlog`
+ * here, `risa …` after the move): every prompt, hint and help line names them through
+ * this (lib.sh's tool_command in bash).
+ * @param {Record<string, any>} [config] a valid config (default: this repo's)
+ * @returns {{ prd: string, backlog: string }}
+ */
+export function toolCommands(config = loadConfig().config) {
+  return { prd: config.tool.prd, backlog: config.tool.backlog };
 }
 
 /** Whether this file is the script Node was started on (through any symlink). */

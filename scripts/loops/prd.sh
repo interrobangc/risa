@@ -37,7 +37,7 @@ pnpm prd <command>
     dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's)
     queue <topic>             put the topic first in the PRD registry and return: the dispatcher takes it next
                               (or, with none running, says to start one or pnpm prd start <topic>)
-    plan <topic> [--open] [B-n …]   a docs-only worktree for writing a PRD and plan; --open starts its
+    plan <topic> [--open] [${backlog_id_prefix}n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
                               (on opus, a `design` row's planner on Fable; --model <m> runs that one session on model m)
@@ -188,7 +188,7 @@ pnpm prd <command>
     tier [--base <ref>]       the CI tier this worktree's commits propose against <ref> (default $trunk), and why
 
   Land
-    land <topic> [-m subject] [--tier <t> [--why "<reason>"]] [--fixes B-n,…] [--no-review] [--local]
+    land <topic> [-m subject] [--tier <t> [--why "<reason>"]] [--fixes ${backlog_id_prefix}n,…] [--no-review] [--local]
                               [--force] [--skeptic <id>… | --by-user]
                               merge prd/<topic> into dev (only when the dev keeper says so) through its
                               PR: merged on GitHub once its head is the local tip and Codex's verdict is
@@ -348,7 +348,7 @@ case $cmd in
     fi
     topic=$1; shift; open=0 items=()
     for a in "$@"; do
-      case $a in --open) open=1 ;; B-[0-9]*) items+=("$a") ;; *) die "plan: unknown argument $a" ;; esac
+      case $a in --open) open=1 ;; "$backlog_id_prefix"[0-9]*) items+=("$a") ;; *) die "plan: unknown argument $a" ;; esac
     done
     dir=$loops/plan-$topic
     [[ -d $dir ]] || "$bin/new.sh" plan "$topic"
@@ -467,7 +467,7 @@ case $cmd in
     asked=full
     if ((quick)); then
       asked=quick
-      [[ $(git -C "$dir" branch --show-current) == slice/* ]] && asked=slice
+      [[ $(git -C "$dir" branch --show-current) == "$slice_prefix"* ]] && asked=slice
     fi
     base=$(check_base "$dir" "$asked")
     { read -r pmode; read -r ptooling; read -r pown; } < <(
@@ -482,20 +482,21 @@ case $cmd in
     fi
     [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
     # shellcheck disable=SC2086
-    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
+    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "$(project_command check)${pmode:+ ($pmode)}" -- \
       "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"
     else
       echo "$(git -C "$dir" rev-parse HEAD) full" > "$record"
-      echo "pnpm check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
+      echo "$(project_command check) passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current))"
     fi
     ;;
   sync)
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd sync inside a PRD's worktree"
     dir=$loops/$name; branch=$(git -C "$dir" branch --show-current)
-    [[ $branch == prd/* || $branch == plan/* || $branch == hotfix/* ]] || die "$branch isn't a prd/, plan/ or hotfix/ branch"
+    [[ $branch == "$prd_prefix"* || $branch == "$plan_prefix"* || $branch == "$hotfix_prefix"* ]] ||
+      die "$branch isn't a $prd_prefix, $plan_prefix or $hotfix_prefix branch"
     # shellcheck source=unsynced.sh
     source "$bin/unsynced.sh"
     unsynced_clear "$dir"
@@ -524,7 +525,7 @@ case $cmd in
       echo "$branch needs no merge: $trunk's changes share no file with it and bring nothing risky. No recheck needed (pnpm prd sync --force merges anyway, when you need that code)"
     else
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"
-      echo "Merged $trunk into $branch. If seeds or migrations changed: pnpm datastore:reset. Then: pnpm prd check"
+      echo "Merged $trunk into $branch. If seeds or migrations changed: $(project_command datastoreReset). Then: pnpm prd check"
     fi
     ;;
   ask | asks | answer)
