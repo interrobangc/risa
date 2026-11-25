@@ -163,8 +163,12 @@ scripts/loops/dispatch.mjs core
 scripts/loops/dispatch.test.mjs core
 scripts/loops/doc.mjs core
 scripts/loops/doc.test.mjs core
+scripts/loops/docs/backlog.md core
 scripts/loops/docs/hotfix.md core
+scripts/loops/docs/inbox.md core
 scripts/loops/docs/loop.md core
+scripts/loops/docs/orchestrator.md core
+scripts/loops/docs/planner.md core
 scripts/loops/docs/recovery.md core
 scripts/loops/down.sh core
 scripts/loops/drain.mjs core
