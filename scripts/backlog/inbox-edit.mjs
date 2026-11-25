@@ -1,4 +1,4 @@
-// Pure edits of plans/inbox.md for `pnpm backlog inbox add|move|edit|remove`: text in,
+// Pure edits of the inbox (plans/inbox.md here) for `pnpm backlog inbox add|move|edit|remove`: text in,
 // text out. The origin writer (origin.mjs) applies them to origin/dev's copy.
 //
 // A bullet goes at the end of the first "## " section whose heading has its
@@ -6,7 +6,7 @@
 // with no section gets one at the end of the file. A bullet is found by its
 // words: the folded words are a part of its text (tag left out), and when
 // several bullets hold them, the one whose whole text they are wins.
-import { BacklogError, checkType, parseInbox, typeForHeading } from "./format.mjs";
+import { BacklogError, IDS, checkType, parseInbox, typeForHeading } from "./format.mjs";
 
 /** The heading a new section gets, by type. */
 const HEADING_FOR = {
@@ -17,7 +17,7 @@ const HEADING_FOR = {
   question: "Questions",
   chore: "Chores",
 };
-const TAG_AT_END = /\(B-\d+\)\s*$/;
+const TAG_AT_END = new RegExp(`\\(${IDS.pattern}\\)\\s*$`);
 
 const fold = (/** @type {string} */ s) => s.replace(/\s+/g, " ").trim();
 const key = (/** @type {string} */ s) => fold(s).toLowerCase();
@@ -85,7 +85,7 @@ export function addEntry(text, type, bullet, details = "") {
   checkType(type);
   const b = fold(bullet);
   if (!b) throw new BacklogError("what should the line say?");
-  if (TAG_AT_END.test(b)) throw new BacklogError("a new line has no id: leave out the (B-n)");
+  if (TAG_AT_END.test(b)) throw new BacklogError(`a new line has no id: leave out the (${IDS.prefix}n)`);
   return insert(text, type, [`- ${b}`, ...detailLines(details)]);
 }
 
@@ -144,7 +144,7 @@ export function moveEntry(text, line, type) {
 export function rewordEntry(text, line, bullet, details) {
   const b = fold(bullet);
   if (!b) throw new BacklogError("what should the line say?");
-  if (TAG_AT_END.test(b)) throw new BacklogError("a line has no id: leave out the (B-n)");
+  if (TAG_AT_END.test(b)) throw new BacklogError(`a line has no id: leave out the (${IDS.prefix}n)`);
   const lines = text.split("\n");
   const last = span(lines, line);
   const more = details === undefined ? lines.slice(line + 1, last + 1) : detailLines(details);

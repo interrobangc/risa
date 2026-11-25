@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// The live backlog, on dev in the main checkout:
+// The live backlog, on dev in the main checkout (the paths, the trunk, the ids'
+// prefix and the PRD table's heading are the project config's; this repo's below):
 //   plans/inbox.md    the user's plain list: bullets under headings, no fields
 //   plans/backlog.md  the tracker: ids, status, PRD, owner, commit, notes
 //
@@ -80,7 +81,7 @@
 //   pnpm backlog prd move <topic> --first|--last|--before T|--after T
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
-// BACKLOG_BRANCH (default dev), BACKLOG_REMOTE (default origin).
+// BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -91,13 +92,19 @@ import * as edits from "./inbox-edit.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
+import { loadConfig } from "../loops/config.mjs";
 
-const TRUNK = process.env.BACKLOG_BRANCH ?? "dev";
+const { config } = loadConfig();
+const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
-const REL = "plans/backlog.md";
-const INBOX_REL = "plans/inbox.md";
-const ARCHIVE_REL = "plans/backlog-archive.md";
-const QUARANTINE_REL = "scripts/ci/quarantine.txt";
+const REL = config.paths.backlog;
+const INBOX_REL = config.paths.inbox;
+const ARCHIVE_REL = config.paths.archive;
+/** CI's quarantine list, which `ci-file` commits with the backlog (null: the project has none). */
+const QUARANTINE_REL = config.paths.quarantine ?? null;
+const PREFIX = config.branches.prefixes;
+/** The lock and temporary files in the git dir carry the project's name. */
+const NAME = config.name;
 // Loaded only for ci-file: every other command works without scripts/ci/.
 const filing = process.argv[2] === "ci-file" ? await import("../ci/filing.mjs") : null;
 
@@ -129,7 +136,7 @@ const archiveFile = join(mainCheckout, ARCHIVE_REL);
 const gitDir = resolve(mainCheckout, git(mainCheckout, "rev-parse", "--git-dir"));
 const lockDir = join(
   resolve(mainCheckout, git(mainCheckout, "rev-parse", "--git-common-dir")),
-  "caretook-backlog.lock",
+  `${NAME}-backlog.lock`,
 );
 
 const today = () => {
@@ -291,7 +298,7 @@ function amendFacts(head, readHead, headRaw, commits) {
  */
 function commitContents(contents, w, readHead, commits) {
   const head = git(mainCheckout, "rev-parse", "HEAD");
-  const tmpIndex = join(gitDir, `caretook-backlog-index-${process.pid}`);
+  const tmpIndex = join(gitDir, `${NAME}-backlog-index-${process.pid}`);
   const env = { GIT_INDEX_FILE: tmpIndex };
   try {
     gitRaw(mainCheckout, ["read-tree", "HEAD"], { env });
@@ -420,7 +427,7 @@ function write(tool, describe, change, opts = {}) {
     );
 
     // The quarantine: committed from HEAD's copy; the working copy follows unless it has hand edits.
-    if (typeof ctx.quarantine === "string" && ctx.quarantine !== headText(QUARANTINE_REL)) {
+    if (QUARANTINE_REL && typeof ctx.quarantine === "string" && ctx.quarantine !== headText(QUARANTINE_REL)) {
       commit[QUARANTINE_REL] = ctx.quarantine;
       if (readText(join(mainCheckout, QUARANTINE_REL)) === headText(QUARANTINE_REL))
         disk[QUARANTINE_REL] = ctx.quarantine;
@@ -567,6 +574,7 @@ const originWrite = () => ({
   remote: REMOTE,
   trunk: TRUNK,
   rel: INBOX_REL,
+  name: NAME,
   backlogFiles: BACKLOG_FILES,
   withLock,
 });
@@ -1003,16 +1011,18 @@ function findings() {
 
 /** What stateOf needs, from dev and the worktrees. @param {import("./format.mjs").Item[]} items @returns {reg.Facts} */
 function registryFacts(items) {
+  const PLANS = `${config.paths.plans}/`;
   const plans = new Set(
-    (tryGit(mainCheckout, "ls-tree", "--name-only", TRUNK, "plans/") ?? "")
+    (tryGit(mainCheckout, "ls-tree", "--name-only", TRUNK, PLANS) ?? "")
       .split("\n")
-      .map((f) => /^plans\/(.+)-plan\.md$/.exec(f)?.[1])
+      .map((f) => (f.startsWith(PLANS) ? /^(.+)-plan\.md$/.exec(f.slice(PLANS.length))?.[1] : undefined))
       .filter(Boolean),
   );
   const worktrees = new Set(
-    [
-      ...git(mainCheckout, "worktree", "list", "--porcelain").matchAll(/^branch refs\/heads\/prd\/(.+)$/gm),
-    ].map((m) => m[1]),
+    [...git(mainCheckout, "worktree", "list", "--porcelain").matchAll(/^branch refs\/heads\/(.+)$/gm)]
+      .map((m) => m[1])
+      .filter((b) => b.startsWith(PREFIX.prd))
+      .map((b) => b.slice(PREFIX.prd.length)),
   );
   const waiting = new Map();
   for (const i of items)
@@ -1131,7 +1141,7 @@ function doctor(fix) {
 }
 
 const ids = (pos) => {
-  if (!pos.length) throw new fmt.BacklogError("which item? (B-n)");
+  if (!pos.length) throw new fmt.BacklogError(`which item? (${fmt.IDS.prefix}n)`);
   return [...new Set(pos.map(fmt.normId))];
 };
 /** "B-1: …", "B-1, B-2, B-3 +2: …" */
@@ -1225,7 +1235,7 @@ function main() {
       const at = pos.findIndex((p) => p.includes("="));
       const list = ids(at < 0 ? pos : pos.slice(0, at));
       const pairs = at < 0 ? [] : pos.slice(at);
-      if (!pairs.length) throw new fmt.BacklogError("usage: set B-n… key=value…");
+      if (!pairs.length) throw new fmt.BacklogError(`usage: set ${fmt.IDS.prefix}n… key=value…`);
       write("set", about(list, `set ${pairs.join(", ")}`), (b, c) => {
         for (const id of list) {
           const it = target(b, c, id, opts.archived);
@@ -1241,10 +1251,11 @@ function main() {
     case "note": {
       // The first word is the id; more ids follow only in the B-n form, so a note can start with a number.
       let n = 1;
-      while (n < pos.length && /^B-\d+$/i.test(pos[n])) n++;
+      while (n < pos.length && fmt.IDS.is(pos[n])) n++;
       const list = ids(pos.slice(0, n));
       const text = pos.slice(n).join(" ");
-      if (!text.trim()) throw new fmt.BacklogError("usage: note B-n [B-n…] <text…>");
+      if (!text.trim())
+        throw new fmt.BacklogError(`usage: note ${fmt.IDS.prefix}n [${fmt.IDS.prefix}n…] <text…>`);
       write("note", about(list, "note"), (b, c) => {
         for (const id of list) fmt.addNote(target(b, c, id, opts.archived), { text, ...ctx() });
       });
@@ -1253,7 +1264,9 @@ function main() {
     case "claim": {
       const owner = opts.as ?? myBranch();
       if (!owner || owner === TRUNK)
-        throw new fmt.BacklogError("claim from your prd/ or plan/ branch, or pass --as OWNER");
+        throw new fmt.BacklogError(
+          `claim from your ${PREFIX.prd} or ${PREFIX.plan} branch, or pass --as OWNER`,
+        );
       const list = ids(pos);
       write("claim", about(list, `claimed by ${owner}`), (b) => {
         const items = list.map((id) => fmt.find(b, id));
@@ -1314,6 +1327,8 @@ function main() {
         (b, c) => {
           refreshStatuses(b);
           const apply = /** @type {NonNullable<typeof filing>} */ (filing).applyFindings;
+          if (!QUARANTINE_REL)
+            throw new fmt.BacklogError("ci-file: the project config names no quarantine list");
           const r = apply(b, headText(QUARANTINE_REL), findings, {
             add: (f) =>
               fmt.add(b, {
@@ -1374,7 +1389,9 @@ try {
   if (e instanceof LookAlikeStop) {
     console.error("backlog: this looks like what's already filed or in the inbox; nothing was added:");
     for (const m of e.matches) console.error(`  ${lookAlikeLine(m)}`);
-    console.error("Note the existing item (pnpm backlog note B-<n> …), or rerun with --anyway.");
+    console.error(
+      `Note the existing item (pnpm backlog note ${fmt.IDS.prefix}<n> …), or rerun with --anyway.`,
+    );
     process.exit(3);
   }
   if (e instanceof fmt.BacklogError) {

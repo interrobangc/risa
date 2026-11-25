@@ -5,12 +5,6 @@
 .github/workflows/ci.yml project-to-core 1
 apps/web/test/browserLease.ts project-to-core 1
 package.json project-to-core 4
-scripts/backlog/backlog.mjs core-to-project 1
-scripts/backlog/backlog.mjs project-name 2
-scripts/backlog/backlog.test.mjs core-to-project 1
-scripts/backlog/origin.mjs project-name 1
-scripts/backlog/origin.test.mjs project-name 1
-scripts/backlog/registry.cli.test.mjs app-path 2
 scripts/ci/blame.mjs core-to-project 2
 scripts/ci/blame.test.mjs app-path 2
 scripts/ci/blame.test.mjs core-to-project 2
@@ -142,9 +136,8 @@ scripts/loops/lease.sh project-env 26
 scripts/loops/lease.test.mjs core-to-project 1
 scripts/loops/lease.test.mjs project-env 20
 scripts/loops/lib.sh app-path 1
-scripts/loops/lib.sh core-to-project 9
 scripts/loops/lib.sh project-env 28
-scripts/loops/lib.sh project-name 6
+scripts/loops/lib.sh project-name 2
 scripts/loops/load-gate.mjs project-env 14
 scripts/loops/load-gate.test.mjs app-path 4
 scripts/loops/load-gate.test.mjs project-env 48

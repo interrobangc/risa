@@ -9,6 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   CONFIG_NAME,
   ConfigError,
+  backlogIds,
   SHAPE,
   configPath,
   configProblems,
@@ -45,7 +46,7 @@ describe("the loader", () => {
     expect(path).toBe(FILE);
     expect(config.name).toMatch(/^[a-z]/);
     expect(config.branches.trunk).toBe("dev");
-    const paths = [...Object.values(config.paths), ...(config.boundary?.appPaths ?? [])];
+    const paths = [...Object.values(config.paths).flat(), ...(config.boundary?.appPaths ?? [])];
     for (const p of paths) expect(existsSync(join(root, p)), p).toBe(true);
   });
 
@@ -58,7 +59,9 @@ describe("the loader", () => {
     const keys = SHAPE.map(([key]) => key);
     expect(new Set(keys).size).toBe(keys.length);
     for (const [key, type] of SHAPE)
-      expect(type, key).toMatch(/^(slug|text|command|path|branch|prefix|heading|item|version)(\[\])?\??$/);
+      expect(type, key).toMatch(
+        /^(slug|text|command|path|branch|prefix|heading|item|idPrefix|version)(\[\])?\??$/,
+      );
   });
 
   it.each([
@@ -131,6 +134,9 @@ describe("the loader", () => {
       (c) => (c.backlog.zoneOverflowItem = "750"),
       "backlog.zoneOverflowItem: must be a backlog id",
     ],
+    ["backlog.idPrefix", (c) => (c.backlog.idPrefix = "b-"), "backlog.idPrefix: must be an id prefix"],
+    ["backlog.idPrefix", (c) => delete c.backlog.idPrefix, "backlog.idPrefix: missing"],
+    ["paths.tooling", (c) => (c.paths.tooling = "tools"), "paths.tooling: must be a list"],
     ["commands.check", (c) => delete c.commands.check, "commands.check: missing"],
     ["commands.install", (c) => (c.commands.install = ["pnpm"]), "commands.install: must be a command"],
     ["commands.quickCheck", (c) => (c.commands.quickCheck = " x "), "commands.quickCheck: must be a command"],
@@ -204,6 +210,27 @@ describe("the loader", () => {
   });
 });
 
+describe("backlogIds", () => {
+  it("builds the ids from the config's prefix: this repo's, and another's", () => {
+    const here = backlogIds();
+    expect(here.prefix).toBe(`${loadConfig({ path: FILE }).config.backlog.idPrefix}-`);
+    const risa = backlogIds(changed((c) => (c.backlog.idPrefix = "RISA")));
+    expect(risa).toMatchObject({ prefix: "RISA-", pattern: "RISA-\\d+" });
+    expect(risa.id(772)).toBe("RISA-772");
+    expect(risa.num("RISA-772")).toBe(772);
+    expect(risa.normalize("12")).toBe("RISA-12");
+    expect(risa.normalize("risa-12")).toBe("RISA-12");
+    expect([
+      risa.is("RISA-1"),
+      risa.is("risa-1"),
+      risa.is("B-1"),
+      risa.is("RISA-"),
+      risa.is("XRISA-1"),
+    ]).toEqual([true, true, false, false, false]);
+    expect(new RegExp(`\\((${risa.pattern})\\)`).exec("a line (RISA-9)")?.[1]).toBe("RISA-9");
+  });
+});
+
 describe("config get", () => {
   const { config } = loadConfig({ path: FILE });
   const keys = SHAPE.map(([key]) => key).filter((key) => !key.includes("*"));
@@ -260,6 +287,58 @@ describe("config get", () => {
     const sample = join(tmp, "sample.json");
     writeFileSync(sample, JSON.stringify(changed((c) => (c.branches.trunk = "trunk"))));
     expect(bash('echo "$trunk"', { RISA_CONFIG: sample }).stdout).toBe("trunk\n");
+  });
+
+  it("takes lib.sh's other names from the config: prefixes, protected branches, files, exempt paths", () => {
+    const sample = join(tmp, "names.json");
+    writeFileSync(
+      sample,
+      JSON.stringify(
+        changed((c) => {
+          c.name = "acme";
+          c.branches.protected = ["live"];
+          c.branches.prefixes = { prd: "topic/", slice: "part/", plan: "draft/", hotfix: "quick/" };
+          Object.assign(c.paths, { backlog: "todo/list.md", inbox: "todo/in.md", archive: "todo/old.md" });
+          c.paths.tooling = ["tools", "acme.json"];
+          delete c.paths.brakeList;
+          c.paths.quarantine = "lists/q.txt";
+        }),
+      ),
+    );
+    const r = bash(
+      [
+        'echo "$project_name"',
+        "parent_of part/x/3",
+        "parent_of topic/x",
+        "pr_branch x",
+        "land_dir draft/y",
+        "is_protected live && echo live",
+        "is_protected main || echo main-free",
+        'echo "${backlog_files[*]}|${ci_lists[*]}"',
+        'printf \'a\\ntodo/in.md\\nlists/q.txt\\n\' | not_files "${backlog_files[@]}" "${ci_lists[@]}"',
+        'for f in tools/a.sh acme.json acmexjson toolsx/a scripts/loops/x.sh docs/a.md app.ts; do grep -qE "$exempt_re" <<< "$f" && echo "exempt $f"; done',
+      ].join("; "),
+      { RISA_CONFIG: sample },
+    );
+    expect(r.stderr).toBe("");
+    expect(r.stdout.replaceAll(`${ROOT}/.loops`, "$loops").replace(/^.*\.loops/m, "$loops")).toBe(
+      [
+        "acme",
+        "topic/x",
+        "dev",
+        "topic/x",
+        "$loops/plan-y",
+        "live",
+        "main-free",
+        "todo/list.md todo/in.md todo/old.md|lists/q.txt",
+        "a",
+        "exempt tools/a.sh",
+        "exempt acme.json",
+        "exempt scripts/loops/x.sh",
+        "exempt docs/a.md",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("stops a script that sources lib.sh when the config doesn't load", () => {
