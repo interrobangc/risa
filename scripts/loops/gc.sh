@@ -40,10 +40,12 @@ for dir in "$loops"/*/; do
     echo "remove      $name ($(git -C "$dir" branch --show-current) is merged into $(parent_of "$(git -C "$dir" branch --show-current)"))"
     continue
   fi
-  secs=$(stack_stopped_secs "$dir")
-  if [[ -n $secs ]] && ((secs >= limit)); then
+  # One stack hook call per worktree: its project and how long it has been stopped.
+  facts=$(stack_hook stackReady "$dir" 2>/dev/null || true)
+  secs=$(fact stopped_secs "$facts")
+  if [[ -n $(fact project "$facts") && -n $secs ]] && ((secs >= limit)); then
     down+=("$name")
-    echo "stack down  $name ($(stack_project "$dir") stopped $(fmt_age "$secs") ago; the worktree stays)"
+    echo "stack down  $name ($(fact project "$facts") stopped $(fmt_age "$secs") ago; the worktree stays)"
   fi
 done
 

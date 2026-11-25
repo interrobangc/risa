@@ -295,10 +295,11 @@ export SMOKE=$([[ -n $smoke ]] && echo 1 || echo 0)
 # left alone.
 ensure_server() {
   [[ $here != main && -n $(web_port "$top") ]] || return 0
-  local serve newer
-  serve=$(dirname "$0")/serve.sh
+  local newer
+  # The project's dev server, through the config's serve hook.
+  serve() { stack_hook serve "$@"; }
   if [[ -n $use_dev ]]; then
-    "$serve" "$here" --dev
+    serve "$here" --dev
     return
   fi
   require_disk "a check build"
@@ -307,15 +308,15 @@ ensure_server() {
       apps/web/build-target.ts apps/web/package.json apps/web/.env packages/*/src packages/*/package.json \
       pnpm-lock.yaml -type f ! -name '*.test.ts' -newer .serve-built 2>/dev/null | head -1)
     if [[ -z $newer && -f $top/.serve-built ]]; then
-      "$serve" "$here" --built
+      serve "$here" --built
       return
     fi
     echo "The check build is older than the source (${newer:-no build yet}): rebuilding."
-    "$serve" "$here" --restart --built
+    serve "$here" --restart --built
     return
   fi
   echo "Checks run against a check build (pnpm prd browser --dev for the dev server)."
-  "$serve" "$here" --built
+  serve "$here" --built
 }
 
 # start_server → ensure_server, its output in the log dir unless --verbose

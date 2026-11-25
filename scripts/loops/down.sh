@@ -8,10 +8,10 @@
 #                still recovers
 #             2. stop the dispatcher (dispatch.mjs --stop), so it opens nothing
 #                while the rest goes down; recover reopens it in a tab
-#             3. stop every dev server (serve.sh --stop)
-#             4. stop each stack (docker compose stop: its data stays)
-#             5. stop the shared test Postgres (test-db.sh down; its data is a
-#                tmpfs, and the integration globalSetup recreates it)
+#             3. stop every dev server (the serve hook: serve N --stop)
+#             4. stop each stack (the stackStop hook: its data stays)
+#             5. stop the shared test database (the testDb hook: down; the
+#                integration tests' setup brings it back)
 #
 # A record already there is merged, not replaced, so running down twice never
 # forgets what the first one stopped. recover deletes the record once used.
@@ -65,18 +65,19 @@ if [[ -n $dispatcher ]]; then
   else echo "  couldn't stop the dispatcher (pid $dispatcher): $out" >&2; failed=1; fi
 fi
 for n in ${servers[@]+"${servers[@]}"}; do
-  if "$bin/serve.sh" "$n" --stop </dev/null >/dev/null; then echo "  stopped dev server $n"
+  if stack_hook serve "$n" --stop </dev/null >/dev/null; then echo "  stopped dev server $n"
   else echo "  couldn't stop dev server $n" >&2; failed=1; fi
 done
 for n in ${stacks[@]+"${stacks[@]}"}; do
-  dir=$loops/$n proj=$(stack_project "$loops/$n")
-  # Never fall back to Compose's default project: that's the main checkout's.
-  [[ $proj == caretook-loop* ]] || { echo "  $n: no stack project, skipped" >&2; continue; }
-  if (cd "$dir" && docker compose stop) </dev/null >/dev/null 2>&1; then echo "  stopped stack $n ($proj, data kept)"
-  else echo "  couldn't stop stack $n ($proj)" >&2; failed=1; fi
+  # The hook stops only the worktree's own stack: no facts means it has none.
+  if facts=$(stack_hook stackStop "$loops/$n" </dev/null 2>/dev/null); then
+    proj=$(fact project "$facts")
+    if [[ -n $proj ]]; then echo "  stopped stack $n ($proj, data kept)"
+    else echo "  $n: no stack project, skipped" >&2; fi
+  else echo "  couldn't stop stack $n" >&2; failed=1; fi
 done
 if ((testdb)); then
-  if "$bin/test-db.sh" down </dev/null >/dev/null 2>&1; then echo "  stopped the shared test Postgres"
+  if stack_hook testDb down </dev/null >/dev/null 2>&1; then echo "  stopped the shared test Postgres"
   else echo "  couldn't stop the shared test Postgres" >&2; failed=1; fi
 fi
 ((${#servers[@]} + ${#stacks[@]} + testdb)) || [[ -n $dispatcher ]] || echo "  nothing was running"

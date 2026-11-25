@@ -5,19 +5,21 @@
 #   recover.sh                    take the single-instance lock (.loops/.recover.lock:
 #                                 a second recover exits 75 without acting), then
 #                                 run the inventory's actions, in order:
-#                                 1. start Docker Desktop (open -a Docker) and
-#                                    wait for `docker info`
+#                                 1. start the stack engine (the stackEngine
+#                                    hook's start: Docker Desktop here) and wait
+#                                    for it
 #                                 2. keep the dispatcher's intent to reopen
 #                                    (.loops/.dispatch-intent.json) before its
 #                                    stale lock goes; clear stale locks (never a
 #                                    live one; the dispatcher's when its pid is
 #                                    gone) and migrate markers with no worktree
-#                                 3. the shared test Postgres (test-db.sh up)
-#                                 4. stacks, one at a time: compose up, wait for
-#                                    its Postgres, migrate (retried once), with a
-#                                    marker in .loops/.migrate/ while it runs; a
-#                                    marker left by a crash reruns the migrate
-#                                 5. dev servers (serve.sh)
+#                                 3. the shared test database (the testDb hook: up)
+#                                 4. stacks, one at a time (the stackStart hook:
+#                                    start it, wait for its database, migrate,
+#                                    never seed), with a marker in .loops/.migrate/
+#                                    while it runs; a marker left by a crash or a
+#                                    failed start reruns it
+#                                 5. dev servers (the serve hook)
 #                                 6. the dispatcher, in a background iTerm2 tab
 #                                    (the opener), when it was running (the down
 #                                    record, a stale lock or a kept intent says
@@ -55,13 +57,12 @@
 #                                 a dry run never launches anything
 #
 # inventory.mjs decides the classes and actions; inventory-facts.mjs collects
-# the facts (read-only: git, docker info|ps|inspect, lsof, df). Every step is
+# the facts (read-only: git, the stack hooks' read-only forms, lsof, df). Every step is
 # skipped when it's already done, so a recover after a good one only prints (and opens
 # the recovery agent again). A recover by hand (not --unattended, not a dry run)
 # deletes the stay-down mark (.loops/.stay-down.json): the machine comes back.
 #
-# Env: CARETOOK_DOCKER_WAIT_SECS (180), CARETOOK_RECOVER_PG_SECS (60),
-# CARETOOK_RECOVER_DISPATCH_SECS (60: the wait for the reopened dispatcher's lock),
+# Env: CARETOOK_RECOVER_DISPATCH_SECS (60: the wait for the reopened dispatcher's lock),
 # CARETOOK_RECOVER_PROBE_SECS (600), CARETOOK_RECOVER_STEP_SECS (300: --at's
 # longest sleep before it rechecks the clock); CARETOOK_CLOCK_FILE (tests: a
 # file holding the current epoch second, in place of the clock).
@@ -81,7 +82,7 @@ while (($#)); do
     --wait) wait=1 ;;
     --no-agent) agent=0 ;;
     --unattended) unattended=1 ;;
-    -h | --help) sed -n '2,67p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,68p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "recover: unknown option $1 (--dry-run, --json, --at HH:MM, --wait, --no-agent, --unattended)" ;;
   esac
   shift
@@ -177,17 +178,14 @@ wait_for_claude() {
   echo "  probe $n: Claude answered."
 }
 
-# start_docker → open Docker Desktop and wait for `docker info`.
-start_docker() {
-  local limit=${CARETOOK_DOCKER_WAIT_SECS:-180} deadline
-  echo "• Docker isn't running: starting Docker Desktop"
-  open -a Docker </dev/null || die "recover: couldn't start Docker Desktop (open -a Docker); start Docker, then rerun"
-  deadline=$(($(now_secs) + limit))
-  until docker info >/dev/null 2>&1; do
-    (($(now_secs) < deadline)) || die "recover: Docker didn't answer within ${limit}s; start it by hand, then rerun"
-    sleep 2
-  done
-  echo "  Docker is up"
+# start_engine → start the stack engine (the stackEngine hook) and wait for it.
+start_engine() {
+  local engine
+  engine=$(fact name "$(stack_hook stackEngine status 2>/dev/null || true)"); engine=${engine:-the stack engine}
+  echo "• $engine isn't running: starting it"
+  stack_hook stackEngine start </dev/null >/dev/null ||
+    die "recover: $engine didn't start (the stackEngine hook); start it by hand, then rerun"
+  echo "  $engine is up"
 }
 
 # clear_lock PATH → remove a stale lock the inventory named (only lock paths).
@@ -229,39 +227,23 @@ reopen_dispatcher() {
   echo "  running (pid $pid)"
 }
 
-# wait_for_pg DIR PROJECT → until the stack's Postgres accepts connections.
-wait_for_pg() {
-  local c deadline limit=${CARETOOK_RECOVER_PG_SECS:-60}
-  c=$(env_get "$1/.env.loop" PG_CONTAINER); c=${c:-$2-postgres-1}
-  deadline=$(($(now_secs) + limit))
-  until docker exec "$c" pg_isready -q -h 127.0.0.1 -U caretook -d caretook >/dev/null 2>&1; do
-    (($(now_secs) < deadline)) || { echo "  $c didn't accept connections within ${limit}s" >&2; return 1; }
-    sleep 1
-  done
-}
-
-migrate() { (cd "$1" && use_node && pnpm -s datastore:migrate) </dev/null >"$1/.recover-migrate.log" 2>&1; }
-
-# stack_up NAME → start its stack and wait for it, then migrate (retried once:
-# a Postgres that just restarted can drop the first connection). The migrate
-# marker (.loops/.migrate/NAME, when it started) stands while it runs, so a
-# crash leaves it for the next recover to report and rerun.
+# stack_up NAME → start its stack again (the stackStart hook: it waits for the
+# stack's database and migrates, retried once, never seeding). The migrate
+# marker (.loops/.migrate/NAME, when it started) stands while it runs and stays
+# when it fails, so a crash or a failed start leaves it for the next recover to
+# report and rerun.
 stack_up() {
-  local dir=$loops/$1 proj marker=$loops/.migrate/$1
-  proj=$(stack_project "$dir")
-  [[ $proj == caretook-loop* ]] || { echo "  $1 has no stack project" >&2; return 1; }
-  echo "• stack $1 ($proj)"
+  local dir=$loops/$1 marker=$loops/.migrate/$1 facts err rc=0
+  echo "• stack $1"
   [[ ! -f $marker ]] || echo "  a migrate here was cut off (started $(cat "$marker" 2>/dev/null)): rerunning it"
-  (cd "$dir" && docker compose up -d --wait) </dev/null >/dev/null 2>&1 || { echo "  compose up failed" >&2; return 1; }
-  wait_for_pg "$dir" "$proj" || return 1
   mkdir -p "$loops/.migrate" && date -u +%Y-%m-%dT%H:%M:%SZ >"$marker" || echo "  couldn't write the migrate marker" >&2
-  if ! migrate "$dir"; then
-    echo "  migrate failed; retrying once"
-    sleep 3
-    migrate "$dir" || { echo "  migrate failed again (see $dir/.recover-migrate.log)" >&2; return 1; }
-  fi
-  rm -f "$dir/.recover-migrate.log" "$marker"
-  echo "  up and migrated"
+  err=$(mktemp)
+  facts=$(stack_hook stackStart "$dir" </dev/null 2>"$err") || rc=$?
+  [[ ! -s $err ]] || sed 's/^/  /' "$err"
+  rm -f "$err"
+  ((rc == 0)) || return 1
+  rm -f "$marker"
+  echo "  up and migrated ($(fact project "$facts"))"
 }
 
 # after_infrastructure SESSION… → the last step, once the machine is back: the
@@ -310,23 +292,23 @@ run_actions() {
   local list step target gc=() sessions=() landings=() record=""
   list=$(inventory --json | node "$bin/recover-lib.mjs" actions)
   if grep -q $'^docker start\t' <<<"$list"; then
-    start_docker
+    start_engine
     list=$(inventory --json | node "$bin/recover-lib.mjs" actions)
   fi
   while IFS=$'\t' read -r -u 3 step target; do
     case $step in
       "") ;;
-      "docker start") die "recover: Docker still doesn't answer" ;;
+      "docker start") die "recover: the stack engine still doesn't answer" ;;
       keep-dispatch-intent) keep_intent || failed+=("the dispatcher's intent") ;;
       clear-lock) clear_lock "$target" || failed+=("lock $target") ;;
       "test-db up")
         echo "• the shared test Postgres"
-        "$bin/test-db.sh" up </dev/null >/dev/null 2>&1 && echo "  up" || { echo "  didn't start" >&2; failed+=("test Postgres"); }
+        stack_hook testDb up </dev/null >/dev/null 2>&1 && echo "  up" || { echo "  didn't start" >&2; failed+=("test Postgres"); }
         ;;
       "stack up") stack_up "$target" || failed+=("stack $target") ;;
       serve)
         echo "• dev server $target"
-        "$bin/serve.sh" "$target" </dev/null 2>&1 | sed 's/^/  /' || failed+=("server $target")
+        stack_hook serve "$target" </dev/null 2>&1 | sed 's/^/  /' || failed+=("server $target")
         ;;
       dispatch)
         # Gated on every step above: no dispatcher (and so no managed session) on a broken machine.

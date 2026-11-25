@@ -9,10 +9,10 @@
 //           no live session and nothing running in it (rm.sh);
 //         - lease and slot tickets whose holder is gone (older than a minute,
 //           so one being taken isn't), removed;
-//         - test databases no worktree owns (test-db.sh drop-db);
+//         - test databases no worktree owns (the testDb hook's orphans; its drop-db);
 //         - stale remote-tracking refs (git fetch --prune);
-//         - dangling Docker volumes of a caretook-loopN project no worktree
-//           names (docker volume rm);
+//         - the stack's leftovers no worktree's stack uses (the stackLeftovers
+//           hook's volume= lines; its `leftovers remove`);
 //         - .loops/.browser-hangs logs older than a week;
 //         - ended session records whose worktree is gone;
 //         - ci/ refs on origin older than a day with no run going
@@ -33,7 +33,6 @@
 // Never, whatever the facts: a dirty worktree, any build or Vite cache (unlike
 // `reclaim --yes`), the main checkout, an unmerged branch, a session itself.
 
-import { createHash } from "node:crypto";
 import { branchKinds } from "./config.mjs";
 
 /** Tickets younger than this are left alone: their holder may still be writing its pid. */
@@ -46,45 +45,6 @@ export const CI_REF_SECS = 86400;
 export const ARCHIVABLE = ["landed", "staging", "live", "dropped"];
 /** The long-lived branches tidy never lists: the trunk and the protected ones (dev, main, staging here). */
 export const protectedBranches = () => branchKinds().kept;
-
-/** stack-lib.sh's test_db_name: a worktree's own test database. */
-export const testDbName = (/** @type {string} */ name) =>
-  `caretook_test_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`.slice(0, 63);
-
-/** A worker copy's suffix (test-db.sh's worker_re; packages/data/src/db/testDatabase.ts). */
-const WORKER_SUFFIX = /^_w([1-9]|1[0-6])$/;
-
-/**
- * Test database DB's worker copies' name without the _w<n>:
- * caretook_tw_<stem cut to 38>_<md5 of DB cut to 8> (workerDatabaseName in
- * packages/data/src/db/testDatabase.ts; test-db.sh's worker_prefix).
- * @param {string} db
- */
-export const testDbWorkerPrefix = (db) =>
-  `caretook_tw_${db.replace(/^caretook_test_/, "").slice(0, 38)}_${createHash("md5").update(db).digest("hex").slice(0, 8)}`;
-
-/**
- * The worktree that owns test database DB, or null: its own database, or one of
- * its integration workers' copies (caretook_tw_…_w<n>, which no worktree's own
- * database can be). Copies named the old way, <database cut to 59>_w<n>, still
- * count as their worktree's until it's gone, then as orphans; known names come
- * first, so a topic ending -w<n> owns its database instead of it reading as
- * another's old copy.
- * @param {string} db
- * @param {string[]} worktrees  the worktree names
- */
-export function testDbOwner(db, worktrees) {
-  for (const w of worktrees) if (testDbName(w) === db) return w;
-  for (const w of worktrees) {
-    const prefix = testDbWorkerPrefix(testDbName(w));
-    if (db.startsWith(prefix) && WORKER_SUFFIX.test(db.slice(prefix.length))) return w;
-  }
-  for (const w of worktrees) {
-    const base = testDbName(w).slice(0, 59);
-    if (db.startsWith(base) && WORKER_SUFFIX.test(db.slice(base.length))) return w;
-  }
-  return null;
-}
 
 /**
  * @typedef {object} TidyWorktree
@@ -130,9 +90,8 @@ export function testDbOwner(db, worktrees) {
  * @property {{ file: string, name: string, item: string }[]} [quarantineDone]   quarantine entries whose item is done
  * @property {{ ref: string, sha: string, ageSecs: number | null, running: boolean }[]} [ciRefs]   ci/ refs on origin; a null age is unknown
  * @property {TidyLock[]} [locks]
- * @property {{ db: string, worktree: string|null }[]} [testDbs]
- * @property {{ name: string, project: string }[]} [volumes]   dangling volumes
- * @property {string[]} [usedProjects]   Compose projects still in use
+ * @property {string[]} [testDbOrphans]   test databases no worktree owns (the testDb hook's orphans)
+ * @property {{ name: string, why: string }[]} [volumes]   the stack's leftovers no worktree's stack uses (the stackLeftovers hook)
  * @property {{ path: string, ageSecs: number }[]} [hangLogs]
  * @property {{ id: string, title?: string, status: string, prd?: string }[] | null} [items]   backlog items, archived ones left out
  * @property {string[] | null} [prdWorktrees]   topics with a prd/ worktree; null when unreadable (a topic's finished items stay)
@@ -250,25 +209,11 @@ export function tidy(facts) {
     else safe.push({ kind: l.kind, target: l.path, why: `${who}: ${why}`, how: "remove it" });
   }
 
-  for (const d of facts.testDbs ?? [])
-    if (!d.worktree)
-      safe.push({
-        kind: "test-db",
-        target: d.db,
-        why: "no worktree owns it",
-        how: `test-db drop-db ${d.db}`,
-      });
+  for (const db of facts.testDbOrphans ?? [])
+    safe.push({ kind: "test-db", target: db, why: "no worktree owns it", how: `test-db drop-db ${db}` });
 
-  const used = new Set(facts.usedProjects ?? []);
-  for (const v of facts.volumes ?? []) {
-    if (!/^caretook-loop\d+(-test)?$/.test(v.project) || used.has(v.project)) continue;
-    safe.push({
-      kind: "volume",
-      target: v.name,
-      why: `dangling; no worktree uses ${v.project}`,
-      how: "docker volume rm",
-    });
-  }
+  for (const v of facts.volumes ?? [])
+    safe.push({ kind: "volume", target: v.name, why: v.why, how: "stack leftovers remove volume" });
 
   for (const h of facts.hangLogs ?? [])
     if (h.ageSecs > HANG_LOG_DAYS * 86400)

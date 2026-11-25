@@ -11,11 +11,11 @@
 #
 # A slice gets a stack only when its plan says `Stack: yes` (or --stack); add
 # one later with `pnpm prd stack up`. Every worktree's integration tests use its
-# own database on the shared test Postgres (test-db.sh), stack or not.
+# own test database (the config's testDb hook: `use`), stack or not.
 #
-# A stacked worktree leases the lowest free slot (1-19), which fixes its ports
-# (slot_ports in lib.sh) and Compose project (caretook-loopN). Secrets
-# are copied from the main checkout's env files. If the branch already exists,
+# A stacked worktree leases the lowest free slot (1-19); the stack hook
+# (stackUp) makes the stack for it: its env files, ports and data. A stackless
+# one gets the stack hook's stackless env (stackDown). If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most max_prds (lib.sh: the
 # stored `pnpm prd dispatch --cap`, else CARETOOK_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
 # (pnpm prd start|slice|plan|hotfix wrap this.)
@@ -78,12 +78,10 @@ elif [[ $kind == prd ]]; then
 fi
 
 if ((stack)); then
-  require_main_env
   require_disk "a new stack for $name"
   lease_free_slot "$name" "$slot"
   # Give the slot back if anything fails before the worktree exists.
   trap '[[ -d $dir ]] || release_slot "$name"' ERR
-  slot_ports "$slot"
 fi
 
 if git -C "$main" show-ref --verify --quiet "refs/heads/$branch"; then
@@ -99,31 +97,33 @@ cd "$dir"
 # worktree, here).
 if project_command hooksInstall >/dev/null 2>&1; then run_project hooksInstall; fi
 
-if ((stack)); then
-  write_stack_env "$dir" "$slot" "$base"
-else
-  write_stackless_env "$dir" "$base"
-fi
-# Integration tests use this worktree's own database on the shared test
-# Postgres (test-db.sh), stack or not; it's created on the first run.
-write_test_env "$dir" "$name"
+((stack)) || stack_hook stackDown "$dir" --base "$base" >/dev/null || die "stackless env failed for $name"
+# Integration tests use this worktree's own test database (the testDb hook),
+# stack or not; it's created on the first run.
+test_facts=$(stack_hook testDb use "$name") || die "test database setup failed for $name"
 
 use_node
 run_project install
 
+prd=$(tool_command prd)
 if ((stack)); then
-  run_project datastoreStart
+  # The hook writes the stack's env files, starts it, migrates and seeds; the
+  # slot lease is ours to give back when it fails.
+  facts=$(stack_hook stackUp "$dir" --slot "$slot" --base "$base") || {
+    release_slot "$name"
+    die "stack up failed for $name (it stays a worktree without a stack; $prd stack up $name tries again)"
+  }
   echo
   echo "Worktree $name ready (slot $slot) at $dir on $branch (from $base)"
-  echo "  dev server   pnpm prd serve      → http://localhost:$web"
-  echo "  Postgres     :$pg   PowerSync :$ps (project caretook-loop$slot)"
-  echo "  tests        pnpm test:integration → $(test_db_name "$name") on the shared test Postgres (:$shared_test_port)"
-  echo "  browser      pnpm prd browser --changed   (or one check: pnpm prd browser <check>)"
+  echo "  dev server   $prd serve      → $(fact url "$facts")"
+  echo "  $(fact summary "$facts") (project $(fact project "$facts"))"
+  echo "  tests        pnpm test:integration → $(fact summary "$test_facts")"
+  echo "  browser      $prd browser --changed   (or one check: $prd browser <check>)"
 else
   echo
   echo "Worktree $name ready (no stack) at $dir on $branch (from $base)"
-  echo "  checks       pnpm check (integration tests use $(test_db_name "$name") on the shared test Postgres, :$shared_test_port)"
-  echo "  a stack      pnpm prd stack up   (dev server, browser checks), pnpm prd stack down when done"
+  echo "  checks       pnpm check; integration tests use $(fact summary "$test_facts")"
+  echo "  a stack      $prd stack up   (dev server, browser checks), $prd stack down when done"
 fi
 if [[ $kind == prd ]]; then
   echo

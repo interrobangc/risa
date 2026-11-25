@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Collects the facts inventory.mjs classifies: every .loops worktree (git), its
-// stack and containers (docker), its dev server (lsof), the locks and their
+// stack and containers (the stack hooks), its dev server (lsof), the locks and their
 // holders, the dispatcher and its restart intent, which sessions it manages,
-// a running recover, migrates cut off, the down record and free disk. Read-only: it runs only git, `docker info|ps|inspect`, `lsof` and
+// a running recover, migrates cut off, the down record and free disk. Read-only: it runs only git, the stack hooks' read-only forms (engine status, ready, test-db facts), `lsof` and
 // `df`, and writes nothing (git runs with --no-optional-locks, so not even the
 // index is refreshed).
 //
@@ -23,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_MIN_FREE_GB, formatInventory, inventory } from "./inventory.mjs";
 import { listRecords } from "./land-journal.mjs";
 import { branchKinds } from "./config.mjs";
+import { fact, runHook } from "./hooks.mjs";
 
 /** The backlog lock is stale after this long (backlog.mjs takes it over then too). */
 export const BACKLOG_LOCK_STALE_MS = 30_000;
@@ -115,33 +116,18 @@ function sliceMerged(
   return lines(merges).some((l) => l.split(" ").slice(1).includes(tip.out));
 }
 
-/** Container ids of a Compose project: running only, or all. */
-function containers(
-  /** @type {string} */ project,
-  all = false,
-  /** @type {NodeJS.ProcessEnv} */ env = process.env,
-) {
-  const r = run(
-    "docker",
-    ["ps", all ? "-aq" : "-q", "--filter", `label=com.docker.compose.project=${project}`],
-    env,
-  );
-  return r.ok ? lines(r.out) : [];
-}
-
-/** How long ago the newest container of a stopped project finished, in seconds. */
-function stoppedSecs(/** @type {string[]} */ ids, /** @type {NodeJS.ProcessEnv} */ env, now = Date.now()) {
-  if (!ids.length) return null;
-  const r = run("docker", ["inspect", "-f", "{{.State.Running}} {{.State.FinishedAt}}", ...ids], env);
-  if (!r.ok) return null;
-  let newest = 0;
-  for (const l of lines(r.out)) {
-    const [running, at] = l.split(" ");
-    if (running === "true") return null;
-    const t = Date.parse(at ?? "");
-    if (t > newest) newest = t;
-  }
-  return newest > 0 ? Math.max(0, Math.round((now - newest) / 1000)) : null;
+/** A worktree's stack facts from the stack hook (stackReady): its project, container counts and stopped-since. */
+function readyFacts(/** @type {string} */ dir, /** @type {NodeJS.ProcessEnv} */ env) {
+  const out = runHook("stackReady", [dir], { env }).out;
+  const [up, all] = fact("containers", out).split("/").map(Number);
+  const secs = fact("stopped_secs", out);
+  return {
+    stack: fact("project", out) || null,
+    up: up || 0,
+    all: all || 0,
+    stoppedSecs: secs === "" ? null : Number(secs),
+    webPort: Number(fact("web_port", out)) || null,
+  };
 }
 
 const listening = (/** @type {number} */ port, /** @type {NodeJS.ProcessEnv} */ env) =>
@@ -177,7 +163,7 @@ function leaseInfo(/** @type {string} */ file) {
 export function collectFacts({ main, env = process.env, now = Date.now() }) {
   const trunk = env.TRUNK || "dev";
   const loops = join(main, ".loops");
-  const dockerUp = run("docker", ["info"], env).ok;
+  const dockerUp = fact("running", runHook("stackEngine", ["status"], { env }).out) === "yes";
 
   // Migrates recover's stack step started and never finished (.loops/.migrate/<name>,
   // holding when it started): a crash cut them off.
@@ -189,10 +175,11 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     const dir = join(loops, name);
     if (!existsSync(join(dir, ".git"))) continue;
     const branch = git(dir, ["branch", "--show-current"], env).out;
-    const stack = envGet(join(dir, ".env"), "CARETOOK_STACK") || null;
-    const port = Number(envGet(join(dir, "apps/web/.env"), "WEB_PORT")) || null;
-    const up = stack && dockerUp ? containers(stack, false, env) : [];
-    const all = stack && dockerUp ? containers(stack, true, env) : [];
+    const ready = readyFacts(dir, env);
+    const stack = ready.stack;
+    const port = ready.webPort;
+    const up = stack && dockerUp ? ready.up : 0;
+    const all = stack && dockerUp ? ready.all : 0;
     worktrees.push({
       name,
       branch,
@@ -200,9 +187,10 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       merged: sliceMerged(dir, branch, env),
       dirty: git(dir, ["status", "--porcelain"], env).out !== "",
       stack,
-      containersUp: up.length,
-      containersAll: all.length,
-      stoppedSecs: stack && dockerUp && up.length === 0 ? stoppedSecs(all, env, now) : null,
+      containersUp: up,
+      containersAll: all,
+      // With no containers left the hook gives the env file's age; the inventory wants none then.
+      stoppedSecs: stack && dockerUp && up === 0 && all > 0 ? ready.stoppedSecs : null,
       webPort: port,
       serverRunning: port ? listening(port, env) : false,
       ...(migrating.has(name) ? { migrating: migrating.get(name) } : {}),
@@ -308,23 +296,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     }
   }
 
-  const testDbProject = env.CARETOOK_SHARED_TEST_PROJECT || "caretook-shared-test";
-  const testDbRunning =
-    dockerUp &&
-    run(
-      "docker",
-      [
-        "ps",
-        "-q",
-        "--filter",
-        `label=com.docker.compose.project=${testDbProject}`,
-        "--filter",
-        "label=com.docker.compose.service=postgres",
-        "--filter",
-        "status=running",
-      ],
-      env,
-    ).out !== "";
+  const testDbRunning = dockerUp && fact("running", runHook("testDb", ["facts"], { env }).out) === "yes";
 
   // Which session records the dispatcher manages (session.sh --managed).
   const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");

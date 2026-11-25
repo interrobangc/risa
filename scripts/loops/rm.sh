@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Tear down a worktree made by new.sh: stop and delete its Docker stacks and
-# data, drop its databases on the shared test Postgres (its own and its
-# integration workers' copies), remove the worktree, its session record
+# Tear down a worktree made by new.sh: take down its stack and data (the stack
+# hook's stackDown), drop its test databases (the testDb hook's drop: its own
+# and its integration workers' copies), remove the worktree, its session record
 # (.loops/.sessions/) and release its slot. Then delete its branch if it's
 # fully merged into its parent (slice/<topic>/<n> → prd/<topic>; prd/* and
 # plan/* and hotfix/* → dev); an unmerged branch is kept. A merged branch's
@@ -76,9 +76,10 @@ if [[ -n $registry && $branch == "$prd_prefix"* ]] && hot_rows=$(cd "$main" && n
   clear_hot=${branch#"$prd_prefix"}
 fi
 
-stack_teardown "$dir"
-# Its databases on the shared test Postgres, worker copies too (nothing when that isn't running).
-"$(dirname "$0")/test-db.sh" drop "$name" || echo "couldn't drop $(test_db_name "$name") (pnpm prd test-db list)" >&2
+# Its stack, its data and its env files (the stack hook; nothing without a stack).
+stack_hook stackDown "$dir" >/dev/null || die "couldn't take down $name's stack; the worktree stays ($(tool_command prd) stack down $name)"
+# Its test databases, worker copies too (the testDb hook; nothing when that server isn't running).
+stack_hook testDb drop "$name" || echo "couldn't drop $name's test database ($(tool_command prd) test-db list)" >&2
 # Whether a slice was merged into its parent, for the run log's slice-end (below).
 slice_merged=false
 if [[ $branch == "$slice_prefix"* ]] && git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then

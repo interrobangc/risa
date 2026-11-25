@@ -1,17 +1,7 @@
 // The cleanup sorter (tidy.mjs): every safe, ask and never case, with a dirty,
 // live or young case beside each safe one. Pure: facts in, lists out.
 import { describe, expect, it } from "vitest";
-import {
-  HANG_LOG_DAYS,
-  TICKET_GRACE_SECS,
-  formatTidy,
-  reportText,
-  testDbName,
-  testDbOwner,
-  testDbWorkerPrefix,
-  tidy,
-} from "./tidy.mjs";
-import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
+import { HANG_LOG_DAYS, TICKET_GRACE_SECS, formatTidy, reportText, tidy } from "./tidy.mjs";
 
 const targets = (/** @type {{ target: string }[]} */ list) => list.map((f) => f.target);
 const one = (/** @type {import("./tidy.mjs").TidyFacts} */ facts) => tidy(facts);
@@ -233,97 +223,16 @@ describe("leftovers", () => {
     ]);
   });
 
-  it("a test database with no worktree is safe; one a worktree owns isn't listed", () => {
-    const { safe } = one({
-      testDbs: [
-        { db: "caretook_test_gone", worktree: null },
-        { db: "caretook_test_t_1", worktree: "t-1" },
-      ],
-    });
+  it("a test database no worktree owns (the hook's orphans) is safe", () => {
+    const { safe } = one({ testDbOrphans: ["sample_db_gone"] });
     expect(safe).toEqual([
       {
         kind: "test-db",
-        target: "caretook_test_gone",
+        target: "sample_db_gone",
         why: "no worktree owns it",
-        how: "test-db drop-db caretook_test_gone",
+        how: "test-db drop-db sample_db_gone",
       },
     ]);
-  });
-
-  describe("testDbOwner (B-440)", () => {
-    const names = ["foo-w2", "bar"];
-
-    it("a live topic ending -w<n> owns its database and its workers' old-style copies", () => {
-      expect(testDbName("foo-w2")).toBe("caretook_test_foo_w2");
-      expect(testDbOwner("caretook_test_foo_w2", names)).toBe("foo-w2");
-      expect(testDbOwner("caretook_test_foo_w2_w1", names)).toBe("foo-w2");
-      expect(testDbOwner("caretook_test_foo_w2_w16", names)).toBe("foo-w2");
-      expect(testDbOwner("caretook_test_bar_w3", names)).toBe("bar");
-    });
-
-    it("a worker copy of a gone topic, or an out-of-range copy, has no owner", () => {
-      expect(testDbOwner("caretook_test_gone_w1", names)).toBeNull();
-      expect(testDbOwner("caretook_test_gone", names)).toBeNull();
-      expect(testDbOwner("caretook_test_bar_w17", names)).toBeNull();
-      expect(testDbOwner("caretook_test_barn", names)).toBeNull();
-    });
-
-    it("a long name's copies are cut to 59 before the suffix, as test-db.sh does", () => {
-      const long = `t-${"x".repeat(70)}`;
-      const db = testDbName(long);
-      expect(db).toHaveLength(63);
-      expect(testDbOwner(db, [long])).toBe(long);
-      expect(testDbOwner(`${db.slice(0, 59)}_w4`, [long])).toBe(long);
-    });
-
-    it("matches the integration setup's worker names (B-405)", () => {
-      for (const db of ["caretook_test_foo", `caretook_test_${"y".repeat(49)}`, "caretook"])
-        for (const n of [1, 9, 16]) expect(`${testDbWorkerPrefix(db)}_w${n}`).toBe(workerDatabaseName(db, n));
-    });
-
-    it("a worker copy is its own worktree's, never another worktree's database (B-405)", () => {
-      const copy = workerDatabaseName(testDbName("foo"), 1);
-      expect(copy).not.toBe(testDbName("foo-w1"));
-      expect(testDbOwner(copy, ["foo", "foo-w1"])).toBe("foo");
-      expect(testDbOwner(testDbName("foo-w1"), ["foo", "foo-w1"])).toBe("foo-w1");
-      expect(testDbOwner(workerDatabaseName(testDbName("foo"), 17), ["foo"])).toBeNull();
-    });
-
-    it("two long topics sharing their first characters own distinct copies (B-405)", () => {
-      const a = `t-${"x".repeat(44)}-a`;
-      const b = `t-${"x".repeat(44)}-b`;
-      const copyA = workerDatabaseName(testDbName(a), 3);
-      const copyB = workerDatabaseName(testDbName(b), 3);
-      // Their stems are cut to the same 38 characters; the hash of the full name differs.
-      expect(copyA.slice(0, 50)).toBe(copyB.slice(0, 50));
-      expect(copyA).not.toBe(copyB);
-      expect(copyA.length).toBeLessThanOrEqual(63);
-      expect(testDbOwner(copyA, [a, b])).toBe(a);
-      expect(testDbOwner(copyB, [a, b])).toBe(b);
-    });
-
-    it("a worker copy of a gone topic is an orphan, new style or old (B-405)", () => {
-      const copy = workerDatabaseName(testDbName("gone"), 2);
-      expect(testDbOwner(copy, names)).toBeNull();
-      const { safe } = one({
-        testDbs: [copy, "caretook_test_gone_w2", workerDatabaseName(testDbName("bar"), 2)].map((db) => ({
-          db,
-          worktree: testDbOwner(db, names),
-        })),
-      });
-      expect(targets(safe)).toEqual([copy, "caretook_test_gone_w2"]);
-    });
-
-    it("tidy keeps what it owns and offers only the orphans", () => {
-      const dbs = [
-        "caretook_test_foo_w2",
-        "caretook_test_foo_w2_w1",
-        "caretook_test_gone_w1",
-        "caretook_test_gone",
-      ];
-      const { safe } = one({ testDbs: dbs.map((db) => ({ db, worktree: testDbOwner(db, names) })) });
-      expect(targets(safe)).toEqual(["caretook_test_gone_w1", "caretook_test_gone"]);
-    });
   });
 
   it("stale remote-tracking refs are safe (git fetch --prune)", () => {
@@ -333,19 +242,16 @@ describe("leftovers", () => {
     ]);
   });
 
-  it("dangling caretook-loop volumes nobody uses are safe; used, other or anonymous ones never", () => {
-    const { safe } = one({
-      volumes: [
-        { name: "caretook-loop9_data", project: "caretook-loop9" },
-        { name: "caretook-loop9-test_data", project: "caretook-loop9-test" },
-        { name: "caretook-loop7_data", project: "caretook-loop7" },
-        { name: "caretook_data", project: "caretook" },
-        { name: "other_db", project: "other" },
-        { name: "abc123", project: "" },
-      ],
-      usedProjects: ["caretook", "caretook-shared-test", "caretook-loop7", "caretook-loop7-test"],
-    });
-    expect(targets(safe)).toEqual(["caretook-loop9_data", "caretook-loop9-test_data"]);
+  it("the stack hook's leftovers are safe, with the hook's why", () => {
+    const { safe } = one({ volumes: [{ name: "stack9_data", why: "dangling; no worktree uses stack9" }] });
+    expect(safe).toEqual([
+      {
+        kind: "volume",
+        target: "stack9_data",
+        why: "dangling; no worktree uses stack9",
+        how: "stack leftovers remove volume",
+      },
+    ]);
   });
 
   it("browser-hang logs older than a week are safe; newer ones aren't listed", () => {

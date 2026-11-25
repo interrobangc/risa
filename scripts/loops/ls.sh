@@ -24,14 +24,16 @@ for dir in "$loops"/*/; do
   parent=$(parent_of "$branch")
   ahead=$(git -C "$dir" rev-list --count "$parent..HEAD" 2>/dev/null || echo '?')
   dirty=$([[ -n $(git -C "$dir" status --porcelain) ]] && echo dirty || echo clean)
-  proj=$(env_get "$dir/.env" CARETOOK_STACK)
+  # One stack hook call per worktree: its project, slot, containers, port and stopped-since.
+  facts=$(stack_hook stackReady "$dir" 2>/dev/null || true)
+  proj=$(fact project "$facts")
   if [[ -n $proj ]]; then
-    slot=${proj#caretook-loop}
-    up=$(docker compose -p "$proj" ps -q 2>/dev/null | wc -l | tr -d ' ')
-    port=$(web_port "$dir")
+    slot=$(fact slot "$facts"); slot=${slot:-?}
+    containers=$(fact containers "$facts"); up=${containers%%/*}; up=${up:-0}
+    port=$(fact web_port "$facts")
     stack="$up up"
     if ((up == 0)); then
-      secs=$(stack_stopped_secs "$dir")
+      secs=$(fact stopped_secs "$facts")
       [[ -n $secs ]] && ((secs >= limit)) &&
         leftovers+="stopped stack: $name ($proj stopped $(fmt_age "$secs") ago): pnpm prd gc"$'\n'
     fi
@@ -96,7 +98,7 @@ done
 [[ -z $leftovers ]] || printf '\n%s' "$leftovers"
 
 echo
-"$(dirname "$0")/test-db.sh" status 2>/dev/null || echo "shared test Postgres: unknown (is Docker running?)"
+stack_hook testDb status 2>/dev/null || echo "shared test Postgres: unknown (is Docker running?)"
 
 echo
 "$(dirname "$0")/lease.sh" holders

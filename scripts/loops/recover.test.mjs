@@ -625,7 +625,7 @@ describe("down and recover", () => {
     allDown();
     put("boot", "2"); // docker info fails twice more after open
     const out = okRecover([], { FAKE_DOCKER_DOWN: "1" });
-    expect(out).toMatch(/Docker isn't running: starting Docker Desktop/);
+    expect(out).toMatch(/Docker isn't running: starting it/);
     const lines = calls().split("\n");
     const opened = lines.indexOf("open -a Docker");
     expect(opened).toBeGreaterThanOrEqual(0);

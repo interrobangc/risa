@@ -268,7 +268,8 @@ case $cmd in
       --check-log "${CARETOOK_CHECK_LOG:-$loops/.check-times.log}" \
       --flake-log "${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}" "$@" ;;
   land) exec "$bin/land.sh" "$@" ;;
-  serve) exec "$bin/serve.sh" "$@" ;;
+  # The project's dev server and test database, through the config's hooks.
+  serve) stack_hook serve "$@"; exit $? ;;
   browser) exec "$bin/browser.sh" "$@" ;;
   rm) exec "$bin/rm.sh" "$@" ;;
   stack) exec "$bin/stack.sh" "$@" ;;
@@ -281,7 +282,7 @@ case $cmd in
     [[ ${1:-} == "" || ${1:-} == -* ]] || { kind=$1; shift; }
     exec "$bin/lease.sh" wait "$kind" "$@"
     ;;
-  test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
+  test-db | testdb) stack_hook testDb "$@"; exit $? ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   doc) exec node "$bin/doc.mjs" "$@" ;;
   queue) exec node "$bin/queue.mjs" "$@" ;;

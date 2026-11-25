@@ -30,11 +30,10 @@ case $cmd in
   up)
     require_disk "a stack for $name"
     args=()
-    proj=$(stack_project "$dir")
+    proj=$(fact project "$(stack_hook stackStatus "$dir" 2>/dev/null || true)")
     if [[ -n $proj ]]; then
       echo "$name already has a stack ($proj); starting it"
     else
-      require_main_env
       lease_free_slot "$name"
       args=(--slot "$slot")
     fi
