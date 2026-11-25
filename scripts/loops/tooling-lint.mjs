@@ -3,8 +3,9 @@
 // since the merge base, staged, unstaged and untracked), so a tooling-only
 // change that needs no `pnpm check` is still linted. Only the changed files,
 // so it stays fast. Exit 1 on an error.
-//   CARETOOK_TOOLING_LINT=off skips it (check-body.sh: the check just linted
-//   and formatted everything). TRUNK names the trunk (default dev).
+//   CARETOOK_TOOLING_LINT=off skips it (the check's own static steps lint and
+//   format everything, so its tooling step runs only the tests). TRUNK names the
+//   trunk (default dev).
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";

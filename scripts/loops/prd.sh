@@ -475,15 +475,13 @@ case $cmd in
     rm -f "$record"
     # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
-    if [[ $pmode == slice ]]; then
-      echo "Slice check against ${base:0:7}: typecheck, lint, format, every unit test, and the integration and component tests this diff adds or edits ($why)"
-    elif [[ $pmode == quick ]]; then
-      echo "Quick check against ${base:0:7}: typecheck, lint, format, every unit test, the integration tests related to the diff, and the component tests it adds or edits ($why)"
-    fi
-    [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests (pnpm test:tooling) join."
+    # The project's check (the config's check hook) prints its own steps;
+    # check-hook.sh runs it, then the tooling tests when the plan says so.
+    echo "The $pmode check of the diff since ${base:0:7}${why:+ ($why)}."
+    [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests join after the project's check."
     # shellcheck disable=SC2086
     (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
-      "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-body.sh" "$pmode" "$base" "$ptooling" $pown)
+      "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-hook.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"

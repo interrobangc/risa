@@ -2,7 +2,8 @@
 // the Vitest projects the config's testProjects.tooling names; the browser harness
 // test's (testProjects.browserHarness) too when the change touches what it tests
 // (check-plan.mjs), when the check's base can't be found, or when files are named
-// on the command line (they filter).
+// on the command line (they filter). The check's own tooling step (check-hook.sh)
+// is check-tooling.mjs: the same projects, under the check's rerun rules.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

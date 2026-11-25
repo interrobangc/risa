@@ -284,10 +284,10 @@ describe("config get", () => {
   });
 
   it("fails in bash, with a line, on a key with no value", () => {
-    const r = bash('config_get hooks.check; echo "rc=$?"; v=$(config_get paths.nope) || echo "none"');
+    const r = bash('config_get hooks.stackUp; echo "rc=$?"; v=$(config_get paths.nope) || echo "none"');
     expect(r.stdout).toBe("rc=1\nnone\n");
     expect(r.stderr).toBe(
-      `${CONFIG_NAME}: no value for hooks.check\n${CONFIG_NAME}: no value for paths.nope\n`,
+      `${CONFIG_NAME}: no value for hooks.stackUp\n${CONFIG_NAME}: no value for paths.nope\n`,
     );
   });
 
