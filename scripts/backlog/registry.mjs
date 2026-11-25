@@ -1,5 +1,6 @@
-// The PRD registry: the "## PRDs" table in plans/backlog.md's preamble. Pure:
-// no git, no file system (backlog.mjs gathers the facts and writes).
+// The PRD registry: the "## PRDs" table in the backlog's preamble (the heading
+// and the backlog's path are the project config's, read once as this loads).
+// Pure: no git, no other file system (backlog.mjs gathers the facts and writes).
 //
 //   | PRD     | Flags          | After           | Hot files               | Doc and notes |
 //   | ------- | -------------- | --------------- | ----------------------- | ------------- |
@@ -14,7 +15,10 @@
 // "old": it is recognised and refused, never read as rows (it was converted
 // once, by hand-run tooling since removed).
 
+import { loadConfig } from "../loops/config.mjs";
 import { BacklogError } from "./format.mjs";
+
+const { config } = loadConfig();
 
 /** hold: waits on the user; done: finished; standing: never finishes, runs while it has waiting items; alone: nothing else runs beside it; design: its planner runs on Fable. */
 export const FLAGS = ["hold", "done", "standing", "alone", "design"];
@@ -23,7 +27,8 @@ export const STATES = ["to-write", "planned", "running", "idle", "hold", "done"]
 /** Item statuses that mean "still to do" for a topic (doctor's "waiting items"). */
 export const WAITING = ["inbox", "triaged", "in-progress"];
 
-export const SECTION = "## PRDs";
+export const SECTION = config.backlog.prdsHeading;
+const BACKLOG = config.paths.backlog;
 const HEADER = ["PRD", "Flags", "After", "Hot files", "Doc and notes"];
 const NONE = "—";
 
@@ -133,7 +138,7 @@ export function parseRegistry(preamble) {
 export function withRows(preamble, rows, opts = {}) {
   const lines = preamble.replace(/\r\n/g, "\n").split("\n");
   const at = locate(lines);
-  if (!at || at.tableStart < 0) throw new BacklogError(`plans/backlog.md has no "${SECTION}" table`);
+  if (!at || at.tableStart < 0) throw new BacklogError(`${BACKLOG} has no "${SECTION}" table`);
   const before =
     opts.intro === undefined
       ? lines.slice(0, at.tableStart)
@@ -149,7 +154,7 @@ export function rowsOf(preamble) {
     throw new BacklogError(
       `the PRD table is in the old prose form (PRD | Doc | Depends on | Hot files); the tooling reads only the registry's columns (${HEADER.join(" | ")})`,
     );
-  throw new BacklogError(`plans/backlog.md has no "${SECTION}" table`);
+  throw new BacklogError(`${BACKLOG} has no "${SECTION}" table`);
 }
 
 // ---- the worked-out state --------------------------------------------------------

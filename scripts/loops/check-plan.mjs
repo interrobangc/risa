@@ -39,8 +39,10 @@ export const FULL = [
 /** CI's two committed lists: filing a flake changes them, and that keeps a verdict. */
 export const CI_LISTS = new Set(["scripts/ci/brake-list.txt", "scripts/ci/quarantine.txt"]);
 
-// The project config (risa.json) counts as tooling: the tooling tests check it.
-const TOOLING = /^(scripts\/loops\/|scripts\/backlog\/|\.githooks\/|scripts\/hooks\.test\.mjs$|risa\.json$)/;
+// The project config (risa.json) counts as tooling: the tooling tests check it. So
+// does the project's own folder of scripts (scripts/project/, the tooling that stays).
+const TOOLING =
+  /^(scripts\/loops\/|scripts\/backlog\/|scripts\/project\/|\.githooks\/|scripts\/hooks\.test\.mjs$|risa\.json$)/;
 
 // What the browser harness test (scripts/loops/browser.test.mjs, the
 // tooling:browser project) exercises: browser.sh, what it sources and starts, the

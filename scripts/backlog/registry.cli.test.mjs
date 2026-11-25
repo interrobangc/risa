@@ -118,7 +118,7 @@ describe("backlog prd", () => {
   });
 
   it("sets a row in one commit, and standing gives planned with items", () => {
-    expect(cli(prd, "prd", "set", "fixes-x", "flags=standing", "hot=scripts/loops/,apps/web/x.ts")).toBe(
+    expect(cli(prd, "prd", "set", "fixes-x", "flags=standing", "hot=scripts/loops/,src/x.ts")).toBe(
       "updated fixes-x",
     );
     expect(lastMessage()).toMatch(/^chore\(backlog\): prd set fixes-x: flags=standing, hot=scripts\/loops\//);
@@ -128,7 +128,7 @@ describe("backlog prd", () => {
     expect(fixes).toMatchObject({
       state: "planned",
       flags: ["standing"],
-      hot: ["scripts/loops/", "apps/web/x.ts"],
+      hot: ["scripts/loops/", "src/x.ts"],
     });
     expect(cliFails(prd, "prd", "set", "fixes-x", "flags=paused").out).toContain("unknown flag paused");
   });

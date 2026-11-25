@@ -30,6 +30,7 @@ const GIT_TIMEOUT_MS = 120_000;
  * @typedef {{
  *   main: string,                  the main checkout (its object store and refs)
  *   gitDir: string,                its git dir, for the temporary index
+ *   name: string,                  the project's name, which the temporary index carries
  *   remote: string, trunk: string, rel: string,
  *   backlogFiles: string[],        what a backlog commit may change
  *   withLock: <T>(fn: () => T) => T,
@@ -90,7 +91,7 @@ export function pushInboxEdit(o) {
     if (push(here)) log(`pushed ${own.length} backlog commit(s) of ${o.trunk} first`);
   });
 
-  const tmpIndex = join(o.gitDir, `caretook-inbox-index-${process.pid}`);
+  const tmpIndex = join(o.gitDir, `${o.name}-inbox-index-${process.pid}`);
   try {
     for (let tries = 1; tries <= TRIES; tries++) {
       if (tries > 1) fetch();

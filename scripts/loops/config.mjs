@@ -60,6 +60,10 @@ const TYPES = {
     want: "a Markdown heading (`## …`)",
   },
   item: { ok: (v) => typeof v === "string" && /^[A-Z]+-\d+$/.test(v), want: "a backlog id (B-12)" },
+  idPrefix: {
+    ok: (v) => typeof v === "string" && /^[A-Z][A-Z0-9]*$/.test(v),
+    want: "an id prefix (capitals: B, RISA)",
+  },
   version: {
     ok: (v) => typeof v === "string" && /^\d+\.\d+\.\d+([-+][\w.-]+)?$/.test(v),
     want: "a version (1.2.3)",
@@ -95,6 +99,9 @@ export const SHAPE = [
   ["paths.quarantine", "path?"],
   ["paths.tierData", "path?"],
   ["paths.checkPlanRules", "path?"],
+  // The project's tooling files and folders: a change only to these, Markdown and the tool's own
+  // folders needs no check.
+  ["paths.tooling", "path[]"],
   // A role's doc: additions read after the generic doc, or a replacement of it.
   ["roles.*.additions", "path?"],
   ["roles.*.replacement", "path?"],
@@ -107,6 +114,8 @@ export const SHAPE = [
   ["branches.prefixes.hotfix", "prefix"],
   // The backlog file's own facts.
   ["backlog.prdsHeading", "heading"],
+  // Backlog ids are <idPrefix>-<n> (B-12); backlogIds below builds the rest from it.
+  ["backlog.idPrefix", "idPrefix"],
   ["backlog.zoneOverflowItem", "item?"],
   // The project's commands that the tool runs.
   ["commands.install", "command"],
@@ -298,6 +307,32 @@ export function getValue(config, key) {
   for (const part of key.split(".")) at = isObject(at) ? at[part] : undefined;
   if (at === undefined) return { known: true };
   return { known: true, value: Array.isArray(at) ? at.map(String) : String(at) };
+}
+
+/**
+ * The backlog's ids, from the config's prefix: `<prefix>-<n>` (B-12, RISA-772).
+ * The one place that knows their form; the backlog tools build every id, heading,
+ * tag and lookup from it.
+ * @param {Record<string, any>} [config] a valid config (default: this repo's)
+ */
+export function backlogIds(config = loadConfig().config) {
+  const prefix = `${config.backlog.idPrefix}-`;
+  /** A regular expression's source for one id (the prefix is capitals and digits, nothing to escape). */
+  const pattern = `${prefix}\\d+`;
+  const whole = new RegExp(`^${pattern}$`, "i");
+  return {
+    /** "B-" */
+    prefix,
+    pattern,
+    /** Whether `s` is an id, in any case ("b-12" too). @param {string} s */
+    is: (s) => whole.test(s),
+    /** @param {number} n */
+    id: (n) => `${prefix}${n}`,
+    /** The id's number. @param {string} id */
+    num: (id) => Number(id.slice(prefix.length)),
+    /** "12", "b-12" → "B-12"; anything else upper-cased. @param {string} s */
+    normalize: (s) => (/^\d+$/.test(s) ? `${prefix}${s}` : s.toUpperCase()),
+  };
 }
 
 /** Whether this file is the script Node was started on (through any symlink). */

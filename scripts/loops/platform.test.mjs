@@ -75,7 +75,7 @@ describe("load_avg", () => {
 });
 
 describe("what pnpm test:tooling runs", () => {
-  const BASE = ["tooling:unit", "scripts:unit"];
+  const BASE = ["tooling:unit", "core:unit", "project:unit", "project:tooling"];
   const WITH = [...BASE, "tooling:browser"];
 
   it.each([

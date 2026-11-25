@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { loadConfig } from "../loops/config.mjs";
 
 const CLI = new URL("./backlog.mjs", import.meta.url).pathname;
 const run = promisify(execFile);
@@ -454,7 +455,7 @@ describe("backlog CLI: multi-id writes and amending", () => {
 
 describe("backlog ci-file", () => {
   const FILE = "scripts/loops/a.test.mjs";
-  const LIST = "scripts/ci/quarantine.txt";
+  const LIST = loadConfig().config.paths.quarantine;
   const flake = {
     key: "k1",
     title: "CI flake: a",
@@ -640,5 +641,86 @@ describe("backlog CLI: look-alikes and archive by id", () => {
     const rows = JSON.parse(cli(m4, "list", "--all", "--json"));
     expect(rows.find((r) => r.id === "B-2").archived).toBe(true);
     expect(rows.find((r) => r.id === "B-1").archived).toBeUndefined();
+  });
+});
+
+// Another project's config (RISA_CONFIG): its own paths, trunk, PRD heading and
+// id prefix. Every id, heading, tag and lookup follows it.
+describe("backlog CLI: another project's config", () => {
+  let r4, m4, p4, cfg;
+  const at = (rel) => readFileSync(join(m4, rel), "utf8");
+  const run4 = (cwd, ...a) =>
+    execFileSync("node", [CLI, ...a], { cwd, encoding: "utf8", env: { ...env, RISA_CONFIG: cfg } }).trim();
+  beforeAll(() => {
+    r4 = realpathSync(mkdtempSync(join(tmpdir(), "backlog-sample-")));
+    m4 = join(r4, "repo");
+    p4 = join(r4, "topic-x");
+    const sample = loadConfig().config;
+    cfg = join(r4, "sample.json");
+    writeFileSync(
+      cfg,
+      JSON.stringify({
+        ...sample,
+        name: "sample",
+        paths: { ...sample.paths, backlog: "todo/list.md", inbox: "todo/in.md", archive: "todo/old.md" },
+        branches: {
+          ...sample.branches,
+          trunk: "trunk",
+          prefixes: { ...sample.branches.prefixes, prd: "topic/" },
+        },
+        backlog: { ...sample.backlog, prdsHeading: "## Topics", idPrefix: "RISA" },
+      }),
+    );
+    execFileSync("git", ["init", "-q", "-b", "trunk", m4]);
+    git(m4, "config", "user.email", "test@example.com");
+    git(m4, "config", "user.name", "Test");
+    git(m4, "config", "commit.gpgsign", "false");
+    execFileSync("mkdir", ["-p", join(m4, "todo")]);
+    writeFileSync(
+      join(m4, "todo/list.md"),
+      "# Tracker\n\n## Topics\n\n| PRD | Flags | After | Hot files | Doc and notes |\n| --- | ----- | ----- | --------- | ------------- |\n| `x` | — | — | — | notes |\n\n## Items\n",
+    );
+    writeFileSync(join(m4, "todo/in.md"), "# Inbox\n\n## Bugs\n\n- Scrolling jumps\n");
+    git(m4, "add", ".");
+    git(m4, "commit", "-q", "-m", "init");
+    git(m4, "worktree", "add", "-q", "-b", "topic/x", p4);
+  });
+  afterAll(() => rmSync(r4, { recursive: true, force: true }));
+
+  it("gives new ids, headings, summary rows and inbox tags the project's prefix", () => {
+    expect(run4(p4, "add", "bug", "Sign-in", "twice")).toBe("added RISA-1");
+    expect(at("todo/list.md")).toContain("### RISA-1 · bug · Sign-in twice");
+    expect(at("todo/list.md")).toMatch(/^\| RISA-1 \| bug \|/m);
+    expect(git(m4, "log", "-1", "--format=%s%n%b")).toBe(
+      "chore(backlog): add RISA-1 (bug) Sign-in twice\nBy: topic/x\n\nBacklog-Tool: add\nBacklog-Ids: RISA-1",
+    );
+    expect(run4(p4, "ingest")).toMatch(/RISA-2 +bug +Scrolling jumps/);
+    expect(at("todo/in.md")).toContain("- Scrolling jumps (RISA-2)");
+    expect(git(m4, "show", "--name-only", "--format=", "HEAD").split("\n").sort()).toEqual([
+      "todo/in.md",
+      "todo/list.md",
+    ]);
+    expect(run4(p4, "ingest")).toBe("nothing new in the inbox");
+  });
+
+  it("finds items by the prefix, a bare number or lower case, and notes several", () => {
+    expect(run4(m4, "show", "risa-1")).toMatch(/^RISA-1 · bug · Sign-in twice/);
+    expect(run4(m4, "show", "2")).toMatch(/^RISA-2 · bug · Scrolling jumps/);
+    expect(run4(m4, "note", "RISA-1", "RISA-2", "seen", "twice")).toBe("noted RISA-1, RISA-2");
+    expect(run4(m4, "note", "RISA-1", "B-2", "a", "B-n", "is", "words")).toBe("noted RISA-1");
+    expect(at("todo/list.md")).toMatch(/: B-2 a B-n is words/);
+  });
+
+  it("reads the registry under the project's heading, and finds its prd worktrees by their prefix", () => {
+    expect(JSON.parse(run4(m4, "prd", "list", "--json"))).toMatchObject([{ topic: "x", state: "running" }]);
+  });
+
+  it("archives to the project's archive", () => {
+    run4(m4, "set", "RISA-1", "status=dropped");
+    expect(run4(m4, "archive")).toBe("archived 1 to todo/old.md: RISA-1");
+    expect(at("todo/old.md")).toContain("### RISA-1 · bug · Sign-in twice");
+    expect(at("todo/old.md")).toContain("`pnpm backlog show RISA-n`");
+    expect(run4(m4, "show", "RISA-1")).toContain("(archived in todo/old.md)");
+    expect(run4(m4, "add", "bug", "Another")).toBe("added RISA-3");
   });
 });

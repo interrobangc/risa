@@ -1,4 +1,4 @@
-// A three-way merge of plans/inbox.md, entry by entry. Pure and total: it never
+// A three-way merge of the inbox (plans/inbox.md here), entry by entry. Pure and total: it never
 // fails and never writes conflict markers. `pnpm prd dev-sync` (scripts/loops/
 // lib.sh) runs it as a command:
 //
@@ -20,9 +20,9 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { parseInbox } from "./format.mjs";
+import { IDS, parseInbox } from "./format.mjs";
 
-const TAG = /\s\(B-\d+\)\s*$/;
+const TAG = new RegExp(`\\s\\(${IDS.pattern}\\)\\s*$`);
 /** A reworded bullet shares at least this share of its words, and two of them. */
 const REWORD_OVERLAP = 0.5;
 

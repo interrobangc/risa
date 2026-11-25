@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -19,6 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import "../loops/config-fixture.mjs";
+import { loadConfig } from "../loops/config.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const INBOX = "plans/inbox.md";
@@ -243,7 +245,8 @@ describe("inbox add", () => {
     expect(onOrigin()).toContain("- Raced 5");
     expect(onOrigin()).not.toContain("Lost connection banner");
     expect(snapshot()).toEqual(before);
-    expect(existsSync(join(repo, ".git", `caretook-inbox-index-${process.pid}`))).toBe(false);
+    const name = loadConfig().config.name;
+    expect(readdirSync(join(repo, ".git")).filter((f) => f.startsWith(`${name}-inbox-index-`))).toEqual([]);
   });
 });
 
