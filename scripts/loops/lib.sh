@@ -73,6 +73,17 @@ run_project() {
   shift
   eval "$c" '"$@"'
 }
+# run_hook NAME [ARG…] → runs the project's hook NAME (hooks.NAME in the config:
+# the project's own script the tool calls, checkAreas, docBudget…) from the top
+# of the checkout the command runs in, ARGs after it, stdin passed on, and gives
+# its exit code; 127, with a line, when the config doesn't set it.
+run_hook() {
+  local c top
+  c=$(config_get "hooks.$1") || return 127
+  top=$(git rev-parse --show-toplevel) || return 1
+  shift
+  (cd "$top" && eval "$c" '"$@"')
+}
 
 # is_protected BRANCH → true when BRANCH is one of the config's protected branches.
 is_protected() {

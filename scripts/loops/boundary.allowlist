@@ -45,7 +45,7 @@ scripts/loops/autostart.test.mjs project-name 2
 scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
 scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
 scripts/loops/browser.sh app-path 9
-scripts/loops/browser.sh core-to-project 9
+scripts/loops/browser.sh core-to-project 5
 scripts/loops/browser.sh project-env 32
 scripts/loops/browser.sh project-name 1
 scripts/loops/browser.test.mjs app-path 15
@@ -110,7 +110,6 @@ scripts/loops/inventory.test.mjs project-name 9
 scripts/loops/keep-alive.mjs project-env 1
 scripts/loops/land-journal.mjs project-env 1
 scripts/loops/land.sh app-path 3
-scripts/loops/land.sh core-to-project 2
 scripts/loops/land.sh project-env 14
 scripts/loops/land.test.mjs app-path 64
 scripts/loops/land.test.mjs core-to-project 6
