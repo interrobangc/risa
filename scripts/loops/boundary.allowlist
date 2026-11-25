@@ -71,7 +71,7 @@ scripts/loops/check-gate.test.mjs project-name 1
 scripts/loops/check-plan.mjs app-path 5
 scripts/loops/check-plan.mjs core-to-project 9 # the check plan's rules: Caretook's data in slice 10
 scripts/loops/check-plan.test.mjs app-path 47
-scripts/loops/check-plan.test.mjs core-to-project 12
+scripts/loops/check-plan.test.mjs core-to-project 12 # tests the tooling pattern that names scripts/project: Caretook data in slice 10
 scripts/loops/check-run.sh project-env 30
 scripts/loops/check-run.test.mjs project-env 50
 scripts/loops/check-times.mjs project-env 2
