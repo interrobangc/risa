@@ -62,12 +62,19 @@ add() { kinds+=("$1") targets+=("$2") sizes+=("$3") whys+=("$4"); }
 keep() { kept+="  $1"$'\n'; }
 
 # Worktrees: merged ones go whole; the rest give up their caches.
+# A failed stack or test-db hook would leave a project out of used_projects and
+# its volumes looking unused, so either stops reclaim (stack-lib.sh's values
+# tolerate one; here it must be loud). No stack is project= empty, exit 0.
+[[ -n $shared_test_project ]] ||
+  die "reclaim: the test-db hook gave no project (testDb facts failed?), so the volumes in use can't be told; nothing changed"
 used_projects=" $shared_test_project caretook "
 for dir in "$loops"/*/; do
   [[ -d $dir ]] || continue
   dir=${dir%/}; name=$(basename "$dir")
   [[ $dir != "$main" ]] || continue
-  proj=$(stack_project "$dir")
+  status=$(stack_hook stackStatus "$dir") ||
+    die "reclaim: the stack status hook failed for $name, so its volumes can't be told from unused ones; nothing changed"
+  proj=$(fact project "$status")
   [[ -z $proj ]] || used_projects+="$proj $proj-test "
   branch=$(git -C "$dir" branch --show-current 2>/dev/null || true)
   dirty=$([[ -n $(git -C "$dir" status --porcelain 2>/dev/null) ]] && echo 1 || true)
