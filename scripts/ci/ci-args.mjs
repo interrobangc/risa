@@ -1,8 +1,13 @@
 // ci-args.mjs: part of `pnpm prd ci` (ci.mjs has the map). The commands'
 // arguments (run, blame and file, gate) and the branch and commit a request
 // means.
+import { backlogIds } from "../loops/config.mjs";
 import { DEFAULT_WAIT_MIN } from "./ci-io.mjs";
-import { TIERS, isTier } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
+
+const { TIERS, isTier } = tierData();
+const IDS = backlogIds();
+const ID = new RegExp(`^${IDS.pattern}$`);
 
 /** @typedef {import("./ci-io.mjs").Io} Io */
 
@@ -79,7 +84,7 @@ export function parseGateArgs(/** @type {string[]} */ args) {
   }
   if (!isTier(tier)) throw new Error(`ci gate: --tier needs one of ${TIERS.join(", ")}`);
   if (!base || base.startsWith("-")) throw new Error("ci gate: --base needs a commit");
-  if (fixes.some((f) => !/^B-\d+$/.test(f))) throw new Error("ci gate: --fixes takes B-n,B-m");
+  if (fixes.some((f) => !ID.test(f))) throw new Error(`ci gate: --fixes takes ${IDS.prefix}n,${IDS.prefix}m`);
   return { ref, tier, base, fixes, out, peek };
 }
 

@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME, exitFor } from "./ci-io.mjs";
-import { TIERS, ciRefName, parseCiRef } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
 import { isVerdict } from "./verdict.mjs";
+
+const { TIERS, ciRefName, parseCiRef } = tierData();
 
 /**
  * @typedef {import("./ci-io.mjs").Io} Io

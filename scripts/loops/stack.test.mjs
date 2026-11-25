@@ -110,7 +110,7 @@ const fixture = () => {
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
-  for (const f of ["outstanding.mjs", "tiers.mjs", "tiers.json"])
+  for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");
   mkdirSync(join(main, "plans"));

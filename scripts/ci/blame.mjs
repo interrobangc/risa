@@ -8,9 +8,14 @@
 // couldn't load) leaves the failure unknown: it is never assigned, and never green.
 import { dirname } from "node:path";
 
+import { backlogIds } from "../loops/config.mjs";
 import { findingKey, keyMark } from "./filing.mjs";
 import { isQuarantined } from "./lists.mjs";
-import { TIERS, fileTier, isBrowserCheckFile } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
+
+const { TIERS, fileTier, isBrowserCheckFile } = tierData();
+/** A dev-brake notice: its item and key. */
+const BRAKE_NOTICE = new RegExp(`^dev brake ${backlogIds().pattern} \\[ci-key ([^\\]]+)\\]`);
 
 /** The whole tier a failed check job needs on dev. */
 const CHECK_JOB_TIER = /** @type {const} */ ({ static: "static", build: "full" });
@@ -190,8 +195,7 @@ export function brakeNotice(id, f) {
 }
 
 /** The key a dev-brake notice carries, or null for any other notice. */
-export const noticeKey = (/** @type {string} */ text) =>
-  /^dev brake B-\d+ \[ci-key ([^\]]+)\]/.exec(text)?.[1] ?? null;
+export const noticeKey = (/** @type {string} */ text) => BRAKE_NOTICE.exec(text)?.[1] ?? null;
 
 /**
  * Sort a verdict's flakes: a file the branch touched is the branch's and nothing
