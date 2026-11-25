@@ -1,29 +1,20 @@
 // Every prompt kind and flag (prompt.sh and its parts in prompts/) against a
-// golden file, so a refactor of the prompt scripts can't change a byte of what
-// they print. The golden was made from the script before it was split
-// (B-597). After a deliberate prompt change, regenerate it:
-//   CARETOOK_UPDATE_GOLDEN=1 pnpm exec vitest run --project tooling:unit loops/prompt-golden.test.mjs
-// and review the diff of prompt.fixtures/golden.txt.
-import { execFileSync, spawnSync } from "node:child_process";
-import {
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+// golden file, so a change to the prompt scripts can't change a byte of what they
+// print unseen. Rendered twice: on the sample project (sample-project/, its golden
+// beside its config), whose names differ from this repo's wherever the prompts
+// read them from the config, and on this repo's own config, held to the golden its
+// config names (paths.promptGolden). After a deliberate prompt change, regenerate
+// both with `pnpm exec vitest run --project tooling:unit loops/prompt-golden.test.mjs -u`
+// and review their diffs.
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { afterAll, describe, expect, it } from "vitest";
+import { configPath, loadConfig } from "./config.mjs";
+import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 
-const HERE = new URL(".", import.meta.url).pathname;
-const GOLDEN = join(HERE, "prompt.fixtures/golden.txt");
-const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
+const SAMPLE_GOLDEN = new URL("./sample-project/prompt-golden.txt", import.meta.url).pathname;
 
 const PLAN = `# Plan: T
 
@@ -51,7 +42,7 @@ const FIXES_PLAN = `# Plan: fixes-x
 Stack: no · Reads: plans/fixes-rules.md · Tests: unit
 `;
 
-// Each case: the arguments, and whether the dispatcher runs (a lock naming a live pid).
+// Each case: the arguments (<id> is the config's backlog id prefix), and whether the dispatcher runs (a lock naming a live pid).
 const CASES = [
   ["orchestrator", "T"],
   ["orchestrator", "T", "--auto"],
@@ -61,9 +52,9 @@ const CASES = [
   ["orchestrator", "fixes-x", "--auto"],
   ["orchestrator", "T", "--bogus"],
   ["plan", "T"],
-  ["plan", "T", "B-1", "B-22"],
+  ["plan", "T", "<id>1", "<id>22"],
   ["plan", "T", "--auto"],
-  ["plan", "T", "--auto", "B-1"],
+  ["plan", "T", "--auto", "<id>1"],
   ["plan", "fixes-x"],
   ["plan", "T", "nope"],
   ["slice", "T", "1"],
@@ -91,62 +82,86 @@ const CASES = [
   ["bogus", "T"],
 ];
 
-let root, main;
-const env = Object.fromEntries(
-  Object.entries(process.env).filter(([k]) => !k.startsWith("CARETOOK_") && k !== "TRUNK"),
-);
+// Only what git and the shells need: no tool knob or RISA_CONFIG from the caller.
+const ENV = { PATH: process.env.PATH, HOME: process.env.HOME };
 
-const run = (args) => {
-  const opts = typeof args.at(-1) === "object" ? args.at(-1) : {};
-  const argv = args.filter((a) => typeof a === "string").map((a) => a.replace("<root>", root));
-  const lock = join(main, ".loops/.dispatch.lock");
-  if (opts.dispatcher) writeFileSync(lock, `${process.pid}\n`);
-  try {
-    const r = spawnSync("bash", [join(main, "scripts/loops/prompt.sh"), ...argv], {
-      cwd: main,
-      encoding: "utf8",
-      env,
-    });
-    const norm = (s) => s.replaceAll(root, "<root>").replaceAll(`pid ${process.pid})`, "pid <pid>)");
-    const label = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
-    return `===== ${label} (exit ${r.status})\n${norm(r.stdout)}----- stderr\n${norm(r.stderr)}`;
-  } finally {
-    rmSync(lock, { force: true });
-  }
-};
+const roots = [];
+afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
 
-beforeAll(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "prompt-golden-")));
-  main = join(root, "main");
-  mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  mkdirSync(join(main, "plans"), { recursive: true });
-  for (const f of ["prompt.sh", "lib.sh", "config.mjs", "slice-fields.mjs", "slice-brief.mjs"]) {
-    copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  }
-  if (existsSync(join(HERE, "prompts")))
-    cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });
-  writeFileSync(join(main, "plans/T-plan.md"), PLAN);
-  writeFileSync(join(main, "plans/T-prd.md"), "# PRD: T\n");
-  writeFileSync(join(main, "plans/W-plan.md"), PLAN);
-  writeFileSync(join(main, "plans/fixes-x-plan.md"), FIXES_PLAN);
-  writeFileSync(join(main, ".gitignore"), ".loops/\n");
-  git(root, "init", "-q", "-b", "dev", main);
-  git(main, "add", ".");
-  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--no-verify", "-m", "chore: init");
+/** A throwaway repo on the config, with the plans the cases read; every case's output. */
+function render(config) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "prompt-golden-")));
+  roots.push(root);
+  const main = join(root, "main");
+  const { paths, backlog } = loadConfig({ path: config }).config;
+  makeRepo(main, {
+    config,
+    files: {
+      [`${paths.plans}/T-plan.md`]: PLAN,
+      [`${paths.plans}/T-prd.md`]: "# PRD: T\n",
+      [`${paths.plans}/W-plan.md`]: PLAN,
+      [`${paths.plans}/fixes-x-plan.md`]: FIXES_PLAN,
+    },
+  });
   // A worktree that exists without a stack wins over the plan's "Stack: yes".
   mkdirSync(join(main, ".loops/W-2"), { recursive: true });
   writeFileSync(join(main, ".loops/W-2/.env.loop"), "SLOT=\nBASE_BRANCH=prd/W\n");
   writeFileSync(join(root, "brief.md"), "What's in hand: one PRD.\n");
   writeFileSync(join(root, "empty.md"), "  \n");
-});
 
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const run = (/** @type {any[]} */ cased) => {
+    const args = cased.map((a) => (typeof a === "string" ? a.replace("<id>", `${backlog.idPrefix}-`) : a));
+    const opts = typeof args.at(-1) === "object" ? args.at(-1) : {};
+    const argv = args.filter((a) => typeof a === "string").map((a) => a.replace("<root>", root));
+    const lock = join(main, ".loops/.dispatch.lock");
+    if (opts.dispatcher) writeFileSync(lock, `${process.pid}\n`);
+    try {
+      const r = spawnSync("bash", [join(main, "scripts/loops/prompt.sh"), ...argv], {
+        cwd: main,
+        encoding: "utf8",
+        env: ENV,
+      });
+      const norm = (s) => s.replaceAll(root, "<root>").replaceAll(`pid ${process.pid})`, "pid <pid>)");
+      const label = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+      return `===== ${label} (exit ${r.status})\n${norm(r.stdout)}----- stderr\n${norm(r.stderr)}`;
+    } finally {
+      rmSync(lock, { force: true });
+    }
+  };
+  return CASES.map(run).join("");
+}
 
-it("prints byte-identical prompts for every kind and flag", () => {
-  const out = CASES.map(run).join("");
-  if (process.env.CARETOOK_UPDATE_GOLDEN === "1") {
-    mkdirSync(join(HERE, "prompt.fixtures"), { recursive: true });
-    writeFileSync(GOLDEN, out);
-  }
-  expect(out).toBe(readFileSync(GOLDEN, "utf8"));
+describe("the prompts, byte for byte, for every kind and flag", () => {
+  it("on the sample project, in its own names", async () => {
+    const out = render(SAMPLE_CONFIG);
+    await expect(out).toMatchFileSnapshot(SAMPLE_GOLDEN);
+    // Its commands, paths, role docs, trunk and ids, and none of this repo's.
+    for (const name of [
+      "`risa start",
+      "`risa backlog list`",
+      "`make check`",
+      "`make test-tools`",
+      "`make log",
+      "GUIDE.md is already",
+      "work/plans/T-plan.md",
+      "work/inbox.md on origin/main",
+      "handbook/roles/lead.md",
+      "handbook/roles/planner.md",
+      "handbook/taste.md",
+      "handbook/ and GUIDE.md",
+      "`web/.env`",
+      "SAM-<n>",
+      "dangling sample Docker",
+      "(`main-<n>`)",
+    ])
+      expect(out, name).toContain(name);
+    for (const name of ["pnpm", "docs/agents/", "AGENTS.md is", "B-<n>", "plans/inbox.md", "on dev"])
+      expect(out, name).not.toContain(name);
+  });
+
+  const own = loadConfig({ path: configPath({}) });
+  const golden = own.config.paths.promptGolden;
+  it.skipIf(!golden)("on this repo's own config, against the golden it names", async () => {
+    await expect(render(own.path)).toMatchFileSnapshot(join(own.root, golden));
+  });
 });

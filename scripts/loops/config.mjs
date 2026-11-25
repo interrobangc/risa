@@ -92,6 +92,9 @@ export const SHAPE = [
   ["paths.docs", "path"],
   ["paths.agentsDoc", "path"],
   ["paths.preferences", "path?"],
+  // The project's own prompt golden: the core's prompt test renders every prompt on this
+  // config and holds it to that file.
+  ["paths.promptGolden", "path?"],
   ["paths.browserChecks", "path?"],
   ["paths.checksManifest", "path?"],
   ["paths.checkAreas", "path?"],
@@ -124,11 +127,18 @@ export const SHAPE = [
   ["commands.projectTests", "command?"],
   ["commands.typecheck", "command"],
   ["commands.typegen", "command"],
+  // Commands the prompts name: the tooling tests (else the check), the log (else git's) and
+  // the docs' size budget (else none).
+  ["commands.toolingTests", "command?"],
+  ["commands.log", "command?"],
+  ["commands.docBudget", "command?"],
   ["commands.datastoreStart", "command"],
   ["commands.datastoreReset", "command"],
   ["commands.datastoreSeed", "command"],
   // Turns on the repo's git hooks in a new worktree (none: the tool sets no hooks).
   ["commands.hooksInstall", "command?"],
+  // The env file a stack keeps the dev server's port in (WEB_PORT), which the slice prompt names.
+  ["stack.portEnv", "path?"],
   // The test projects the tool's own test runner names.
   ["testProjects.tooling", "text[]?"],
   ["testProjects.browserHarness", "text?"],

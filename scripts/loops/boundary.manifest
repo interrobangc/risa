@@ -186,7 +186,6 @@ scripts/loops/platform.test.mjs core
 scripts/loops/pr.sh core
 scripts/loops/prd.sh core
 scripts/loops/prompt-golden.test.mjs core
-scripts/loops/prompt.fixtures/golden.txt project
 scripts/loops/prompt.sh core
 scripts/loops/prompt.test.mjs core
 scripts/loops/prompts/backlog.sh core
@@ -219,6 +218,9 @@ scripts/loops/rotate.sh core
 scripts/loops/rotate.test.mjs core
 scripts/loops/run-log.mjs core
 scripts/loops/run-log.test.mjs core
+scripts/loops/sample-project/prompt-golden.txt core
+scripts/loops/sample-project/repo.mjs core
+scripts/loops/sample-project/risa.json core
 scripts/loops/serve.sh project
 scripts/loops/session-requests.mjs core
 scripts/loops/session-requests.test.mjs core
@@ -264,6 +266,7 @@ scripts/project/doc-budget.test.mjs project
 scripts/project/host-headers.mjs project
 scripts/project/log.sh project
 scripts/project/package-diff.mjs project
+scripts/project/prompt-golden.txt project
 scripts/project/risa.mjs project
 scripts/project/status-trim.mjs project
 scripts/project/sync-matrix.test.mjs project

@@ -17,6 +17,7 @@
 //     prints the blocks, or nothing (exit 1) when the plan has no such slice
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { backlogIds } from "./config.mjs";
 
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const SLICE = /^Slice\s+(\d+)\b/i;
@@ -83,8 +84,12 @@ export function sliceSection(planText, n) {
   return { heading: h.text, text, wave, architecture };
 }
 
-/** What a slice's section cites: italic names, user-story numbers and backlog ids. */
-export function citations(sectionText) {
+/**
+ * What a slice's section cites: italic names, user-story numbers and backlog ids.
+ * @param {string} sectionText
+ * @param {{ pattern: string }} [ids] the backlog's ids (default: this repo's config)
+ */
+export function citations(sectionText, ids = backlogIds()) {
   const names = new Set();
   for (const m of sectionText.matchAll(/(?<![\w`*])_([^_\n]+?)_(?![\w])/g)) names.add(norm(m[1]));
   const stories = new Set();
@@ -98,7 +103,7 @@ export function citations(sectionText) {
       } else stories.add(a);
     }
   }
-  const items = new Set(sectionText.match(/\bB-\d+\b/g) ?? []);
+  const items = new Set(sectionText.match(new RegExp(`\\b${ids.pattern}\\b`, "g")) ?? []);
   return { names, stories: [...stories].sort((a, b) => a - b), items };
 }
 

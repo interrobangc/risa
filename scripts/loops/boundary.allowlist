@@ -159,12 +159,7 @@ scripts/loops/pr.sh project-env 2
 scripts/loops/prd.sh core-to-project 4
 scripts/loops/prd.sh project-env 40
 scripts/loops/prd.sh project-name 3
-scripts/loops/prompt-golden.test.mjs core-to-project 2
-scripts/loops/prompt-golden.test.mjs project-env 3
-scripts/loops/prompts/backlog.sh project-env 4
-scripts/loops/prompts/orchestrator.sh project-name 1
-scripts/loops/prompts/slice.sh app-path 1
-scripts/loops/prompts/tidy.sh project-name 1
+scripts/loops/prompts/backlog.sh project-env 4 # tool knobs (CARETOOK_CAPTAIN, CARETOOK_MAX_PRDS): the RISA_ rename, orchestration-split-3 slice 4
 scripts/loops/ready.sh app-path 4
 scripts/loops/reclaim.sh app-path 8
 scripts/loops/reclaim.sh project-name 4
@@ -190,6 +185,7 @@ scripts/loops/rotate.test.mjs project-env 11
 scripts/loops/rotate.test.mjs project-name 1
 scripts/loops/run-log.mjs project-env 3
 scripts/loops/run-log.test.mjs project-env 4
+scripts/loops/sample-project/prompt-golden.txt project-env 2 # backlog.sh's CARETOOK_MAX_PRDS, rendered: goes with the RISA_ rename, orchestration-split-3 slice 4
 scripts/loops/serve.sh project-to-core 1
 scripts/loops/session-requests.mjs project-env 5
 scripts/loops/session-requests.test.mjs project-env 2
@@ -201,7 +197,6 @@ scripts/loops/sessions.test.mjs project-name 1
 scripts/loops/skeptic.mjs project-env 4
 scripts/loops/skeptics.mjs project-env 4
 scripts/loops/skeptics.test.mjs project-env 5
-scripts/loops/slice-brief.test.mjs project-env 1
 scripts/loops/slice-fields.test.mjs app-path 3
 scripts/loops/stack-lib.sh app-path 20
 scripts/loops/stack-lib.sh core-to-project 1

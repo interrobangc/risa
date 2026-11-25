@@ -2,6 +2,7 @@
 // its exports and its command line. The prompt itself: prompt.test.mjs.
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { backlogIds } from "./config.mjs";
 import { citations, citedParts, sliceBrief, sliceSection, squeezeTables } from "./slice-brief.mjs";
 
 const CLI = new URL("./slice-brief.mjs", import.meta.url).pathname;
@@ -72,7 +73,12 @@ describe("citations", () => {
   });
 
   it("ignores snake_case words and code", () => {
-    expect([...citations("the `care_recipient` table and CARETOOK_X_Y").names]).toEqual([]);
+    expect([...citations("the `care_recipient` table and SOME_X_Y").names]).toEqual([]);
+  });
+
+  it("reads backlog ids in the config's form", () => {
+    const ids = backlogIds({ backlog: { idPrefix: "SAM" } });
+    expect([...citations("(SAM-3, B-4, XSAM-5)", ids).items]).toEqual(["SAM-3"]);
   });
 });
 

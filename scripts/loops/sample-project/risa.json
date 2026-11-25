@@ -1,0 +1,53 @@
+{
+  "name": "sample",
+  "tool": {
+    "prd": "risa",
+    "backlog": "risa backlog"
+  },
+  "paths": {
+    "backlog": "work/backlog.md",
+    "inbox": "work/inbox.md",
+    "archive": "work/archive.md",
+    "plans": "work/plans",
+    "docs": "handbook",
+    "agentsDoc": "GUIDE.md",
+    "preferences": "handbook/taste.md",
+    "tooling": ["tools"]
+  },
+  "roles": {
+    "backlog": { "replacement": "handbook/roles/backlog.md" },
+    "hotfix": { "replacement": "handbook/roles/hotfix.md" },
+    "loop": { "replacement": "handbook/roles/slice.md" },
+    "orchestrator": { "replacement": "handbook/roles/lead.md" },
+    "planner": { "additions": "handbook/roles/planner.md" },
+    "recovery": { "replacement": "handbook/roles/recovery.md" }
+  },
+  "branches": {
+    "trunk": "main",
+    "protected": ["release"],
+    "prefixes": {
+      "prd": "prd/",
+      "slice": "slice/",
+      "plan": "plan/",
+      "hotfix": "hotfix/"
+    }
+  },
+  "backlog": {
+    "prdsHeading": "## Topics",
+    "idPrefix": "SAM"
+  },
+  "commands": {
+    "install": "make install",
+    "check": "make check",
+    "typecheck": "make typecheck",
+    "typegen": "make typegen",
+    "toolingTests": "make test-tools",
+    "log": "make log",
+    "datastoreStart": "make db-start",
+    "datastoreReset": "make db-reset",
+    "datastoreSeed": "make db-seed"
+  },
+  "stack": {
+    "portEnv": "web/.env"
+  }
+}
