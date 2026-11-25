@@ -25,8 +25,8 @@
 # 3. Execs session.sh with the same name and the resume prompt (prompt.sh
 #    orchestrator <topic> --resume), plus --auto when the record or the plan's
 #    _Status_ says run-through, and --managed when the record is the
-#    dispatcher's: always a fresh session, never --continue. session.sh clears
-#    rotating as it starts.
+#    dispatcher's, and the record's --model when it has one: always a fresh
+#    session, never --continue. session.sh clears rotating as it starts.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -142,5 +142,9 @@ if [[ $kind == backlog ]]; then
   args+=(--remote-control "${remote:-$name}" "$prompt")
   exec "$bin/session.sh" "$name" --kind backlog ${managed:+--managed} -- "${args[@]}"
 fi
-args=(--remote-control "$name" "$("$bin/prompt.sh" orchestrator "$topic" --resume ${auto:+--auto})")
+# The record's model carries over (a by-hand Fable orchestrator stays on Fable).
+model=$(field "$before" model)
+args=()
+[[ -z $model ]] || args+=(--model "$model")
+args+=(--remote-control "$name" "$("$bin/prompt.sh" orchestrator "$topic" --resume ${auto:+--auto})")
 exec "$bin/session.sh" "$name" ${auto:+--auto} ${managed:+--managed} -- "${args[@]}"

@@ -151,6 +151,7 @@ const liveSession = async (extra = {}) => {
       ...(extra.auto ? ["--auto"] : []),
       ...(extra.managed ? ["--managed"] : []),
       "--",
+      ...(extra.model ? ["--model", extra.model] : []),
       "x",
     ],
     { STUB_MODE: extra.mode ?? "wait", STUB_NAME: "prd-w" },
@@ -418,6 +419,23 @@ describe("rotate-into.sh", () => {
     expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
     await second.s.done;
     expect(JSON.parse(stateFile("record-at-start")).managed).toBe(false);
+  });
+
+  it("carries the record's model over, and passes none when none was recorded", async () => {
+    const first = await liveSession({ model: "fable" });
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await first.s.done;
+    expect(JSON.parse(stateFile("record-at-start"))).toMatchObject({ model: "fable" });
+    const args = stateFile("args").split("\n");
+    expect(args.slice(2, 6)).toEqual(["--model", "fable", "--remote-control", "prd-w"]);
+    expect(record("prd-w")).toMatchObject({ model: "fable" });
+
+    rmSync(state, { recursive: true, force: true });
+    rmSync(sessions, { recursive: true, force: true });
+    const second = await liveSession();
+    expect(runLine(printedLine(run("prd.sh", ["rotate", "w"]).stdout)).status).toBe(0);
+    await second.s.done;
+    expect(stateFile("args")).not.toContain("--model");
   });
 
   it("kills a session that ignores TERM after the wait, making a record when there was none", async () => {
