@@ -259,6 +259,7 @@ beforeAll(() => {
     "asks.mjs",
     "ask.mjs",
     "skeptics.mjs",
+    "doc.mjs",
     "sessions.mjs",
     "captain.mjs",
     "load-gate.mjs",

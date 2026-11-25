@@ -135,7 +135,7 @@ describe("the prompts, byte for byte, for every kind and flag", () => {
   it("on the sample project, in its own names", async () => {
     const out = render(SAMPLE_CONFIG);
     await expect(out).toMatchFileSnapshot(SAMPLE_GOLDEN);
-    // Its commands, paths, role docs, trunk and ids, and none of this repo's.
+    // Its commands, paths, role docs (by the doc command), trunk and ids, and none of this repo's.
     for (const name of [
       "`risa start",
       "`risa backlog list`",
@@ -145,8 +145,10 @@ describe("the prompts, byte for byte, for every kind and flag", () => {
       "GUIDE.md is already",
       "work/plans/T-plan.md",
       "work/inbox.md on origin/main",
-      "handbook/roles/lead.md",
-      "handbook/roles/planner.md",
+      "`risa doc orchestrator`",
+      "`risa doc planner`",
+      '`risa doc orchestrator "Models"`',
+      "into its file, handbook/roles/hotfix.md.",
       "handbook/taste.md",
       "handbook/ and GUIDE.md",
       "`web/.env`",

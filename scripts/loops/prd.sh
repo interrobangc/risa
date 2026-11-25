@@ -108,6 +108,9 @@ pnpm prd <command>
                               session, backlog-<name> (Remote Control "backlog - <name>"); the outcome is a notice
     session requests [--json] the pending requests, and those settled in the last day
 
+    doc <role> [section]      a role's doc as its sessions read it (the generic doc, then the project's
+                              additions; or its replacement), or one section of it; no role: the roles
+
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
     ask --topic <t> --question <text> --skeptic <id> [--option <a>]… [--recommend <a|n> --defaults|--waits]
                               file a question past a skeptic (the dispatcher's own need none); prints its id and the PushNotification line to send; a macOS
@@ -158,7 +161,7 @@ pnpm prd <command>
                               the diff since the last full pass, and a diff touching a migration, seeds, the
                               sync config, a lockfile, a package.json (beyond its scripts) or the Vitest config makes it a full
                               check; the tooling tests join when the diff touches the tooling
-                              (docs and tooling-only changes need neither: docs/agents/orchestrator.md, _The check gate_)
+                              (docs and tooling-only changes need neither: prd doc orchestrator "The check gate")
     status-trim [topic] [--dry-run] [--next]   keep the plan's _Status_ short (after each landing): move the
                               hand-offs but the latest, and a fixes plan's landed waves (their paragraphs and
                               table rows), to plans/<topic>-history.md, newest first; --next: the next slice number
@@ -280,6 +283,7 @@ case $cmd in
     ;;
   test-db | testdb) exec "$bin/test-db.sh" "$@" ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
+  doc) exec node "$bin/doc.mjs" "$@" ;;
   queue) exec node "$bin/queue.mjs" "$@" ;;
   status-trim)
     t=""

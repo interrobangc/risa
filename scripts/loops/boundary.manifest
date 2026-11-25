@@ -161,6 +161,8 @@ scripts/loops/dispatch-pick.test.mjs core
 scripts/loops/dispatch-stuck.mjs core
 scripts/loops/dispatch.mjs core
 scripts/loops/dispatch.test.mjs core
+scripts/loops/doc.mjs core
+scripts/loops/doc.test.mjs core
 scripts/loops/down.sh core
 scripts/loops/drain.mjs core
 scripts/loops/drain.test.mjs core

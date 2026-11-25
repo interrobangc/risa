@@ -49,7 +49,7 @@ cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.
 
 - Your worktree is $loops/$topic-$n, on branch $slice_prefix$topic/$n (from $prd_prefix$topic). \`cd\` there in every shell and work only there; Read, Edit and Write use absolute paths inside it.
-- $agents_doc (the core) is already in your context (CLAUDE.md loads it); Read it only if it isn't. $read_line $agents_doc's _Area index_ finds any other rule you need.
+- $agents_doc (the core) is already in your context (CLAUDE.md loads it); Read it only if it isn't. $read_line A Reads entry that names a role's doc (loop, planner, machinery, …), even by its file, means that role's doc command: \`$prd_cmd doc <role>\`. $agents_doc's _Area index_ finds any other rule you need.
 - This slice's fields, from the plan:
 $fields
 EOF
@@ -60,7 +60,7 @@ EOF
 fi
 cat <<EOF
 - Build only slice $n. Leave other slices' regions and files alone.
-- Read your handbook, $(role_doc loop), and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
+- Read your handbook ($(role_doc loop) prints it) and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
 $stack_line Delete any scratch scripts before you commit.
 - Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. To wait on a check running in the background, run \`$prd_cmd wait check\` (it returns once this worktree's check is gone, and exits 75 at its \`--timeout\`); never \`pgrep -f\` (it matches its own shell and never exits).
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.

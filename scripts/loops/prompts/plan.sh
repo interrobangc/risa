@@ -29,7 +29,7 @@ cat <<EOF
 You are the planning agent for "$topic".
 
 - Your worktree is $loops/plan-$topic, on branch $plan_prefix$topic (from $trunk), with no Docker stack. Work only there; never in the main checkout ($main).
-- $agents_doc is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read your handbook, $(role_doc planner), and $(role_doc backlog), then the area docs the topic touches (_Area index_). Then \`$backlog_cmd list\` and \`$backlog_cmd show ${backlog_id_prefix}<n>\` for the items behind "$topic"${items:+ ($items)}.
+- $agents_doc is already in your context (CLAUDE.md loads it), so don't Read it again; follow it. Read your handbook and the backlog's ($(role_doc planner) and $(role_doc backlog) print them), then the area docs the topic touches (_Area index_). Then \`$backlog_cmd list\` and \`$backlog_cmd show ${backlog_id_prefix}<n>\` for the items behind "$topic"${items:+ ($items)}.
 $ask_line
 - Write the PRD as $plans_dir/$topic-prd.md, opening with the handbook's _Decisions_ table and following _The PRD's shape_. Then cut it into tracer-bullet slices, saved as $plans_dir/$topic-plan.md, in the handbook's _The plan's shape_ (about six slices at most: cut a bigger one into follow-on topics; **a slice that would touch more than about 8 files, or more than one running topic's hot file** (\`$backlog_cmd prd list\`), **is split into slices that each land on their own**), with each slice's fields line (_Slice fields_) and acceptance criteria that name the tests (_The test budget_).
 - **Don't load the \`write-a-prd\`, \`prd-to-plan\` or \`grill-me\` skills:** they make you interview the user and wait for approval. The handbook has their templates.

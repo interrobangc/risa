@@ -31,6 +31,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { CONFIG_NAME, loadConfig } from "./config.mjs";
+import { DocError, roleDoc } from "./doc.mjs";
 
 const ID = /^s(\d+)$/;
 const ID_FILE = /^s(\d+)\.json$/;
@@ -326,15 +328,14 @@ export function formatRecords(records) {
     .join("\n");
 }
 
-const section = (markdown, heading, file) => {
-  const lines = markdown.split("\n");
-  const start = lines.indexOf(`## ${heading}`);
-  if (start < 0) throw new SkepticError(`${file} has no "${heading}" section`);
-  const end = lines.findIndex((l, i) => i > start && l.startsWith("## "));
-  return lines
-    .slice(start + 1, end < 0 ? undefined : end)
-    .join("\n")
-    .trim();
+// A role doc's section, as `prd doc <role> <section>` prints it, without its heading line.
+const section = (role, heading, config, root) => {
+  try {
+    return roleDoc(role, { config, root, section: heading }).split("\n").slice(1).join("\n").trim();
+  } catch (e) {
+    if (e instanceof DocError) throw new SkepticError(`the brief needs it: ${e.message}`);
+    throw e;
+  }
 };
 
 const readDoc = (root, file) => {
@@ -350,18 +351,20 @@ const readDoc = (root, file) => {
  * The rules a skeptic judges by, as the docs have them today. A doc that lost
  * its rule is refused: a brief without the never list must not go out.
  * @param {string} root the checkout whose docs to read
+ * @param {Record<string, any>} [config] its project config (by default, its risa.json)
  */
-export function readRules(root) {
-  const preferences = readDoc(root, "docs/agents/preferences.md");
-  const planner = readDoc(root, "docs/agents/planner.md");
-  const fixes = readDoc(root, "plans/fixes-rules.md");
+export function readRules(root, config = loadConfig({ path: join(root, CONFIG_NAME) }).config) {
+  const prefsPath = config.paths?.preferences;
+  if (!prefsPath) throw new SkepticError("the brief needs the preferences doc, and the config names none");
+  const preferences = readDoc(root, prefsPath);
+  const fixes = readDoc(root, join(config.paths.plans, "fixes-rules.md"));
   const silence = preferences.split("\n").find((l) => l.includes("**Default on silence:**")) ?? "";
   const never = /Never \(`--waits`\):\s*(.+?)\s*\([^()]*\d{4}-\d{2}-\d{2}\)\s*$/.exec(silence)?.[1];
-  if (!never) throw new SkepticError("docs/agents/preferences.md has no never list to brief from");
+  if (!never) throw new SkepticError(`${prefsPath} has no never list to brief from`);
   return {
     neverList: never,
-    whatToAsk: section(planner, "What to ask", "docs/agents/planner.md").split("**Unattended**")[0].trim(),
-    skepticPass: section(planner, "The skeptic pass", "docs/agents/planner.md"),
+    whatToAsk: section("planner", "What to ask", config, root).split("**Unattended**")[0].trim(),
+    skepticPass: section("planner", "The skeptic pass", config, root),
     fixesRules: fixes.split("\n").slice(1).join("\n").trim(),
   };
 }
