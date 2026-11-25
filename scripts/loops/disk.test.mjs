@@ -79,7 +79,6 @@ beforeAll(() => {
     TRUNK: "dev",
     CARETOOK_FREE_GB: "",
     CARETOOK_MIN_FREE_GB: "",
-    CARETOOK_SHARED_TEST_PORT: "",
     CARETOOK_LEASE_ROOT: join(root, "leases"),
     CARETOOK_BROWSER_LEASES: join(root, "leases/browser"),
     CARETOOK_BROWSER_FLAKES: join(root, "flakes.log"),

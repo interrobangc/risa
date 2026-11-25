@@ -153,7 +153,6 @@ function build() {
     CARETOOK_FREE_GB: "50",
     CARETOOK_MIN_FREE_GB: "",
     CARETOOK_LEASE_ROOT: "",
-    CARETOOK_SHARED_TEST_PROJECT: "",
     CARETOOK_CLOCK_FILE: "",
     CARETOOK_ITERM_APP: join(root, "iTerm.app"),
     CARETOOK_SESSIONS_DIR: "",
@@ -163,7 +162,6 @@ function build() {
   mkdirSync(join(root, "iTerm.app"));
   for (const k of [
     "CARETOOK_RECOVER_PROBE_SECS",
-    "CARETOOK_DOCKER_WAIT_SECS",
     "CARETOOK_RECOVER_STEP_SECS",
     "CARETOOK_RECOVER_DISPATCH_SECS",
     "SAMPLE_STACK_FAIL",

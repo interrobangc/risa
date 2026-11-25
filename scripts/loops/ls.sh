@@ -98,7 +98,7 @@ done
 [[ -z $leftovers ]] || printf '\n%s' "$leftovers"
 
 echo
-stack_hook testDb status 2>/dev/null || echo "shared test Postgres: unknown (is Docker running?)"
+stack_hook testDb status 2>/dev/null || echo "test database: unknown (the testDb hook failed)"
 
 echo
 "$(dirname "$0")/lease.sh" holders

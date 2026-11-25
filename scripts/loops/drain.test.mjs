@@ -1,7 +1,7 @@
 // The drain (drain.mjs): the decision at the lines, the limited tick's actions and the
 // landing test, pure; the pick holding starts, plans and reopens; and new.sh refusing a
-// slice worktree while draining, against a throwaway repo with the stub stack hook, fake pnpm, lsof and
-// nvm. Every reading here is made up; nothing reads the real .loops.
+// slice worktree while draining, against a throwaway repo with the stub stack hook and
+// fake pnpm, lsof and nvm. Every reading here is made up; nothing reads the real .loops.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -338,7 +338,6 @@ describe("new.sh slice while draining", () => {
       SAMPLE_STACK_STATE: join(root, "stack-state"),
       NVM_DIR: nvm,
       TRUNK: "dev",
-      CARETOOK_SHARED_TEST_PORT: "",
       CARETOOK_FREE_GB: "100",
       CARETOOK_MIN_FREE_GB: "",
       CARETOOK_MAX_PRDS: "",

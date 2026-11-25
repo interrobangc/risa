@@ -185,7 +185,6 @@ describe("the scripts that wait or warn", () => {
       SAMPLE_STACK_STATE: join(root, "stack-state"),
       NVM_DIR: nvm,
       TRUNK: "dev",
-      CARETOOK_SHARED_TEST_PORT: "",
       CARETOOK_FREE_GB: "100",
       CARETOOK_MIN_FREE_GB: "",
       CARETOOK_MAX_PRDS: "",
