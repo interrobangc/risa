@@ -100,7 +100,6 @@ scripts/loops/check-areas.d/sync project
 scripts/loops/check-areas.d/timeline project
 scripts/loops/check-areas.d/todos project
 scripts/loops/check-areas.mjs project
-scripts/loops/check-areas.test.mjs project
 scripts/loops/check-body.sh project
 scripts/loops/check-body.test.mjs project
 scripts/loops/check-budget.mjs core
@@ -145,7 +144,6 @@ scripts/loops/dispatch.mjs core
 scripts/loops/dispatch.test.mjs core
 scripts/loops/doc-budget.config.mjs project
 scripts/loops/doc-budget.mjs project
-scripts/loops/doc-budget.test.mjs project
 scripts/loops/down.sh core
 scripts/loops/drain.mjs core
 scripts/loops/drain.test.mjs core
@@ -154,7 +152,6 @@ scripts/loops/fixes-plans.test.mjs project
 scripts/loops/gc.sh core
 scripts/loops/heartbeat.mjs core
 scripts/loops/heartbeat.test.mjs core
-scripts/loops/host-headers.mjs project
 scripts/loops/inbox-settings.json core
 scripts/loops/inventory-facts.mjs core
 scripts/loops/inventory.mjs core
@@ -173,7 +170,6 @@ scripts/loops/lib.sh core
 scripts/loops/lint-heap.test.mjs project
 scripts/loops/load-gate.mjs core
 scripts/loops/load-gate.test.mjs core
-scripts/loops/log.sh project
 scripts/loops/ls.sh core
 scripts/loops/metrics.mjs core
 scripts/loops/metrics.test.mjs core
@@ -243,7 +239,6 @@ scripts/loops/status-extra.mjs core
 scripts/loops/status-extra.test.mjs core
 scripts/loops/status-trim.mjs core
 scripts/loops/status-trim.test.mjs core
-scripts/loops/sync-matrix.test.mjs project
 scripts/loops/test-db.sh project
 scripts/loops/tidy-cli.mjs core
 scripts/loops/tidy-cli.test.mjs core
@@ -261,5 +256,16 @@ scripts/loops/watchdog.test.mjs core
 scripts/loops/workers.mjs core
 scripts/loops/workers.test.mjs core
 scripts/loops/workspace-config.test.mjs project
+scripts/project/check-areas.mjs project
+scripts/project/check-areas.test.mjs project
+scripts/project/doc-budget.config.mjs project
+scripts/project/doc-budget.mjs project
+scripts/project/doc-budget.test.mjs project
+scripts/project/host-headers.mjs project
+scripts/project/log.sh project
+scripts/project/package-diff.mjs project
+scripts/project/risa.mjs project
+scripts/project/status-trim.mjs project
+scripts/project/sync-matrix.test.mjs project
 scripts/project/test-projects.mjs project
 scripts/project/test-projects.test.mjs project

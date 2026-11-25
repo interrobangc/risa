@@ -62,8 +62,6 @@ scripts/loops/bye.test.mjs project-env 10
 scripts/loops/captain.mjs project-env 2
 scripts/loops/captain.test.mjs project-env 2
 scripts/loops/check-areas.d/_global project-to-core 3
-scripts/loops/check-areas.mjs project-to-core 1
-scripts/loops/check-body.test.mjs project-to-core 1
 scripts/loops/check-budget.mjs project-env 7
 scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 16
@@ -104,7 +102,6 @@ scripts/loops/dispatch.mjs project-env 61
 scripts/loops/dispatch.mjs project-name 1
 scripts/loops/dispatch.test.mjs project-env 57
 scripts/loops/dispatch.test.mjs project-name 1
-scripts/loops/doc-budget.mjs project-to-core 2
 scripts/loops/down.sh core-to-project 2
 scripts/loops/down.sh project-name 1
 scripts/loops/drain.mjs project-env 10
