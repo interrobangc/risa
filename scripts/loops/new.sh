@@ -41,7 +41,7 @@ case $kind in
       echo "already $(prd_count) PRD worktrees (cap $max_prds; from $max_prds_from: pnpm prd dispatch --cap <n> changes it)" >&2; exit 1
     fi ;;
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
-    # The plan's Stack field (docs/agents/planner.md, _Slice fields_) decides: a stack only
+    # The plan's Stack field (`prd doc planner "Slice fields"`) decides: a stack only
     # for Stack: yes, or --stack. Missing, or no plan: no stack.
     plan_text=$(git -C "$main" show "${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md" 2>/dev/null || true)
     planned=no

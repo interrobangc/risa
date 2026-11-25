@@ -7,7 +7,7 @@
 //
 // Fields are separated by "·", ";" or "|"; names are case-insensitive. A missing
 // field gets its default (no stack, nothing extra to read, no tests named) and a
-// warning, as does a malformed one. (docs/agents/planner.md, _Slice fields_.)
+// warning, as does a malformed one. (`prd doc planner "Slice fields"`.)
 //
 //   node slice-fields.mjs <n> [plan-file]   (the plan on stdin when no file)
 //     prints "Stack: …", "Reads: …" and "Tests: …", warnings on stderr

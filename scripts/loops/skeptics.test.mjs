@@ -348,9 +348,15 @@ describe("the brief", () => {
     writeFileSync(join(docs, "docs/agents/preferences.md"), "# Preferences\n");
     writeFileSync(join(docs, "docs/agents/planner.md"), "## What to ask\n\nx\n\n## The skeptic pass\n\ny\n");
     writeFileSync(join(docs, "plans/fixes-rules.md"), "# Rules\n\nz\n");
-    expect(() => readRules(docs)).toThrow(/no never list/);
+    const config = {
+      paths: { plans: "plans", preferences: "docs/agents/preferences.md" },
+      roles: { planner: { replacement: "docs/agents/planner.md" } },
+    };
+    expect(() => readRules(docs, config)).toThrow(/no never list/);
     rmSync(join(docs, "plans/fixes-rules.md"));
-    expect(() => readRules(docs)).toThrow(/fixes-rules/);
+    expect(() => readRules(docs, config)).toThrow(/fixes-rules/);
+    writeFileSync(join(docs, "plans/fixes-rules.md"), "# Rules\n\nz\n");
+    expect(() => readRules(docs, { ...config, paths: { plans: "plans" } })).toThrow(/names none/);
   });
 });
 

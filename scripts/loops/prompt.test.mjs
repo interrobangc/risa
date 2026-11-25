@@ -413,7 +413,7 @@ describe("slice", () => {
       );
       expect(out).toContain("### Slice 4: A new fix (B-40)");
       expect(out).toContain("New fix text.");
-      expect(out).toContain("docs/agents/loop.md");
+      expect(out).toContain("`pnpm prd doc loop`");
       for (const other of ["first wave's intro", "Old fix text", "Slice 5", "Another fix text", "| Slice |"])
         expect(out).not.toContain(other);
     }
@@ -781,17 +781,17 @@ describe("bye", () => {
     "then run `pnpm prd bye`. Clean, it ends this session: say nothing after it. Otherwise ask the user about each open thing it lists, one at a time (finish it, hand it off or drop it), then run it again.";
 
   it.each([
-    ["orchestrator", ["orchestrator", "T"], "orchestrator.md"],
-    ["orchestrator --auto", ["orchestrator", "T", "--auto"], "orchestrator.md"],
-    ["orchestrator --resume", ["orchestrator", "T", "--resume"], "orchestrator.md"],
-    ["plan", ["plan", "T"], "planner.md"],
-    ["plan --auto", ["plan", "T", "--auto"], "planner.md"],
-    ["hotfix", ["hotfix", "x", "the fix"], "hotfix.md"],
-    ["backlog", ["backlog"], "backlog.md"],
-    ["recover", ["recover"], "recovery.md"],
+    ["orchestrator", ["orchestrator", "T"], "orchestrator"],
+    ["orchestrator --auto", ["orchestrator", "T", "--auto"], "orchestrator"],
+    ["orchestrator --resume", ["orchestrator", "T", "--resume"], "orchestrator"],
+    ["plan", ["plan", "T"], "planner"],
+    ["plan --auto", ["plan", "T", "--auto"], "planner"],
+    ["hotfix", ["hotfix", "x", "the fix"], "hotfix"],
+    ["backlog", ["backlog"], "backlog"],
+    ["recover", ["recover"], "recovery"],
   ])("%s: a message of just 'bye' runs pnpm prd bye after its doc's own checks", (_, args, doc) => {
     const text = ok(...args);
-    expect(text).toContain(`${BYE} docs/agents/${doc} names under _Bye_, ${AFTER}`);
+    expect(text).toContain(`${BYE} \`pnpm prd doc ${doc}\` names under _Bye_, ${AFTER}`);
     expect(text.match(/just 'bye'/g)).toHaveLength(1);
   });
 
@@ -800,7 +800,7 @@ describe("bye", () => {
     ["slice --continue", ["slice", "T", "1", "--continue"]],
   ])("%s: bye only reports, and the open things go to the orchestrator", (_, args) => {
     expect(ok(...args)).toContain(
-      "- **A message of just 'bye'**: first the checks docs/agents/loop.md names under _Bye_, then run `pnpm prd bye` (a slice only reports; it ends no session). Clean: send your hand-off. Otherwise send your orchestrator the open things it lists and wait for its word on each.",
+      "- **A message of just 'bye'**: first the checks `pnpm prd doc loop` names under _Bye_, then run `pnpm prd bye` (a slice only reports; it ends no session). Clean: send your hand-off. Otherwise send your orchestrator the open things it lists and wait for its word on each.",
     );
   });
 
@@ -818,7 +818,7 @@ describe("bye", () => {
     ["hotfix", ["hotfix", "x", "the fix"], "hotfix"],
     ["backlog", ["backlog"], "backlog"],
     ["recover", ["recover"], "recovery"],
-  ])("%s: a role the config names no doc for falls back to its name, whole", (_, args, role) => {
+  ])("%s: a role the config names no doc for is still the doc command (its generic doc)", (_, args, role) => {
     const config = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
     delete config.roles;
     const file = join(root, "no-roles.json");
@@ -829,7 +829,7 @@ describe("bye", () => {
       env: { ...process.env, RISA_CONFIG: file },
     });
     expect(r.stderr).toBe("");
-    expect(r.stdout).toContain(`${BYE} the ${role} role's doc names under _Bye_, ${AFTER}`);
+    expect(r.stdout).toContain(`${BYE} \`pnpm prd doc ${role}\` names under _Bye_, ${AFTER}`);
   });
 
   it("the briefs that aren't a role get none", () => {
@@ -895,7 +895,8 @@ describe("hotfix", () => {
     expect(text).toContain(`Your worktree is ${loops}/hotfix-trim, on branch hotfix/trim (from dev)`);
     expect(text).toContain("**Ask the user before every step that takes time or changes shared state**");
     expect(text).toContain("Background agents are allowed");
-    expect(text).toContain("docs/agents/hotfix.md");
+    expect(text).toContain("`pnpm prd doc hotfix`");
+    expect(text).toContain("into its file, docs/agents/hotfix.md.");
     expect(text).toContain('**"PR or local?"**');
     expect(text).toContain("`pnpm prd land hotfix/trim --pr` or `--local`");
     expect(text).toContain("`pnpm prd pr hotfix/trim`");

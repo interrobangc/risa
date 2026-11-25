@@ -22,12 +22,17 @@ plans_dir=$(config_get paths.plans)
 docs_dir=$(config_get paths.docs)
 inbox_file=$(config_get paths.inbox)
 prefs_doc=$(config_get paths.preferences 2>/dev/null || true)
-# role_doc ROLE → the file a session in that role reads: the config's replacement
-# for the role, else its additions (the doc command, orchestration-split-2, will
-# print the generic doc and the additions together).
+# role_doc ROLE [SECTION] → the doc command that prints a role's doc (doc.mjs: the
+# generic doc and the project's additions, or its replacement), or one section of it.
+# A prompt names a role's doc only this way, never by its path.
 role_doc() {
+  if (($# > 1)); then echo "\`$prd_cmd doc $1 \"$2\"\`"; else echo "\`$prd_cmd doc $1\`"; fi
+}
+# role_file ROLE → the project's file for a role's doc, the one a session edits: its
+# replacement, else its additions.
+role_file() {
   config_get "roles.$1.replacement" 2>/dev/null || config_get "roles.$1.additions" 2>/dev/null ||
-    echo "the $1 role's doc"
+    echo "the $1 role's additions file"
 }
 # in_main NAME → the tool's command NAME, run on the main checkout from anywhere
 # (the inbox agent works outside the repository): a pnpm script through -C, any
