@@ -13,7 +13,8 @@
 #                                        (DIR/.sample-stopped-secs, else 60)
 #   stack stop DIR | start DIR           stops or starts it, data kept; its facts
 #   stack engine [status|start]          running=yes|no, name=Sample engine
-#   stack leftovers [--all] [PROJECT…]   the lines of leftovers (volume=…), but a PROJECT's
+#   stack leftovers [--all] [PROJECT…]   the lines of leftovers (volume=…) but a PROJECT's
+#                                        (named PROJECT or PROJECT_…); engine down: a kept= line
 #   stack leftovers remove KIND ID       drops ID's line
 #   serve NAME [--stop|--restart|--built] its server: listens on its web_port
 #   test-db facts|status|up|down|use NAME|drop NAME|drop-db DB|orphans [NAME…]|list|name NAME
@@ -57,13 +58,13 @@ set_running() {
 die() { echo "stack-hook.sh: $*" >&2; exit 1; }
 
 if [[ $kind == stack ]]; then
-  dir="" slot="" probe="" all="" rest=()
+  dir="" slot="" probe="" rest=()
   while (($#)); do
     case $1 in
       --slot) slot=$2; shift 2 ;;
       --base) shift 2 ;;
       --probe) probe=1; shift ;;
-      --all) all=1; shift ;;
+      --all) shift ;;
       *) if [[ -z $dir ]]; then dir=$1; else rest+=("$1"); fi; shift ;;
     esac
   done
@@ -128,10 +129,11 @@ if [[ $kind == stack ]]; then
         exit 0
       fi
       [[ ! -f $st/engine-down ]] || { echo "kept=the engine isn't running"; exit 0; }
-      keep=" ${dir} ${rest[*]:-} "
+      # A PROJECT's own (PROJECT or PROJECT_<anything>) is in use: not a leftover.
       while IFS= read -r l; do
-        v=${l#*=}; v=${v%% *}
-        [[ $keep == *" $v "* ]] || echo "$l"
+        v=${l#*=}; v=${v%% *} used=""
+        for p in $dir ${rest[@]+"${rest[@]}"}; do [[ $v == "$p" || $v == "$p"_* ]] && used=1; done
+        [[ -n $used ]] || echo "$l"
       done < <(cat "$st/leftovers" 2>/dev/null)
       ;;
     *) die "unknown stack verb ${verb:-(none)}" ;;

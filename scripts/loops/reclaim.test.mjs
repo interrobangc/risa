@@ -1,11 +1,11 @@
 // pnpm prd reclaim (reclaim.sh) against a throwaway repo with these scripts
-// copied in, and fake docker, du, lsof, pnpm and nvm on PATH: nothing here
-// touches real containers, volumes, images, worktrees or the disk.
+// copied in, the stack hooks on the sample project's stub (its leftovers in its
+// state), and fake du, lsof, pnpm and nvm on PATH: nothing here touches real
+// containers, volumes, images, worktrees or the disk.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { FIXTURE_CONFIG } from "./config-fixture.mjs";
+import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -38,28 +38,17 @@ Stack: no · Reads: none · Tests: unit
 Stack: no · Reads: none · Tests: unit
 `;
 
-// What `docker system df -v --format …` prints: name, size, links, labels.
-const VOLUMES = [
-  "caretook-loop9_data 12.5MB 0 com.docker.compose.project=caretook-loop9,com.docker.compose.volume=data",
-  "caretook-loop7_data 3MB 0 com.docker.compose.project=caretook-loop7,com.docker.compose.volume=data",
-  "caretook_data 5MB 0 com.docker.compose.project=caretook,com.docker.compose.volume=data",
-  "caretook-shared-test_data 1MB 0 com.docker.compose.project=caretook-shared-test",
-  "other_db 1GB 0 com.docker.compose.project=other,com.docker.compose.volume=db",
-  "named-by-hand 2MB 0 ",
-  "abc123 21.03kB 0 com.docker.volume.anonymous=",
-  "linked 1MB 1 com.docker.compose.project=caretook-loop9",
+// The stub's leftovers (stack-hook.sh): ID KB why. sample-loop7_data is the
+// active slice's project's, so the stub leaves it out.
+const LEFTOVERS = [
+  "volume=sample-loop9_data 12500 dangling; no worktree uses sample-loop9",
+  "volume=sample-loop7_data 3000 dangling; no worktree uses sample-loop7",
+  "volume=abc123 21 dangling, anonymous",
+  "image=sha256img 120000 dangling image",
+  "kept=volume sample_data: the main checkout's",
 ].join("\n");
 
-const FAKE_DOCKER = `#!/usr/bin/env bash
-echo "docker $*" >> "$FAKE_LOG"
-case $1 in
-  info) [[ -z \${FAKE_DOCKER_DOWN:-} ]] || exit 1 ;;
-  system) echo "$FAKE_VOLUMES" ;;
-  images) echo "sha256img 120MB" ;;
-esac
-exit 0
-`;
-
+let config;
 let root, main, loops, log, env;
 const sh = (args = [], opts = {}) =>
   spawnSync("bash", [join(main, "scripts/loops/reclaim.sh"), ...args], {
@@ -77,7 +66,7 @@ const calls = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
 const removals = () =>
   calls()
     .split("\n")
-    .filter((l) => / (volume|image) rm /.test(l));
+    .filter((l) => l.startsWith("stack leftovers remove "));
 const put = (...p) => {
   mkdirSync(join(...p), { recursive: true });
   writeFileSync(join(...p, "f"), "x\n");
@@ -96,7 +85,6 @@ beforeAll(() => {
   const nvm = join(root, "nvm");
   mkdirSync(bin);
   mkdirSync(nvm);
-  writeFileSync(join(bin, "docker"), FAKE_DOCKER);
   writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
   // Listening only on FAKE_LISTEN's port.
   writeFileSync(
@@ -105,21 +93,22 @@ beforeAll(() => {
   );
   // 2 MB for anything.
   writeFileSync(join(bin, "du"), '#!/usr/bin/env bash\nprintf "2048\\t%s\\n" "${@: -1}"\n');
-  for (const f of ["docker", "pnpm", "lsof", "du"]) chmodSync(join(bin, f), 0o755);
+  for (const f of ["pnpm", "lsof", "du"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
   env = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     NVM_DIR: nvm,
     FAKE_LOG: log,
-    FAKE_VOLUMES: VOLUMES,
     TRUNK: "dev",
     CARETOOK_FREE_GB: "42",
     CARETOOK_MIN_FREE_GB: "",
-    CARETOOK_SHARED_TEST_PORT: "",
-    CARETOOK_SHARED_TEST_PROJECT: "",
     CARETOOK_LEASE_ROOT: join(root, "leases"),
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
+    SAMPLE_STACK_LOG: log,
   };
+  mkdirSync(env.SAMPLE_STACK_STATE);
+  writeFileSync(join(env.SAMPLE_STACK_STATE, "leftovers"), `${LEFTOVERS}\n`);
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
@@ -133,9 +122,8 @@ beforeAll(() => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The project's stack and test DB scripts: the old stack functions and places
-  // call them through the config's hooks until slice 3 of orchestration-split-2.
-  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
+  config = stubHookConfig(main);
+  env.RISA_CONFIG = config;
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
@@ -162,8 +150,8 @@ beforeAll(() => {
   // Their wave has landed, so nothing holds them for a fix.
   git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land the wave", "prd/t");
   writeFileSync(join(loops, "t-5", "work-5.txt"), "more, not committed\n");
-  // Slice 1 is active, with a stack named caretook-loop7 (its volume is in use).
-  writeFileSync(join(loops, "t-1", ".env"), "CARETOOK_STACK=caretook-loop7\n");
+  // Slice 1 is active, with a stack named sample-loop7 (its volume is in use).
+  writeFileSync(join(loops, "t-1", ".sample-stack"), "project=sample-loop7\n");
   for (const c of CACHES) {
     put(loops, "t-1", c);
     put(main, c);
@@ -181,19 +169,17 @@ describe("reclaim --list", () => {
     expect(out).toMatch(/^ {2}vite +2\.0 MB +t-1\/node_modules\/\.vite /m);
     expect(out).toMatch(/^ {2}vite +2\.0 MB +t-1\/apps\/web\/node_modules\/\.vite /m);
     expect(out).toMatch(
-      /^ {2}volume +12\.2 MB +caretook-loop9_data \(dangling; no worktree uses caretook-loop9\)$/m,
+      /^ {2}volume +12\.2 MB +sample-loop9_data \(dangling; no worktree uses sample-loop9\)$/m,
     );
     expect(out).toMatch(/^ {2}volume +21 KB +abc123 \(dangling, anonymous\)$/m);
     expect(out).toMatch(/^ {2}image +117\.2 MB +sha256img /m);
     expect(out).toMatch(/^ {2}total +137\.4 MB in 7 item\(s\)$/m);
 
     expect(out).toMatch(/t-5: merged, but has uncommitted changes/);
-    expect(out).toMatch(/volume caretook-loop7_data: caretook-loop7 is still in use/);
-    expect(out).toMatch(/volume caretook_data: caretook is still in use/);
-    expect(out).toMatch(/volume caretook-shared-test_data: caretook-shared-test is still in use/);
-    expect(out).toMatch(/2 dangling volume\(s\) of other Compose projects/);
-    for (const v of ["other_db", "named-by-hand", "linked"])
-      expect(out).not.toMatch(new RegExp(`\\b${v}\\b`));
+    // The hook's kept= lines are kept; the active slice's project's volume isn't listed.
+    expect(out).toMatch(/volume sample_data: the main checkout's/);
+    expect(out).not.toMatch(/sample-loop7_data/);
+    expect(calls()).toMatch(/^stack leftovers --all sample-loop7$/m);
     expect(out).not.toMatch(/t-5 \(/);
 
     expect(removals()).toEqual([]);
@@ -209,24 +195,28 @@ describe("reclaim --list", () => {
   });
 
   it("keeps the caches of a worktree whose server is running", () => {
-    writeFileSync(join(loops, "t-1", "apps/web/.env"), "WEB_PORT=6999\n");
+    const stack = join(loops, "t-1", ".sample-stack");
+    writeFileSync(stack, "project=sample-loop7\nweb_port=6999\n");
     const out = ok(["--list"], { env: { FAKE_LISTEN: "6999" } });
-    rmSync(join(loops, "t-1", "apps/web/.env"));
+    writeFileSync(stack, "project=sample-loop7\n");
     expect(out).toMatch(/t-1: its server is running, so its caches stay/);
     expect(out).not.toMatch(/^ {2}(build|vite) /m);
   });
 
-  it("skips Docker when it isn't running", () => {
-    const out = ok(["--list"], { env: { FAKE_DOCKER_DOWN: "1" } });
-    expect(out).toMatch(/Docker isn't running: volumes and images not checked/);
+  it("lists only the hook's kept line when the engine isn't running", () => {
+    const down = join(env.SAMPLE_STACK_STATE, "engine-down");
+    writeFileSync(down, "");
+    const out = ok(["--list"]);
+    rmSync(down);
+    expect(out).toMatch(/the engine isn't running/);
     expect(out).not.toMatch(/^ {2}(volume|image) /m);
     expect(out).toMatch(/^ {2}worktree /m);
   });
 });
 
-// A config whose hooks are this repo's but for the named ones.
+// A config whose hooks are the stub's but for the named ones.
 const configWith = (hooks) => {
-  const c = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+  const c = JSON.parse(readFileSync(config, "utf8"));
   const file = join(root, `config-${Object.keys(hooks).join("-")}.json`);
   writeFileSync(file, JSON.stringify({ ...c, hooks: { ...c.hooks, ...hooks } }));
   return file;
@@ -237,8 +227,7 @@ describe("reclaim with a failing hook", () => {
   // look unused: reclaim stops instead, listing and removing nothing.
   it.each([
     ["the stack status hook fails", { stackStatus: "exit 3;" }, /stack status hook failed for t-\d/],
-    ["the test-db facts fail", { testDb: "exit 3;" }, /the test-db hook gave no project/],
-    ["the test-db facts have no project", { testDb: "echo port=1;" }, /the test-db hook gave no project/],
+    ["the stack leftovers hook fails", { stackLeftovers: "exit 3;" }, /the stack leftovers hook failed/],
   ])("%s", (_, hooks, why) => {
     const r = sh(["--yes"], { env: { RISA_CONFIG: configWith(hooks) } });
     expect(r.status).not.toBe(0);
@@ -283,9 +272,9 @@ describe("reclaim --yes", () => {
 
     // Only the dangling caretook-loop volume nobody uses, the anonymous one and the image.
     expect(removals()).toEqual([
-      "docker volume rm caretook-loop9_data",
-      "docker volume rm abc123",
-      "docker image rm sha256img",
+      "stack leftovers remove volume sample-loop9_data",
+      "stack leftovers remove volume abc123",
+      "stack leftovers remove image sha256img",
     ]);
 
     // .loops caches go; the main checkout's stay; the active worktree stays.
@@ -296,9 +285,9 @@ describe("reclaim --yes", () => {
     expect(existsSync(join(loops, "t-1"))).toBe(true);
   });
 
-  it("then has only Docker's (still faked) dangling items left", () => {
+  it("then has nothing left but the dirty worktree", () => {
     const out = ok(["--list"]);
-    expect(out).not.toMatch(/^ {2}(worktree|build|vite) /m);
+    expect(out).toMatch(/^Nothing to reclaim\.$/m);
     expect(out).toMatch(/t-5: merged, but has uncommitted changes/);
   });
 });
