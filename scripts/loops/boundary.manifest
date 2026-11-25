@@ -261,3 +261,5 @@ scripts/loops/watchdog.test.mjs core
 scripts/loops/workers.mjs core
 scripts/loops/workers.test.mjs core
 scripts/loops/workspace-config.test.mjs project
+scripts/project/test-projects.mjs project
+scripts/project/test-projects.test.mjs project

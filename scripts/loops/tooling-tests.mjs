@@ -1,7 +1,8 @@
 // tooling-tests.mjs: the tests `pnpm test:tooling` runs, after its lint. Always
-// tooling:unit and scripts:unit; the browser harness test (tooling:browser) too
-// when the change touches what it tests (check-plan.mjs), when the check's base
-// can't be found, or when files are named on the command line (they filter).
+// the core's tooling:unit and core:unit and the project's project:unit and
+// project:tooling; the browser harness test (tooling:browser) too when the change
+// touches what it tests (check-plan.mjs), when the check's base can't be found,
+// or when files are named on the command line (they filter).
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ export function changedSinceBase(root) {
  * @returns {string[]}
  */
 export function toolingProjects(changed, named = []) {
-  const projects = ["tooling:unit", "scripts:unit"];
+  const projects = ["tooling:unit", "core:unit", "project:unit", "project:tooling"];
   if (named.length || changed === null || needsBrowserHarness(changed)) projects.push("tooling:browser");
   return projects;
 }
