@@ -35,7 +35,8 @@ scripts/ci/release.mjs core-to-project 2
 scripts/ci/release.test.mjs app-path 1
 scripts/ci/release.test.mjs core-to-project 6
 scripts/ci/release.test.mjs project-env 2
-scripts/ci/tiers.mjs project-to-core 1
+scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (the browser harness test): residual until the move
+scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
 scripts/ci/verdict.mjs project-to-core 1
 scripts/deploy/workflows.test.mjs project-to-core 3
 scripts/loops/ask.mjs project-env 21
@@ -67,7 +68,7 @@ scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 16
 scripts/loops/check-gate.test.mjs project-name 1
 scripts/loops/check-plan.mjs app-path 5
-scripts/loops/check-plan.mjs core-to-project 9 # the check plan's rules: Caretook's data in slice 10
+scripts/loops/check-plan.mjs core-to-project 8 # the check plan's rules: Caretook's data in slice 10
 scripts/loops/check-plan.test.mjs app-path 47
 scripts/loops/check-plan.test.mjs core-to-project 12 # tests the tooling pattern that names scripts/project: Caretook data in slice 10
 scripts/loops/check-run.sh project-env 30
