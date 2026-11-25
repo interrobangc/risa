@@ -299,8 +299,11 @@ describe("pnpm prd watchdog (stub recover)", () => {
     );
     for (const f of ["docker", "recover"]) chmodSync(join(bin, f), 0o755);
     writeFileSync(join(root, "clock"), String(NOW / 1000));
+    // Hermetic: nothing from the shell, so a session's own settings (the usage watch off) can't leak in (B-818).
     env = {
-      ...process.env,
+      ...Object.fromEntries(
+        ["HOME", "TMPDIR", "TZ"].flatMap((k) => (k in process.env ? [[k, process.env[k]]] : [])),
+      ),
       PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
       CARETOOK_RECOVER_BIN: join(bin, "recover"),
       CARETOOK_CLOCK_FILE: join(root, "clock"),
