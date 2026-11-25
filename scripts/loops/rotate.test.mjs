@@ -215,7 +215,8 @@ beforeAll(() => {
     copyFileSync(join(backlogDir, f), join(main, "scripts/backlog", f));
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
-  for (const f of ["outstanding.mjs", "tiers.mjs", "tiers.json"]) copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
+  for (const f of ["outstanding.mjs", "tiers.mjs", "tiers.json"])
+    copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/w-plan.md"), plan(`${MERGED}\n| 3 | 2 | not started | |`));
