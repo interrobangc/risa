@@ -1,8 +1,9 @@
 // The disk guard (lib.sh: free_gb, require_disk, disk_line) and its callers:
 // new.sh for a stacked worktree, stack.sh up, browser.sh's check build, and the
-// status line. A throwaway repo with these scripts copied in, fake docker,
-// pnpm, lsof, df and serve.sh, and CARETOOK_FREE_GB standing in for the real
-// reading: nothing here touches real containers, slots, worktrees or the disk.
+// status line. A throwaway repo with these scripts copied in, fake pnpm, lsof
+// and df, the stack hooks on the sample project's stub, and CARETOOK_FREE_GB
+// standing in for the real reading: nothing here touches real containers,
+// slots, worktrees or the disk.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -21,7 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -35,11 +36,6 @@ Stack: no · Reads: none · Tests: unit
 ## Slice 2: Needs a stack
 
 Stack: yes · Reads: none · Tests: unit
-`;
-
-const FAKE_DOCKER = `#!/usr/bin/env bash
-echo "docker $*" >> "$FAKE_LOG"
-exit 0
 `;
 
 // df -Pk: 12 GB available (12 * 1024 * 1024 KB).
@@ -70,11 +66,10 @@ beforeAll(() => {
   const nvm = join(root, "nvm");
   mkdirSync(bin);
   mkdirSync(nvm);
-  writeFileSync(join(bin, "docker"), FAKE_DOCKER);
   writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
   writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
   writeFileSync(join(bin, "df"), FAKE_DF);
-  for (const f of ["docker", "pnpm", "lsof", "df"]) chmodSync(join(bin, f), 0o755);
+  for (const f of ["pnpm", "lsof", "df"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
   env = {
     ...process.env,
@@ -90,6 +85,8 @@ beforeAll(() => {
     CARETOOK_BROWSER_FLAKES: join(root, "flakes.log"),
     CARETOOK_BROWSER_BUSY: "100000",
     CARETOOK_BROWSER_SILENCE: "10",
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
+    SAMPLE_STACK_LOG: log,
   };
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
@@ -104,14 +101,9 @@ beforeAll(() => {
     (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The project's stack and test DB scripts: the old stack functions and places
-  // call them through the config's hooks until slice 3 of orchestration-split-2.
-  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
-  // A fake serve.sh: browser.sh calls it to start (and build) the check server.
-  writeFileSync(
-    join(main, "scripts/loops/serve.sh"),
-    '#!/usr/bin/env bash\necho "serve $*" >> "$FAKE_LOG"\n',
-  );
+  // The stack hooks (serve among them, which browser.sh calls to start and build
+  // the check server) on the sample project's stub, logging to FAKE_LOG.
+  env.RISA_CONFIG = stubHookConfig(main);
   writeFileSync(join(main, "scripts/loops/checks"), "# check cap never-exits e2e\nclean 20 no yes\n");
   mkdirSync(join(main, "scripts/browser-checks"), { recursive: true });
   writeFileSync(
@@ -128,10 +120,6 @@ beforeAll(() => {
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
   git(main, "branch", "prd/t");
-  mkdirSync(join(main, "packages/data"), { recursive: true });
-  mkdirSync(join(main, "apps/web"), { recursive: true });
-  writeFileSync(join(main, "packages/data/.env"), 'DATABASE_URL="x"\nSEED_USER_PASSWORD="pw-fictional"\n');
-  writeFileSync(join(main, "apps/web/.env"), 'BETTER_AUTH_URL="x"\nCRON_SECRET="s"\n');
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => rmSync(log, { force: true }));
@@ -199,7 +187,7 @@ describe("new.sh", () => {
     const r = sh("new.sh", ["slice", "t", "2"], { env: ROOMY });
     expect(r.status, r.stderr).toBe(0);
     expect(leases()).toEqual(["1"]);
-    expect(calls()).toMatch(/pnpm datastore:start/);
+    expect(calls()).toMatch(/^stack up t-2 --slot 1 /m);
   });
 });
 
@@ -208,9 +196,9 @@ describe("stack.sh up", () => {
     const dir = join(loops, "t-1");
     const r = sh("stack.sh", ["up"], { cwd: dir, env: LOW });
     refused(r, "a stack for t-1");
-    expect(existsSync(join(dir, ".env"))).toBe(false);
+    expect(existsSync(join(dir, ".sample-stack"))).toBe(false);
     expect(leases()).toEqual(["1"]);
-    expect(calls()).not.toMatch(/datastore/);
+    expect(calls()).not.toMatch(/^stack up/m);
   });
 
   it("refuses to restart a stopped stack below the line, and starts it above", () => {
@@ -219,7 +207,7 @@ describe("stack.sh up", () => {
     const r = sh("stack.sh", ["up"], { cwd: dir, env: { CARETOOK_FREE_GB: "9", CARETOOK_MIN_FREE_GB: "8" } });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toMatch(/already has a stack/);
-    expect(calls()).toMatch(/pnpm datastore:start/);
+    expect(calls()).toMatch(/^stack up t-2 /m);
   });
 });
 
@@ -256,13 +244,13 @@ describe("pnpm prd status", () => {
 });
 
 // new.sh runs the project's commands from the config, and names branches by its
-// prefixes: a sample config with other ones changes what runs.
+// prefixes: a sample config with other ones changes what runs. The stack's own
+// migrate and seed are the stackUp hook's.
 describe("new.sh through the config", () => {
-  it("runs the config's install, datastore start and hooks install, on the config's branch", () => {
-    const raw = JSON.parse(readFileSync(process.env.RISA_CONFIG, "utf8"));
+  it("runs the config's install, hooks install and stack hook, on the config's branch", () => {
+    const raw = JSON.parse(readFileSync(env.RISA_CONFIG, "utf8"));
     Object.assign(raw.commands, {
       install: "pnpm i --offline",
-      datastoreStart: "pnpm db:up",
       hooksInstall: 'echo hooks-install >> "$FAKE_LOG"',
     });
     raw.branches.prefixes.hotfix = "quick/";
@@ -270,8 +258,10 @@ describe("new.sh through the config", () => {
     writeFileSync(sample, JSON.stringify(raw));
     const r = sh("new.sh", ["--stack", "hotfix", "q"], { env: { ...ROOMY, RISA_CONFIG: sample } });
     expect(r.status, r.stderr).toBe(0);
-    expect(calls()).toMatch(/^hooks-install\npnpm i --offline\npnpm db:up\n/m);
-    expect(calls()).not.toMatch(/pnpm install|datastore:start/);
+    expect(calls()).toMatch(
+      /^hooks-install\ntest-db use hotfix-q\npnpm i --offline\nstack up hotfix-q --slot \d+ --base dev\n/m,
+    );
+    expect(calls()).not.toMatch(/pnpm install/);
     expect(git(join(loops, "hotfix-q"), "branch", "--show-current")).toBe("quick/q");
   });
 });
