@@ -2,7 +2,7 @@
 //
 // drainDecision (pure) turns the usage reading (usage.mjs mergeReadings) into one of
 //   normal    nothing held;
-//   draining  a plan window (5-hour or weekly) at CARETOOK_USAGE_DRAIN (85%) or more:
+//   draining  a plan window (5-hour or weekly) at CARETOOK_USAGE_DRAIN (95%) or more:
 //             no start, plan or reopen (`pnpm prd dispatch --resume` doesn't override it),
 //             and a new slice worktree is refused (new.sh slice runs `drain.mjs check`);
 //   limited   a plan window at CARETOOK_USAGE_STOP (98%) or more, a reading showing overage
@@ -29,7 +29,7 @@ import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
 import { clock, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
-export const DRAIN_PERCENT = 85;
+export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
 /** A session sent TERM this long ago and still live is sent KILL (as `pnpm prd end`). */
 export const END_WAIT_MS = 10_000;

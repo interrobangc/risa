@@ -1808,7 +1808,7 @@ describe("the drain", () => {
   });
 
   it("draining: no start, plan or reopen, and --resume doesn't override it; CARETOOK_USAGE_WATCH=off does", () => {
-    reading(90);
+    reading(96);
     worktree("d", "prd/d");
     deadRecord("prd-d", { kind: "prd", topic: "d" });
     setRows([
@@ -1817,11 +1817,11 @@ describe("the drain", () => {
       { topic: "d", state: "running" },
     ]);
     const out = ok(["--once"], on);
-    expect(out).toMatch(/^\S+Z nothing: usage is draining: 5h 90%, at or over the drain line 85% \(until /);
+    expect(out).toMatch(/^\S+Z nothing: usage is draining: 5h 96%, at or over the drain line 95% \(until /);
     expect(out).toContain("  a: no start while usage is draining");
     expect(out).toContain("  p: no plan while usage is draining");
     expect(out).toContain("  d: its orchestrator died; not reopened while usage is draining");
-    expect(out).toContain("usage: now draining: 5h 90%");
+    expect(out).toContain("usage: now draining: 5h 96%");
     ok(["--resume"]);
     expect(ok(["--once"], on)).toMatch(/^\S+Z nothing: usage is draining/);
     expect(calls("new")).toEqual([]);
@@ -1832,7 +1832,7 @@ describe("the drain", () => {
   });
 
   it("draining ends nothing, and a session in a landing is never stopped", () => {
-    reading(90);
+    reading(96);
     const s = liveSession("prd-x", { kind: "prd", topic: "x" });
     const l = liveSession("prd-y", {
       kind: "prd",

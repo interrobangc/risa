@@ -58,16 +58,16 @@ const usageOf = (windows, extra = {}) =>
 const decide = (usage, opts = {}) => drainDecision(usage, { ...lines, now: NOW, staleMs: STALE, ...opts });
 
 describe("the drain decision", () => {
-  it("is normal under 85%, draining from 85%, limited from 98%, on the 5-hour or the weekly window", () => {
+  it("is normal under 95%, draining from 95%, limited from 98%, on the 5-hour or the weekly window", () => {
     for (const w of ["fiveHour", "sevenDay"]) {
-      expect(decide(usageOf({ [w]: { percent: 84.9 } })).state).toBe("normal");
-      expect(decide(usageOf({ [w]: { percent: 85 } })).state).toBe("draining");
+      expect(decide(usageOf({ [w]: { percent: 94.9 } })).state).toBe("normal");
+      expect(decide(usageOf({ [w]: { percent: 95 } })).state).toBe("draining");
       expect(decide(usageOf({ [w]: { percent: 97.9 } })).state).toBe("draining");
       expect(decide(usageOf({ [w]: { percent: 98 } })).state).toBe("limited");
     }
-    const d = decide(usageOf({ fiveHour: { percent: 40 }, sevenDay: { percent: 90 } }));
+    const d = decide(usageOf({ fiveHour: { percent: 40 }, sevenDay: { percent: 96 } }));
     expect(d).toMatchObject({ state: "draining", resetsAt: NOW + 60 * MIN, unknown: false });
-    expect(d.why).toMatch(/^7d 90%, at or over the drain line 85% \(until \d\d:\d\d\)$/);
+    expect(d.why).toMatch(/^7d 96%, at or over the drain line 95% \(until \d\d:\d\d\)$/);
   });
 
   it("the spend window never drains: only the plan's", () => {
@@ -107,14 +107,14 @@ describe("the drain decision", () => {
   });
 
   it("CARETOOK_USAGE_DRAIN, CARETOOK_USAGE_STOP and CARETOOK_USAGE_WATCH=off", () => {
-    expect(drainSettings({})).toEqual({ drain: 85, stop: 98, off: false });
+    expect(drainSettings({})).toEqual({ drain: 95, stop: 98, off: false });
     expect(drainSettings({ CARETOOK_USAGE_DRAIN: "70", CARETOOK_USAGE_STOP: "95" })).toEqual({
       drain: 70,
       stop: 95,
       off: false,
     });
     expect(drainSettings({ CARETOOK_USAGE_DRAIN: "nope", CARETOOK_USAGE_STOP: "-1" })).toMatchObject({
-      drain: 85,
+      drain: 95,
       stop: 98,
     });
     // A drain line over the stop line drains at the stop line.
@@ -380,14 +380,14 @@ describe("new.sh slice while draining", () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
   it("refuses a new slice worktree while draining or limited, with the reason", () => {
-    for (const percent of [90, 99]) {
+    for (const percent of [96, 99]) {
       reading(percent);
       try {
         const r = newSlice();
         expect(r.status, r.out).toBe(1);
         expect(r.out).toMatch(
           new RegExp(
-            `refused: slice t-1: usage is ${percent === 90 ? "draining" : "limited"}: 5h ${percent}%`,
+            `refused: slice t-1: usage is ${percent === 96 ? "draining" : "limited"}: 5h ${percent}%`,
           ),
         );
         expect(r.out).toContain("no new slice worktree until it resets");
