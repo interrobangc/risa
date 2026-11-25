@@ -6,7 +6,7 @@
 // entry; an entry whose item is finished leaves on any write.
 import { createHash } from "node:crypto";
 
-import { isQuarantined, parseQuarantine } from "./lists.mjs";
+import { isQuarantined, parseQuarantine } from "./ci-lists.mjs";
 
 /** Item statuses that count as finished: the fix is in dev, or the item was dropped. */
 const FINISHED = new Set(["landed", "staging", "live", "dropped"]);

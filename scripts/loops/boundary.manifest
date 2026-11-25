@@ -32,6 +32,8 @@ scripts/ci/ci-commits.mjs core
 scripts/ci/ci-file.mjs core
 scripts/ci/ci-gate.mjs core
 scripts/ci/ci-io.mjs core
+scripts/ci/ci-lists.mjs core
+scripts/ci/ci-lists.test.mjs core
 scripts/ci/ci-runs.mjs core
 scripts/ci/ci-status.mjs core
 scripts/ci/ci.mjs core
@@ -51,6 +53,8 @@ scripts/ci/quarantine-setup.mjs project
 scripts/ci/quarantine.txt project
 scripts/ci/release-gate.mjs core
 scripts/ci/release-gate.test.mjs core
+scripts/ci/release-jobs.mjs project
+scripts/ci/release-jobs.test.mjs project
 scripts/ci/release.mjs core
 scripts/ci/release.test.mjs core
 scripts/ci/test-job.mjs project
