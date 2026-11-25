@@ -2,7 +2,8 @@
 // done flag `pnpm prd rm` writes, against a throwaway repo with these scripts
 // and the backlog tool copied in, a stub claude (CARETOOK_CLAUDE_BIN, named
 // claude-stub so no walk up finds a real claude), CARETOOK_ITERM_APP pointing
-// nowhere (the opener prints its command) and a fake docker. Nothing here
+// nowhere (the opener prints its command) and the stack hooks on the sample
+// project's stub (config-fixture.mjs's stubHookConfig). Nothing here
 // starts a real claude, opens a tab or signals a process it didn't start.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -23,7 +24,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CAPTAINS } from "./captain.mjs";
 import { clearsHot, doneFlags, slicesLeft } from "./rotate.mjs";
-import "./config-fixture.mjs";
+import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -179,8 +180,7 @@ beforeAll(() => {
   mkdirSync(bin);
   stub = join(bin, "claude-stub");
   writeFileSync(stub, STUB);
-  writeFileSync(join(bin, "docker"), "#!/usr/bin/env bash\nexit 0\n");
-  for (const f of ["claude-stub", "docker"]) chmodSync(join(bin, f), 0o755);
+  chmodSync(stub, 0o755);
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
     ["user.email", "test@example.com"],
@@ -206,12 +206,9 @@ beforeAll(() => {
     "prompt.sh",
     "rm.sh",
     "stack-lib.sh",
-    "test-db.sh",
+    "hooks.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));
-  // The project's stack and test DB scripts: the old stack functions and places
-  // call them through the config's hooks until slice 3 of orchestration-split-2.
-  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
   const backlogDir = join(HERE, "../backlog");
   for (const f of readdirSync(backlogDir).filter((f) => f.endsWith(".mjs") && !f.includes(".test.")))
@@ -221,6 +218,8 @@ beforeAll(() => {
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
   writeFileSync(join(main, ".gitignore"), ".loops/\n");
+  // The stack hooks on the sample project's stub: rm.sh's stack down and test-db drop.
+  const config = stubHookConfig(main);
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/w-plan.md"), plan(`${MERGED}\n| 3 | 2 | not started | |`));
   git(main, "add", ".");
@@ -237,6 +236,8 @@ beforeAll(() => {
     BACKLOG_BY: "",
     STUB_STATE: state,
     PRD_SH: scripts("prd.sh"),
+    RISA_CONFIG: config,
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
   };
 }, 60_000);
 afterAll(() => rmSync(root, { recursive: true, force: true }));
