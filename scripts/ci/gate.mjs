@@ -3,7 +3,9 @@
 // acts on what this returns. The code is the verdict kind's exit code, 0 to land.
 import { label } from "./blame.mjs";
 import { PROPOSED_TIERS, tierRank } from "../loops/check-plan.mjs";
-import { TIERS } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
+
+const { TIERS } = tierData();
 
 const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
 

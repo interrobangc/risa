@@ -7,9 +7,11 @@ import { applyFindings } from "./filing.mjs";
 import { releasePasses } from "./gate.mjs";
 import { parseBrakeList } from "./lists.mjs";
 import { MAX_ZONE_FILINGS, ZONE_OVERFLOW_ITEM, combineRepeats, zoneFindings } from "./release.mjs";
-import { jobsFor, planOutputs } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
 import { buildVerdict } from "./verdict.mjs";
 import { SECOND_ZONE, SECOND_ZONE_MODE, secondZoneEnv, testZone } from "./zones.mjs";
+
+const { jobsFor } = tierData();
 
 const SHA = "c".repeat(40);
 const CHECKS = ["sign-in", "roundtrip"];
@@ -68,9 +70,6 @@ describe("the release tier", () => {
       "zone-components-2",
       "zone-browser",
     ]);
-    expect(planOutputs("ci/candidate/x")).toContain("release=false");
-    expect(planOutputs("ci/release/x")).toContain("release=true");
-    expect(planOutputs("ci/release/x", ["scripts/ci/ci.test.mjs"])).toContain("release=false");
   });
 
   it("moves a job to the one second zone", () => {

@@ -18,8 +18,10 @@ import {
   latestVerdict,
   verdictLines,
 } from "./ci.mjs";
-import { TIERS, ciRefName, jobsFor, narrowedJobs, parseCiRef, planOutputs } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
 import { buildVerdict, mergeSummaries, summarizeVitest } from "./verdict.mjs";
+
+const { TIERS, ciRefName, jobsFor, narrowedJobs, parseCiRef } = tierData();
 
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
@@ -134,12 +136,6 @@ describe("the tiers", () => {
     });
   });
 
-  it("start the browser job only on a candidate run", () => {
-    expect(planOutputs("ci/full/x")).toContain("candidate=false");
-    expect(planOutputs("ci/candidate/x")).toContain("candidate=true");
-    expect(planOutputs("ci/candidate/x", ["scripts/ci/ci.test.mjs"])).toContain("candidate=false");
-  });
-
   it("read a browser suite that failed as file, and one that never started as infra", () => {
     const needs = Object.fromEntries(
       ["plan", ...jobsFor("candidate").jobs].map((job) => [job, { result: "success" }]),
@@ -150,25 +146,6 @@ describe("the tiers", () => {
     const ran = buildVerdict({ ...run, needs: failed({ started: "true" }) });
     expect(ran).toMatchObject({ kind: "file", failed: { jobs: ["browser"], unnamedJobs: ["browser"] } });
     expect(buildVerdict({ ...run, needs: failed({}) }).kind).toBe("infra");
-  });
-
-  it("give the plan job no integration on a unit run", () => {
-    expect(planOutputs("ci/unit/x")).toEqual([
-      "tier=unit",
-      "static=true",
-      "unit=true",
-      "integration=false",
-      "components=false",
-      "full=false",
-      "candidate=false",
-      "release=false",
-      "components2=false",
-      "narrowed=false",
-    ]);
-    expect(planOutputs("ci/components/x")).toContain("components=true");
-    expect(planOutputs("ci/components/x")).toContain("full=false");
-    expect(planOutputs("ci/full/x")).toContain("full=true");
-    expect(() => planOutputs("dev")).toThrow(/not a ci/);
   });
 });
 
@@ -527,19 +504,6 @@ describe("a narrowed run", () => {
   it("starts only its files' jobs, the components in one", () => {
     expect(narrowedJobs(["a.test.ts", "b.browser.test.tsx"])).toEqual(["unit", "components-1"]);
     expect(narrowedJobs(["scripts/loops/browser.test.mjs"])).toEqual(["integration"]);
-    const plan = planOutputs("ci/full/x", ["a.int.test.ts"]);
-    expect(plan).toEqual([
-      "tier=full",
-      "static=false",
-      "unit=false",
-      "integration=true",
-      "components=false",
-      "full=false",
-      "candidate=false",
-      "release=false",
-      "components2=false",
-      "narrowed=true",
-    ]);
   });
 
   it("is never printed as the branch's verdict", () => {

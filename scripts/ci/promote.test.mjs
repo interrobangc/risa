@@ -10,8 +10,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { REFUSED } from "./candidate.mjs";
 import { EXIT, main } from "./ci.mjs";
 import { releasePasses } from "./gate.mjs";
-import { jobsFor } from "./tiers.mjs";
+import { tierData } from "./tier-data.mjs";
 import { buildVerdict } from "./verdict.mjs";
+
+const { jobsFor } = tierData();
 
 const BRANCH = "rc/20261123-1030";
 const CI_REF = "ci/candidate/rc-20261123-1030";
