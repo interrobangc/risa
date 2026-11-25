@@ -514,6 +514,20 @@ describe("commands through the config", () => {
     expect(r.stderr).toBe(`${CONFIG_NAME}: no value for commands.hooksInstall\n`);
   });
 
+  it("runs the command in a subshell: a cd or exit in it leaves the caller as it was", () => {
+    const moved = join(tmp, "moved.json");
+    writeFileSync(
+      moved,
+      JSON.stringify(
+        changed((c) => {
+          c.commands.install = "cd /; exit 3";
+        }),
+      ),
+    );
+    const r = bash('run_project install; echo "rc=$? $PWD"', { RISA_CONFIG: moved });
+    expect(r.stdout).toBe(`rc=3 ${ROOT}\n`);
+  });
+
   it("runs a hook from the top of the checkout it is called in, with its arguments and stdin", () => {
     const hooked = join(tmp, "hooks.json");
     writeFileSync(

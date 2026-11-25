@@ -65,12 +65,13 @@ tool_command() { config_get "tool.$1"; }
 # install, check, typecheck, typegen, datastoreStart…); fails when it isn't set.
 project_command() { config_get "commands.$1"; }
 # run_project NAME [ARG…] → runs that command here, ARGs after it, and gives its
-# exit code; 127, with a line, when the config doesn't set it.
+# exit code; 127, with a line, when the config doesn't set it. In a subshell, so
+# a `cd` or `exit` in the command can't change the caller.
 run_project() {
   local c
   c=$(project_command "$1") || return 127
   shift
-  eval "$c" '"$@"'
+  (eval "$c" '"$@"')
 }
 # run_hook NAME [ARG…] → runs the project's hook NAME (hooks.NAME in the config:
 # the project's own script the tool calls, checkAreas, docBudget…) from the top
