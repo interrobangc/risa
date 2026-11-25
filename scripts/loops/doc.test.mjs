@@ -1,7 +1,8 @@
 // pnpm prd doc <role> [section] (doc.mjs): on the sample project (generic alone,
 // generic then additions, a replacement, a section, each error), and on this repo's
 // config: a replacement role prints today's file byte for byte, a split one (loop,
-// hotfix, recovery) the core's generic doc and then the project's additions.
+// hotfix, recovery, orchestrator, planner, backlog, inbox) the core's generic doc and
+// then the project's additions.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -73,7 +74,7 @@ describe("prd doc on the sample project", () => {
   });
 
   it("refuses an unknown role, naming the roles", () => {
-    expect(fails("nope")).toMatch(/no role "nope" \(the roles: backlog, hotfix, loop, machinery,/);
+    expect(fails("nope")).toMatch(/no role "nope" \(the roles: backlog, hotfix, inbox, loop, machinery,/);
   });
 
   it("refuses an unknown section, and a fenced line is no heading", () => {
@@ -121,8 +122,16 @@ describe("this repo's roles", () => {
     expect(roleDoc(role, { config, root })).toBe(readFileSync(join(root, entry.replacement), "utf8"));
   });
 
-  it("the split roles are loop, hotfix and recovery", () => {
-    expect(split.map(([role]) => role).sort()).toEqual(["hotfix", "loop", "recovery"]);
+  it("the split roles are loop, hotfix, recovery, orchestrator, planner, backlog and inbox", () => {
+    expect(split.map(([role]) => role).sort()).toEqual([
+      "backlog",
+      "hotfix",
+      "inbox",
+      "loop",
+      "orchestrator",
+      "planner",
+      "recovery",
+    ]);
   });
 
   it.each(split)("%s prints the core's generic doc, then the project's additions", (role, entry) => {
@@ -136,6 +145,18 @@ describe("this repo's roles", () => {
     ["loop", "Hand-off", /^## Hand-off\n\nYour final message:/],
     ["loop", "Tests", /^## Tests\n/],
     ["loop", "Your worktree and stack", /Slots and ports/],
+    ["orchestrator", "Models", /^## Models\n\n\*\*Coding goes to opus/],
+    ["orchestrator", "Recovery", /\*\*Resuming as orchestrator:\*\*/],
+    ["orchestrator", "The check gate", /^### The check gate\n[\s\S]*\*\*How each kind lands:\*\*/],
+    [
+      "orchestrator",
+      "Rules across PRDs",
+      /Migrations take the next number[\s\S]*Hot files get regions first/,
+    ],
+    ["planner", "Slice fields", /^## Slice fields\n[\s\S]*slice-fields\.mjs/],
+    ["planner", "What to ask", /^## What to ask\n[\s\S]*\*\*Unattended\*\*/],
+    ["planner", "The skeptic pass", /^## The skeptic pass\n[\s\S]*\*\*A second send-back\*\*/],
+    ["backlog", "Deciding what's next", /Standing priorities:\n\n1\. Write the PRDs/],
   ])("%s's %s section, which prompts and docs name, is in the merged text", (role, heading, want) => {
     expect(roleDoc(role, { config, root, section: heading })).toMatch(want);
   });
