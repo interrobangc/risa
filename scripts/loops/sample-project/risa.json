@@ -12,6 +12,8 @@
     "docs": "handbook",
     "agentsDoc": "GUIDE.md",
     "preferences": "handbook/taste.md",
+    "tierData": "tools/tiers.json",
+    "checkPlanRules": "tools/check-plan-rules.json",
     "tooling": ["tools"]
   },
   "roles": {
@@ -49,5 +51,9 @@
   },
   "stack": {
     "portEnv": "web/.env"
+  },
+  "testProjects": {
+    "tooling": ["tools:unit"],
+    "browserHarness": "tools:browser"
   }
 }

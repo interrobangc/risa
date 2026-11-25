@@ -225,6 +225,8 @@ scripts/loops/run-log.test.mjs core
 scripts/loops/sample-project/prompt-golden.txt core
 scripts/loops/sample-project/repo.mjs core
 scripts/loops/sample-project/risa.json core
+scripts/loops/sample-project/tools/check-plan-rules.json core
+scripts/loops/sample-project/tools/tiers.json core
 scripts/loops/serve.sh project
 scripts/loops/session-requests.mjs core
 scripts/loops/session-requests.test.mjs core
@@ -264,6 +266,8 @@ scripts/loops/workers.test.mjs core
 scripts/loops/workspace-config.test.mjs project
 scripts/project/check-areas.mjs project
 scripts/project/check-areas.test.mjs project
+scripts/project/check-plan-rules.json project
+scripts/project/check-plan-rules.test.mjs project
 scripts/project/doc-budget.config.mjs project
 scripts/project/doc-budget.mjs project
 scripts/project/doc-budget.test.mjs project

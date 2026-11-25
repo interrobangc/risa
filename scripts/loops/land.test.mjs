@@ -994,10 +994,11 @@ exit 0
     const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
     change(raw);
     writeFileSync(join(root, "sample.json"), JSON.stringify(raw));
-    // Its paths start from its own folder: the tier data the check plan reads goes there too.
-    const tiers = raw.paths.tierData;
-    mkdirSync(dirname(join(root, tiers)), { recursive: true });
-    cpSync(join(dirname(FIXTURE_CONFIG), tiers), join(root, tiers));
+    // Its paths start from its own folder: the tier data and rules the check plan reads go there too.
+    for (const rel of [raw.paths.tierData, raw.paths.checkPlanRules]) {
+      mkdirSync(dirname(join(root, rel)), { recursive: true });
+      cpSync(join(dirname(FIXTURE_CONFIG), rel), join(root, rel));
+    }
     return { RISA_CONFIG: join(root, "sample.json") };
   };
 

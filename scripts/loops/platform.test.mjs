@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { toolingProjects } from "./tooling-tests.mjs";
-import { needsBrowserHarness } from "./check-plan.mjs";
+import { checkPlanFor } from "./check-plan.mjs";
+import { loadConfig } from "./config.mjs";
+import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let dir, file;
@@ -74,36 +76,37 @@ describe("load_avg", () => {
   });
 });
 
+// On the sample project: its config names the projects, its rules what the harness
+// tests (this repo's answers: scripts/project/check-plan-rules.test.mjs).
 describe("what pnpm test:tooling runs", () => {
-  const BASE = ["tooling:unit", "core:unit", "project:unit", "project:tooling"];
-  const WITH = [...BASE, "tooling:browser"];
+  const sample = loadConfig({ path: SAMPLE_CONFIG });
+  const opts = { config: sample.config, plan: checkPlanFor(sample) };
+  const BASE = ["tools:unit"];
+  const WITH = [...BASE, "tools:browser"];
 
-  it.each([
-    "scripts/loops/browser.sh",
-    "scripts/loops/browser.test.mjs",
-    "scripts/loops/lib.sh",
-    "scripts/loops/lease.sh",
-    "scripts/loops/serve.sh",
-    "scripts/loops/checks",
-    "scripts/project/check-areas.mjs",
-    "scripts/loops/check-areas.d/timeline",
-    "scripts/browser-checks/fixtures.mjs",
-  ])("adds the browser harness for %s", (f) => {
-    expect(needsBrowserHarness([f])).toBe(true);
-    expect(toolingProjects(["docs/x.md", f])).toEqual(WITH);
-  });
+  it.each(["scripts/loops/browser.sh", "scripts/loops/lib.sh", "tools/harness/run.sh", "e2e/a.spec.js"])(
+    "adds the browser harness for %s",
+    (f) => {
+      expect(toolingProjects(["docs/x.md", f], [], opts)).toEqual(WITH);
+    },
+  );
 
-  it.each([
-    "scripts/loops/land.sh",
-    "scripts/loops/checks.mjs",
-    "scripts/backlog/backlog.mjs",
-    ".githooks/commit-msg",
-  ])("skips it for %s", (f) => {
-    expect(toolingProjects([f])).toEqual(BASE);
+  it.each(["scripts/loops/land.sh", "tools/x.sh", "web/a.js"])("skips it for %s", (f) => {
+    expect(toolingProjects([f], [], opts)).toEqual(BASE);
   });
 
   it("runs it when the base can't be determined, or files are named", () => {
-    expect(toolingProjects(null)).toEqual(WITH);
-    expect(toolingProjects([], ["scripts/loops/lease.test.mjs"])).toEqual(WITH);
+    expect(toolingProjects(null, [], opts)).toEqual(WITH);
+    expect(toolingProjects([], ["scripts/loops/lease.test.mjs"], opts)).toEqual(WITH);
+  });
+
+  it("runs no harness a config doesn't name, and refuses a config with no projects", () => {
+    const { browserHarness: _, ...tooling } = sample.config.testProjects;
+    expect(
+      toolingProjects(null, [], { ...opts, config: { ...sample.config, testProjects: tooling } }),
+    ).toEqual(BASE);
+    expect(() =>
+      toolingProjects([], [], { ...opts, config: { ...sample.config, testProjects: undefined } }),
+    ).toThrow(/sets no testProjects\.tooling/);
   });
 });

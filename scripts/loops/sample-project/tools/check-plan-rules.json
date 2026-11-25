@@ -1,0 +1,19 @@
+{
+  "ownTests": "\\.slow\\.test\\.js$",
+  "suite": {
+    "tier": "e2e",
+    "rules": [
+      { "match": "^db/migrations/", "why": "a migration" },
+      { "match": "^lock\\.json$", "why": "the lockfile" },
+      { "match": "(^|/)package\\.json$", "why": "a package.json" },
+      { "match": "^db/.*fixture", "flags": "i", "why": "the fixtures" }
+    ]
+  },
+  "byPath": [
+    { "match": "^web/", "tier": "test", "why": "web code" },
+    { "match": "^server/", "tier": "lint", "why": "server code" }
+  ],
+  "browserHarness": { "tier": "test", "paths": ["tools/harness", "e2e"] },
+  "tooling": ["Makefile"],
+  "reachesCode": [{ "match": "(^|/)tsconfig\\.json$", "why": "a TypeScript config" }]
+}

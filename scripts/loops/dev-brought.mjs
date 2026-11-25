@@ -5,41 +5,13 @@
 // Anything git can't answer is a refusal (`answered: false`), never a pass. Diffs
 // use --no-renames, so a file dev renamed shows on dev's side under both paths.
 // Markdown both sides changed isn't shared: no check reads it, and a conflict in it
-// stops the landing's merge anyway.
+// stops the landing's merge anyway. What counts as risky is the check plan's
+// (check-plan.mjs: the project's rules).
 import { execFileSync } from "node:child_process";
-import { CI_LISTS, FULL } from "./check-plan.mjs";
+import { checkPlan } from "./check-plan.mjs";
 
 /** pnpm backlog commits these onto dev; two branches sharing them means nothing. */
 const BACKLOG = new Set(["plans/backlog.md", "plans/inbox.md", "plans/backlog-archive.md"]);
-
-/**
- * What reaches a branch's code without an import, beyond check-plan's forced-full
- * list: test setup, build and TypeScript config, and the lint and format config
- * (an unsynced landing only typechecks, and a lint or format failure brakes dev).
- * @type {[RegExp, string][]}
- */
-const REACHES_CODE = [
-  [/^(packages\/[^/]+|apps\/web)\/test\//, "test setup"],
-  [/(^|\/)vite\.config\.[^/]+$/, "a Vite config"],
-  [/(^|\/)tsconfig[^/]*\.json$/, "a TypeScript config"],
-  [/^pnpm-workspace\.yaml$/, "the pnpm workspace"],
-  [/(^|\/)eslint\.config\.[^/]+$/, "the ESLint config"],
-  [/^scripts\/eslint\//, "the ESLint rules"],
-  [/(^|\/)(\.prettierrc(\.[^/]+)?|prettier\.config\.[^/]+|\.prettierignore)$/, "the Prettier config"],
-];
-
-const RISKY = [.../** @type {[RegExp, string][]} */ (FULL), ...REACHES_CODE];
-
-/**
- * What kind of risky file this is, or null. Markdown never is, so a note can't
- * match the seeds' pattern; CI's two lists aren't drift at all (lib.sh, trunk_drift).
- * @param {string} file
- * @returns {string | null}
- */
-export function riskyKind(file) {
-  if (file.endsWith(".md") || CI_LISTS.has(file)) return null;
-  return RISKY.find(([re]) => re.test(file))?.[1] ?? null;
-}
 
 /** @param {string[]} items */
 const andMore = (items) => (items.length > 1 ? ` and ${items.length - 1} more` : "");
@@ -57,9 +29,11 @@ const andMore = (items) => (items.length > 1 ? ` and ${items.length - 1} more` :
  * @param {string} repo a checkout that has both refs
  * @param {string} devRef dev's ref there
  * @param {string} tipRef the branch's tip
+ * @param {{ plan?: import("./check-plan.mjs").CheckPlan }} [opts] the check plan whose
+ *   rules say what is risky (default: this repo's)
  * @returns {Answered | Unanswered}
  */
-export function devBrought(repo, devRef, tipRef) {
+export function devBrought(repo, devRef, tipRef, { plan = checkPlan() } = {}) {
   const git = (/** @type {string[]} */ ...args) =>
     execFileSync("git", ["-C", repo, ...args], {
       encoding: "utf8",
@@ -99,10 +73,10 @@ export function devBrought(repo, devRef, tipRef) {
     const own = new Set(branchFiles);
     const shared = devFiles.filter((f) => own.has(f) && !BACKLOG.has(f) && !f.endsWith(".md"));
     const risky = devFiles.flatMap((file) => {
-      const kind = riskyKind(file);
+      const kind = plan.riskyKind(file);
       return kind ? [{ file, kind }] : [];
     });
-    const drift = devFiles.some((f) => !BACKLOG.has(f) && !CI_LISTS.has(f));
+    const drift = devFiles.some((f) => !BACKLOG.has(f) && !plan.isCiList(f));
 
     let refusal = null;
     if (shared.length) refusal = `${devRef} changed ${shared[0]}${andMore(shared)}, which the branch touches`;

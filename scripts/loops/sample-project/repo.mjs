@@ -5,11 +5,12 @@
 // commands), except the branch prefixes, which some scripts still hardcode.
 //
 //   makeRepo(main, { config, files })   a git repo at `main`: the tool's scripts
-//     (scripts/loops), the config as its risa.json, the files given (path → text),
-//     one commit on the config's trunk. The scripts find the config at its root, so
+//     (scripts/loops), the config as its risa.json, the data files it names that sit
+//     beside it (the tier data, the check plan's rules: tools/ here), the files given
+//     (path → text), one commit on the config's trunk. The scripts find the config at its root, so
 //     a test runs them with RISA_CONFIG unset.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_NAME } from "../config.mjs";
@@ -29,6 +30,12 @@ export function makeRepo(main, { config = SAMPLE_CONFIG, files = {} } = {}) {
   mkdirSync(main, { recursive: true });
   cpSync(LOOPS, join(main, "scripts/loops"), { recursive: true });
   copyFileSync(config, join(main, CONFIG_NAME));
+  for (const rel of [parsed.paths.tierData, parsed.paths.checkPlanRules]) {
+    const from = rel && join(dirname(config), rel);
+    if (!from || !existsSync(from)) continue;
+    mkdirSync(dirname(join(main, rel)), { recursive: true });
+    copyFileSync(from, join(main, rel));
+  }
   for (const [path, text] of Object.entries({ ".gitignore": ".loops/\n", ...files })) {
     mkdirSync(dirname(join(main, path)), { recursive: true });
     writeFileSync(join(main, path), text);

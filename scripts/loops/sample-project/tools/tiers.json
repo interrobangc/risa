@@ -1,0 +1,17 @@
+{
+  "tiers": ["lint", "test", "e2e"],
+  "jobs": {
+    "lint": ["lint"],
+    "test": ["test"],
+    "e2e": ["e2e"]
+  },
+  "fileGroups": [
+    { "group": "e2e", "pattern": "e2e/*.spec.js", "tier": "e2e" },
+    { "group": "test", "pattern": "*", "tier": "test" }
+  ],
+  "narrowedTiers": ["test"],
+  "browserCheck": "e2e/*.spec.js",
+  "narrowedFile": ".narrowed.json",
+  "forcedFlakeFile": ".force-flake.json",
+  "refPrefix": "runs/"
+}

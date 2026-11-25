@@ -16,58 +16,342 @@
 //   full   pnpm check and the build budget.
 // A package.json that changed only its `scripts` asks for no tier (package-diff.mjs).
 // The CLI needs --base to tell: without it, any package.json proposes full.
-
+//
+// This is the engine; the rules are the project's data: the file its config's
+// paths.checkPlanRules names (JSON), with the tiers from its tier data
+// (paths.tierData) and CI's two lists from paths.brakeList and paths.quarantine:
+//   ownTests        a pattern: the integration and component test files, the only
+//                   tests a slice or quick check picks by name
+//   suite           { tier, rules: [{ match, why, flags? }] }: what only the whole
+//                   suite vouches for, and the tier that runs it (a file no rule
+//                   covers asks for it too)
+//   byPath          [{ match, tier, why }]: the tier by path, the first match
+//   browserHarness  { tier, paths }: what the browser harness test exercises beyond
+//                   the core's own files (CORE_HARNESS), and the tier a change to it asks
+//                   for (optional: none, no harness)
+//   tooling         paths that are tooling beyond the config's paths.tooling and the
+//                   core's own folders: a change only to tooling asks for no tier
+//   reachesCode     [{ match, why }]: what reaches a branch's code without an import,
+//                   beyond the suite's list (dev-brought.mjs: a dev sync's risk)
+// A `match` is a regular expression's source (`flags` its flags); a path is a file
+// or a folder, from the repo's root.
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
+import { loadConfig } from "./config.mjs";
 import { tierData } from "../ci/tier-data.mjs";
 
-/** Integration and component test files: the only tests a slice or quick check picks by name. */
-const OWN_TEST = /\.(int\.test\.ts|browser\.test\.tsx)$/;
+/** The core's own folders, tooling while they sit in the repo (lib.sh's exempt_re too). */
+const CORE_TOOLING = ["scripts/loops", "scripts/backlog"];
 
-/** What only the whole suite can vouch for. dev-brought.mjs reads it too. */
-export const FULL = [
-  [/^packages\/data\/src\/db\/migrations\//, "a migration"],
-  [/^packages\/data\/(scripts|src)\/.*seed/i, "seeds"],
-  [/^powersync\/sync-config\.yaml$/, "the sync config"],
-  [/^pnpm-lock\.yaml$/, "the lockfile"],
-  [/(^|\/)package\.json$/, "a package.json"],
-  [/^vitest\.config\.ts$/, "the Vitest config"],
-  [/^\.github\/(workflows|actions)\//, "the CI workflow"],
-  [/^scripts\/ci\//, "scripts/ci"],
+/** What the browser harness test (the core's browser.test.mjs) exercises of the core. */
+const CORE_HARNESS = [
+  "scripts/loops/browser.sh",
+  "scripts/loops/browser.test.mjs",
+  "scripts/loops/lib.sh",
+  "scripts/loops/lease.sh",
 ];
 
-/** CI's two committed lists: filing a flake changes them, and that keeps a verdict. */
-export const CI_LISTS = new Set(["scripts/ci/brake-list.txt", "scripts/ci/quarantine.txt"]);
+const KEYS = ["ownTests", "suite", "byPath", "browserHarness", "tooling", "reachesCode"];
 
-// The project config (risa.json) counts as tooling: the tooling tests check it. So
-// does the project's own folder of scripts (scripts/project/, the tooling that stays).
-const TOOLING =
-  /^(scripts\/loops\/|scripts\/backlog\/|scripts\/project\/|\.githooks\/|scripts\/hooks\.test\.mjs$|risa\.json$)/;
-
-// What the browser harness test (scripts/loops/browser.test.mjs, the
-// tooling:browser project) exercises: browser.sh, what it sources and starts, the
-// manifest, the area map and its engine (the project's, in scripts/project/), and the
-// checks' own directory.
-const BROWSER_HARNESS =
-  /^scripts\/(loops\/(browser\.sh|browser\.test\.mjs|lib\.sh|lease\.sh|serve\.sh|checks|check-areas\.d\/.+)|project\/check-areas\.mjs|browser-checks\/.+)$/;
-
-/**
- * Whether a change needs the browser harness test.
- * @param {string[]} changed files changed against the base
- * @returns {boolean}
- */
-export const needsBrowserHarness = (changed) => changed.some((f) => BROWSER_HARNESS.test(f));
-
-/**
- * @param {string[]} changed files changed against the base
- * @param {"slice" | "quick" | "full"} asked
- * @returns {{ mode: "slice" | "quick" | "full", ownTests: string[], tooling: boolean }}
- */
-export function planCheck(changed, asked) {
-  const tooling = changed.some((f) => TOOLING.test(f));
-  if (asked === "full") return { mode: "full", ownTests: [], tooling };
-  return { mode: asked, ownTests: [...new Set(changed.filter((f) => OWN_TEST.test(f)))], tooling };
+/** A rules file that doesn't load: every problem, each naming its field. */
+export class CheckPlanRulesError extends Error {
+  /** @param {string[]} problems */
+  constructor(problems) {
+    super(problems.join("\n"));
+    this.name = "CheckPlanRulesError";
+    this.problems = problems;
+  }
 }
+
+/** @param {unknown} v */
+const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+/** @param {unknown} v */
+const isPath = (v) =>
+  typeof v === "string" &&
+  v !== "" &&
+  !/[\s\\]/.test(v) &&
+  v.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+/** @param {unknown} v */
+const isWhy = (v) => typeof v === "string" && /^\S(.*\S)?$/.test(v);
+
+/**
+ * What is wrong with a pattern's source and flags, or null.
+ * @param {unknown} match
+ * @param {unknown} flags
+ */
+const patternProblem = (match, flags) => {
+  if (typeof match !== "string" || match === "") return "must be a regular expression's source";
+  if (flags !== undefined && !(typeof flags === "string" && /^[imsu]*$/.test(flags)))
+    return "flags: must be some of i, m, s, u";
+  try {
+    new RegExp(match, /** @type {string | undefined} */ (flags));
+    return null;
+  } catch (e) {
+    return `not a regular expression (${e instanceof Error ? e.message : e})`;
+  }
+};
+
+/**
+ * What is wrong with a parsed rules file: one line per problem, none when it loads.
+ * @param {unknown} data
+ * @param {readonly string[]} [tiers] the project's tiers: a rule's tier must be one
+ * @returns {string[]}
+ */
+export function checkPlanRulesProblems(data, tiers) {
+  if (!isObject(data)) return ["the file must hold one JSON object"];
+  const d = /** @type {Record<string, any>} */ (data);
+  /** @type {string[]} */
+  const problems = Object.keys(d)
+    .filter((k) => !KEYS.includes(k))
+    .map((k) => `${k}: unknown key`);
+  for (const k of ["ownTests", "suite"]) if (!(k in d)) problems.push(`${k}: missing`);
+  const tier = (/** @type {string} */ at, /** @type {unknown} */ t) => {
+    if (typeof t !== "string" || (tiers && !tiers.includes(t)))
+      problems.push(`${at}: not a tier${tiers ? ` (${tiers.join(", ")})` : ""}`);
+  };
+  /**
+   * @param {string} at
+   * @param {unknown} list
+   * @param {string[]} fields the keys each rule has (`flags` may join them)
+   */
+  const rules = (at, list, fields) => {
+    if (!Array.isArray(list)) return problems.push(`${at}: must be a list of { ${fields.join(", ")} }`);
+    list.forEach((/** @type {any} */ r, /** @type {number} */ i) => {
+      if (!isObject(r)) return problems.push(`${at}.${i}: must be { ${fields.join(", ")} }`);
+      for (const k of Object.keys(r))
+        if (![...fields, "flags"].includes(k)) problems.push(`${at}.${i}.${k}: unknown key`);
+      const bad = patternProblem(r.match, r.flags);
+      if (bad) problems.push(`${at}.${i}.match: ${bad}`);
+      if (!isWhy(r.why)) problems.push(`${at}.${i}.why: must be one line of text`);
+      if (fields.includes("tier")) tier(`${at}.${i}.tier`, r.tier);
+    });
+  };
+  const paths = (/** @type {string} */ at, /** @type {unknown} */ list) => {
+    if (!Array.isArray(list)) return problems.push(`${at}: must be a list of paths`);
+    list.forEach((p, i) => {
+      if (!isPath(p)) problems.push(`${at}.${i}: must be a path from the repo's root`);
+    });
+  };
+  if ("ownTests" in d) {
+    const bad = patternProblem(d.ownTests, undefined);
+    if (bad) problems.push(`ownTests: ${bad}`);
+  }
+  if ("suite" in d) {
+    if (!isObject(d.suite)) problems.push("suite: must be { tier, rules }");
+    else {
+      for (const k of Object.keys(d.suite))
+        if (!["tier", "rules"].includes(k)) problems.push(`suite.${k}: unknown key`);
+      tier("suite.tier", d.suite.tier);
+      rules("suite.rules", d.suite.rules, ["match", "why"]);
+    }
+  }
+  if ("byPath" in d) rules("byPath", d.byPath, ["match", "tier", "why"]);
+  if ("browserHarness" in d) {
+    if (!isObject(d.browserHarness)) problems.push("browserHarness: must be { tier, paths }");
+    else {
+      for (const k of Object.keys(d.browserHarness))
+        if (!["tier", "paths"].includes(k)) problems.push(`browserHarness.${k}: unknown key`);
+      tier("browserHarness.tier", d.browserHarness.tier);
+      paths("browserHarness.paths", d.browserHarness.paths);
+    }
+  }
+  if ("tooling" in d) paths("tooling", d.tooling);
+  if ("reachesCode" in d) rules("reachesCode", d.reachesCode, ["match", "why"]);
+  return problems;
+}
+
+/**
+ * Whether a file is one of these paths or under one.
+ * @param {readonly string[]} paths
+ */
+const under = (paths) => (/** @type {string} */ file) =>
+  paths.some((p) => file === p || file.startsWith(`${p}/`));
+
+/** @param {{ match: string, flags?: string, why: string, tier?: string }[]} list */
+const compile = (list = []) =>
+  list.map((r) => ({ re: new RegExp(r.match, r.flags), why: r.why, tier: r.tier ?? "" }));
+
+/**
+ * The check plan for one project: its rules file and tier data, from its config.
+ * Throws a CheckPlanRulesError naming every problem with the rules.
+ * @param {{ config: Record<string, any>, root: string }} project a loaded config
+ */
+export function checkPlanFor(project) {
+  const rel = project.config.paths?.checkPlanRules;
+  if (!rel)
+    throw new CheckPlanRulesError([
+      "the project config sets no paths.checkPlanRules (the check plan's rules)",
+    ]);
+  const file = join(project.root, rel);
+  let data;
+  try {
+    data = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new CheckPlanRulesError([
+      `${file}: can't read the check plan's rules (${e instanceof Error ? e.message : e})`,
+    ]);
+  }
+  const { TIERS } = tierData(project);
+  const problems = checkPlanRulesProblems(data, TIERS);
+  if (problems.length) throw new CheckPlanRulesError(problems.map((p) => `${file}: ${p}`));
+
+  const ownTest = new RegExp(data.ownTests);
+  /** @type {string} */
+  const suiteTier = data.suite.tier;
+  const suite = compile(data.suite.rules);
+  const byPath = compile(data.byPath);
+  const reaches = compile(data.reachesCode);
+  const harnessTier = data.browserHarness?.tier;
+  const isHarness = harnessTier
+    ? under([...CORE_HARNESS, ...data.browserHarness.paths])
+    : (/** @type {string} */ _file) => false;
+  const isTooling = under([
+    ...CORE_TOOLING,
+    ...(project.config.paths?.tooling ?? []),
+    ...(data.tooling ?? []),
+  ]);
+  const ciLists = new Set(
+    [project.config.paths?.brakeList, project.config.paths?.quarantine].filter(Boolean),
+  );
+
+  /** The tiers a landing can declare, lowest first. */
+  const PROPOSED_TIERS = Object.freeze(["none", ...TIERS]);
+  const tierRank = (/** @type {string} */ tier) => PROPOSED_TIERS.indexOf(tier);
+
+  /**
+   * One file's tier. Markdown comes first, so a note can't match the seeds' pattern;
+   * a file no rule covers asks for the suite's.
+   * @param {string} file
+   * @param {Set<string>} scriptsOnly
+   * @returns {{ tier: string, why: string }}
+   */
+  const fileProposal = (file, scriptsOnly) => {
+    if (file.endsWith(".md")) return { tier: "none", why: "docs" };
+    if (scriptsOnly.has(file)) return { tier: "none", why: "a package.json's scripts" };
+    for (const r of suite) if (r.re.test(file)) return { tier: suiteTier, why: r.why };
+    for (const r of byPath) if (r.re.test(file)) return { tier: r.tier, why: r.why };
+    if (isHarness(file)) return { tier: harnessTier, why: "the browser harness" };
+    if (isTooling(file)) return { tier: "none", why: "tooling" };
+    return { tier: suiteTier, why: "a file no rule covers" };
+  };
+
+  /**
+   * The lowest tier a landing of this diff should wait for: its files' highest.
+   * @param {string[]} changed files changed against the base
+   * @param {Map<string, { base: string | null, head: string | null }>} [packages] both
+   *   versions of each changed package.json; one missing here asks for the suite
+   * @returns {{ tier: string, reason: string }}
+   */
+  const proposeTier = (changed, packages = new Map()) => {
+    const scriptsOnly = scriptsOnlyFiles(packages);
+    let top = { tier: "none", reason: changed.length ? "docs and tooling only" : "no changes" };
+    for (const file of changed) {
+      const { tier, why } = fileProposal(file, scriptsOnly);
+      if (tierRank(tier) > tierRank(top.tier)) top = { tier, reason: `${why} (${file})` };
+    }
+    return top;
+  };
+
+  return Object.freeze({
+    PROPOSED_TIERS,
+    tierRank,
+    proposeTier,
+    /** Whether this is one of CI's two committed lists. @param {string} file */
+    isCiList: (file) => ciLists.has(file),
+
+    /**
+     * Whether a change needs the browser harness test.
+     * @param {string[]} changed files changed against the base
+     */
+    needsBrowserHarness: (changed) => changed.some(isHarness),
+
+    /**
+     * @param {string[]} changed files changed against the base
+     * @param {"slice" | "quick" | "full"} asked
+     * @returns {{ mode: "slice" | "quick" | "full", ownTests: string[], tooling: boolean }}
+     */
+    planCheck(changed, asked) {
+      const tooling = changed.some(isTooling);
+      if (asked === "full") return { mode: "full", ownTests: [], tooling };
+      return { mode: asked, ownTests: [...new Set(changed.filter((f) => ownTest.test(f)))], tooling };
+    },
+
+    /**
+     * Whether commits changing these files keep a verdict from before them: docs,
+     * tooling and CI's two lists. The browser harness doesn't, since a verdict ran it.
+     * @param {string[]} changed
+     * @param {Map<string, { base: string | null, head: string | null }>} [packages]
+     */
+    keepsVerdict: (changed, packages = new Map()) =>
+      proposeTier(
+        changed.filter((f) => !ciLists.has(f)),
+        packages,
+      ).tier === "none",
+
+    /**
+     * What a dev sync (a merge of dev into the branch) asks the synced tip to recheck:
+     * the tier of the files dev brought, which dev's own landing already vouched for
+     * alone. The browser harness counts as tooling here, since `pnpm test:tooling` runs
+     * its test, unless the branch changed that file too; CI's two lists count for nothing.
+     * @param {string[]} brought files the merge changed against the branch's side
+     * @param {string[]} touched files the branch itself changed against dev
+     */
+    syncTier(brought, touched) {
+      const shared = new Set(touched);
+      return proposeTier(brought.filter((f) => !ciLists.has(f) && (shared.has(f) || !isHarness(f))));
+    },
+
+    /**
+     * A declared tier against the proposal. `none` under a real proposal is no gate at
+     * all, which is what --force is for, so a reason doesn't buy it.
+     * @param {string} proposed
+     * @param {string} [declared]
+     * @returns {"ok" | "below" | "refused"}
+     */
+    declaredStatus(proposed, declared = proposed) {
+      if (tierRank(declared) >= tierRank(proposed)) return "ok";
+      return declared === "none" ? "refused" : "below";
+    },
+
+    /**
+     * The lint step `pnpm test:tooling` runs first (tooling-lint.mjs): eslint and
+     * prettier on the changed tooling files, since a docs-and-tooling-only diff
+     * passes the gate with no check ("none needed") and would otherwise reach dev
+     * unlinted. Markdown is left to `prettier --check`, so a Markdown-only diff
+     * gets no step (both lists empty).
+     * @param {string[]} changed files changed against the trunk
+     * @returns {{ eslint: string[], prettier: string[] }}
+     */
+    planToolingLint(changed) {
+      const files = changed.filter((f) => isTooling(f) && !f.endsWith(".md"));
+      return { eslint: files.filter((f) => /\.[cm]?[jt]sx?$/.test(f)), prettier: files };
+    },
+
+    /**
+     * What kind of risky file a dev sync brought, or null (dev-brought.mjs): what
+     * only the whole suite vouches for, and what reaches code without an import.
+     * Markdown never is, so a note can't match the seeds' pattern; CI's two lists
+     * aren't drift at all (lib.sh, trunk_drift).
+     * @param {string} file
+     * @returns {string | null}
+     */
+    riskyKind(file) {
+      if (file.endsWith(".md") || ciLists.has(file)) return null;
+      return [...suite, ...reaches].find((r) => r.re.test(file))?.why ?? null;
+    },
+  });
+}
+
+/** @typedef {ReturnType<typeof checkPlanFor>} CheckPlan */
+
+/** @type {CheckPlan | undefined} */
+let ours;
+/** This repo's check plan, built on first use. */
+export const checkPlan = () => (ours ??= checkPlanFor(loadConfig()));
+
+// This repo's plan, function by function: what the scripts and the CLI call.
 
 /** The tiers a landing can declare, lowest first. */
 export const PROPOSED_TIERS = /** @type {const} */ (["none", ...tierData().TIERS]);
@@ -77,94 +361,20 @@ export const PROPOSED_TIERS = /** @type {const} */ (["none", ...tierData().TIERS
 export const tierRank = (/** @type {string} */ tier) =>
   PROPOSED_TIERS.indexOf(/** @type {ProposedTier} */ (tier));
 
-/**
- * One file's tier. Markdown comes first, so a note can't match the seeds' pattern;
- * a file no rule covers asks for the most.
- * @param {string} file
- * @param {Set<string>} scriptsOnly
- * @returns {{ tier: ProposedTier, why: string }}
- */
-function fileProposal(file, scriptsOnly) {
-  if (file.endsWith(".md")) return { tier: "none", why: "docs" };
-  if (scriptsOnly.has(file)) return { tier: "none", why: "a package.json's scripts" };
-  for (const [re, what] of FULL)
-    if (/** @type {RegExp} */ (re).test(file)) return { tier: "full", why: /** @type {string} */ (what) };
-  if (file.startsWith("apps/")) return { tier: "components", why: "app code" };
-  if (file.startsWith("packages/")) return { tier: "integration", why: "server code" };
-  if (BROWSER_HARNESS.test(file)) return { tier: "integration", why: "the browser harness" };
-  if (TOOLING.test(file)) return { tier: "none", why: "tooling" };
-  return { tier: "full", why: "a file no rule covers" };
-}
-
-/**
- * The lowest tier a landing of this diff should wait for: its files' highest.
- * @param {string[]} changed files changed against the base
- * @param {Map<string, { base: string | null, head: string | null }>} [packages] both
- *   versions of each changed package.json; one missing here proposes full
- * @returns {{ tier: ProposedTier, reason: string }}
- */
-export function proposeTier(changed, packages = new Map()) {
-  const scriptsOnly = scriptsOnlyFiles(packages);
-  /** @type {{ tier: ProposedTier, reason: string }} */
-  let top = { tier: "none", reason: changed.length ? "docs and tooling only" : "no changes" };
-  for (const file of changed) {
-    const { tier, why } = fileProposal(file, scriptsOnly);
-    if (tierRank(tier) > tierRank(top.tier)) top = { tier, reason: `${why} (${file})` };
-  }
-  return top;
-}
-
-/**
- * Whether commits changing these files keep a verdict from before them: docs,
- * tooling and CI's two lists. The browser harness doesn't, since a verdict ran it.
- * @param {string[]} changed
- * @param {Map<string, { base: string | null, head: string | null }>} [packages]
- */
-export const keepsVerdict = (changed, packages = new Map()) =>
-  proposeTier(
-    changed.filter((f) => !CI_LISTS.has(f)),
-    packages,
-  ).tier === "none";
-
-/**
- * What a dev sync (a merge of dev into the branch) asks the synced tip to recheck:
- * the tier of the files dev brought, which dev's own landing already vouched for
- * alone. The browser harness counts as tooling here, since `pnpm test:tooling` runs
- * its test, unless the branch changed that file too; CI's two lists count for nothing.
- * @param {string[]} brought files the merge changed against the branch's side
- * @param {string[]} touched files the branch itself changed against dev
- * @returns {{ tier: ProposedTier, reason: string }}
- */
-export function syncTier(brought, touched) {
-  const shared = new Set(touched);
-  return proposeTier(brought.filter((f) => !CI_LISTS.has(f) && (shared.has(f) || !BROWSER_HARNESS.test(f))));
-}
-
-/**
- * A declared tier against the proposal. `none` under a real proposal is no gate at
- * all, which is what --force is for, so a reason doesn't buy it.
- * @param {string} proposed
- * @param {string} [declared]
- * @returns {"ok" | "below" | "refused"}
- */
-export function declaredStatus(proposed, declared = proposed) {
-  if (tierRank(declared) >= tierRank(proposed)) return "ok";
-  return declared === "none" ? "refused" : "below";
-}
-
-/**
- * The lint step `pnpm test:tooling` runs first (tooling-lint.mjs): eslint and
- * prettier on the changed tooling files, since a docs-and-tooling-only diff
- * passes the gate with no check ("none needed") and would otherwise reach dev
- * unlinted. Markdown is left to `prettier --check`, so a Markdown-only diff
- * gets no step (both lists empty).
- * @param {string[]} changed files changed against the trunk
- * @returns {{ eslint: string[], prettier: string[] }}
- */
-export function planToolingLint(changed) {
-  const files = changed.filter((f) => TOOLING.test(f) && !f.endsWith(".md"));
-  return { eslint: files.filter((f) => /\.[cm]?[jt]sx?$/.test(f)), prettier: files };
-}
+/** @param {string[]} changed */
+export const needsBrowserHarness = (changed) => checkPlan().needsBrowserHarness(changed);
+/** @param {string[]} changed @param {"slice" | "quick" | "full"} asked */
+export const planCheck = (changed, asked) => checkPlan().planCheck(changed, asked);
+/** @param {string[]} changed @param {Map<string, { base: string | null, head: string | null }>} [packages] */
+export const proposeTier = (changed, packages) => checkPlan().proposeTier(changed, packages);
+/** @param {string[]} changed @param {Map<string, { base: string | null, head: string | null }>} [packages] */
+export const keepsVerdict = (changed, packages) => checkPlan().keepsVerdict(changed, packages);
+/** @param {string[]} brought @param {string[]} touched */
+export const syncTier = (brought, touched) => checkPlan().syncTier(brought, touched);
+/** @param {string} proposed @param {string} [declared] */
+export const declaredStatus = (proposed, declared) => checkPlan().declaredStatus(proposed, declared);
+/** @param {string[]} changed */
+export const planToolingLint = (changed) => checkPlan().planToolingLint(changed);
 
 const USAGE = `usage: check-plan.mjs --mode slice|quick|full [--repo DIR --base REF --head REF] < changed-files
        check-plan.mjs --propose [--declared <tier>] [--repo DIR] [--base REF [--head REF] | < changed-files]`;

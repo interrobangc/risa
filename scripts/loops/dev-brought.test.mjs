@@ -1,10 +1,26 @@
-// What dev brought since the last sync (dev-brought.mjs), over throwaway repositories.
+// What dev brought since the last sync (dev-brought.mjs), over throwaway repositories,
+// with the sample project's check plan rules (this repo's risky kinds:
+// scripts/project/check-plan-rules.test.mjs).
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { devBrought, riskyKind } from "./dev-brought.mjs";
+import { checkPlanFor } from "./check-plan.mjs";
+import { loadConfig } from "./config.mjs";
+import { devBrought as brought } from "./dev-brought.mjs";
+import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
+
+const SAMPLE = loadConfig({ path: SAMPLE_CONFIG });
+// The sample, with CI's two lists named.
+const plan = checkPlanFor({
+  ...SAMPLE,
+  config: {
+    ...SAMPLE.config,
+    paths: { ...SAMPLE.config.paths, brakeList: "ci/brakes.txt", quarantine: "ci/q.txt" },
+  },
+});
+const devBrought = (repo, dev, tip) => brought(repo, dev, tip, { plan });
 
 const HERE = new URL(".", import.meta.url).pathname;
 
@@ -82,22 +98,10 @@ describe("devBrought", () => {
   );
 
   it.each([
-    ["packages/data/src/db/migrations/0100_x.sql", "a migration"],
-    ["packages/data/src/seeds/people.ts", "seeds"],
-    ["powersync/sync-config.yaml", "the sync config"],
-    ["pnpm-lock.yaml", "the lockfile"],
-    ["apps/web/package.json", "a package.json"],
-    ["vitest.config.ts", "the Vitest config"],
-    ["packages/data/test/setup.ts", "test setup"],
-    ["apps/web/test/setup.ts", "test setup"],
-    ["apps/web/vite.config.ts", "a Vite config"],
-    ["tsconfig.base.json", "a TypeScript config"],
-    ["packages/api/tsconfig.json", "a TypeScript config"],
-    ["pnpm-workspace.yaml", "the pnpm workspace"],
-    ["eslint.config.js", "the ESLint config"],
-    ["scripts/eslint/plugin.mjs", "the ESLint rules"],
-    [".prettierrc.json", "the Prettier config"],
-    [".prettierignore", "the Prettier config"],
+    ["db/migrations/0100_x.sql", "a migration"],
+    ["lock.json", "the lockfile"],
+    ["web/package.json", "a package.json"],
+    ["web/tsconfig.json", "a TypeScript config"],
   ])("names %s on dev's side as %s", (file, kind) => {
     on("branch");
     commit("mine.ts");
@@ -108,7 +112,7 @@ describe("devBrought", () => {
     expect(v.refusal).toBe(`dev brought ${kind} (${file})`);
   });
 
-  it.each(["plans/topic-plan.md", "docs/domain/sync.md"])("doesn't call %s shared", (file) => {
+  it.each(["plans/topic-plan.md", "docs/sync.md"])("doesn't call %s shared", (file) => {
     on("branch");
     commit(file, "mine.ts");
     on("dev");
@@ -125,18 +129,18 @@ describe("devBrought", () => {
   });
 
   it("leaves Markdown and CI's two lists off the risky list", () => {
-    expect(riskyKind("packages/data/src/seeds/notes.md")).toBeNull();
-    expect(riskyKind("scripts/ci/quarantine.txt")).toBeNull();
-    expect(riskyKind("scripts/ci/brake-list.txt")).toBeNull();
-    expect(riskyKind("scripts/ci/gate.mjs")).toBe("scripts/ci");
-    expect(riskyKind("apps/web/app/routes/home.tsx")).toBeNull();
+    on("branch");
+    commit("mine.ts");
+    on("dev");
+    commit("db/migrations/notes.md", "ci/q.txt", "ci/brakes.txt");
+    expect(devBrought(repo, "dev", "branch")).toMatchObject({ risky: [], refusal: null });
   });
 
   it("doesn't call a dev that moved only CI's lists drift", () => {
     on("branch");
     commit("mine.ts");
     on("dev");
-    commit("scripts/ci/quarantine.txt");
+    commit("ci/q.txt");
     expect(devBrought(repo, "dev", "branch")).toMatchObject({ drift: false, risky: [], refusal: null });
   });
 
