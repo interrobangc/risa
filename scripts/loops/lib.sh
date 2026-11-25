@@ -6,7 +6,30 @@
 main=$(git -C "$(dirname "${BASH_SOURCE[0]}")" worktree list --porcelain | awk 'NR==1{print $2}')
 loops=$main/.loops
 leases=$loops/.slots
-trunk=${TRUNK:-dev}
+
+# The project config (risa.json; config.mjs is its loader and the only code that
+# knows where the file is). Bash reads it once per process: config_load starts
+# Node once and keeps every value, and config_get answers from that copy. It is
+# loaded here, as lib.sh is sourced, so a $(config_get …) never starts Node again.
+#   config_get KEY → the value (a list: one item per line); fails, with a line
+#   on stderr, when the config has no value for KEY.
+config_load() {
+  [[ -n ${_config_loaded:-} ]] && return 0
+  _config=$(node "$(dirname "${BASH_SOURCE[0]}")/config.mjs" dump) || return 1
+  _config_loaded=1
+}
+config_get() {
+  local line found=""
+  config_load || return 1
+  while IFS= read -r line; do
+    case $line in
+      "$1="* | "$1".[0-9]*=*) echo "${line#*=}"; found=1 ;;
+    esac
+  done <<< "$_config"
+  [[ -n $found ]] || { echo "risa.json: no value for $1" >&2; return 1; }
+}
+config_load || { echo "lib.sh: the project config didn't load" >&2; return 1 2>/dev/null || exit 1; }
+trunk=${TRUNK:-$(config_get branches.trunk)}
 # The PRD cap (lanes): `pnpm prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
 # wins over CARETOOK_MAX_PRDS; the default is 4. max_prds_from says which one set it.
 prd_cap_file=$loops/.prd-cap

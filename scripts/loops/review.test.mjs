@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const fixture = (name) => join(HERE, "codex-review.fixtures", `${name}.json`);

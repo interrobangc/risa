@@ -30,6 +30,7 @@ import {
   probeAllowed,
 } from "./drain.mjs";
 import { mergeReadings } from "./usage.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const NOW = Date.parse("2026-11-22T12:00:00Z");

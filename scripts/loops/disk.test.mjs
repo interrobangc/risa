@@ -21,6 +21,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -99,7 +100,9 @@ beforeAll(() => {
   ])
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
-  for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f === "slice-fields.mjs"))
+  for (const f of readdirSync(HERE).filter(
+    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
+  ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   // A fake serve.sh: browser.sh calls it to start (and build) the check server.
   writeFileSync(

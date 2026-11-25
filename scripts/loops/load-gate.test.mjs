@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadGate, parseLoad, readLoadGate, sayGate, stateOf } from "./load-gate.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 
@@ -209,7 +210,7 @@ describe("the scripts that wait or warn", () => {
       git(main, "config", k, v);
     mkdirSync(join(main, "scripts/loops"), { recursive: true });
     for (const f of readdirSync(HERE).filter(
-      (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "load-gate.mjs",
+      (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "load-gate.mjs",
     ))
       copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
     writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.postgres/\n");

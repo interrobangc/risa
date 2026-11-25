@@ -22,6 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAsk, dismissAsk, getAsk } from "./asks.mjs";
 import { byeLines, byeVerdict } from "./bye.mjs";
 import { createNotice } from "./notices.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -195,6 +196,7 @@ beforeAll(() => {
   for (const f of [
     "prd.sh",
     "lib.sh",
+    "config.mjs",
     "bye.mjs",
     "sessions.mjs",
     "captain.mjs",

@@ -50,6 +50,7 @@ import {
   stuckSettings,
 } from "./dispatch-stuck.mjs";
 import { createRequest } from "./session-requests.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -949,7 +950,8 @@ describe("the session-request tick", () => {
   });
 
   it("the opened line really starts a recorded session with the brief at the top", () => {
-    for (const f of ["session.sh", "prompt.sh", "lib.sh"]) copyFileSync(join(HERE, f), scripts(f));
+    for (const f of ["session.sh", "prompt.sh", "lib.sh", "config.mjs"])
+      copyFileSync(join(HERE, f), scripts(f));
     cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
     const seen = join(root, "claude-args");
     const stub = join(root, "bin", "claude-args");

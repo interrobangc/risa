@@ -6,6 +6,7 @@ import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -134,7 +135,7 @@ beforeAll(() => {
   loops = join(main, ".loops");
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   mkdirSync(join(main, "plans"), { recursive: true });
-  for (const f of ["prompt.sh", "lib.sh", "slice-fields.mjs", "slice-brief.mjs"]) {
+  for (const f of ["prompt.sh", "lib.sh", "config.mjs", "slice-fields.mjs", "slice-brief.mjs"]) {
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   }
   cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });

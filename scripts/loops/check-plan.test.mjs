@@ -61,6 +61,7 @@ describe("planCheck", () => {
     "scripts/backlog/b.mjs",
     ".githooks/commit-msg",
     "scripts/hooks.test.mjs",
+    "risa.json",
   ])("joins the tooling tests for %s", (file) => {
     expect(planCheck([file], "slice").tooling).toBe(true);
     expect(planCheck([file], "quick").tooling).toBe(true);

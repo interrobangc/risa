@@ -6,6 +6,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let repo;
@@ -36,7 +37,7 @@ beforeEach(() => {
   git("config", "user.name", "T");
   git("config", "core.hooksPath", "/dev/null");
   mkdirSync(join(repo, "scripts/loops"), { recursive: true });
-  copyFileSync(join(HERE, "lib.sh"), join(repo, "scripts/loops/lib.sh"));
+  for (const f of ["lib.sh", "config.mjs"]) copyFileSync(join(HERE, f), join(repo, "scripts/loops", f));
   commit({ "apps/web/a.ts": "1", "README.md": "r" }, "base");
   git("checkout", "-qb", "feature");
 });

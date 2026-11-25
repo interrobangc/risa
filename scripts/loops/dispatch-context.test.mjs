@@ -29,6 +29,7 @@ import {
   runsPrdCommand,
 } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, MAX_REOPENS, pick } from "./dispatch-pick.mjs";
+import "./config-fixture.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIN = 60_000;

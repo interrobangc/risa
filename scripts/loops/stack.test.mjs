@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { workerDatabaseName } from "../../packages/data/src/db/testDatabase.ts";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -104,7 +105,7 @@ const fixture = () => {
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter(
-    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "run-log.mjs",
+    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "run-log.mjs",
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   const ciDir = join(HERE, "../ci");

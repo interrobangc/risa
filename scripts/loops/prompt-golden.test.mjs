@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const GOLDEN = join(HERE, "prompt.fixtures/golden.txt");
@@ -119,7 +120,7 @@ beforeAll(() => {
   main = join(root, "main");
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   mkdirSync(join(main, "plans"), { recursive: true });
-  for (const f of ["prompt.sh", "lib.sh", "slice-fields.mjs", "slice-brief.mjs"]) {
+  for (const f of ["prompt.sh", "lib.sh", "config.mjs", "slice-fields.mjs", "slice-brief.mjs"]) {
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   }
   if (existsSync(join(HERE, "prompts")))

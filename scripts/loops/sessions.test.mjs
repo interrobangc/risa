@@ -31,6 +31,7 @@ import {
   START_SLACK_MS,
   writeRecord,
 } from "./sessions.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -226,6 +227,7 @@ beforeAll(() => {
   for (const f of [
     "prd.sh",
     "lib.sh",
+    "config.mjs",
     "session.sh",
     "sessions.mjs",
     "captain.mjs",

@@ -29,6 +29,7 @@ import {
   runThrough,
 } from "./open-session.mjs";
 import { CAPTAINS } from "./captain.mjs";
+import "./config-fixture.mjs";
 
 const SESSION_SH = "/o/scripts/loops/session.sh";
 const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
@@ -129,6 +130,7 @@ beforeAll(() => {
   for (const f of [
     "prd.sh",
     "lib.sh",
+    "config.mjs",
     "open-session.sh",
     "open-session.mjs",
     "planner-model.mjs",

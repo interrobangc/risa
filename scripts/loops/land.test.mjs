@@ -23,6 +23,7 @@ import { brakeNotice } from "../ci/blame.mjs";
 import { declinesSince, markLanded } from "./land-skeptic.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
 import { recordVerdict } from "./skeptics.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root, repo;

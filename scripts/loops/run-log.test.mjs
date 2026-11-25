@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { appendEvent, makeEvent, parseFields, topicOfBranch } from "./run-log.mjs";
+import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root;
@@ -87,7 +88,8 @@ describe("run_log in lib.sh", () => {
   beforeEach(() => {
     repo = join(root, "repo");
     mkdirSync(join(repo, "scripts/loops"), { recursive: true });
-    for (const f of ["lib.sh", "run-log.mjs"]) copyFileSync(join(HERE, f), join(repo, "scripts/loops", f));
+    for (const f of ["lib.sh", "config.mjs", "run-log.mjs"])
+      copyFileSync(join(HERE, f), join(repo, "scripts/loops", f));
     execFileSync("git", ["init", "-q", repo]);
   });
   const sh = (script, env = {}) =>
