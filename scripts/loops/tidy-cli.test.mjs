@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -120,6 +121,10 @@ beforeAll(() => {
   mkdirSync(join(main, "scripts/backlog"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => /\.(sh|mjs)$/.test(f) && !f.endsWith(".test.mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The project's scripts too: the test DB's old place here forwards to the
+  // project's until slice 3 of orchestration-split-2 swaps its callers to the
+  // config's hook (and this copy goes with it).
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));

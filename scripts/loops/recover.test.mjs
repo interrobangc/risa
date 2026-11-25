@@ -229,6 +229,10 @@ function build() {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f.endsWith(".mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
+  // The project's scripts too: the test DB's old place here forwards to the
+  // project's until slice 3 of orchestration-split-2 swaps its callers to the
+  // config's hook (and this copy goes with it).
+  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });
   mkdirSync(join(main, "scripts/backlog"));
   for (const f of ["registry.mjs", "format.mjs"])
