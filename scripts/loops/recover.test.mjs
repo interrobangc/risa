@@ -1,7 +1,8 @@
 // `pnpm prd recover` and `pnpm prd down` (recover.sh, down.sh, recover-lib.mjs,
 // inventory-facts.mjs, inventory.mjs) against a throwaway repo with these
-// scripts copied in, real git worktrees, and fake docker, lsof, open, sleep,
-// claude, pnpm, nvm, osascript (with CARETOOK_ITERM_APP a folder here) and serve.sh:
+// scripts copied in, real git worktrees, the sample project's stub stack hook
+// (its state and calls shared with the fakes), and fake lsof, open, sleep,
+// claude, nvm and osascript (with CARETOOK_ITERM_APP a folder here):
 // nothing here touches real containers, servers, slots, sessions, tabs, asks or worktrees,
 // and the dry run must change nothing on disk. The dispatcher is a node process that
 // only sleeps, its pid in the lock; the fake tab for it starts one (a minute at most).
@@ -25,65 +26,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
 const DEAD_PID = "999999"; // above macOS's and Linux's default pid_max
 
-// Projects in FAKE_RUNNING or $FAKE_STATE/running have a running container; every
-// caretook-loop* project has a stopped one. `compose up|stop|down` change the
-// state. Each call is logged, marked when the down record already exists.
-const MARK = `rec=""; [[ -f $FAKE_RECORD ]] && rec=" (record)"`;
-const FAKE_DOCKER = `#!/usr/bin/env bash
-${MARK}
-echo "docker $*$rec" >> "$FAKE_LOG"
-st=$FAKE_STATE; touch "$st/running"
-is_running() { [[ " \${FAKE_RUNNING:-} " == *" $1 "* ]] || grep -qx "$1" "$st/running"; }
-countdown() { local n; n=$(cat "$st/$1" 2>/dev/null || echo 0); ((n > 0)) || return 1; echo $((n - 1)) > "$st/$1"; }
-case $1 in
-  info)
-    if [[ -n \${FAKE_DOCKER_DOWN:-} ]]; then
-      [[ -f $st/docker-started ]] || exit 1
-      countdown boot && exit 1
-    fi ;;
-  ps)
-    proj=$(printf '%s\\n' "$@" | sed -n 's/^label=com.docker.compose.project=//p')
-    if is_running "$proj"; then echo "id-$proj"
-    elif [[ "$*" == *-aq* && $proj == caretook-loop* ]]; then echo "id-$proj"; fi ;;
-  inspect) echo "false 2026-11-19T10:00:00.000Z" ;;
-  compose)
-    shift; proj="" file=0
-    while (($#)); do case $1 in -p) proj=$2; shift 2 ;; -f) file=1; shift 2 ;; *) break ;; esac; done
-    [[ -z $proj && $file == 1 ]] && proj=\${CARETOOK_SHARED_TEST_PROJECT:-}
-    [[ -n $proj ]] || proj=$(sed -n 's/^CARETOOK_STACK=//p' .env 2>/dev/null)
-    echo "compose $1 $proj$rec" >> "$FAKE_LOG"
-    # FAKE_COMPOSE_FAIL: projects whose compose up fails.
-    [[ $1 == up && " \${FAKE_COMPOSE_FAIL:-} " == *" $proj "* ]] && exit 1
-    case $1 in
-      up | start) is_running "$proj" || echo "$proj" >> "$st/running" ;;
-      stop | down) grep -vx "$proj" "$st/running" > "$st/r" || true; mv "$st/r" "$st/running" ;;
-    esac ;;
-  exec) countdown pg-slow && exit 1 ;;
-  *) exit 3 ;;
-esac
-exit 0
-`;
 const FAKE_LSOF = `#!/usr/bin/env bash
 echo "lsof $*" >> "$FAKE_LOG"
 for p in \${FAKE_LISTEN:-} $(cat "$FAKE_STATE/listen" 2>/dev/null); do [[ "$*" == *"TCP:$p "* ]] && { echo 4242; exit 0; }; done
 exit 1
 `;
 
-const FAKE_SERVE = `#!/usr/bin/env bash
-${MARK}
-echo "serve $*$rec" >> "$FAKE_LOG"
-[[ " \${FAKE_SERVE_FAIL:-} " == *" $1 "* ]] && exit 1
-port=$(sed -n 's/^WEB_PORT=//p' "$(dirname "$0")/../../.loops/$1/apps/web/.env")
-touch "$FAKE_STATE/listen"
-if [[ \${2:-} == --stop ]]; then grep -vx "$port" "$FAKE_STATE/listen" > "$FAKE_STATE/l" || true; mv "$FAKE_STATE/l" "$FAKE_STATE/listen"
-else echo "$port" >> "$FAKE_STATE/listen"; echo "$1 is running at http://localhost:$port"; fi
-`;
 const FAKES = {
   // The opener's tab: logs its title (and " [dispatcher locked]" when a live
   // dispatcher holds its lock then), and keeps the line the tab would run, per
@@ -100,7 +54,7 @@ if [[ $3 == dispatch && ! -f $FAKE_STATE/dispatch-fails ]]; then
 fi
 `,
   open: `#!/usr/bin/env bash
-echo "open $*" >> "$FAKE_LOG"; touch "$FAKE_STATE/docker-started"
+echo "open $*" >> "$FAKE_LOG"
 `,
   // A fake clock: with CARETOOK_CLOCK_FILE, sleeping moves it on.
   sleep: `#!/usr/bin/env bash
@@ -122,16 +76,6 @@ n=$(cat "$FAKE_STATE/claude-fails" 2>/dev/null || echo 0)
 ((n > 0)) && { echo $((n - 1)) > "$FAKE_STATE/claude-fails"; exit 1; }
 exit 0
 `,
-  // Fails once for each line naming the worktree in $FAKE_STATE/migrate-fail.
-  // Notes in $FAKE_STATE/marked each worktree whose migrate marker stood then.
-  pnpm: `#!/usr/bin/env bash
-w=$(basename "$PWD")
-echo "pnpm $* [$w]" >> "$FAKE_LOG"
-[[ -f ../.migrate/$w ]] && echo "$w" >> "$FAKE_STATE/marked"
-if grep -qx "$w" "$FAKE_STATE/migrate-fail" 2>/dev/null; then
-  awk -v w="$w" '!done && $0 == w { done = 1; next } 1' "$FAKE_STATE/migrate-fail" > "$FAKE_STATE/m"; mv "$FAKE_STATE/m" "$FAKE_STATE/migrate-fail"; exit 1
-fi
-`,
 };
 
 let root, main, loops, log, env, state;
@@ -149,6 +93,11 @@ const okRecover = (args, extra) => {
 const json = (extra) => JSON.parse(okRecover(["--dry-run", "--json"], extra));
 const steps = (inv) => inv.actions.map((a) => (a.target ? `${a.step} ${a.target}` : a.step));
 const calls = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
+/** Write or remove one of the stub hook's and the fakes' state files. */
+const put = (file, text) => writeFileSync(join(state, file), text);
+const drop = (...files) => {
+  for (const f of files) rmSync(join(state, f), { force: true });
+};
 
 /** Every path under DIR with its size and mtime (and a directory's entries). */
 function snapshot(dir, out = new Map()) {
@@ -166,9 +115,10 @@ const worktree = (name, branch, from) =>
   git(main, "worktree", "add", "-q", "-b", branch, join(loops, name), from);
 const stackEnv = (name, slot) => {
   const dir = join(loops, name);
-  writeFileSync(join(dir, ".env"), `CARETOOK_STACK=caretook-loop${slot}\n`);
-  mkdirSync(join(dir, "apps/web"), { recursive: true });
-  writeFileSync(join(dir, "apps/web/.env"), `BETTER_AUTH_URL="x"\nWEB_PORT=6${slot}73\n`);
+  writeFileSync(
+    join(dir, ".sample-stack"),
+    `project=sample-loop${slot}\nslot=${slot}\nweb_port=6${slot}73\n`,
+  );
 };
 
 function build() {
@@ -180,7 +130,7 @@ function build() {
   mkdirSync(state);
   const bin = join(root, "bin");
   mkdirSync(bin);
-  const fakes = { docker: FAKE_DOCKER, lsof: FAKE_LSOF, ...FAKES };
+  const fakes = { lsof: FAKE_LSOF, ...FAKES };
   for (const [f, text] of Object.entries(fakes)) {
     writeFileSync(join(bin, f), text);
     chmodSync(join(bin, f), 0o755);
@@ -192,6 +142,9 @@ function build() {
     PATH: `${bin}:${process.env.PATH}`,
     FAKE_LOG: log,
     FAKE_STATE: state,
+    SAMPLE_STACK_STATE: state,
+    SAMPLE_STACK_LOG: log,
+    SAMPLE_STACK_MARK: join(root, "repo/.loops/.down.json"),
     FAKE_RECORD: join(root, "repo/.loops/.down.json"),
     FAKE_DISPATCH_LOCK: join(root, "repo/.loops/.dispatch.lock"),
     NVM_DIR: join(root, "nvm"),
@@ -211,11 +164,9 @@ function build() {
   for (const k of [
     "CARETOOK_RECOVER_PROBE_SECS",
     "CARETOOK_DOCKER_WAIT_SECS",
-    "CARETOOK_RECOVER_PG_SECS",
     "CARETOOK_RECOVER_STEP_SECS",
     "CARETOOK_RECOVER_DISPATCH_SECS",
-    "FAKE_COMPOSE_FAIL",
-    "FAKE_SERVE_FAIL",
+    "SAMPLE_STACK_FAIL",
   ])
     delete env[k];
 
@@ -229,16 +180,12 @@ function build() {
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter((f) => f.endsWith(".sh") || f.endsWith(".mjs")))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
-  // The project's scripts too: the test DB's old place here forwards to the
-  // project's until slice 3 of orchestration-split-2 swaps its callers to the
-  // config's hook (and this copy goes with it).
-  cpSync(join(HERE, "..", "project"), join(main, "scripts", "project"), { recursive: true });
   cpSync(join(HERE, "prompts"), join(main, "scripts/loops/prompts"), { recursive: true });
   mkdirSync(join(main, "scripts/backlog"));
   for (const f of ["registry.mjs", "format.mjs"])
     copyFileSync(join(HERE, "../backlog", f), join(main, "scripts/backlog", f));
-  writeFileSync(join(main, "scripts/loops/serve.sh"), FAKE_SERVE);
-  writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n");
+  env.RISA_CONFIG = stubHookConfig(main);
+  writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\n.sample-*\n");
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
   git(main, "branch", "prd/t");
@@ -324,17 +271,26 @@ describe("recover --dry-run", () => {
     expect(inv.locks.live.map((l) => l.path)).toEqual([join(loops, ".slots/1")]);
   });
 
-  it("with Docker down, starts it first", () => {
-    const inv = json({ FAKE_DOCKER_DOWN: "1" });
-    expect(steps(inv)[0]).toBe("docker start");
-    expect(calls()).not.toMatch(/docker ps/);
+  it("with the stack engine down, starts it first", () => {
+    put("engine-down", "");
+    try {
+      const inv = json();
+      expect(steps(inv)[0]).toBe("docker start");
+      expect(calls()).not.toMatch(/^(stack (start|up)|test-db up)( |$)/m);
+    } finally {
+      drop("engine-down");
+    }
   });
 
   it("with everything up, has only gc offers and sessions besides the locks", () => {
-    const inv = json({
-      FAKE_RUNNING: "caretook-loop1 caretook-loop2 caretook-shared-test",
-      FAKE_LISTEN: "6173",
-    });
+    put("running", "sample-loop1\nsample-loop2\n");
+    put("testdb-up", "");
+    let inv;
+    try {
+      inv = json({ FAKE_LISTEN: "6173" });
+    } finally {
+      drop("running", "testdb-up");
+    }
     expect(inv.actions.filter((a) => a.step !== "clear-lock").map((a) => a.step)).toEqual([
       "offer-gc",
       "offer-gc",
@@ -445,7 +401,7 @@ describe("recover --dry-run", () => {
     );
   });
 
-  it("changes nothing on disk, and only asks docker and lsof", () => {
+  it("changes nothing on disk, and starts, stops, brings up or down nothing", () => {
     const before = snapshot(root);
     const text = okRecover(["--dry-run"]);
     expect(text).toMatch(/^NAME\s+CLASS/);
@@ -453,11 +409,8 @@ describe("recover --dry-run", () => {
     expect(text).toMatch(/Dry run: nothing was changed\.$/m);
     okRecover(["--dry-run", "--json"]);
     expect(snapshot(root)).toEqual(before);
-    const docker = calls()
-      .split("\n")
-      .filter((l) => l.startsWith("docker "))
-      .map((l) => l.split(" ")[1]);
-    expect(new Set(docker)).toEqual(new Set(["info", "ps", "inspect"]));
+    expect(calls()).toMatch(/^stack engine status/m);
+    expect(calls()).not.toMatch(/^(stack (up|down|start|stop|engine start)|test-db (up|down)|serve)( |$)/m);
     expect(calls()).not.toMatch(/^(claude|osascript|open) /m);
     expect(existsSync(join(state, "agent-args"))).toBe(false);
   });
@@ -466,7 +419,7 @@ describe("recover --dry-run", () => {
     expect(recover(["--bogus"]).stderr).toMatch(/unknown option --bogus/);
     expect(recover(["--at", "25:00"]).stderr).toMatch(/24-hour time/);
     expect(recover(["--dry-run", "--wait"]).stderr).toMatch(/doesn't wait/);
-    expect(calls()).not.toMatch(/compose|serve|sleep/);
+    expect(calls()).not.toMatch(/^(stack|test-db|serve|sleep) /m);
   });
 
   it("lists recover and down in pnpm prd help", () => {
@@ -486,13 +439,12 @@ describe("recover --dry-run", () => {
 describe("down and recover", () => {
   fresh();
   const record = () => join(loops, ".down.json");
-  const put = (file, text) => writeFileSync(join(state, file), text);
   // Everything recovery or down does to the machine, in order (not the read-only probes).
   // `marked` keeps the " (record)" mark: the record existed when the call was made.
   const effects = (marked = false) =>
     calls()
       .split("\n")
-      .filter((l) => /^(compose|serve|pnpm|open|osascript|claude) /.test(l))
+      .filter((l) => /^(stack (start|stop) |test-db (up|down)( |$)|(serve|open|osascript|claude) )/.test(l))
       .map((l) => (marked ? l : l.replace(/ \(record\)$/, "")));
   const down = (extra = {}) => {
     const r = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "down"], {
@@ -506,11 +458,13 @@ describe("down and recover", () => {
   const allDown = () => {
     put("running", "");
     put("listen", "");
+    drop("testdb-up", "engine-down");
   };
 
   it("down writes the record first, then stops servers, stacks and the test Postgres", () => {
     // Up: t (prd), t-1 (merged) and t-2 (active) stacks, t's and t-2's servers, the test Postgres.
-    put("running", "caretook-loop1\ncaretook-loop2\ncaretook-loop3\ncaretook-shared-test\n");
+    put("running", "sample-loop1\nsample-loop2\nsample-loop3\n");
+    put("testdb-up", "");
     put("listen", "6173\n6273\n");
     const out = down();
     expect(JSON.parse(readFileSync(record(), "utf8"))).toEqual({
@@ -523,14 +477,15 @@ describe("down and recover", () => {
     expect(effects(true)).toEqual([
       "serve t --stop (record)",
       "serve t-2 --stop (record)",
-      "compose stop caretook-loop1 (record)",
-      "compose stop caretook-loop3 (record)",
-      "compose stop caretook-loop2 (record)",
-      "compose down caretook-shared-test (record)",
+      "stack stop t (record)",
+      "stack stop t-1 (record)",
+      "stack stop t-2 (record)",
+      "test-db down (record)",
     ]);
     expect(readFileSync(join(state, "running"), "utf8")).toBe("");
+    expect(existsSync(join(state, "testdb-up"))).toBe(false);
     expect(readFileSync(join(state, "listen"), "utf8")).toBe("");
-    expect(out).toMatch(/stopped stack t-2 \(caretook-loop2, data kept\)/);
+    expect(out).toMatch(/stopped stack t-2 \(sample-loop2, data kept\)/);
     expect(out).toMatch(/stopped dev server t\n/);
     expect(out).toMatch(/stopped the shared test Postgres/);
   });
@@ -547,25 +502,17 @@ describe("down and recover", () => {
   });
 
   it("recover issues exactly the recorded starts in order, clears only stale locks, and deletes the record", () => {
-    put("migrate-fail", "t-2\n");
-    put("pg-slow", "2");
     const out = okRecover([]);
     expect(effects()).toEqual([
-      "compose up caretook-shared-test",
-      "compose up caretook-loop1",
-      "pnpm -s datastore:migrate [t]",
-      "compose up caretook-loop3",
-      "pnpm -s datastore:migrate [t-1]",
-      "compose up caretook-loop2",
-      "pnpm -s datastore:migrate [t-2]",
-      "pnpm -s datastore:migrate [t-2]",
+      "test-db up",
+      "stack start t",
+      "stack start t-1",
+      "stack start t-2",
       "serve t",
       "serve t-2",
       "claude --remote-control recover (agent)",
     ]);
-    expect(out).toMatch(/migrate failed; retrying once/);
-    // It waited for t's Postgres (two refusals) before migrating.
-    expect(calls().match(/^docker exec caretook-loop1-postgres-1 pg_isready/gm)).toHaveLength(3);
+    expect(out).toMatch(/• stack t-2\n {2}up and migrated \(sample-loop2\)/);
     expect(existsSync(record())).toBe(false);
     expect(existsSync(join(loops, ".slots/9"))).toBe(false);
     expect(existsSync(join(loops, ".slots/1"))).toBe(true);
@@ -589,7 +536,7 @@ describe("down and recover", () => {
     const out = okRecover(["--no-agent"]);
     expect(effects()).toEqual([]);
     expect(out).not.toMatch(/^• /m);
-    expect(calls()).not.toMatch(/^docker (compose|exec)/m);
+    expect(calls()).not.toMatch(/^(stack (start|up)|test-db up)( |$)/m);
     expect(out).toMatch(/Sessions to carry on or reopen/);
     expect(out).toMatch(/--no-agent: to message and reopen them/);
     expect(existsSync(join(state, "agent-args"))).toBe(false);
@@ -597,9 +544,8 @@ describe("down and recover", () => {
 
   it("doesn't open the agent when something didn't recover", () => {
     allDown();
-    put("pg-slow", "1"); // t's Postgres refuses once, with no time left to wait
     rmSync(join(state, "agent-args"), { force: true });
-    const r = recover([], { CARETOOK_RECOVER_PG_SECS: "0" });
+    const r = recover([], { SAMPLE_STACK_FAIL: "start:t" }); // t's stack doesn't start
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/Didn't recover:\n {2}stack t/);
     expect(r.stdout).toMatch(/Not opening the recovery agent/);
@@ -611,43 +557,29 @@ describe("down and recover", () => {
   it("without a record, brings back only the prd and active stacks and the prd server", () => {
     allDown();
     okRecover(["--no-agent"]);
-    expect(effects()).toEqual([
-      "compose up caretook-shared-test",
-      "compose up caretook-loop1",
-      "pnpm -s datastore:migrate [t]",
-      "compose up caretook-loop2",
-      "pnpm -s datastore:migrate [t-2]",
-      "serve t",
-    ]);
+    expect(effects()).toEqual(["test-db up", "stack start t", "stack start t-2", "serve t"]);
   });
 
-  it("starts Docker Desktop when it isn't running and waits for it", () => {
+  it("starts the stack engine (the stackEngine hook) when it isn't running, before anything else", () => {
     allDown();
-    put("boot", "2"); // docker info fails twice more after open
-    const out = okRecover([], { FAKE_DOCKER_DOWN: "1" });
-    expect(out).toMatch(/Docker isn't running: starting it/);
+    put("engine-down", "");
+    const out = okRecover([]);
+    expect(out).toMatch(/Sample engine isn't running: starting it/);
     const lines = calls().split("\n");
-    const opened = lines.indexOf("open -a Docker");
-    expect(opened).toBeGreaterThanOrEqual(0);
-    const after = lines.slice(opened);
-    expect(after.filter((l) => l === "sleep 2")).toHaveLength(2);
-    expect(after.indexOf("compose up caretook-shared-test")).toBeGreaterThan(after.lastIndexOf("sleep 2"));
-    expect(effects()).toContain("compose up caretook-loop2");
+    const started = lines.indexOf("stack engine start");
+    expect(started).toBeGreaterThanOrEqual(0);
+    expect(lines.indexOf("test-db up")).toBeGreaterThan(started);
+    expect(effects()).toContain("stack start t-2");
   });
 
-  it("gives up when Docker never answers", () => {
-    rmSync(join(state, "docker-started"));
-    put("boot", "1000");
-    const clock = join(state, "clock");
-    put("clock", "1000000");
-    const r = recover([], {
-      FAKE_DOCKER_DOWN: "1",
-      CARETOOK_CLOCK_FILE: clock,
-      CARETOOK_DOCKER_WAIT_SECS: "10",
-    });
+  it("gives up when the stack engine doesn't start", () => {
+    allDown();
+    put("engine-down", "");
+    const r = recover([], { SAMPLE_STACK_FAIL: "engine:start" });
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/Docker didn't answer within 10s/);
-    expect(effects().filter((l) => l.startsWith("compose"))).toEqual([]);
+    expect(r.stderr).toMatch(/recover: Sample engine didn't start/);
+    expect(effects().filter((l) => /^(stack start|test-db up)/.test(l))).toEqual([]);
+    drop("engine-down");
   });
 
   it("--at sleeps until that time, then recovers", () => {
@@ -661,7 +593,7 @@ describe("down and recover", () => {
     expect(slept.reduce((a, b) => a + b, 0)).toBe(3 * 3600);
     expect(Math.max(...slept)).toBeLessThanOrEqual(300);
     const lastSleep = lines.findLastIndex((l) => l.startsWith("sleep "));
-    expect(lines.indexOf("compose up caretook-shared-test")).toBeGreaterThan(lastSleep);
+    expect(lines.indexOf("test-db up")).toBeGreaterThan(lastSleep);
   });
 
   // A wait of most of a day in 300 s steps is 258 fake sleeps, each a process or
@@ -715,14 +647,14 @@ describe("down and recover", () => {
     expect(out).toMatch(/probe 3: Claude answered/);
     const lines = calls()
       .split("\n")
-      .filter((l) => /^(claude|sleep|compose) /.test(l));
+      .filter((l) => /^(claude |sleep |test-db up$)/.test(l));
     expect(lines.slice(0, 6)).toEqual([
       "claude -p ok",
       "sleep 600",
       "claude -p ok",
       "sleep 600",
       "claude -p ok",
-      "compose up caretook-shared-test",
+      "test-db up",
     ]);
   });
 });
@@ -734,7 +666,7 @@ describe("down and recover with the dispatcher", () => {
   const effects = () =>
     calls()
       .split("\n")
-      .filter((l) => /^(compose|serve|pnpm|open|osascript|claude) /.test(l))
+      .filter((l) => /^(stack (start|stop) |test-db (up|down)( |$)|(serve|open|osascript|claude) )/.test(l))
       .map((l) => l.replace(/ \(record\)$/, ""));
   const tabs = () => effects().filter((l) => l.startsWith("osascript"));
   /**
@@ -785,7 +717,7 @@ describe("down and recover with the dispatcher", () => {
     );
     expect(tabs()).toEqual(["osascript dispatch"]);
     const e = effects();
-    expect(e.indexOf("osascript dispatch")).toBeGreaterThan(e.indexOf("compose up caretook-shared-test"));
+    expect(e.indexOf("osascript dispatch")).toBeGreaterThan(e.indexOf("test-db up"));
     // The agent opened only once the new dispatcher held its lock.
     expect(e.at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
     expect(readFileSync(join(state, "tab-line"), "utf8").trim()).toBe(
@@ -824,11 +756,10 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
   const intent = () => join(loops, ".dispatch-intent.json");
   const recoverLock = () => join(loops, ".recover.lock");
   const asks = () => join(loops, ".asks");
-  const put = (file, text) => writeFileSync(join(state, file), text);
   const effects = () =>
     calls()
       .split("\n")
-      .filter((l) => /^(compose|serve|pnpm|open|osascript|claude) /.test(l));
+      .filter((l) => /^(stack (start|stop) |test-db (up|down)( |$)|(serve|open|osascript|claude) )/.test(l));
   const tabs = () => effects().filter((l) => l.startsWith("osascript") && l !== "osascript notify");
   const reports = () =>
     existsSync(asks())
@@ -840,6 +771,7 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
   const crashed = () => {
     put("running", "");
     put("listen", "");
+    drop("testdb-up", "engine-down");
     endDispatchers();
     writeFileSync(lock(), `${DEAD_PID}\n`);
     for (const f of [intent(), join(state, "dispatch-fails"), join(state, "agent-args")])
@@ -848,9 +780,9 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
   };
 
   it.each([
-    ["test-Postgres", { FAKE_COMPOSE_FAIL: "caretook-shared-test" }, /test Postgres/],
-    ["stack", { FAKE_COMPOSE_FAIL: "caretook-loop2" }, /stack t-2/],
-    ["server", { FAKE_SERVE_FAIL: "t" }, /server t/],
+    ["test-Postgres", { SAMPLE_STACK_FAIL: "test-db:up" }, /test Postgres/],
+    ["stack", { SAMPLE_STACK_FAIL: "start:t-2" }, /stack t-2/],
+    ["server", { SAMPLE_STACK_FAIL: "serve:t" }, /server t/],
   ])("a failed %s step leaves the dispatcher closed with its intent kept", (_, extra, failure) => {
     crashed();
     const r = recover(["--no-agent"], extra);
@@ -905,7 +837,7 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
       expect(r.stderr).toMatch(
         new RegExp(`another recover is running \\(pid ${process.pid}\\): nothing done`),
       );
-      expect(calls()).toBe(""); // not even the inventory's docker info, nor a report
+      expect(calls()).toBe(""); // not even the inventory's engine status, nor a report
       expect(reports()).toEqual([]);
       expect(readFileSync(recoverLock(), "utf8").trim()).toBe(String(process.pid));
       expect(okRecover(["--dry-run"])).toMatch(
@@ -947,8 +879,7 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
 
   it("--unattended files one report on failure", () => {
     crashed();
-    put("pg-slow", "1"); // t's Postgres refuses once, with no time left to wait
-    const failed = recover(["--unattended"], { CARETOOK_RECOVER_PG_SECS: "0" });
+    const failed = recover(["--unattended"], { SAMPLE_STACK_FAIL: "start:t" }); // t's stack doesn't start
     expect(failed.status).toBe(1);
     expect(tabs()).not.toContain("osascript recover");
     const got = reports();
@@ -958,30 +889,24 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     expect(existsSync(recoverLock())).toBe(false);
   });
 
-  it("--unattended reports a step that gives up, like Docker never answering", () => {
+  it("--unattended reports a step that gives up, like the stack engine not starting", () => {
     crashed();
-    rmSync(join(state, "docker-started"), { force: true });
-    put("boot", "1000");
-    put("clock", "1000000");
-    const r = recover(["--unattended"], {
-      FAKE_DOCKER_DOWN: "1",
-      CARETOOK_CLOCK_FILE: join(state, "clock"),
-      CARETOOK_DOCKER_WAIT_SECS: "10",
-    });
+    put("engine-down", "");
+    const r = recover(["--unattended"], { SAMPLE_STACK_FAIL: "engine:start" });
     expect(r.status).toBe(1);
     const got = reports();
     expect(got).toHaveLength(1);
-    expect(got[0].text).toMatch(/stopped: recover: Docker didn't answer within 10s/);
-    rmSync(join(state, "boot"));
+    expect(got[0].text).toMatch(/stopped: recover: Sample engine didn't start/);
+    drop("engine-down");
   });
 
   it("a migrate marker left behind is reported and rerun, and cleared once it passes", () => {
     endDispatchers();
     rmSync(lock(), { force: true });
     rmSync(intent(), { force: true });
-    put("running", "caretook-loop1\ncaretook-loop2\ncaretook-shared-test\n");
+    put("running", "sample-loop1\nsample-loop2\n");
+    put("testdb-up", "");
     put("listen", "6173\n");
-    rmSync(join(state, "marked"), { force: true });
     mkdirSync(join(loops, ".migrate"), { recursive: true });
     writeFileSync(join(loops, ".migrate/t"), "2026-11-20T08:00:00Z\n");
     writeFileSync(join(loops, ".migrate/gone-5"), "2026-11-20T08:00:00Z\n");
@@ -995,9 +920,8 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     );
     expect(steps(inv)).not.toContain("stack up t-2");
 
-    // A migrate that fails twice leaves its marker for the next run.
-    put("migrate-fail", "t\nt\n");
-    const r = recover(["--no-agent"], extra);
+    // A start that fails (its migrate, retried once in the hook) leaves the marker for the next run.
+    const r = recover(["--no-agent"], { SAMPLE_STACK_FAIL: "start:t" });
     expect(r.status).toBe(1);
     expect(r.stdout).toMatch(/a migrate here was cut off \(started 2026-11-20T08:00:00Z\): rerunning it/);
     expect(existsSync(join(loops, ".migrate/t"))).toBe(true);
@@ -1005,19 +929,14 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
 
     rmSync(log);
     okRecover(["--no-agent"], extra);
-    expect(effects().filter((l) => /^(compose up|pnpm)/.test(l))).toEqual([
-      "compose up caretook-loop1",
-      "pnpm -s datastore:migrate [t]",
-    ]);
-    expect(readFileSync(join(state, "marked"), "utf8").split("\n").filter(Boolean)).toEqual(["t", "t", "t"]);
+    expect(effects().filter((l) => /^stack start/.test(l))).toEqual(["stack start t"]);
     expect(existsSync(join(loops, ".migrate/t"))).toBe(false);
     expect(json(extra).warnings.join("\n")).not.toMatch(/migrate was cut off/);
   });
 
   it("--unattended with CARETOOK_RECOVER_REPORT=off (the watchdog's later tries) files no report", () => {
     crashed();
-    put("pg-slow", "1");
-    const r = recover(["--unattended"], { CARETOOK_RECOVER_PG_SECS: "0", CARETOOK_RECOVER_REPORT: "off" });
+    const r = recover(["--unattended"], { SAMPLE_STACK_FAIL: "start:t", CARETOOK_RECOVER_REPORT: "off" });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/not reported again this incident/);
     expect(reports()).toEqual([]);
