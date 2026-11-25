@@ -62,6 +62,7 @@ describe("planCheck", () => {
     ".githooks/commit-msg",
     "scripts/hooks.test.mjs",
     "risa.json",
+    "scripts/project/a.mjs",
   ])("joins the tooling tests for %s", (file) => {
     expect(planCheck([file], "slice").tooling).toBe(true);
     expect(planCheck([file], "quick").tooling).toBe(true);
@@ -83,6 +84,7 @@ describe("proposeTier", () => {
   it.each([
     [["docs/a.md", "plans/b.md", "AGENTS.md"], "none"],
     [["scripts/loops/prd.sh", "scripts/backlog/b.mjs", ".githooks/commit-msg"], "none"],
+    [["scripts/project/a.mjs", "scripts/project/a.test.mjs", "scripts/project/rules.json"], "none"],
     [["packages/data/src/seed-notes.md"], "none"],
     [["scripts/loops/browser.sh"], "integration"],
     [["scripts/loops/lib.sh", "docs/a.md"], "integration"],
@@ -230,6 +232,15 @@ describe("planToolingLint", () => {
       ".githooks/commit-msg",
       "scripts/hooks.test.mjs",
     ]);
+  });
+
+  it("lints and formats the project's own scripts (scripts/project/)", () => {
+    expect(
+      planToolingLint(["scripts/project/a.mjs", "scripts/project/rules.json", "scripts/project/a.md"]),
+    ).toEqual({
+      eslint: ["scripts/project/a.mjs"],
+      prettier: ["scripts/project/a.mjs", "scripts/project/rules.json"],
+    });
   });
 
   it("puts no lint step on a Markdown-only diff", () => {

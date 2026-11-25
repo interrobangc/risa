@@ -53,7 +53,8 @@ scripts/loops/autostart.mjs project-env 13
 scripts/loops/autostart.mjs project-name 1
 scripts/loops/autostart.test.mjs project-env 7
 scripts/loops/autostart.test.mjs project-name 2
-scripts/loops/boundary.mjs core-to-project 1 # the manifest's folders (ROOTS) name the hooks folder: goes with the manifest at the move
+scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
+scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
 scripts/loops/browser.sh app-path 9
 scripts/loops/browser.sh core-to-project 9
 scripts/loops/browser.sh project-env 32
@@ -74,9 +75,9 @@ scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 16
 scripts/loops/check-gate.test.mjs project-name 1
 scripts/loops/check-plan.mjs app-path 5
-scripts/loops/check-plan.mjs core-to-project 8
+scripts/loops/check-plan.mjs core-to-project 9 # the check plan's rules: Caretook's data in slice 10
 scripts/loops/check-plan.test.mjs app-path 47
-scripts/loops/check-plan.test.mjs core-to-project 11
+scripts/loops/check-plan.test.mjs core-to-project 12
 scripts/loops/check-run.sh project-env 30
 scripts/loops/check-run.test.mjs project-env 50
 scripts/loops/check-times.mjs project-env 2
@@ -246,4 +247,5 @@ scripts/loops/watch.test.mjs project-env 9
 scripts/loops/watchdog.mjs project-env 20
 scripts/loops/watchdog.test.mjs project-env 10
 scripts/loops/workers.test.mjs app-path 1
+scripts/project/test-projects.test.mjs project-to-core 1 # owners from the core's manifest until the move; the removal commit drops that check
 vitest.config.ts project-to-core 9
