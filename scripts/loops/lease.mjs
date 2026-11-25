@@ -1,10 +1,10 @@
-// The Node entry to lease.sh's machine-wide leases (for Vitest and other Node
-// tools): `takeLease(kind)` holds one through a `lease.sh hold` child, which
+// The Node entry to lease.sh's machine-wide leases, for the core's Node tools
+// (a project's code uses the config's lease command instead, hooks.lease): `takeLease(kind)` holds one through a `lease.sh hold` child, which
 // releases it when `release()` is called, when this process exits (its stdin
 // closes), or when this process's pid is gone, so even a SIGKILL frees it.
 //
 //   import { takeLease } from "<repo>/scripts/loops/lease.mjs";
-//   const lease = await takeLease("browser", { label: "web:components" });
+//   const lease = await takeLease("browser", { label: "my-tool" });
 //   try { … } finally { await lease.release(); }
 //
 // It waits while every lease of the kind is taken (lease.sh's messages go to
