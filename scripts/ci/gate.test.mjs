@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 import { decideGate, needsBlame, verdictMeets, walkVerdicts } from "./gate.mjs";
 
@@ -51,6 +53,19 @@ describe("decideGate", () => {
     const out = decide({ kind });
     expect(out).toMatchObject({ land: false, code });
     expect(out.lines.join("\n")).toContain("pnpm prd ci run unit --ref b --wait");
+  });
+
+  it("a time verdict refuses with that reason: never blamed, never landed as a flake", () => {
+    const verdict = JSON.parse(
+      readFileSync(new URL("./verdict.fixtures/branch-time-failure.json", import.meta.url), "utf8"),
+    );
+    expect(verdict.kind).toBe("time");
+    expect(needsBlame(verdict, [])).toBe(false);
+    const out = decideGate({ verdict, tier: "unit", branch: "b", touched: [] });
+    expect(out).toMatchObject({ land: false, code: 6, fileFlakes: false });
+    expect(out.lines).toEqual([
+      "time: past an armed cutoff in unit; its tests passed. Trim the step, then: pnpm prd ci run unit --ref b --wait",
+    ]);
   });
 
   it("file lands when every failure is dev's, and files its flakes", () => {
