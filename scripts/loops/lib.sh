@@ -315,24 +315,25 @@ docs_only() {
 
 # deps_re → the files whose change needs the main checkout's install.
 deps_re='(^|/)package\.json$|^pnpm-lock\.yaml$'
-# main_install LANDED CHANGED SESSION TOPIC → after a landing whose diff (CHANGED,
-# a path a line) touches the lockfile or a package.json, the project's install
+# main_install LANDED CHANGED → after a landing whose diff (CHANGED, a path a
+# line) touches the lockfile or a package.json, the project's install
 # (commands.install) in the main checkout (B-432), only in the narrow safe case:
 # it is on $trunk, holds LANDED (the landed commit) and has no uncommitted change
 # to those files. The main checkout is the user's: in any other state, or when the
-# install fails, it prints why and posts a notice (from SESSION, for TOPIC) for
-# the dev keeper; never a retry or a fix. Always returns 0: never fails a landing.
+# install fails, it prints why, sets install_why and returns 1 (land.sh posts the
+# notice for the dev keeper); never a retry or a fix. 0: installed, or no need.
 main_install() {
-  local landed=$1 changed=$2 session=$3 topic=$4 why="" st log
+  local landed=$1 changed=$2 st log
+  install_why=""
   grep -qE "$deps_re" <<< "$changed" || return 0
   if [[ $(git -C "$main" branch --show-current 2>/dev/null) != "$trunk" ]]; then
-    why="it isn't on $trunk"
+    install_why="it isn't on $trunk"
   elif ! git -C "$main" merge-base --is-ancestor "$landed" HEAD 2>/dev/null; then
-    why="it isn't at the landed tip ${landed:0:7}"
+    install_why="it isn't at the landed tip ${landed:0:7}"
   elif ! st=$(git -C "$main" status --porcelain -- pnpm-lock.yaml ':(glob)**/package.json' 2>/dev/null); then
-    why="git couldn't read its status"
+    install_why="git couldn't read its status"
   elif [[ -n $st ]]; then
-    why="it has uncommitted changes to the lockfile or a package.json"
+    install_why="it has uncommitted changes to the lockfile or a package.json"
   else
     log=$(mktemp "${TMPDIR:-/tmp}/land-install.XXXXXX")
     if (cd "$main" && run_project install) > "$log" 2>&1; then
@@ -341,15 +342,11 @@ main_install() {
       return 0
     fi
     tail -20 "$log" | sed 's/^/  /'
-    why="the install failed (its log: $log)"
+    install_why="the install failed"
+    log=" (its log: $log)"
   fi
-  echo "dependencies changed, but the main checkout's install didn't run: $why. Run \`$(project_command install)\` in $main by hand"
-  CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$loops_lib_dir/notice.mjs" notice \
-    --session "$session" --topic "$topic" --for 360 \
-    "dependencies changed in $topic's landing; the main checkout needs its install by hand: ${why% (its log*}" >/dev/null 2>&1 &&
-    echo "notice posted for the dev keeper: the main checkout's install" ||
-    echo "warning: couldn't post the install notice (ignored)" >&2
-  return 0
+  echo "dependencies changed, but the main checkout's install didn't run: $install_why${log:-}. Run \`$(project_command install)\` in $main by hand"
+  return 1
 }
 
 # propose_tier BASE TIP [DECLARED] → three lines from check-plan.mjs: the tier this

@@ -106,7 +106,7 @@ scripts/loops/land-unsynced.test.mjs project-name 3
 scripts/loops/land.sh project-env 14
 scripts/loops/land.test.mjs app-path 20
 scripts/loops/land.test.mjs core-to-project 5
-scripts/loops/land.test.mjs project-env 6
+scripts/loops/land.test.mjs project-env 5
 scripts/loops/lease.mjs project-env 2
 scripts/loops/lease.sh project-env 25
 scripts/loops/lease.test.mjs project-env 18

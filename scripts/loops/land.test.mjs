@@ -13,6 +13,8 @@ import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 import { root, repo, git, commit, landWith, land, branch, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
+// The notice board's directory, which land.sh reads from the environment.
+const NOTICES_DIR = "CARETOOK_NOTICES_DIR";
 
 const docsOnly = () =>
   spawnSync("bash", ["-c", "source scripts/loops/lib.sh && docs_only dev feature"], {
@@ -425,7 +427,7 @@ describe("land.sh posts a landing notice", () => {
         PR_HEAD: spawnSync("git", ["-C", repo, "rev-parse", "prd/throwaway-x"], {
           encoding: "utf8",
         }).stdout.trim(),
-        CARETOOK_NOTICES_DIR: board(),
+        [NOTICES_DIR]: board(),
         ...extra,
       },
     });
@@ -472,7 +474,7 @@ describe("land.sh posts a landing notice", () => {
   it("still lands when the notice can't be posted", () => {
     branch({ "apps/web/b.ts": "2" });
     writeFileSync(join(root, "not-a-dir"), "x");
-    const r = prdLand({ CARETOOK_NOTICES_DIR: join(root, "not-a-dir", "notices") });
+    const r = prdLand({ [NOTICES_DIR]: join(root, "not-a-dir", "notices") });
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toContain("Landed prd/throwaway-x");
     expect(r.stderr).toContain("couldn't post the landing notice");
@@ -497,7 +499,7 @@ describe("land.sh brings the main checkout's install up to date", () => {
   const env = (extra = {}) => ({
     ...process.env,
     PATH: `${join(root, "bin")}:${process.env.PATH}`,
-    CARETOOK_NOTICES_DIR: board(),
+    [NOTICES_DIR]: board(),
     INSTALL_LOG: installs(),
     ...extra,
   });
@@ -533,11 +535,11 @@ describe("land.sh brings the main checkout's install up to date", () => {
   });
 
   it("installs after a local landing that changes a package.json, and not for other files", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "lib/c.ts": "3" });
     expect(landPr().status).toBe(0);
     expect(installed()).toBe("");
     git("checkout", "-qb", "hotfix/throwaway-y");
-    commit({ "apps/web/package.json": "{}\n" }, "a dependency");
+    commit({ "lib/package.json": "{}\n" }, "a dependency");
     git("checkout", "-q", "dev");
     const r = spawnSync(
       "bash",
@@ -549,10 +551,10 @@ describe("land.sh brings the main checkout's install up to date", () => {
   });
 
   it("a checkout with uncommitted changes to a package.json gets a notice and no install", () => {
-    commit({ "apps/web/package.json": "{}\n" }, "a package");
+    commit({ "lib/package.json": "{}\n" }, "a package");
     git("push", "-q", "origin", "dev");
     branch({ "pnpm-lock.yaml": "lock\n" });
-    writeFileSync(join(repo, "apps/web/package.json"), '{ "the user": "editing" }\n');
+    writeFileSync(join(repo, "lib/package.json"), '{ "the user": "editing" }\n');
     const r = landPr();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(installed()).toBe("");
@@ -563,30 +565,33 @@ describe("land.sh brings the main checkout's install up to date", () => {
     expect(more).toEqual([]);
     expect(n).toMatchObject({ session: "prd-throwaway-x", topic: "throwaway-x" });
     expect(n.text).toContain("needs its install by hand: it has uncommitted changes");
-    expect(readFileSync(join(repo, "apps/web/package.json"), "utf8")).toContain("editing");
+    expect(readFileSync(join(repo, "lib/package.json"), "utf8")).toContain("editing");
   });
 
-  it("a checkout off dev, or behind the landed tip, gets a notice and no install", () => {
+  it("a checkout off dev, or behind the landed tip, installs nothing and says why", () => {
     const mainInstall = (sha) =>
       spawnSync(
         "bash",
-        ["-c", 'source scripts/loops/lib.sh && main_install "$@"', "_", sha, "pnpm-lock.yaml", "prd-t", "t"],
+        [
+          "-c",
+          'source scripts/loops/lib.sh && main_install "$@" || echo "why=$install_why"',
+          "_",
+          sha,
+          "pnpm-lock.yaml",
+        ],
         { cwd: repo, encoding: "utf8", env: env() },
       );
     branch({ "pnpm-lock.yaml": "lock\n" });
+    const behind = git("rev-parse", "--short=7", "prd/throwaway-x");
     let r = mainInstall(git("rev-parse", "prd/throwaway-x"));
     expect(r.status, r.stderr).toBe(0);
-    expect(r.stdout).toContain(
-      `didn't run: it isn't at the landed tip ${git("rev-parse", "--short=7", "prd/throwaway-x")}`,
-    );
+    expect(r.stdout).toContain(`didn't run: it isn't at the landed tip ${behind}`);
+    expect(r.stdout).toContain(`why=it isn't at the landed tip ${behind}`);
     git("checkout", "-q", "feature");
     r = mainInstall(git("rev-parse", "dev"));
-    expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain("didn't run: it isn't on dev");
+    expect(r.stdout).toContain("why=it isn't on dev");
     expect(installed()).toBe("");
-    expect(installNotices().map((n) => n.text.replace(/.*by hand: /, ""))).toEqual(
-      expect.arrayContaining([expect.stringMatching(/^it isn't at the landed tip/), "it isn't on dev"]),
-    );
   });
 
   it("a failed install gets a notice, once, and the landing still stands", () => {

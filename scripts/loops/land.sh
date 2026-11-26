@@ -566,11 +566,23 @@ post_landed() {
   [[ -n $want_to_test ]] || return 0
   local sha
   sha=$(git -C "$main" rev-parse --short "$(landed_sha)")
-  CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
-    --session "$(landing_session)" --topic "$topic" --for 360 \
-    "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" >/dev/null 2>&1 &&
+  post_notice "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" &&
     echo "notice posted: $topic landed as $sha (six hours)" ||
     echo "warning: couldn't post the landing notice (ignored)" >&2
+  return 0
+}
+# post_notice TEXT → TEXT on the notice board for six hours, from the landing's session.
+post_notice() {
+  CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
+    --session "$(landing_session)" --topic "$topic" --for 360 "$1" >/dev/null 2>&1
+}
+# install_main → main_install (lib.sh) after a landing; when it couldn't install,
+# a notice for the dev keeper. Never fails the landing.
+install_main() {
+  main_install "$(landed_sha)" "$changed" && return 0
+  post_notice "dependencies changed in $topic's landing; the main checkout needs its install by hand: $install_why" &&
+    echo "notice posted for the dev keeper: the main checkout's install" ||
+    echo "warning: couldn't post the install notice (ignored)" >&2
   return 0
 }
 # skeptic_report → before the merge: the topic's Codex declines join the verdicts,
@@ -661,8 +673,8 @@ finish_from() {
   [[ -n $go ]] || die "no step $1 to finish from on the $path path"
   mark_topic_done
   # A landing that changes dependencies brings the main checkout's install up to
-  # date when that's safe, else files a notice (lib.sh, main_install; B-432).
-  main_install "$(landed_sha)" "$changed" "$(landing_session)" "$topic"
+  # date when that's safe, else posts a notice (install_main; B-432).
+  install_main
   journal_drop
   next_steps
   exit "$filed"
