@@ -15,13 +15,17 @@
 //   narrowedFile    the file list a narrowed run's throwaway commit adds
 //   forcedFlakeFile the marker of a proof run's throwaway commit
 //   refPrefix       what a requested run's ref starts with (`ci/`): `<prefix><tier>/<name>`
-//   gates           optional: the time gates' data (time-gate.mjs has its shape and
-//                   defaults), given as GATES with every default filled in
+//   gates           optional: the time gates' data (time-gate.mjs judges with it),
+//                   given as GATES with every default filled in; every field optional:
+//     quietLoadPerCore           a quiet machine's 5-minute load per core (1)
+//     measures.<measure>.aim     seconds (300); measures: unit, components, quick
+//     measures.<measure>.cutoff  seconds, at least the aim (360)
+//     measures.<measure>.armed   whether a fail past the cutoff fails (false)
+//     measures.quick.modes       the check modes the local measure covers (quick, slice)
 // A pattern's `*` matches anything, `/` and a newline too.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../loops/config.mjs";
-import { gatesFrom, gatesProblems } from "../loops/time-gate.mjs";
 
 const KEYS = [
   "tiers",
@@ -35,6 +39,110 @@ const KEYS = [
 ];
 /** The keys a tier data file may leave out. */
 const OPTIONAL = ["gates"];
+
+// The time gates' data.
+/** The measures and which is local (judged on load). */
+export const MEASURES = Object.freeze(["unit", "components", "quick"]);
+export const LOCAL_MEASURE = "quick";
+
+export const DEFAULT_LIMITS = Object.freeze({ aim: 300, cutoff: 360, armed: false });
+export const DEFAULT_QUIET_LOAD_PER_CORE = 1;
+export const DEFAULT_LOCAL_MODES = Object.freeze(["quick", "slice"]);
+const MEASURE_KEYS = ["aim", "cutoff", "armed", "modes"];
+
+const isGroup = (/** @type {unknown} */ v) => !!v && typeof v === "object" && !Array.isArray(v);
+const isSeconds = (/** @type {unknown} */ v) => typeof v === "number" && Number.isFinite(v) && v > 0;
+
+/**
+ * What is wrong with the gates' data (the tier data's `gates`): one line per
+ * problem, each naming its field; none when it loads. Undefined is the defaults.
+ * @param {unknown} gates
+ * @returns {string[]}
+ */
+export function gatesProblems(gates) {
+  if (gates === undefined) return [];
+  if (!isGroup(gates)) return ["gates: must be a group of keys (quietLoadPerCore, measures)"];
+  const g = /** @type {Record<string, any>} */ (gates);
+  const problems = Object.keys(g)
+    .filter((k) => !["quietLoadPerCore", "measures"].includes(k))
+    .map((k) => `gates.${k}: unknown key`);
+  if ("quietLoadPerCore" in g && !isSeconds(g.quietLoadPerCore))
+    problems.push("gates.quietLoadPerCore: must be a number above 0");
+  if (!("measures" in g)) return problems;
+  if (!isGroup(g.measures)) return [...problems, "gates.measures: must be a group of keys, one per measure"];
+  for (const [name, m] of Object.entries(g.measures)) {
+    const at = `gates.measures.${name}`;
+    if (!MEASURES.includes(name)) {
+      problems.push(`${at}: unknown measure (${MEASURES.join(", ")})`);
+      continue;
+    }
+    if (!isGroup(m)) {
+      problems.push(`${at}: must be { aim, cutoff, armed }`);
+      continue;
+    }
+    for (const k of Object.keys(m).filter((k) => !MEASURE_KEYS.includes(k)))
+      problems.push(`${at}.${k}: unknown key`);
+    if ("aim" in m && !isSeconds(m.aim)) problems.push(`${at}.aim: must be seconds above 0`);
+    if ("cutoff" in m && !isSeconds(m.cutoff)) problems.push(`${at}.cutoff: must be seconds above 0`);
+    if ("armed" in m && typeof m.armed !== "boolean") problems.push(`${at}.armed: must be true or false`);
+    const aim = "aim" in m ? m.aim : DEFAULT_LIMITS.aim;
+    const cutoff = "cutoff" in m ? m.cutoff : DEFAULT_LIMITS.cutoff;
+    if (isSeconds(aim) && isSeconds(cutoff) && aim > cutoff)
+      problems.push(`${at}.aim: ${aim} s is above its cutoff (${cutoff} s)`);
+    if ("modes" in m) {
+      if (name !== LOCAL_MEASURE)
+        problems.push(`${at}.modes: only the local measure (${LOCAL_MEASURE}) has modes`);
+      else if (
+        !Array.isArray(m.modes) ||
+        m.modes.length === 0 ||
+        !m.modes.every((/** @type {unknown} */ x) => typeof x === "string" && /^[\w-]+$/.test(x)) ||
+        new Set(m.modes).size !== m.modes.length
+      )
+        problems.push(`${at}.modes: must be a list of check modes, not empty, no repeats`);
+    }
+  }
+  return problems;
+}
+
+/** @typedef {{ aim: number, cutoff: number, armed: boolean }} Limits */
+/** @typedef {{ quietLoadPerCore: number, measures: Readonly<Record<string, Readonly<Limits>>>,
+ *   localModes: readonly string[] }} Gates */
+
+/**
+ * The gates from their data, every default filled in. Throws naming every problem.
+ * @param {unknown} gates the tier data's `gates` (undefined: all defaults)
+ * @returns {Readonly<Gates>}
+ */
+export function gatesFrom(gates) {
+  const problems = gatesProblems(gates);
+  if (problems.length) throw new Error(problems.join("\n"));
+  const g = /** @type {Record<string, any>} */ (gates ?? {});
+  const given = /** @type {Record<string, any>} */ (g.measures ?? {});
+  const measures = Object.fromEntries(
+    MEASURES.map((name) => {
+      const m = given[name] ?? {};
+      return [
+        name,
+        Object.freeze({
+          aim: m.aim ?? DEFAULT_LIMITS.aim,
+          cutoff: m.cutoff ?? DEFAULT_LIMITS.cutoff,
+          armed: m.armed ?? DEFAULT_LIMITS.armed,
+        }),
+      ];
+    }),
+  );
+  return Object.freeze({
+    quietLoadPerCore: g.quietLoadPerCore ?? DEFAULT_QUIET_LOAD_PER_CORE,
+    measures: Object.freeze(measures),
+    localModes: Object.freeze([...(given[LOCAL_MEASURE]?.modes ?? DEFAULT_LOCAL_MODES)]),
+  });
+}
+
+/**
+ * The measure a local check mode counts toward, or null (a full check: none).
+ * @param {Readonly<Gates>} gates @param {string} mode
+ */
+export const measureForMode = (gates, mode) => (gates.localModes.includes(mode) ? LOCAL_MEASURE : null);
 
 /** A tier data file that doesn't load: every problem, each naming its field. */
 export class TierDataError extends Error {

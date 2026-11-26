@@ -3,15 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_LIMITS,
-  gatesFrom,
-  gatesProblems,
-  measureForMode,
-  parseTimed,
-  runCli,
-  timeGate,
-} from "./time-gate.mjs";
+import { DEFAULT_LIMITS, gatesFrom, gatesProblems, measureForMode } from "../ci/tier-data.mjs";
+import { parseTimed, runCli, timeGate } from "./time-gate.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 
