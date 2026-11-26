@@ -156,12 +156,53 @@ describe("summarize", () => {
     expect(s.checks.byMode.slice).toEqual({
       runs: 3,
       passed: 2,
-      failures: 1,
+      testFailures: 1,
+      budgetStops: 0,
+      silenceStops: 0,
+      timeBreaches: 0,
       medianMinutes: 3,
       slowestMinutes: 4,
     });
     expect(s.checks.byMode.quick).toMatchObject({ runs: 2, medianMinutes: 10, slowestMinutes: 15 });
     expect(s.checks.byMode.full).toMatchObject({ runs: 1 });
+  });
+
+  it("counts the checks' test failures, budget stops, silence stops and time breaches apart", () => {
+    // Eighteen-field lines: one of each kind, and a passing one whose unarmed gate warned.
+    const run = (branch, mode, exit, breach = "", verdict = "") =>
+      [...check("2026-03-03T10:00:00Z", branch, mode, 60, exit).split("\t"), breach, verdict, ""].join("\t");
+    const t = summarize(
+      loadData({
+        checkLog: [
+          run("slice/garden/4", "slice", 1),
+          run("slice/garden/4", "slice", 124, "budget"),
+          run("prd/fence", "quick", 124, "silence"),
+          run("prd/fence", "quick", 125, "", "fail"),
+          run("prd/fence", "quick", 0, "", "warn"),
+        ].join("\n"),
+      }),
+    );
+    const one = { testFailures: 1, budgetStops: 1, silenceStops: 1, timeBreaches: 1 };
+    expect(t.checks.overall).toMatchObject({ runs: 5, passed: 1, ...one });
+    expect(t.checks.byMode.slice).toMatchObject({
+      testFailures: 1,
+      budgetStops: 1,
+      silenceStops: 0,
+      timeBreaches: 0,
+    });
+    expect(t.checks.byMode.quick).toMatchObject({
+      testFailures: 0,
+      budgetStops: 0,
+      silenceStops: 1,
+      timeBreaches: 1,
+    });
+    expect(t.checks.byPrd.garden).toMatchObject({ runs: 2, testFailures: 1, budgetStops: 1 });
+    expect(t.checks.byPrd.fence).toMatchObject({ runs: 3, silenceStops: 1, timeBreaches: 1 });
+    const out = formatSummary(t);
+    expect(out).toMatch(/runs tests budget silence time +median m/);
+    expect(out).toMatch(/\n {2}all +5 +1 +1 +1 +1 /);
+    expect(out).toContain(" by mode:");
+    expect(out).toContain(" by PRD:");
   });
 
   it("gives the flake rate by check and overall; old check lines count for neither", () => {
