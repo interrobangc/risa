@@ -364,13 +364,20 @@ export function removeLease(/** @type {string} */ path, { env = process.env } = 
     console.error(`tidy: ${path} isn't a lease (<root>/<kind>/<N>)`);
     return "failed";
   }
-  /** @type {NodeJS.ProcessEnv} */
-  const leaseEnv = { ...env, CARETOOK_LEASE_ROOT: dirname(kindDir) };
-  delete leaseEnv.CARETOOK_BROWSER_LEASES; // lease_dir would read the browser kind there instead
+  // lease_dir answers with this lease's own directory, wherever the kind's
+  // leases were moved to: the takeover acts on exactly the path tidy found.
   const r = spawnSync(
     "bash",
-    ["-c", 'source "$1" && lease_take_over "$2" "$3"', "tidy", join(HERE, "lease.sh"), kind, n],
-    { env: leaseEnv, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
+    [
+      "-c",
+      'source "$1" && lease_dir() { echo "$4"; } && lease_take_over "$2" "$3"',
+      "tidy",
+      join(HERE, "lease.sh"),
+      kind,
+      n,
+      kindDir,
+    ],
+    { env, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
   );
   if (r.status !== 0) {
     console.error(`tidy: lease.sh's takeover of ${path} failed${r.stderr ? `:\n${r.stderr.trim()}` : ""}`);
