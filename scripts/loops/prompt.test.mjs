@@ -486,10 +486,10 @@ describe("sending failures back", () => {
     expect(out).toContain('`pnpm prd check --quick "slice fix"`');
   });
 
-  it("the slice's prompt points to the handbook's rule on batching reads (B-873)", () => {
+  it("the slice's prompt points to the handbook's rule on batching reads and edits (B-873)", () => {
     for (const out of [ok("slice", "T", "1"), ok("slice", "T", "1", "--continue")]) {
       expect(out).toContain(
-        "- **Batch your reads:** independent reads, greps and commands go in one turn, and files are read whole, not in `sed -n` chunks (your handbook's _Reads and turns_).",
+        "- **Batch your turns:** independent reads, greps, commands and edits go in one turn, and a file under about 400 lines is read whole, not in `sed -n` chunks (your handbook's _Reads and turns_).",
       );
     }
   });

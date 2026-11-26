@@ -17,8 +17,9 @@ Your final message:
 Every turn costs its whole context, so take fewer turns:
 
 - **Batch:** send independent reads, greps and commands together in one turn (parallel tool calls, or one shell command that prints several files).
-- **Read a file whole** (the Read tool, or `cat`), not in `sed -n` chunks, unless it is very large.
+- **Read a file whole** (the Read tool, or `cat`) when it is under about 400 lines, not in `sed -n` chunks; a longer one (`dispatch.mjs` is about 1,950): grep for what you need, then read that range.
 - **Search once** with a pattern that covers every name you need (`grep -n 'a\|b\|c'`), not one grep per name.
+- **Edits too:** several replacements go in one script, or as parallel Edit calls in one turn, not one per turn.
 
 ## Loop rules
 
