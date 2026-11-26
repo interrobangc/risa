@@ -13,6 +13,11 @@
 //   - ancestorClaude(pid, table, name): walking parent pids up from PID, the
 //     first process whose command (or its script, for `bash <stub>`) is NAME:
 //     the calling shell's own claude, for a session started before the wrapper.
+//   - endTarget(name, record, facts): the claude process `pnpm prd end <name>`
+//     may end (B-810): the record's pid only while it is a claude process of
+//     that session (under `session.sh <name>`, or running in the record's dir),
+//     else the one live claude under `session.sh <name>` in that dir (a reopen
+//     the record doesn't name), else a refusal: never another process.
 //
 // CLI (CARETOOK_SESSIONS_DIR: the records' folder, default .loops/.sessions of
 // the main checkout):
@@ -33,6 +38,12 @@
 //   node sessions.mjs self [<name>]           the calling session: "<pid> record"
 //                                             when NAME's record is live, else
 //                                             "<pid> ancestor" (exit 1: neither)
+//   node sessions.mjs target <name>           the process `pnpm prd end <name>` ends
+//                                             (endTarget): "<pid> record", or
+//                                             "<pid> reopened <stale pid>" (the
+//                                             record is set to that pid first);
+//                                             exit 4: it has ended; exit 1: refused,
+//                                             saying why
 //   node sessions.mjs caller                  the live record of the calling shell's
 //                                             ancestor claude: "<name>\t<kind>\t<pid>\t<topic>"
 //                                             (exit 1, saying why: no ancestor, or
@@ -108,6 +119,112 @@ export function ancestorClaude(pid, table, name) {
     p = row.ppid;
   }
   return null;
+}
+
+/** The session name a `session.sh <name> …` command line runs (as the command or bash's script), or null. */
+export function wrapperName(/** @type {string} */ args) {
+  const words = (args ?? "").trim().split(/\s+/);
+  const shell = /^(ba|z|da)?sh$/.test(basename(words[0] ?? ""));
+  const i =
+    basename(words[0] ?? "") === "session.sh"
+      ? 0
+      : shell && basename(words[1] ?? "") === "session.sh"
+        ? 1
+        : -1;
+  return i < 0 ? null : (words[i + 1] ?? null);
+}
+
+/**
+ * The name of the session.sh nearest above PID, or null when there is none or
+ * another claude comes first (PID is then a process inside some session, not its claude).
+ * @param {number} pid
+ * @param {Map<number, { ppid: number, args: string }>} table
+ * @param {string} claude
+ */
+export function wrappedAs(pid, table, claude) {
+  const seen = new Set();
+  let p = table.get(pid)?.ppid;
+  while (p && p > 1 && !seen.has(p)) {
+    seen.add(p);
+    const row = table.get(p);
+    if (!row) return null;
+    const w = wrapperName(row.args);
+    if (w) return w;
+    if (runs(row.args, claude)) return null;
+    p = row.ppid;
+  }
+  return null;
+}
+
+/**
+ * Which process `pnpm prd end <name>` ends (B-810: a reopened session's record
+ * once named an older pid, and end killed that instead of the live session).
+ *
+ * The record's pid only while the record is live and the pid is a claude
+ * process of this session: under `session.sh <name>`, or running in the
+ * record's dir (a session whose wrapper is gone). Otherwise the one live claude
+ * right under `session.sh <name>` in the record's dir: a reopen whose record
+ * still names the old pid. Two such sessions, or a pid that isn't the
+ * session's, are refused: it never ends a process it can't tie to the session.
+ *
+ * @param {string} name
+ * @param {SessionRecord | null} record
+ * @param {{ live: boolean, table: Map<number, { ppid: number, args: string }>, claude: string,
+ *   cwdOf: (pid: number) => string | null }} facts
+ * @returns {{ pid: number, how: "record" | "reopened" } | { ended: true } | { refuse: string }}
+ */
+export function endTarget(name, record, { live, table, claude, cwdOf }) {
+  const dir = record?.dir;
+  const isClaude = (/** @type {number} */ pid) => runs(table.get(pid)?.args ?? "", claude);
+  const inDir = (/** @type {number} */ pid) => !!dir && cwdOf(pid) === dir;
+  const ofSession = (/** @type {number} */ pid) =>
+    isClaude(pid) && (wrappedAs(pid, table, claude) === name || inDir(pid));
+  const pid = record?.pid ?? 0;
+  const recordOk = live && pid > 0 && ofSession(pid);
+  const wrapped = [...table.keys()].filter(
+    (p) => isClaude(p) && wrappedAs(p, table, claude) === name && (!dir || inDir(p)),
+  );
+  const others = wrapped.filter((p) => p !== pid);
+  if (recordOk && !others.length) return { pid, how: "record" };
+  if (others.length > 1 || (recordOk && others.length))
+    return {
+      refuse: `${name} has more than one live claude (pids ${[...new Set([...(recordOk ? [pid] : []), ...others])].join(", ")}): refusing to guess which to end`,
+    };
+  if (others.length === 1) return { pid: /** @type {number} */ (others[0]), how: "reopened" };
+  if (!live) return { ended: true };
+  const row = table.get(pid);
+  const what = !row
+    ? "no such process"
+    : isClaude(pid)
+      ? `a claude neither under session.sh ${name} nor in ${dir ?? "its record's dir"}`
+      : `it runs ${row.args.slice(0, 80)}`;
+  return { refuse: `pid ${pid} in ${name}'s record isn't its claude (${what}): refusing to end it` };
+}
+
+/** PID's working directory (its real path), or null when it can't be read. */
+export function cwdOf(/** @type {number} */ pid) {
+  const real = (/** @type {string} */ p) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return p;
+    }
+  };
+  try {
+    return realpathSync(`/proc/${pid}/cwd`);
+  } catch {
+    // Not Linux: lsof.
+  }
+  try {
+    const out = execFileSync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const line = out.split("\n").find((l) => l.startsWith("n"));
+    return line ? real(line.slice(1)) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** ps -A's pid, ppid and command lines. */
@@ -318,6 +435,37 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         }
         break;
       }
+      case "target": {
+        const name = args[0];
+        if (!name) fail("usage: sessions.mjs target <name>", 2);
+        const r = readRecord(dir, /** @type {string} */ (name));
+        if (!r) fail(`end: no session record ${name}`);
+        const live = !!r && isLive(r, processOf(r.pid ?? 0));
+        const t = endTarget(/** @type {string} */ (name), r, {
+          live,
+          table: processTable(),
+          claude: claudeName(),
+          cwdOf,
+        });
+        if ("ended" in t) fail("", 4);
+        else if ("refuse" in t) fail(`end: ${t.refuse}`);
+        else if (t.how === "record") console.log(`${t.pid} record`);
+        else {
+          // The record takes the live session's pid, so its wrapper records the end.
+          const proc = processOf(t.pid);
+          const started = new Date(proc ? proc.startedMs : Date.now())
+            .toISOString()
+            .replace(/\.\d{3}Z$/, "Z");
+          writeRecord(dir, /** @type {string} */ (name), {
+            pid: t.pid,
+            started,
+            ended: undefined,
+            exit: undefined,
+          });
+          console.log(`${t.pid} reopened ${r?.pid ?? "none"}`);
+        }
+        break;
+      }
       case "caller": {
         const p = ancestor(process.pid);
         if (!p) fail("this shell isn't under a claude process");
@@ -328,7 +476,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         break;
       }
       default:
-        fail("usage: sessions.mjs set|get|list|live|ancestor|self|caller …", 2);
+        fail("usage: sessions.mjs set|get|list|live|ancestor|self|target|caller …", 2);
     }
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));

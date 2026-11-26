@@ -22,6 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CAPTAINS } from "./captain.mjs";
 import {
   ancestorClaude,
+  endTarget,
   isLive,
   liveDirRefusal,
   parseEtime,
@@ -30,6 +31,8 @@ import {
   readRecords,
   runs,
   START_SLACK_MS,
+  wrappedAs,
+  wrapperName,
   writeRecord,
 } from "./sessions.mjs";
 import "./config-fixture.mjs";
@@ -185,6 +188,78 @@ describe("the pure part", () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  });
+});
+
+describe("which process pnpm prd end ends (B-810)", () => {
+  // 10: launchd-ish; 20: session.sh prd-t; 21: its claude; 22: a shell in it; 23: a claude under that shell;
+  // 30: session.sh prd-t (a reopen); 31: its claude; 40: a stray claude; 50: sleep.
+  const table = new Map([
+    [10, { ppid: 1, args: "launchd" }],
+    [20, { ppid: 10, args: "bash /r/scripts/loops/session.sh prd-t -- x" }],
+    [21, { ppid: 20, args: "claude-stub --remote-control prd-t" }],
+    [22, { ppid: 21, args: "bash -c pnpm prd end prd-t" }],
+    [23, { ppid: 22, args: "bash /bin/claude-stub" }],
+    [30, { ppid: 10, args: "/r/scripts/loops/session.sh prd-t -- x" }],
+    [31, { ppid: 30, args: "claude-stub" }],
+    [40, { ppid: 10, args: "claude-stub" }],
+    [50, { ppid: 10, args: "sleep 30" }],
+  ]);
+  const cwds = { 21: "/w", 23: "/w", 31: "/w", 40: "/elsewhere" };
+  const facts = (/** @type {number[]} */ drop = [], live = true, cwd = cwds) => ({
+    live,
+    table: new Map([...table].filter(([p]) => !drop.includes(p))),
+    claude: "claude-stub",
+    cwdOf: (/** @type {number} */ p) => /** @type {Record<number, string>} */ (cwd)[p] ?? null,
+  });
+  const rec = (pid) => ({ pid, dir: "/w", started: "2026-11-26T00:00:00Z" });
+
+  it("reads session.sh's name from its command line, as the command or bash's script", () => {
+    expect(wrapperName("bash /r/scripts/loops/session.sh prd-t -- x")).toBe("prd-t");
+    expect(wrapperName("/r/scripts/loops/session.sh plan-v")).toBe("plan-v");
+    expect(wrapperName("claude-stub session.sh prd-t")).toBeNull();
+    expect(wrappedAs(21, table, "claude-stub")).toBe("prd-t");
+    // A claude inside a session's shell isn't that session's claude.
+    expect(wrappedAs(23, table, "claude-stub")).toBeNull();
+    expect(wrappedAs(40, table, "claude-stub")).toBeNull();
+  });
+
+  it("ends the record's pid when it is the session's claude", () => {
+    expect(endTarget("prd-t", rec(21), facts([30, 31]))).toEqual({ pid: 21, how: "record" });
+    // Its wrapper gone, it is still the session's by its directory.
+    const orphan = facts([30, 31]);
+    orphan.table.set(21, { ppid: 1, args: "claude-stub" });
+    expect(endTarget("prd-t", rec(21), orphan)).toEqual({ pid: 21, how: "record" });
+  });
+
+  it("refuses a stale pid that isn't the session's claude, and kills nothing", () => {
+    expect(endTarget("prd-t", rec(50), facts([20, 21, 30, 31]))).toMatchObject({
+      refuse: expect.stringMatching(/pid 50 in prd-t's record isn't its claude \(it runs sleep 30\)/),
+    });
+    expect(endTarget("prd-t", rec(40), facts([20, 21, 30, 31]))).toMatchObject({
+      refuse: expect.stringMatching(/a claude neither under session.sh prd-t nor in \/w/),
+    });
+    expect(endTarget("prd-t", rec(99_999_999), facts([20, 21, 30, 31]))).toMatchObject({
+      refuse: expect.stringMatching(/no such process/),
+    });
+  });
+
+  it("ends the reopened session when the record still names an older pid", () => {
+    expect(endTarget("prd-t", rec(50), facts([20, 21]))).toEqual({ pid: 31, how: "reopened" });
+    expect(endTarget("prd-t", rec(40), facts([20, 21]))).toEqual({ pid: 31, how: "reopened" });
+    // Not live by its record (a dead or reused pid): the live reopen still ends.
+    expect(endTarget("prd-t", rec(46), facts([20, 21], false))).toEqual({ pid: 31, how: "reopened" });
+    // One in another directory (another checkout's prd-t) isn't this record's.
+    expect(endTarget("prd-t", rec(50), facts([20, 21], true, { ...cwds, 31: "/other" }))).toMatchObject({
+      refuse: expect.any(String),
+    });
+  });
+
+  it("refuses two live sessions under one name, and says ended when none is", () => {
+    expect(endTarget("prd-t", rec(21), facts())).toMatchObject({
+      refuse: expect.stringMatching(/more than one live claude \(pids 21, 31\)/),
+    });
+    expect(endTarget("prd-t", rec(21), facts([20, 21, 30, 31], false))).toEqual({ ended: true });
   });
 });
 
@@ -500,6 +575,51 @@ describe("pnpm prd end", () => {
     const r = run("prd.sh", ["end", "prd-t"], { CARETOOK_END_WAIT: "1" });
     expect(r.stdout).toMatch(/ignored TERM for 1s: killed it/);
     expect((await s.done).code).toBe(137);
+  });
+
+  it("refuses a record whose live pid isn't the session's claude, and leaves that process alone (B-810)", async () => {
+    const sleeper = spawn("sleep", ["30"], { stdio: "ignore" });
+    const stray = start(stub, [], { STUB_MODE: "wait", STUB_STATE: join(root, "stray") }, root);
+    try {
+      await until(() => existsSync(join(root, "stray", "ready")));
+      const strayPid = Number(readFileSync(join(root, "stray", "pid"), "utf8").trim());
+      const started = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      for (const pid of [sleeper.pid, strayPid]) {
+        writeRecord(sessions, "prd-s", { pid, started, kind: "prd", topic: "s", dir: main });
+        const r = run("prd.sh", ["end", "prd-s"]);
+        expect(r.status).toBe(1);
+        expect(r.stderr).toMatch(new RegExp(`end: pid ${pid} in prd-s's record isn't its claude`));
+        expect(r.stdout).not.toMatch(/Ending/);
+        expect(() => process.kill(/** @type {number} */ (pid), 0)).not.toThrow();
+      }
+    } finally {
+      sleeper.kill("SIGKILL");
+      stray.child.kill("SIGKILL");
+      rmSync(join(root, "stray"), { recursive: true, force: true });
+    }
+  });
+
+  it("ends the live reopened session when the record names an older pid, and records its end (B-810)", async () => {
+    const sleeper = spawn("sleep", ["30"], { stdio: "ignore" });
+    try {
+      const s = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "wait" });
+      await until(() => existsSync(join(state, "ready")));
+      // The record went back to an older session's pid, still a running process.
+      const started = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      writeRecord(sessions, "prd-t", { pid: sleeper.pid, started });
+      const r = run("prd.sh", ["end", "prd-t"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(
+        new RegExp(
+          `Ending prd-t \\(pid ${stubPid()}, from the live session.sh prd-t \\(its record's pid ${sleeper.pid} was stale\\)\\)`,
+        ),
+      );
+      expect((await s.done).code).toBe(143);
+      expect(() => process.kill(/** @type {number} */ (sleeper.pid), 0)).not.toThrow();
+      expect(record("prd-t")).toMatchObject({ pid: stubPid(), exit: 143 });
+    } finally {
+      sleeper.kill("SIGKILL");
+    }
   });
 
   it("refuses with neither a record nor a claude above it, and an unknown name", () => {
