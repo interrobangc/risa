@@ -15,10 +15,13 @@
 //   narrowedFile    the file list a narrowed run's throwaway commit adds
 //   forcedFlakeFile the marker of a proof run's throwaway commit
 //   refPrefix       what a requested run's ref starts with (`ci/`): `<prefix><tier>/<name>`
+//   gates           optional: the time gates' data (time-gate.mjs has its shape and
+//                   defaults), given as GATES with every default filled in
 // A pattern's `*` matches anything, `/` and a newline too.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../loops/config.mjs";
+import { gatesFrom, gatesProblems } from "../loops/time-gate.mjs";
 
 const KEYS = [
   "tiers",
@@ -30,6 +33,8 @@ const KEYS = [
   "forcedFlakeFile",
   "refPrefix",
 ];
+/** The keys a tier data file may leave out. */
+const OPTIONAL = ["gates"];
 
 /** A tier data file that doesn't load: every problem, each naming its field. */
 export class TierDataError extends Error {
@@ -56,7 +61,7 @@ export function tierDataProblems(data) {
   const d = /** @type {Record<string, any>} */ (data);
   const problems = [
     ...Object.keys(d)
-      .filter((k) => !KEYS.includes(k))
+      .filter((k) => !KEYS.includes(k) && !OPTIONAL.includes(k))
       .map((k) => `${k}: unknown key`),
     ...KEYS.filter((k) => !(k in d)).map((k) => `${k}: missing`),
   ];
@@ -103,6 +108,7 @@ export function tierDataProblems(data) {
     if (k in d && !(isText(d[k]) && !d[k].includes("*"))) problems.push(`${k}: must be a path`);
   if ("refPrefix" in d && !(typeof d.refPrefix === "string" && /^[\w.-]+(\/[\w.-]+)*\/$/.test(d.refPrefix)))
     problems.push("refPrefix: must be a ref prefix ending in a slash (`ci/`)");
+  problems.push(...gatesProblems(d.gates));
   return problems;
 }
 
@@ -157,6 +163,8 @@ export function tiersFrom(data, source = "the tier data") {
     NARROWED_FILE: /** @type {string} */ (d.narrowedFile),
     /** The marker of a proof run's throwaway commit: its check fails once. */
     FORCED_FLAKE_FILE: /** @type {string} */ (d.forcedFlakeFile),
+    /** The time gates: each measure's aim, cutoff and armed switch, the quiet load per core. */
+    GATES: gatesFrom(d.gates),
     /** The jobs a tier runs: its own and those of every tier before it. @param {string} tier */
     jobsFor(tier) {
       if (!isTier(tier)) throw unknownTier(tier);

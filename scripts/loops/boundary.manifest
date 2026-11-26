@@ -280,6 +280,8 @@ scripts/loops/tidy-cli.mjs core
 scripts/loops/tidy-cli.test.mjs core
 scripts/loops/tidy.mjs core
 scripts/loops/tidy.test.mjs core
+scripts/loops/time-gate.mjs core
+scripts/loops/time-gate.test.mjs core
 scripts/loops/tooling-lint.mjs core
 scripts/loops/tooling-tests.mjs core
 scripts/loops/unsynced.sh core

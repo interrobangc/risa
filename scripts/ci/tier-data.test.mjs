@@ -95,6 +95,14 @@ describe("tiersFrom", () => {
     expect(t.parseCiRef("runsXci/tests/x")).toBeNull();
   });
 
+  it("gives the time gates, their defaults when the data has none", () => {
+    expect(t.GATES.quietLoadPerCore).toBe(1);
+    expect(t.GATES.measures.unit).toEqual({ aim: 300, cutoff: 360, armed: false });
+    const g = tiersFrom({ ...SAMPLE, gates: { measures: { unit: { armed: true } } } }).GATES;
+    expect(g.measures.unit).toEqual({ aim: 300, cutoff: 360, armed: true });
+    expect(g.measures.quick.armed).toBe(false);
+  });
+
   it("can't be changed by its callers", () => {
     expect(() => /** @type {any} */ (t.TIERS).push("x")).toThrow();
     expect(() => /** @type {any} */ (t.TIER_JOBS.lint).push("x")).toThrow();
@@ -127,6 +135,16 @@ describe("tierDataProblems", () => {
     ],
     ["a marker with a `*`", (d) => (d.narrowedFile = "*.json"), "narrowedFile: must be a path"],
     ["a prefix with no slash", (d) => (d.refPrefix = "ci"), "refPrefix: must be a ref prefix"],
+    [
+      "a gate's aim above its cutoff",
+      (d) => (d.gates = { measures: { unit: { aim: 400, cutoff: 300 } } }),
+      "gates.measures.unit.aim: 400 s is above its cutoff (300 s)",
+    ],
+    [
+      "a gate for an unknown measure",
+      (d) => (d.gates = { measures: { e2e: {} } }),
+      "gates.measures.e2e: unknown measure",
+    ],
   ])("refuses %s", (_what, change, problem) => {
     const problems = tierDataProblems(changed(change));
     expect(problems.join("\n")).toContain(problem);
@@ -197,5 +215,9 @@ describe("tierData", () => {
 
   it("reads this repo's, through its config", () => {
     expect(tierData().TIERS.length).toBeGreaterThan(0);
+    // Its gates: the three measures, each with its aim under its cutoff.
+    const { measures } = tierData().GATES;
+    expect(Object.keys(measures)).toEqual(["unit", "components", "quick"]);
+    for (const m of Object.values(measures)) expect(m.aim).toBeLessThanOrEqual(m.cutoff);
   });
 });
