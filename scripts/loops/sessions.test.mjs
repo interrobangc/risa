@@ -237,7 +237,14 @@ describe("which process pnpm prd end ends (B-810)", () => {
       refuse: expect.stringMatching(/pid 50 in prd-t's record isn't its claude \(it runs sleep 30\)/),
     });
     expect(endTarget("prd-t", rec(40), facts([20, 21, 30, 31]))).toMatchObject({
-      refuse: expect.stringMatching(/a claude neither under session.sh prd-t nor in \/w/),
+      refuse: expect.stringMatching(
+        /a claude neither under session.sh prd-t, nor in \/w, nor this shell's own/,
+      ),
+    });
+    // The caller's own claude (a session ending itself) is its own, record dir or not.
+    expect(endTarget("prd-t", { pid: 40 }, { ...facts([20, 21, 30, 31]), caller: 40 })).toEqual({
+      pid: 40,
+      how: "record",
     });
     expect(endTarget("prd-t", rec(99_999_999), facts([20, 21, 30, 31]))).toMatchObject({
       refuse: expect.stringMatching(/no such process/),

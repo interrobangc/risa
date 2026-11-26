@@ -161,8 +161,9 @@ export function wrappedAs(pid, table, claude) {
  * once named an older pid, and end killed that instead of the live session).
  *
  * The record's pid only while the record is live and the pid is a claude
- * process of this session: under `session.sh <name>`, or running in the
- * record's dir (a session whose wrapper is gone). Otherwise the one live claude
+ * process of this session: under `session.sh <name>`, running in the
+ * record's dir (a session whose wrapper is gone), or the caller's own ancestor
+ * claude (a session ending itself, `pnpm prd bye`). Otherwise the one live claude
  * right under `session.sh <name>` in the record's dir: a reopen whose record
  * still names the old pid. Two such sessions, or a pid that isn't the
  * session's, are refused: it never ends a process it can't tie to the session.
@@ -170,15 +171,15 @@ export function wrappedAs(pid, table, claude) {
  * @param {string} name
  * @param {SessionRecord | null} record
  * @param {{ live: boolean, table: Map<number, { ppid: number, args: string }>, claude: string,
- *   cwdOf: (pid: number) => string | null }} facts
+ *   cwdOf: (pid: number) => string | null, caller?: number | null }} facts
  * @returns {{ pid: number, how: "record" | "reopened" } | { ended: true } | { refuse: string }}
  */
-export function endTarget(name, record, { live, table, claude, cwdOf }) {
+export function endTarget(name, record, { live, table, claude, cwdOf, caller = null }) {
   const dir = record?.dir;
   const isClaude = (/** @type {number} */ pid) => runs(table.get(pid)?.args ?? "", claude);
   const inDir = (/** @type {number} */ pid) => !!dir && cwdOf(pid) === dir;
   const ofSession = (/** @type {number} */ pid) =>
-    isClaude(pid) && (wrappedAs(pid, table, claude) === name || inDir(pid));
+    isClaude(pid) && (pid === caller || wrappedAs(pid, table, claude) === name || inDir(pid));
   const pid = record?.pid ?? 0;
   const recordOk = live && pid > 0 && ofSession(pid);
   const wrapped = [...table.keys()].filter(
@@ -196,7 +197,7 @@ export function endTarget(name, record, { live, table, claude, cwdOf }) {
   const what = !row
     ? "no such process"
     : isClaude(pid)
-      ? `a claude neither under session.sh ${name} nor in ${dir ?? "its record's dir"}`
+      ? `a claude neither under session.sh ${name}, nor in ${dir ?? "its record's dir"}, nor this shell's own`
       : `it runs ${row.args.slice(0, 80)}`;
   return { refuse: `pid ${pid} in ${name}'s record isn't its claude (${what}): refusing to end it` };
 }
@@ -441,11 +442,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         const r = readRecord(dir, /** @type {string} */ (name));
         if (!r) fail(`end: no session record ${name}`);
         const live = !!r && isLive(r, processOf(r.pid ?? 0));
+        const table = processTable();
         const t = endTarget(/** @type {string} */ (name), r, {
           live,
-          table: processTable(),
+          table,
           claude: claudeName(),
           cwdOf,
+          caller: ancestorClaude(process.pid, table, claudeName()),
         });
         if ("ended" in t) fail("", 4);
         else if ("refuse" in t) fail(`end: ${t.refuse}`);
