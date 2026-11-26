@@ -67,7 +67,8 @@ cat <<EOF
 - Read your handbook ($(role_doc loop) prints it) and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
 - **Batch your turns:** independent reads, greps, commands and edits go in one turn, and a file under about 400 lines is read whole, not in \`sed -n\` chunks (your handbook's _Reads and turns_).
 $stack_line Delete any scratch scripts before you commit.
-- Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. To wait on a check running in the background, run \`$prd_cmd wait check\` (it returns once this worktree's check is gone, and exits 75 at its \`--timeout\`); never \`pgrep -f\` (it matches its own shell and never exits).$format_line
+- Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. Run it, and any command likely past about 2 minutes, with \`run_in_background\` (the harness moves a long foreground command there anyway), then wait with \`$prd_cmd wait check\` (it returns once this worktree's check is gone; at its \`--timeout\` it exits 75: run it again); never \`pgrep -f\` (it matches its own shell and never exits).$format_line
+- **Never end your turn before your hand-off is written:** a turn that ends while a check runs stops you with no hand-off.
 - **Past about 10 reads into unfamiliar code, hand the exploration to one Explore helper** (haiku for a plain search, sonnet for judgement) and take back only its conclusion; long check output goes to a haiku helper too (your handbook's _Loop rules_).
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`$backlog_cmd note ${backlog_id_prefix}<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
@@ -82,6 +83,7 @@ if [[ -n $continuing ]]; then
 - Read what it did: \`$log_cmd --oneline $prd_prefix$topic..HEAD\`, \`git status\`, \`git diff $prd_prefix$topic...HEAD\` (what's committed) and \`git diff\` (what isn't). Uncommitted changes are its work too: keep them unless they're broken.
 - Check that against the slice's acceptance criteria and finish what's missing from there. Don't start over, and don't redo committed work.
 - If everything is committed and \`$prd_cmd check\` (or \`--quick\`) passes, don't rebuild: run whatever the slice's checks still need, and write the hand-off from the branch (its commits are the record).
+- Run \`$prd_cmd check\` with \`run_in_background\` and wait with \`$prd_cmd wait check\` (again on exit 75), and never end your turn before your hand-off is written.
 EOF
 fi
 if [[ -n $brief ]]; then
