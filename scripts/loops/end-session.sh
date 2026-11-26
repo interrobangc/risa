@@ -16,7 +16,6 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
-wait_secs=${CARETOOK_END_WAIT:-10}
 
 (($# <= 1)) || die "usage: pnpm prd end [<name>]"
 case ${1:-} in -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; -*) die "end: unknown option $1" ;; esac
@@ -40,15 +39,6 @@ else
   if [[ ${found#* } == record ]]; then name=$session how="its record"; else name="this shell's claude" how="the calling shell's ancestor"; fi
 fi
 
-# Gone, or a zombie waiting for its parent.
-alive() { local s; s=$(ps -o stat= -p "$1" 2>/dev/null) || return 1; [[ -n $s && $s != Z* ]]; }
-
 # Say it first: ending the caller's own session may take this output with it.
 echo "Ending $name (pid $pid, from $how)."
-kill -TERM "$pid" 2>/dev/null || true
-for ((i = 0; i < wait_secs * 5; i++)); do
-  alive "$pid" || exit 0
-  sleep 0.2
-done
-kill -KILL "$pid" 2>/dev/null || true
-echo "$name ignored TERM for ${wait_secs}s: killed it."
+end_pid "$pid" "$name"

@@ -234,7 +234,7 @@ describe("orchestrator", () => {
       expect(out).toContain('`pnpm prd context --keep "<why>"` and write the reason in _Status_');
       expect(out).toContain("only on the user's word");
       expect(out).toMatch(
-        /When the last wave has landed, run `pnpm prd rm T`, then `cd \S+ && pnpm prd end`/,
+        /When the last wave has landed, run `pnpm prd rm T` from this worktree as your last step: once it has removed the worktree it ends this session/,
       );
     }
   });
@@ -564,13 +564,15 @@ describe("plan and backlog", () => {
     }
   });
 
-  it("plan adds its registry row through pnpm backlog prd and ends with pnpm prd end", () => {
+  it("plan adds its registry row through pnpm backlog prd and ends with pnpm prd rm", () => {
     const plan = ok("plan", "T");
     expect(plan).toContain("`pnpm backlog prd add T`");
     expect(plan).toContain("`pnpm backlog prd set T after=<topic> hot=<path prefixes>`");
-    expect(plan.indexOf("`pnpm prd rm plan-T`")).toBeLessThan(plan.indexOf("&& pnpm prd end`"));
-    // rm deleted the worktree: end runs from the main checkout
-    expect(plan).toMatch(/`cd \S+ && pnpm prd end`/);
+    // rm, run from the worktree, ends the session itself (B-812): it's the last step, after the report.
+    expect(plan).toMatch(
+      /how to start it, then `pnpm prd rm plan-T`, your last step: run from this worktree, `rm` ends this session/,
+    );
+    expect(plan).not.toContain("&& pnpm prd end`");
     expect(plan.trimEnd()).toMatch(/Start by summarising[^]*$/);
   });
 
@@ -647,14 +649,15 @@ describe("plan and backlog", () => {
       );
       expect(plan).toContain("The tool, never you, puts the recommendation in place of an answer");
       expect(plan).not.toContain("wait for it however long it takes");
-      // After the landing: the report, then rm, then end.
+      // After the landing: the report, then rm, which ends the session (B-812).
       const land = plan.indexOf("`pnpm prd land plan/T -m");
       const report = plan.indexOf('`pnpm prd ask --topic T --report "<text>"`');
       const rm = plan.indexOf("`pnpm prd rm plan-T`");
       expect(land).toBeGreaterThan(0);
       expect(report).toBeGreaterThan(land);
       expect(rm).toBeGreaterThan(report);
-      expect(plan.indexOf("&& pnpm prd end`")).toBeGreaterThan(rm);
+      expect(plan).toContain("Then `pnpm prd rm plan-T`, your last step: run from this worktree");
+      expect(plan).not.toContain("&& pnpm prd end`");
       expect(plan).toContain("`pnpm backlog prd set T flags+=hold`");
       expect(plan).not.toContain("flags=");
     }
