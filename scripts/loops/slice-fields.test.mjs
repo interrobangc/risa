@@ -1,7 +1,7 @@
 // The slice fields parser, through its exports and its command line.
 import { execFileSync, spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { formatFields, sliceFields, splitList } from "./slice-fields.mjs";
+import { formatFields, lineAnchors, sliceFields, sliceSections, splitList } from "./slice-fields.mjs";
 
 const CLI = new URL("./slice-fields.mjs", import.meta.url).pathname;
 
@@ -141,6 +141,32 @@ describe("sliceFields", () => {
 describe("splitList", () => {
   it("splits on commas outside parentheses and drops none", () => {
     expect(splitList("a (b, c), d ,, none")).toEqual(["a (b, c)", "d"]);
+  });
+});
+
+describe("lineAnchors", () => {
+  it("finds a line number beside a file, or alone in a code span", () => {
+    expect(lineAnchors("Change `scripts/loops/file.mjs ~158`, then file.mjs:231 and `:231`.")).toEqual([
+      "scripts/loops/file.mjs ~158",
+      "file.mjs:231",
+      "`:231`",
+    ]);
+    expect(lineAnchors("see `land.sh` line 40")).toEqual(["land.sh` line 40"]);
+  });
+
+  it("leaves plain numbers in prose alone", () => {
+    expect(lineAnchors("Rotate past ~120k; 3 files in `land.sh`, port :5436, 10:30, slice 158.")).toEqual([]);
+  });
+});
+
+describe("sliceSections", () => {
+  it("gives each slice's body, to the next heading of its level or above", () => {
+    const text =
+      "## Wave 1\n\n### Slice 1: a\n\nx\n\n#### Notes\n\ny\n\n### Slice 2: b\n\nz\n\n## Wave 2\n\nw";
+    expect(sliceSections(text).map((s) => [s.n, s.body.trim()])).toEqual([
+      [1, "x\n\n#### Notes\n\ny"],
+      [2, "z"],
+    ]);
   });
 });
 
