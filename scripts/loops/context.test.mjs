@@ -313,11 +313,20 @@ describe("hookDecision", () => {
     expect(hardLimitFor("backlog", {})).toBeNull();
   });
 
-  it("gives an orchestrator a 120k soft limit and every other kind 160k, both under CARETOOK_CONTEXT_LIMIT", () => {
+  it("gives an orchestrator a 120k soft limit and every other kind 160k: at 125k only the orchestrator hears", () => {
     expect(limitOf({}, "prd")).toBe(120_000);
     for (const kind of ["inbox", "backlog", "plan", undefined]) expect(limitOf({}, kind)).toBe(160_000);
-    for (const kind of ["prd", "inbox"])
-      expect(limitOf({ CARETOOK_CONTEXT_LIMIT: "90000" }, kind)).toBe(90_000);
+    const at125 = { ...facts, size: 125_000 };
+    const orchestrator = hookDecision(null, { ...at125, limit: limitOf({}, "prd") });
+    expect(orchestrator.message).toContain("at the next wave boundary");
+    expect(orchestrator.message).toContain("Not mid-wave");
+    const inbox = hookDecision(null, {
+      ...at125,
+      limit: limitOf({}, "inbox"),
+      inbox: "pnpm -s -C /m prd rotate --self",
+    });
+    expect(inbox.message).toBeNull();
+    expect(hookDecision(null, { ...at125, limit: limitOf({}, "inbox"), loop: true }).message).toBeNull();
     // The hard limit stays 225k for an orchestrator; the inbox session's one limit is its 160k.
     expect(hardLimitFor("prd", {})).toBe(225_000);
   });
@@ -389,7 +398,7 @@ describe("the hook as a command", () => {
     );
   });
 
-  it("at 125k tells an orchestrator to rotate, and leaves a slice agent and the inbox session alone", () => {
+  it("at 125k tells an orchestrator to rotate at the next wave boundary, and leaves its slice agent alone", () => {
     writeFileSync(transcript, assistant(1, 125_000));
     const orchestrator = contextOf(hook({ transcript_path: transcript }).stdout).additionalContext;
     expect(orchestrator).toContain("past the soft limit of 120k");
@@ -403,12 +412,6 @@ describe("the hook as a command", () => {
       assistant(1, 125_000, 0, { isSidechain: true }),
     );
     expect(hook({ transcript_path: transcript, agent_id: "a1" }).stdout).toBe("");
-    writeFileSync(
-      join(sessions, "inbox.json"),
-      JSON.stringify({ pid: PID, kind: "inbox", started: new Date().toISOString() }),
-    );
-    expect(hook({ transcript_path: transcript }, { CARETOOK_SESSION_NAME: "inbox" }).stdout).toBe("");
-    expect(JSON.parse(readFileSync(join(context, "inbox.json"), "utf8"))).toMatchObject({ size: 125_001 });
   });
 
   it("delivers a waiting nudge once and marks it in the record", () => {

@@ -86,7 +86,7 @@ const positive = (/** @type {string | undefined} */ value, /** @type {number} */
 const ORCHESTRATOR_SOFT = 120_000;
 /** The default soft limit of a backlog or inbox session (and any kind but an orchestrator). */
 const OTHER_SOFT = 160_000;
-/** A session kind's soft limit; CARETOOK_CONTEXT_LIMIT overrides it for every kind. */
+/** A session kind's soft limit; the soft-limit variable (above) overrides it for every kind. */
 export const limitOf = (env = process.env, /** @type {string | undefined} */ kind = undefined) =>
   positive(env.CARETOOK_CONTEXT_LIMIT, kind === "prd" ? ORCHESTRATOR_SOFT : OTHER_SOFT);
 /** An orchestrator's hard limit, never below the soft one. */
