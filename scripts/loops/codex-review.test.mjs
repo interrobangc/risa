@@ -4,8 +4,9 @@
 // throwaway PR #7, in order: running (Codex reviewing the first push), findings
 // (two P2 threads, plus a human comment), declined (one replied to and
 // resolved), outdated (the fix pushed and reviewed clean, but Codex left its
-// fixed thread open), clean (every thread resolved, asked again) and stale (one
-// more push, before Codex started on it). out-of-credits is PR #48 (dev into
+// fixed thread open; its clean state on the head clears it), clean (every
+// thread resolved, asked again) and stale (one more push, before Codex
+// started on it). out-of-credits is PR #48 (dev into
 // staging): Codex reviewed one head, then answered later pushes with its usage
 // limit comment and marked its summary "failed". The carry rule runs against a
 // throwaway repository, with PR states built by hand in the same shape.
@@ -78,11 +79,32 @@ describe("codex-review verdict", () => {
     expect(verdict(pr)).toMatchObject({ state: "findings", findings: [AVERAGE] });
   });
 
-  it("still blocks on a fixed finding Codex left open (outdated) until it's resolved", () => {
-    const v = verdict(fixture("outdated"));
+  it("drops a fixed finding Codex left open (outdated) once its state on the head is clean", () => {
+    const pr = fixture("outdated");
+    expect(pr.reviewThreads.nodes.find((t) => t.id === AVERAGE.threadId)).toMatchObject({
+      isResolved: false,
+      isOutdated: true,
+    });
+    expect(verdict(pr)).toMatchObject({ state: "clean", findings: [], headSha: FIXED, reviewedSha: FIXED });
+  });
+
+  it("still blocks on an outdated finding while Codex's state on the head has unresolved findings", () => {
+    const pr = fixture("outdated");
+    const summary = pr.comments.nodes.find((c) => c.author.login === "chatgpt-codex-connector");
+    summary.body = summary.body.replace(
+      '"has_unresolved_findings":false,"status"',
+      '"has_unresolved_findings":true,"status"',
+    );
+    const v = verdict(pr);
     expect(v).toMatchObject({ state: "findings", headSha: FIXED, reviewedSha: FIXED });
     expect(v.findings).toEqual([{ ...AVERAGE, line: 12, outdated: true }]);
     expect(verdictText(v)).toContain("(outdated)");
+  });
+
+  it("still blocks on an open thread that isn't outdated, whatever the head's state says", () => {
+    const pr = fixture("outdated");
+    pr.reviewThreads.nodes.find((t) => t.id === AVERAGE.threadId).isOutdated = false;
+    expect(verdict(pr)).toMatchObject({ state: "findings", findings: [{ ...AVERAGE, line: 12 }] });
   });
 
   it("is clean when Codex reviewed the head and every thread of its own is resolved", () => {

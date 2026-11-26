@@ -202,7 +202,10 @@ describe("orchestrator", () => {
         "when `add` stops on a look-alike (exit 3), `note` the item it names if that covers the finding, or rerun with `--anyway` if it doesn't",
       );
       expect(out).toContain("Reply on every thread before resolving it");
-      expect(out).toContain("resolve each answered thread");
+      expect(out).toContain(
+        "resolve each answered thread that is declined or current (`review --resolve <threadId>`",
+      );
+      expect(out).toContain("an outdated one stops blocking once Codex's state on the head is clean");
       expect(out).toContain("`review --again` until clean");
       expect(out).toContain("After about three rounds, ask the user");
       expect(out).toContain(
