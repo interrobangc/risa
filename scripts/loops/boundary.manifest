@@ -256,6 +256,7 @@ scripts/loops/session-requests.test.mjs core
 scripts/loops/session.sh core
 scripts/loops/sessions.mjs core
 scripts/loops/sessions.test.mjs core
+scripts/loops/shared-names.test.mjs core
 scripts/loops/skeptic.mjs core
 scripts/loops/skeptics.mjs core
 scripts/loops/skeptics.test.mjs core

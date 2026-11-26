@@ -295,7 +295,7 @@ server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 
 # checked_file DIR → where `pnpm prd check` records the commit it passed on
 # (in the worktree's git dir, so it never shows up as a change).
-checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/caretook-checked"; }
+checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/$project_name-checked"; }
 
 # check_base DIR ASKED (full|quick|slice) → the commit a check's diff starts from.
 # A slice: where it left its PRD branch. A quick check: the last full pass (or a

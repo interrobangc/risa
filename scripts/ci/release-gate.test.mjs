@@ -140,7 +140,7 @@ const flaky = (/** @type {boolean} */ brake) => [
 ];
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "caretook-release-gate-")));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "risa-release-gate-")));
   const origin = join(root, "origin.git");
   repo = join(root, "repo");
   spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { env: gitEnv() });

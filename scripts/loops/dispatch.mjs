@@ -219,7 +219,7 @@ export function sessionLine(
 
 /** The helper's whole prompt: push LINE, then end. */
 export const helperPrompt = (/** @type {string} */ line) =>
-  `You are a one-shot helper for the Caretook dispatcher. Do exactly two things and nothing else: ` +
+  `You are a one-shot helper for the dispatcher. Do exactly two things and nothing else: ` +
   `call the PushNotification tool once with this text: ${JSON.stringify(line)}. ` +
   `Then run \`pnpm prd end\` in Bash (it ends this session and closes its tab).`;
 
@@ -324,9 +324,7 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
     notices: env.RISA_NOTICES_DIR || join(loops, ".notices"),
     cap: join(loops, ".prd-cap"),
     watch: env.RISA_WATCH_DIR || join(loops, ".watch"),
-    usage:
-      env.RISA_USAGE_DIR ||
-      join(dirname(env.RISA_SESSIONS_DIR || join(loops, ".sessions")), ".usage"),
+    usage: env.RISA_USAGE_DIR || join(dirname(env.RISA_SESSIONS_DIR || join(loops, ".sessions")), ".usage"),
     landing: env.RISA_LANDING_DIR || join(loops, ".landing"),
   };
 }
@@ -992,8 +990,7 @@ function stuckStep(
 /** Every process's command line, or null when they can't be read. RISA_PROCESS_FILE stands in (tests). */
 export function processLines(env = process.env) {
   try {
-    if (env.RISA_PROCESS_FILE)
-      return readFileSync(env.RISA_PROCESS_FILE, "utf8").split("\n").filter(Boolean);
+    if (env.RISA_PROCESS_FILE) return readFileSync(env.RISA_PROCESS_FILE, "utf8").split("\n").filter(Boolean);
     return [...processTable().values()].map((r) => r.args);
   } catch {
     return null;

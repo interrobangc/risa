@@ -1,6 +1,6 @@
 {
   "number": 7,
-  "url": "https://github.com/caretook/caretook.com/pull/7",
+  "url": "https://github.com/example/project/pull/7",
   "state": "OPEN",
   "headRefName": "throwaway/codex-fixtures",
   "headRefOid": "b131ab720eb31e4ef73c65ccd8e0862246f7cd5d",
@@ -20,7 +20,7 @@
         "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"b131ab720eb31e4ef73c65ccd8e0862246f7cd5d\",\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":\"running\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n…",
         "createdAt": "2026-11-21T04:16:30Z",
         "updatedAt": "2026-11-21T04:16:30Z",
-        "url": "https://github.com/caretook/caretook.com/pull/7#issuecomment-7057146935"
+        "url": "https://github.com/example/project/pull/7#issuecomment-7057146935"
       }
     ]
   },

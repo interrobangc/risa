@@ -6,8 +6,8 @@ describe("upNow", () => {
   it("lists stacks with a running container, servers that answer, the test Postgres and the dispatcher", () => {
     const inv = {
       worktrees: [
-        { name: "a", stack: "caretook-loop1", containersUp: 2, webPort: 6173, serverRunning: true },
-        { name: "b", stack: "caretook-loop2", containersUp: 0, webPort: 6273, serverRunning: false },
+        { name: "a", stack: "sample-loop1", containersUp: 2, webPort: 6173, serverRunning: true },
+        { name: "b", stack: "sample-loop2", containersUp: 0, webPort: 6273, serverRunning: false },
         { name: "c", stack: null, containersUp: 0, webPort: null, serverRunning: false },
       ],
       testDb: { running: true },

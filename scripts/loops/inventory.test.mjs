@@ -19,13 +19,13 @@ const wt = (name, branch, extra = {}) => ({
 // One of each class, every stack down, nothing running: a cold boot.
 const COLD = {
   worktrees: [
-    wt("t", "prd/t", { stack: "caretook-loop1", containersAll: 3, webPort: 6173 }),
-    wt("t-1", "slice/t/1", { merged: true, stack: "caretook-loop2", containersAll: 3, webPort: 6273 }),
-    wt("t-2", "slice/t/2", { stack: "caretook-loop3", containersAll: 3, webPort: 6373 }),
+    wt("t", "prd/t", { stack: "sample-loop1", containersAll: 3, webPort: 6173 }),
+    wt("t-1", "slice/t/1", { merged: true, stack: "sample-loop2", containersAll: 3, webPort: 6273 }),
+    wt("t-2", "slice/t/2", { stack: "sample-loop3", containersAll: 3, webPort: 6373 }),
     wt("t-3", "slice/t/3"),
     wt("t-4", "slice/t/4", { merged: true, dirty: true }),
     wt("plan-u", "plan/u"),
-    wt("a", "prd/a", { stack: "caretook-loop4", containersAll: 3, webPort: 6473 }),
+    wt("a", "prd/a", { stack: "sample-loop4", containersAll: 3, webPort: 6473 }),
   ],
   locks: [],
   docker: { running: true },
@@ -56,7 +56,7 @@ describe("classify", () => {
   });
 
   it("calls any other branch, or a detached HEAD, stackless", () => {
-    expect(classify(wt("x", "feature/x", { stack: "caretook-loop9" })).class).toBe("stackless");
+    expect(classify(wt("x", "feature/x", { stack: "sample-loop9" })).class).toBe("stackless");
     expect(classify(wt("y", "")).why).toMatch(/detached/);
   });
 });
@@ -137,7 +137,7 @@ describe("locks", () => {
     { kind: "slot", path: "/l/.slots/7", holder: "gone-1", alive: false },
     { kind: "slot", path: "/l/.slots/1", holder: "t", alive: true },
     { kind: "dispatch", path: "/l/.dispatch.lock", pid: 99, alive: false },
-    { kind: "backlog", path: "/g/caretook-backlog.lock", alive: true },
+    { kind: "backlog", path: "/g/sample-backlog.lock", alive: true },
     { kind: "lease", path: "/l/.lease/browser/1", pid: 5, alive: false },
     { kind: "lease", path: "/l/.lease/check/1", pid: 6, alive: true },
   ];
@@ -153,7 +153,7 @@ describe("locks", () => {
   it("lists live locks to leave alone", () => {
     expect(inv.locks.live.map((l) => l.path)).toEqual([
       "/l/.slots/1",
-      "/g/caretook-backlog.lock",
+      "/g/sample-backlog.lock",
       "/l/.lease/check/1",
     ]);
   });
@@ -166,8 +166,8 @@ describe("locks", () => {
 
   it("clears a stale backlog lock", () => {
     const g = clone(COLD);
-    g.locks = [{ kind: "backlog", path: "/g/caretook-backlog.lock", alive: false }];
-    expect(lines(inventory(g))).toContain("clear-lock /g/caretook-backlog.lock");
+    g.locks = [{ kind: "backlog", path: "/g/sample-backlog.lock", alive: false }];
+    expect(lines(inventory(g))).toContain("clear-lock /g/sample-backlog.lock");
   });
 });
 

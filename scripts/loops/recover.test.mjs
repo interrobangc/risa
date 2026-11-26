@@ -27,6 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { stubHookConfig } from "./config-fixture.mjs";
+import { sharedNames } from "./config.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -300,7 +301,7 @@ describe("recover --dry-run", () => {
 
   it("leaves a live dispatcher's lock alone, and clears a stale backlog lock", () => {
     const lock = join(loops, ".dispatch.lock");
-    const backlogLock = join(main, ".git", "caretook-backlog.lock");
+    const backlogLock = join(main, ".git", sharedNames().backlogLock);
     writeFileSync(lock, `${process.pid}\n`);
     mkdirSync(backlogLock);
     try {
@@ -394,9 +395,7 @@ describe("recover --dry-run", () => {
   it("flags low disk", () => {
     const inv = json({ RISA_FREE_GB: "3", RISA_MIN_FREE_GB: "5" });
     expect(inv.disk).toEqual({ freeGb: 3, minGb: 5, low: true });
-    expect(okRecover(["--dry-run"], { RISA_FREE_GB: "3" })).toMatch(
-      /disk: 3 GB free \(line: 10 GB\) · LOW/,
-    );
+    expect(okRecover(["--dry-run"], { RISA_FREE_GB: "3" })).toMatch(/disk: 3 GB free \(line: 10 GB\) · LOW/);
   });
 
   it("changes nothing on disk, and starts, stops, brings up or down nothing", () => {

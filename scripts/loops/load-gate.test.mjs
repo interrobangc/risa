@@ -333,9 +333,7 @@ describe("the scripts that wait or warn", () => {
     const fifth = await run("prd.sh", ["start", "e"]);
     expect(fifth.status).toBe(1);
     expect(fifth.out).toContain("already 4 PRD worktrees (cap 4;");
-    expect((await run("prd.sh", ["status"], { RISA_MAX_PRDS: "5" })).out).toContain(
-      "PRD worktrees: 4 of 5",
-    );
+    expect((await run("prd.sh", ["status"], { RISA_MAX_PRDS: "5" })).out).toContain("PRD worktrees: 4 of 5");
     for (const n of ["c1", "c2", "c3", "d"]) fresh(n);
   });
 

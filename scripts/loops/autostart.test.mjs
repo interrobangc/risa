@@ -16,13 +16,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { jobPath, LABEL, pathOf, plist } from "./autostart.mjs";
+const escaped = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const HERE = new URL(".", import.meta.url).pathname;
 
 describe("the plist", () => {
   it("runs the main checkout's watchdog every five minutes, keeping its children, with the full path", () => {
     const text = plist({ main: "/Users/someone/repo", path: "/n/bin:/t/bin:/usr/bin" });
-    expect(text).toMatch(/<key>Label<\/key>\s*<string>com\.caretook\.prd-watchdog<\/string>/);
+    expect(text).toMatch(new RegExp(String.raw`<key>Label</key>\s*<string>${escaped(LABEL)}</string>`));
     expect(text).toMatch(
       /<array>\s*<string>\/bin\/bash<\/string>\s*<string>\/Users\/someone\/repo\/scripts\/loops\/prd\.sh<\/string>\s*<string>watchdog<\/string>\s*<\/array>/,
     );
@@ -103,7 +104,9 @@ esac`,
   it("install writes a valid plist with the full path and loads it", () => {
     const r = run("install");
     expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/^Installed .*com\.caretook\.prd-watchdog\.plist: the watchdog runs at login/m);
+    expect(r.stdout).toMatch(
+      new RegExp(String.raw`^Installed .*${escaped(LABEL)}\.plist: the watchdog runs at login`, "m"),
+    );
     const text = readFileSync(file(), "utf8");
     expect(pathOf(text)).toBe(`${join(root, "node24")}:${tools}:/usr/bin:/bin:/usr/sbin:/sbin`);
     expect(text).toContain(`<string>${join(main, "scripts/loops/prd.sh")}</string>`);

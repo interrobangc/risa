@@ -358,7 +358,7 @@ beforeAll(() => {
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
   writeFileSync(join(root, "load"), "1 1 1");
-  inboxDir = join(root, "home/.caretook/inbox");
+  inboxDir = join(root, "home/.risa/inbox");
   claudeConfig = join(root, "claude.json");
   env = {
     ...process.env,

@@ -710,7 +710,7 @@ describe("pnpm prd rotate --self", () => {
   });
 
   describe("the inbox session", () => {
-    const inboxDir = () => join(root, "home/.caretook/inbox");
+    const inboxDir = () => join(root, "home/.risa/inbox");
     const inboxEnv = () => ({ RISA_INBOX_DIR: join(root, "elsewhere") });
     const startInbox = async (extraArgs = "") => {
       mkdirSync(inboxDir(), { recursive: true });

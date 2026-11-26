@@ -503,6 +503,31 @@ export function toolCommands(config = loadConfig().config) {
   return { prd: config.tool.prd, backlog: config.tool.backlog };
 }
 
+/**
+ * The names other worktrees, the watchdog and GitHub share, built from the project's
+ * name so they keep their values whatever the tool is called: an unsynced worktree,
+ * the loaded launchd job and the commit statuses already posted still match. lib.sh,
+ * recover.sh and unsynced.sh build the same from `config get name`.
+ * @param {Record<string, any>} [config] a valid config (default: this repo's)
+ */
+export function sharedNames(config = loadConfig().config) {
+  const name = config.name;
+  return {
+    /** pnpm backlog's lock, in the main checkout's git dir */
+    backlogLock: `${name}-backlog.lock`,
+    /** the commit a worktree's check passed on, in its git dir */
+    checked: `${name}-checked`,
+    /** the inbox merge's scratch file, in the git dir */
+    inboxMerged: `${name}-inbox-merged`,
+    /** an unsynced landing's merge marker, in the worktree's git dir */
+    unsyncedMerge: `${name}-unsynced-merge`,
+    /** the watchdog's launchd job */
+    launchdLabel: `com.${name}.prd-watchdog`,
+    /** the commit status a CI verdict is posted under (`<context>/<tier>`) */
+    ciContext: `${name}-ci`,
+  };
+}
+
 /** Whether this file is the script Node was started on (through any symlink). */
 const isMain = () => {
   try {

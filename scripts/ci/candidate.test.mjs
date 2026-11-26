@@ -92,7 +92,7 @@ const remoteTip = (/** @type {string} */ branch) => git(["rev-parse", `refs/remo
 const BRANCH = "rc/20261123-1030";
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "caretook-candidate-test-")));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "risa-candidate-test-")));
   const origin = join(root, "origin.git");
   repo = join(root, "repo");
   prs = [];

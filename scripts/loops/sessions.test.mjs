@@ -515,9 +515,9 @@ describe("liveness", () => {
       `#!/usr/bin/env bash\necho "\${RISA_SESSION_NAME:-none} \${RISA_CONTEXT_HOOK:-none}" > "$STUB_STATE/env"\n`,
     );
     chmodSync(shown, 0o755);
-    expect(
-      run("session.sh", ["plan-t", "--", "go"], { ...inherited, RISA_CLAUDE_BIN: shown }).status,
-    ).toBe(0);
+    expect(run("session.sh", ["plan-t", "--", "go"], { ...inherited, RISA_CLAUDE_BIN: shown }).status).toBe(
+      0,
+    );
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe("none none");
     expect(run("session.sh", ["prd-t", "--", "go"], { RISA_CLAUDE_BIN: shown }).status).toBe(0);
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe(`prd-t ${scripts("context.mjs")}`);
@@ -731,7 +731,7 @@ describe("sessions start through the wrapper", () => {
 
 describe("the inbox session", () => {
   const home = () => join(root, "home");
-  const inboxDir = () => join(home(), ".caretook/inbox");
+  const inboxDir = () => join(home(), ".risa/inbox");
   const inbox = (args = [], extra = {}) =>
     run("prd.sh", ["inbox", ...args], { RISA_INBOX_DIR: inboxDir(), ...extra });
   beforeEach(() => rmSync(home(), { recursive: true, force: true }));

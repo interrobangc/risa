@@ -212,7 +212,7 @@ function pick(
   /** @type {Io} */ io,
   /** @type {{ tip: string, sha: string, merge: boolean }} */ { tip, sha, merge },
 ) {
-  const dir = mkdtempSync(join(tmpdir(), "caretook-candidate-"));
+  const dir = mkdtempSync(join(tmpdir(), "risa-candidate-"));
   const tree = join(dir, "tree");
   try {
     if (!io.git(["worktree", "add", "--quiet", "--detach", tree, tip]).ok)

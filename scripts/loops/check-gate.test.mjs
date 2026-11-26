@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import "./config-fixture.mjs";
+import { sharedNames } from "./config.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let repo;
@@ -21,7 +22,7 @@ const commit = (files, msg) => {
   return git("rev-parse", "HEAD");
 };
 const record = (line) =>
-  writeFileSync(join(git("rev-parse", "--absolute-git-dir"), "caretook-checked"), `${line}\n`);
+  writeFileSync(join(git("rev-parse", "--absolute-git-dir"), sharedNames().checked), `${line}\n`);
 
 beforeEach(() => {
   repo = realpathSync(mkdtempSync(join(tmpdir(), "check-gate-")));

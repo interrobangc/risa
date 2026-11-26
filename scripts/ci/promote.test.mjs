@@ -165,7 +165,7 @@ const expectNothingMerged = (/** @type {string} */ stagingBefore) => {
 };
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), "caretook-promote-test-")));
+  root = realpathSync(mkdtempSync(join(tmpdir(), "risa-promote-test-")));
   const origin = join(root, "origin.git");
   repo = join(root, "repo");
   prs = [];

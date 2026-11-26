@@ -29,7 +29,7 @@ const LAST_ITEMS = {
   line: 5,
   priority: "P2",
   body: "Slice from the end when selecting the last items",
-  url: "https://github.com/caretook/caretook.com/pull/7#discussion_r4650487588",
+  url: "https://github.com/example/project/pull/7#discussion_r4650487588",
   threadId: "PRRT_kwDOVx-WLM66Riu3",
   outdated: false,
 };
@@ -38,7 +38,7 @@ const AVERAGE = {
   line: 12,
   priority: "P2",
   body: "Stop summing before reaching the array length",
-  url: "https://github.com/caretook/caretook.com/pull/7#discussion_r4650487594",
+  url: "https://github.com/example/project/pull/7#discussion_r4650487594",
   threadId: "PRRT_kwDOVx-WLM66Riu7",
   outdated: false,
 };

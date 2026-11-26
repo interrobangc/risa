@@ -211,7 +211,7 @@ describe("leftovers", () => {
         { kind: "slot", path: "/s/3", alive: false, holder: "t-9", ageSecs: old },
         { kind: "lease", path: "/l/check/2", alive: true, pid: 13, ageSecs: old },
         { kind: "lease", path: "/l/browser/1", alive: false, pid: null, ageSecs: 5 },
-        { kind: "backlog", path: "/g/caretook-backlog.lock", alive: false, ageSecs: old },
+        { kind: "backlog", path: "/g/sample-backlog.lock", alive: false, ageSecs: old },
         { kind: "dispatch", path: "/l/.dispatch.lock", alive: false, pid: 12, ageSecs: old },
       ],
     });

@@ -1,6 +1,6 @@
 {
   "number": 48,
-  "url": "https://github.com/caretook/caretook.com/pull/48",
+  "url": "https://github.com/example/project/pull/48",
   "state": "OPEN",
   "headRefName": "dev",
   "headRefOid": "7a205be1d73d85e099e8a70b3e80b03f1372cde5",
@@ -14,7 +14,7 @@
         "state": "COMMENTED",
         "body": "<!-- codex-review-receipt:v1 -->\n\n\n…",
         "submittedAt": "2026-11-22T04:19:13Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#pullrequestreview-6010286025",
+        "url": "https://github.com/example/project/pull/48#pullrequestreview-6010286025",
         "commit": {
           "oid": "69e9c6e268a0a3214d48d32ef6f5c9ada803e2ae"
         }
@@ -37,8 +37,8 @@
               "author": {
                 "login": "chatgpt-codex-connector"
               },
-              "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Migrate legacy pending settings before renaming the cleanup key**\n\nIf a device has an offline `simpleMode` change queued when it upgrades, `readPending` still reads that object from the unchanged `caretook:settings-pending:` storage key. The new strict `userPreferencesZSchema` rejects the legacy key, but `clearPending` no longer removes it, so every subsequent refresh retries the same invalid request. Any later offline units or layout changes merged into that queue are also rejected and then discarded by the refusal cleanup. Normalize the persisted pending object to `easyMode` (including its value conversion), or explicitly remove the retired key, before submitting it.\n…",
-              "url": "https://github.com/caretook/caretook.com/pull/48#discussion_r4656648061",
+              "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Migrate legacy pending settings before renaming the cleanup key**\n\nIf a device has an offline `simpleMode` change queued when it upgrades, `readPending` still reads that object from the unchanged `app:settings-pending:` storage key. The new strict `userPreferencesZSchema` rejects the legacy key, but `clearPending` no longer removes it, so every subsequent refresh retries the same invalid request. Any later offline units or layout changes merged into that queue are also rejected and then discarded by the refusal cleanup. Normalize the persisted pending object to `easyMode` (including its value conversion), or explicitly remove the retired key, before submitting it.\n…",
+              "url": "https://github.com/example/project/pull/48#discussion_r4656648061",
               "createdAt": "2026-11-22T04:19:13Z",
               "commit": {
                 "oid": "7a205be1d73d85e099e8a70b3e80b03f1372cde5"
@@ -65,7 +65,7 @@
                 "login": "chatgpt-codex-connector"
               },
               "body": "**<sub><sub>![P2 Badge](https://img.shields.io/badge/P2-yellow?style=flat)</sub></sub>  Reject unauthorized clearing of appointment setup fields**\n\nWhen an Easy helper owns an event that a writer subsequently cancels, they can call `timeline.update` with `{ cancelledAt: null, cancelReason: null }` to undo that cancellation despite the writer-only restriction on appointment setup. This predicate treats explicit nulls as omitted fields, and `timelineEntryService.update` applies it to the patch before merging with the existing row; the own-row SQL permission then allows the update, clearing the cancellation and its author. Update validation needs to distinguish leaving setup unchanged from clearing an existing value, while still accepting null defaults when creating an entry.\n…",
-              "url": "https://github.com/caretook/caretook.com/pull/48#discussion_r4656648066",
+              "url": "https://github.com/example/project/pull/48#discussion_r4656648066",
               "createdAt": "2026-11-22T04:19:13Z",
               "commit": {
                 "oid": "7a205be1d73d85e099e8a70b3e80b03f1372cde5"
@@ -89,7 +89,7 @@
         "body": "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 {\"code_review\":{\"commit_sha\":\"7a205be1d73d85e099e8a70b3e80b03f1372cde5\",\"has_any_findings\":true,\"has_unresolved_findings\":true,\"status\":\"failed\"},\"security_review\":{\"commit_sha\":null,\"has_any_findings\":null,\"has_unresolved_findings\":null,\"status\":null}} -->\n\n…",
         "createdAt": "2026-11-22T04:14:19Z",
         "updatedAt": "2026-11-22T05:04:49Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074058766",
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074058766",
         "userContentEdits": {
           "nodes": [
             {
@@ -131,7 +131,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T04:21:40Z",
         "updatedAt": "2026-11-22T04:21:40Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074130974"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074130974"
       },
       {
         "id": "IC_kwDOVx-WLM8AAAABpaa0QQ",
@@ -141,7 +141,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T04:21:53Z",
         "updatedAt": "2026-11-22T04:21:53Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074133057"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074133057"
       },
       {
         "id": "IC_kwDOVx-WLM8AAAABpai-hQ",
@@ -151,7 +151,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T04:35:47Z",
         "updatedAt": "2026-11-22T04:35:47Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074266757"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074266757"
       },
       {
         "id": "IC_kwDOVx-WLM8AAAABpat6UA",
@@ -161,7 +161,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T04:54:34Z",
         "updatedAt": "2026-11-22T04:54:34Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074445904"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074445904"
       },
       {
         "id": "IC_kwDOVx-WLM8AAAABpaz2jw",
@@ -171,7 +171,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T05:04:48Z",
         "updatedAt": "2026-11-22T05:04:48Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074543247"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074543247"
       },
       {
         "id": "IC_kwDOVx-WLM8AAAABpaz3_Q",
@@ -181,7 +181,7 @@
         "body": "You have reached your Codex usage limits for code reviews. You can see your limits in the [Codex usage dashboard](https://chatgpt.com/codex/cloud/settings/usage).\nTo continue using code reviews, you can upgrade your account or add credits to your account and enable them for code reviews in your [settings](https://chatgpt.com/settings/code-review).\n…",
         "createdAt": "2026-11-22T05:04:50Z",
         "updatedAt": "2026-11-22T05:04:50Z",
-        "url": "https://github.com/caretook/caretook.com/pull/48#issuecomment-7074543613"
+        "url": "https://github.com/example/project/pull/48#issuecomment-7074543613"
       }
     ]
   },

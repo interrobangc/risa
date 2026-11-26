@@ -51,7 +51,7 @@ pnpm prd <command>
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
                               adds, rewords, moves or removes inbox lines on origin/dev; Opus at low effort
                               (--model <m>: another model, this session only; a reopen or rotation is Opus),
-                              Remote Control "inbox", opened in its own directory outside the repository (\$RISA_INBOX_DIR, default ~/.caretook/inbox; created);
+                              Remote Control "inbox", opened in its own directory outside the repository (\$RISA_INBOX_DIR, default ~/.risa/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on ${hotfix_prefix}<name> from dev, for a fix
@@ -66,7 +66,7 @@ pnpm prd <command>
     reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
                               Vite caches, with sizes; frees them after a yes
     tidy [--yes] [--json]     leftovers sorted into safe (merged slice and landed plan worktrees, dead tickets,
-                              orphan test databases, stale remote refs, dangling caretook volumes, old hang
+                              orphan test databases, stale remote refs, dangling stack volumes, old hang
                               logs, ended records, finished items whose topic has no ${prd_prefix} worktree) and ask
                               (finished-looking live sessions, branches without a worktree, registry rows
                               that look done); --yes removes the safe
@@ -391,7 +391,7 @@ case $cmd in
     # --dir and --managed are the reopen's and rotation's (open-session.mjs,
     # rotate-into.sh): the recorded directory, and the dispatcher's record. They
     # pass no --model, so a reopen or rotation is always on inbox_model.
-    model=$inbox_model dir=${RISA_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
+    model=$inbox_model dir=${RISA_INBOX_DIR:-$HOME/.risa/inbox} managed=()
     while (($#)); do
       case $1 in
         --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "inbox: --model needs a model name (e.g. opus)"; model=$2; shift ;;

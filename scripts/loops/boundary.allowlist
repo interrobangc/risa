@@ -6,73 +6,33 @@
 package.json project-to-core 4
 risa.json project-to-core 1 # hooks.lease is the core's lease.sh hold, which the app's browser lease helper runs: its path changes at the move
 scripts/ci/blame.test.mjs app-path 1
-scripts/ci/blame.test.mjs project-name 1
-scripts/ci/candidate.mjs project-name 1
-scripts/ci/candidate.test.mjs project-name 1
-scripts/ci/ci-runs.mjs project-name 2
-scripts/ci/ci.mjs project-name 1
 scripts/ci/ci.test.mjs app-path 4
-scripts/ci/promote.test.mjs project-name 1
-scripts/ci/release-gate.test.mjs project-name 1
 scripts/ci/test-job.mjs project-to-core 2 # CI's test step feeds the core's time gate (one module judges every measure) with the gates' data: the tool's package at the move
 scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (the browser harness test): residual until the move
 scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
 scripts/ci/verdict.test.mjs project-to-core 2 # ties the core's verdict fixtures and reader version to the writer, buildVerdict: the core keeps the fixtures at the move, this half goes with the writer
 scripts/deploy/workflows.test.mjs project-to-core 3
-scripts/loops/ask.mjs project-name 1
-scripts/loops/ask.test.mjs project-name 1
-scripts/loops/autostart.mjs project-name 1
-scripts/loops/autostart.test.mjs project-name 2
 scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
 scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
 scripts/loops/bye.mjs app-path 1
 scripts/loops/check-gate.test.mjs app-path 7
-scripts/loops/check-gate.test.mjs project-name 1
-scripts/loops/codex-review.fixtures/clean.json project-name 10
-scripts/loops/codex-review.fixtures/declined.json project-name 8
-scripts/loops/codex-review.fixtures/findings.json project-name 6
 scripts/loops/codex-review.fixtures/out-of-credits.json app-path 2
-scripts/loops/codex-review.fixtures/out-of-credits.json project-name 12
-scripts/loops/codex-review.fixtures/outdated.json project-name 8
-scripts/loops/codex-review.fixtures/running.json project-name 2
-scripts/loops/codex-review.fixtures/stale.json project-name 10
-scripts/loops/codex-review.fixtures/waiting.json project-name 1
-scripts/loops/codex-review.test.mjs project-name 2
 scripts/loops/dispatch-pick.test.mjs app-path 2
-scripts/loops/dispatch.mjs project-name 1
-scripts/loops/dispatch.test.mjs project-name 1
 scripts/loops/drain.test.mjs app-path 4
 scripts/loops/heartbeat.test.mjs app-path 1
-scripts/loops/inventory-facts.mjs project-name 1
-scripts/loops/inventory.mjs project-name 1
-scripts/loops/inventory.test.mjs project-name 9
 scripts/loops/land-fixture.mjs app-path 1
 scripts/loops/land-force-resume.test.mjs app-path 6
 scripts/loops/land-gate.test.mjs app-path 5
 scripts/loops/land-unsynced.test.mjs app-path 30
-scripts/loops/land-unsynced.test.mjs project-name 3
 scripts/loops/land.test.mjs app-path 20
 scripts/loops/land.test.mjs core-to-project 5
-scripts/loops/lib.sh project-name 1
 scripts/loops/load-gate.test.mjs app-path 4
 scripts/loops/metrics.test.mjs core-to-project 1
-scripts/loops/open-session.mjs project-name 3
-scripts/loops/open-session.test.mjs project-name 7
-scripts/loops/prd.sh project-name 3
 scripts/loops/reclaim.sh app-path 8
 scripts/loops/reclaim.test.mjs app-path 4
-scripts/loops/reclaim.test.mjs project-name 1
-scripts/loops/recover-lib.test.mjs project-name 2
-scripts/loops/recover.sh project-name 1
-scripts/loops/recover.test.mjs project-name 1
 scripts/loops/rotate.test.mjs app-path 3
-scripts/loops/rotate.test.mjs project-name 1
-scripts/loops/session.sh project-name 1
-scripts/loops/sessions.test.mjs project-name 1
+scripts/loops/shared-names.test.mjs project-name 9 # the sample of Caretook's own config: the lock, the markers, the launchd label and the CI status context keep today's values; leaves with that config at the move
 scripts/loops/slice-fields.test.mjs app-path 3
-scripts/loops/tidy-cli.mjs core-to-project 1
-scripts/loops/tidy.test.mjs project-name 1
-scripts/loops/unsynced.sh project-name 2
 scripts/loops/watch.test.mjs app-path 1
 scripts/loops/workers.test.mjs app-path 1
 scripts/project/check-areas.d/_global project-to-core 3 # the core's folders (scripts/loops, scripts/backlog, scripts/ci) map to no check, so the check-areas lint covers every tracked file: the rules go when the core moves out

@@ -74,7 +74,7 @@ export const DEFAULT_MIN_FREE_GB = 10;
  * @property {string} [parent]      the branch it merges into
  * @property {boolean} [merged]     a slice whose tip is merged into its parent
  * @property {boolean} [dirty]      uncommitted changes
- * @property {string|null} [stack]  its Compose project (caretook-loopN), or null
+ * @property {string|null} [stack]  its Compose project (the stack hook's name for it), or null
  * @property {boolean} [stackFailed]  the stackReady hook failed: the project is
  *   stackStatus's, its containers unknown
  * @property {number} [containersUp]   running containers in that project

@@ -270,7 +270,7 @@ describe("reclaim --yes", () => {
     expect(existsSync(join(loops, "t-5", "work-5.txt"))).toBe(true);
     expect(readFileSync(join(loops, "t-5", "work-5.txt"), "utf8")).toMatch(/not committed/);
 
-    // Only the dangling caretook-loop volume nobody uses, the anonymous one and the image.
+    // Only the dangling sample-loop volume nobody uses, the anonymous one and the image.
     expect(removals()).toEqual([
       "stack leftovers remove volume sample-loop9_data",
       "stack leftovers remove volume abc123",

@@ -7,12 +7,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DISPATCHER_SESSIONS } from "./asks.mjs";
+import { loadConfig } from "./config.mjs";
 import { CONTEXT_SESSION } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION } from "./dispatch-pick.mjs";
 import { STUCK_SESSION } from "./dispatch-stuck.mjs";
 import { recordVerdict } from "./skeptics.mjs";
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
+/** The notification names the project, capitalized. */
+const PROJECT = loadConfig().config.name.replace(/^./, (c) => c.toUpperCase());
 
 let root, dir, skepticDir, stubs, env;
 const children = [];
@@ -36,12 +39,7 @@ beforeEach(() => {
     RISA_SKEPTIC_DIR: skepticDir,
     RISA_ASK_POLL: "0.2",
   };
-  for (const k of [
-    "RISA_ASK_NOTIFY",
-    "RISA_ASK_NOTIFY_TIMEOUT",
-    "RISA_SESSION",
-    "RISA_ASK_DEFAULT_MIN",
-  ])
+  for (const k of ["RISA_ASK_NOTIFY", "RISA_ASK_NOTIFY_TIMEOUT", "RISA_SESSION", "RISA_ASK_DEFAULT_MIN"])
     delete env[k];
 });
 afterEach(() => {
@@ -123,7 +121,7 @@ describe("pnpm prd ask", () => {
     const stored = JSON.parse(readFileSync(join(dir, "a1.json"), "utf8"));
     expect(stored).toMatchObject({ kind: "question", topic: "demo", options: ["yes", "after the check"] });
     expect(readFileSync(join(root, "osascript.args"), "utf8")).toContain(
-      "Caretook question: demo\nLand wave 1 now?\n",
+      `${PROJECT} question: demo\nLand wave 1 now?\n`,
     );
   });
 

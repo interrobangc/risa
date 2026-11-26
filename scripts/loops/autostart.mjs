@@ -36,9 +36,11 @@ import {
 } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { sharedNames } from "./config.mjs";
 import { CLAUDE, GH, HOST_TOOLS, launchd, nvmNode } from "./host.mjs";
 
-export const LABEL = "com.caretook.prd-watchdog";
+/** The watchdog's launchd job, from the project's name (config.mjs's sharedNames). */
+export const LABEL = sharedNames().launchdLabel;
 export const INTERVAL_SECS = 300;
 /** The tools the job runs, besides node. */
 export const TOOLS = ["docker", GH, "git", CLAUDE, ...HOST_TOOLS, "pnpm"];

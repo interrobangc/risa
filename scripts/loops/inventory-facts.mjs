@@ -22,7 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_MIN_FREE_GB, formatInventory, inventory } from "./inventory.mjs";
 import { listRecords } from "./land-journal.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, sharedNames } from "./config.mjs";
 import { fact, runHook } from "./hooks.mjs";
 
 /** The backlog lock is stale after this long (backlog.mjs takes it over then too). */
@@ -264,7 +264,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
   // The backlog lock: no pid; backlog.mjs takes over one older than 30 s.
   const common = git(main, ["rev-parse", "--git-common-dir"], env);
   if (common.ok) {
-    const lock = join(resolve(main, common.out), "caretook-backlog.lock");
+    const lock = join(resolve(main, common.out), sharedNames().backlogLock);
     if (existsSync(lock)) {
       const age = now - statSync(lock).mtimeMs;
       const alive = age <= BACKLOG_LOCK_STALE_MS;

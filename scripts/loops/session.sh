@@ -114,7 +114,7 @@ fi
 # The child records its own pid, then becomes claude, so the recorded pid is
 # the session's. In the foreground, so claude keeps the terminal and its input.
 # It also leaves the pid in PIDFILE, so the end is recorded only against it.
-pidfile=$(mktemp "${TMPDIR:-/tmp}/caretook-session.XXXXXX")
+pidfile=$(mktemp "${TMPDIR:-/tmp}/risa-session.XXXXXX")
 trap 'rm -f "$pidfile"' EXIT
 code=0
 bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" model="$9" remote="${10}" dir="${11}" rotating= ended= exit= &&

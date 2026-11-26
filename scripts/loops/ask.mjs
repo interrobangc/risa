@@ -56,6 +56,7 @@ import {
   span,
   validateAsk,
 } from "./asks.mjs";
+import { loadConfig } from "./config.mjs";
 import { notify, runBounded } from "./host.mjs";
 import { SkepticError, questionHash, useRecord } from "./skeptics.mjs";
 
@@ -76,8 +77,7 @@ const nowOf = () => {
   return Date.now();
 };
 
-const dirOf = () =>
-  process.env.RISA_ASKS_DIR || fail("RISA_ASKS_DIR isn't set (run this through pnpm prd)");
+const dirOf = () => process.env.RISA_ASKS_DIR || fail("RISA_ASKS_DIR isn't set (run this through pnpm prd)");
 
 // Each option takes one value; --option repeats.
 function parse(argv, valued, flags = []) {
@@ -99,7 +99,9 @@ function parse(argv, valued, flags = []) {
 }
 
 async function tell(ask) {
-  const shown = await notify(`Caretook ${ask.kind}: ${ask.topic}`, shorten(ask.text, 200));
+  const name = loadConfig().config.name;
+  const project = name.replace(/^./, (c) => c.toUpperCase());
+  const shown = await notify(`${project} ${ask.kind}: ${ask.topic}`, shorten(ask.text, 200));
   if (shown && shown !== "ok") console.error(`warning: the macOS notification ${shown} (ignored)`);
   const hook = process.env.RISA_ASK_NOTIFY;
   if (hook) {
@@ -206,8 +208,7 @@ function spendVerdict(opts, input, chose) {
       `a question goes to a skeptic first. Nothing was filed. Write the question, options, recommendation and evidence to a file; run a fresh agent on Opus with the brief from pnpm prd prompt skeptic ask --evidence <file>; record its answer with pnpm prd skeptic record --kind ask --verdict decide|ask --why "<its line>" --question "<text>" --offer "<a>"… --defaults|--waits [--option "<chosen>"]. On ask, file this again with --skeptic <id>; on decide, file it with pnpm prd ask --decided --skeptic <id> --chose "<a>"`,
     );
   }
-  const dir =
-    process.env.RISA_SKEPTIC_DIR || fail("RISA_SKEPTIC_DIR isn't set (run this through pnpm prd)");
+  const dir = process.env.RISA_SKEPTIC_DIR || fail("RISA_SKEPTIC_DIR isn't set (run this through pnpm prd)");
   const hash = questionHash(input.text, input.options);
   const wanted = opts.decided
     ? {

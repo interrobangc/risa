@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { brakeNotice } from "../ci/blame.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
+import { sharedNames } from "./config.mjs";
 import { root, repo, git, commit, landWith, branch, GH_CI, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
@@ -58,7 +59,7 @@ describe("land.sh on an unsynced tip", () => {
     const dev = git("rev-parse", "dev");
     inWt("merge", "--no-commit", "--no-ff", "-q", dev);
     writeFileSync(
-      join(inWt("rev-parse", "--absolute-git-dir"), "caretook-unsynced-merge"),
+      join(inWt("rev-parse", "--absolute-git-dir"), sharedNames().unsyncedMerge),
       `${tip} ${dev} 999999\nnever\n`,
     );
   };
@@ -431,7 +432,7 @@ exit 0
     child.kill("SIGTERM");
     await gone;
     await expect
-      .poll(() => existsSync(join(inWt("rev-parse", "--absolute-git-dir"), "caretook-unsynced-merge")), {
+      .poll(() => existsSync(join(inWt("rev-parse", "--absolute-git-dir"), sharedNames().unsyncedMerge)), {
         timeout: 5_000,
       })
       .toBe(false);
@@ -498,7 +499,7 @@ exit 0
     started();
     toDev({ "apps/web/dev.ts": "d" });
     leftover();
-    const marker = join(inWt("rev-parse", "--absolute-git-dir"), "caretook-unsynced-merge");
+    const marker = join(inWt("rev-parse", "--absolute-git-dir"), sharedNames().unsyncedMerge);
     writeFileSync(marker, `${"0".repeat(40)} ${"1".repeat(40)} 999999\nnever\n`);
     const r = go();
     expect(r.stderr).toContain("isn't the landing's temporary one");

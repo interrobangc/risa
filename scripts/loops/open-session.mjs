@@ -43,7 +43,7 @@
 //      (the main backlog session's adds title: its captain, the tab's title and Remote Control name)
 //      node open-session.mjs --main <name> <main checkout>   the same, for a backlog, recovery or inbox record
 // Env: the Claude folders' stand-ins for tests (host.mjs); RISA_INBOX_DIR (the inbox session's directory when its record has none;
-// default ~/.caretook/inbox); RISA_SESSIONS_DIR (default .sessions beside the worktree).
+// default ~/.risa/inbox); RISA_SESSIONS_DIR (default .sessions beside the worktree).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -93,9 +93,9 @@ const MAIN_PROMPTS = /** @type {Record<string, string>} */ ({
   inbox: "inbox",
 });
 
-/** The inbox session's directory: its record's, else RISA_INBOX_DIR, else ~/.caretook/inbox (prd.sh's). */
+/** The inbox session's directory: its record's, else RISA_INBOX_DIR, else ~/.risa/inbox (prd.sh's). */
 export function inboxDirOf(/** @type {{ dir?: string } | null | undefined} */ record, env = process.env) {
-  return record?.dir || env.RISA_INBOX_DIR || join(homedir(), ".caretook", "inbox");
+  return record?.dir || env.RISA_INBOX_DIR || join(homedir(), ".risa", "inbox");
 }
 
 /**

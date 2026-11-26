@@ -26,7 +26,7 @@ import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, tidy } from "./tidy.mjs";
 import { factList, runHook } from "./hooks.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, loadConfig } from "./config.mjs";
 import { gh as hostGh } from "./host.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -128,7 +128,9 @@ export function collectCiRefs(
  * unreadable lists nothing, so tidy never removes an entry on a guess.
  */
 export function collectQuarantineDone(/** @type {string} */ main) {
-  const text = git(main, ["show", "HEAD:scripts/ci/quarantine.txt"]);
+  const list = loadConfig().config.paths.quarantine;
+  if (!list) return [];
+  const text = git(main, ["show", `HEAD:${list}`]);
   const listed = run(process.execPath, [join(HERE, "../backlog/backlog.mjs"), "list", "--all", "--json"], {
     cwd: main,
     timeout: 15_000,

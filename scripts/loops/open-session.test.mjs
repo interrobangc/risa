@@ -247,13 +247,13 @@ describe("backlog, recovery and hotfix sessions", () => {
   it("the inbox session reopens through prd.sh inbox in its recorded directory, on prd.sh's model", () => {
     const prd = wrapper.replace(/session\.sh$/, "prd.sh");
     // A record from the old default (Sonnet) passes no --model: prd.sh's Opus at low effort takes over.
-    const record = { kind: "inbox", model: "sonnet", managed: true, dir: "/h/.caretook/inbox" };
+    const record = { kind: "inbox", model: "sonnet", managed: true, dir: "/h/.risa/inbox" };
     expect(chooseMainCommand({ name: "inbox", main: "/m", wrapper, record })).toMatchObject({
       session: "inbox",
       kind: "inbox",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${prd} inbox --dir /h/.caretook/inbox --managed`,
+      command: `cd /m && ${prd} inbox --dir /h/.risa/inbox --managed`,
     });
     // No directory or model recorded: the default directory; by hand stays by hand.
     expect(
@@ -262,16 +262,16 @@ describe("backlog, recovery and hotfix sessions", () => {
     ).toBe(`cd /m && ${prd} inbox --dir /d`);
   });
 
-  it("the inbox directory is the record's, else RISA_INBOX_DIR, else ~/.caretook/inbox", () => {
+  it("the inbox directory is the record's, else RISA_INBOX_DIR, else ~/.risa/inbox", () => {
     expect(inboxDirOf({ dir: "/r" }, { RISA_INBOX_DIR: "/e" })).toBe("/r");
     expect(inboxDirOf(null, { RISA_INBOX_DIR: "/e" })).toBe("/e");
-    expect(inboxDirOf({}, {})).toMatch(/\/\.caretook\/inbox$/);
+    expect(inboxDirOf({}, {})).toMatch(/\/\.risa\/inbox$/);
   });
 
   it("the inbox directory is trusted after a saved conversation there, or Claude Code's accepted folder", () => {
     const tmp = realpathSync(mkdtempSync(join(tmpdir(), "inbox-trust-")));
     try {
-      const dir = join(tmp, "home/.caretook/inbox");
+      const dir = join(tmp, "home/.risa/inbox");
       const projects = join(tmp, "projects");
       const config = join(tmp, "claude.json");
       const opts = { projects, config };
@@ -529,8 +529,8 @@ describe("choosing the command", () => {
   });
 
   it("names the projects folder as Claude Code does", () => {
-    expect(projectFolder("/Users/x/git/caretook.com/.loops/loop-recovery")).toBe(
-      "-Users-x-git-caretook-com--loops-loop-recovery",
+    expect(projectFolder("/Users/x/git/example.com/.loops/loop-recovery")).toBe(
+      "-Users-x-git-example-com--loops-loop-recovery",
     );
   });
 });

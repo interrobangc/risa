@@ -192,7 +192,7 @@ start_engine() {
 # The dispatcher's stays while its intent couldn't be kept: it's the only record.
 clear_lock() {
   case $1 in
-    "$loops"/.slots/* | "$loops"/.dispatch.lock | */caretook-backlog.lock | "$loops"/.migrate/*) ;;
+    "$loops"/.slots/* | "$loops"/.dispatch.lock | */"$project_name"-backlog.lock | "$loops"/.migrate/*) ;;
     *) echo "  not a lock path, left alone: $1" >&2; return 1 ;;
   esac
   if [[ $1 == "$loops/.dispatch.lock" && ! -f $intent ]]; then
