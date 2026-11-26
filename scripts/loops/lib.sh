@@ -212,6 +212,23 @@ prd_count() {
 
 die() { echo "$*" >&2; exit 1; }
 
+# end_pid PID LABEL [SECS] → end a session's process: TERM, then KILL after SECS
+# seconds (default 10). For pnpm prd end and rm.sh, which ends its caller's own
+# session; say what it ends first, since ending the caller's session may take
+# the output with it.
+end_pid() {
+  local pid=$1 label=$2 wait_secs=${3:-10} i s
+  kill -TERM "$pid" 2>/dev/null || true
+  for ((i = 0; i < wait_secs * 5; i++)); do
+    # Gone, or a zombie waiting for its parent.
+    s=$(ps -o stat= -p "$pid" 2>/dev/null) || return 0
+    [[ -n $s && $s != Z* ]] || return 0
+    sleep 0.2
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  echo "$label ignored TERM for ${wait_secs}s: killed it."
+}
+
 # run_log [--once <field,…>] KIND [key=value|key:=json]… → one event in the run log
 # (run-log.mjs; $CARETOOK_RUN_LOG, else .loops/.run-log.jsonl in the main
 # checkout). It never prints and never fails: watching never hurts the work.

@@ -4,7 +4,7 @@
 // relative path) and fake pnpm, lsof and nvm on PATH: nothing here touches real
 // containers, slots or worktrees. What the project's hooks do is their own
 // tests' (scripts/project/).
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -87,6 +87,19 @@ const fixture = () => {
     SAMPLE_STACK_STATE: join(root, "stack-state"),
     SAMPLE_STACK_LOG: log,
   };
+  // The stub claude, the nearest one rm.sh finds above it: with STUB_RECORD, it
+  // holds that live session record (as session.sh writes it); then it runs
+  // rm.sh from STUB_CWD. Its records are the default folder's, the repo's.
+  writeFileSync(
+    join(bin, "claude"),
+    `#!/usr/bin/env bash
+echo "$$" > "$STUB_STATE/pid"
+[[ -z \${STUB_RECORD:-} ]] || node "$SESSIONS_MJS" set "$STUB_RECORD" "pid=$$" kind=prd "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cd "$STUB_CWD" && bash "$RM_SH" "$@" > "$STUB_STATE/out" 2>&1
+echo "$?" > "$STUB_STATE/code"
+`,
+  );
+  chmodSync(join(bin, "claude"), 0o755);
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
@@ -97,7 +110,7 @@ const fixture = () => {
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter(
-    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs" || f === "run-log.mjs",
+    (f) => f.endsWith(".sh") || ["slice-fields.mjs", "config.mjs", "run-log.mjs", "sessions.mjs"].includes(f),
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   env.RISA_CONFIG = stubHookConfig(main, { copy: true });
@@ -314,6 +327,74 @@ describe("rm.sh", () => {
     ok("rm.sh", ["plan-r"]);
     expect(existsSync(join(sessions, "plan-r.json"))).toBe(false);
     expect(existsSync(join(sessions, "prd-other.json"))).toBe(true);
+  });
+});
+
+describe("rm.sh from inside the worktree it removes (B-812)", () => {
+  const stubState = () => join(root, "stub-state");
+  const sessions = () => join(loops, ".sessions");
+  /** Runs rm.sh ARGS (space-separated) from CWD under the stub claude; resolves {signal, out, code, pid}. */
+  const underClaude = (args, cwd, record) =>
+    new Promise((resolve) => {
+      rmSync(stubState(), { recursive: true, force: true });
+      mkdirSync(stubState(), { recursive: true });
+      const child = spawn(join(root, "bin", "claude"), args.split(" "), {
+        cwd: main,
+        stdio: "ignore",
+        env: {
+          ...env,
+          STUB_STATE: stubState(),
+          STUB_CWD: cwd,
+          STUB_RECORD: record ?? "",
+          SESSIONS_MJS: join(main, "scripts/loops/sessions.mjs"),
+          RM_SH: join(main, "scripts/loops/rm.sh"),
+        },
+      });
+      child.on("close", (_code, signal) => {
+        const f = (n) => (existsSync(join(stubState(), n)) ? read(stubState(), n) : "");
+        resolve({ signal, out: f("out"), code: f("code").trim(), pid: Number(f("pid")) });
+      });
+    });
+  beforeEach(() => {
+    rmSync(sessions(), { recursive: true, force: true });
+    if (!existsSync(join(loops, "u"))) ok("new.sh", ["--no-stack", "prd", "u"]);
+  });
+  afterAll(() => {
+    if (existsSync(join(loops, "u"))) ok("rm.sh", ["u"]);
+  });
+
+  it("ends its own orchestrator's session once the worktree is gone", async () => {
+    const r = await underClaude("u", join(loops, "u", "plans"), "prd-u");
+    expect(r.signal).toBe("SIGTERM");
+    expect(r.out).toMatch(/^Removed u and its branch prd\/u/m);
+    expect(r.out).toContain(`Ending prd-u (pid ${r.pid}): its worktree is gone, so this was its last step.`);
+    expect(existsSync(join(loops, "u"))).toBe(false);
+    expect(existsSync(join(sessions(), "prd-u.json"))).toBe(false);
+  });
+
+  it("refuses another caller inside it, with the line to run from the main checkout", async () => {
+    // A claude with no record (its orchestrator, maybe): the line ends it too.
+    const r = await underClaude("u", join(loops, "u"));
+    expect(r.signal).toBeNull();
+    expect(r.code).toBe("1");
+    expect(r.out).toContain(
+      `rm: this shell is inside u, which rm would delete under it; run instead: cd ${main} && pnpm prd rm u && pnpm prd end`,
+    );
+    expect(existsSync(join(loops, "u"))).toBe(true);
+    // Another session's claude: no end in the line, and its options kept.
+    const other = await underClaude("u --keep-branch", join(loops, "u"), "backlog");
+    expect(other.code).toBe("1");
+    expect(other.out).toMatch(/run instead: cd \S+ && pnpm prd rm u --keep-branch\n$/);
+    expect(existsSync(join(loops, "u"))).toBe(true);
+  });
+
+  it("from the main checkout removes it as before and ends no session", async () => {
+    const r = await underClaude("u", main, "prd-u");
+    expect(r.signal).toBeNull();
+    expect(r.code).toBe("0");
+    expect(r.out).toMatch(/^Removed u and its branch prd\/u/m);
+    expect(r.out).not.toMatch(/Ending/);
+    expect(existsSync(join(loops, "u"))).toBe(false);
   });
 });
 

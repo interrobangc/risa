@@ -47,6 +47,36 @@ if [[ -z $force && $branch == "$prd_prefix"* ]]; then
   done
 fi
 
+# Run from inside the worktree it removes, the caller's shell would be left in
+# a deleted directory, where the harness runs no more commands (B-812). Its own
+# orchestrator or planner (the live session record this worktree's name gives,
+# held by the calling shell's claude) is on its last step: rm ends that session
+# itself once it's done, as pnpm prd end would. Any other caller is refused,
+# with the line to run from the main checkout instead (and pnpm prd end with
+# it for a prd/ or plan/ worktree's caller under a claude with no record).
+case $branch in
+  "$prd_prefix"*) record=prd-${branch#"$prd_prefix"} ;;
+  "$plan_prefix"*) record=plan-${branch#"$plan_prefix"} ;;
+  "$hotfix_prefix"*) record=hotfix-${branch#"$hotfix_prefix"} ;;
+  *) record="" ;;
+esac
+end_self=""
+here=$(pwd -P 2>/dev/null || true) real_dir=$(cd "$dir" && pwd -P)
+if [[ $here == "$real_dir" || $here == "$real_dir"/* ]]; then
+  caller=$(node "$(dirname "$0")/sessions.mjs" caller 2>/dev/null) || caller=""
+  IFS=$'\t' read -r caller_name _ caller_pid _ <<<"$caller" || true
+  if [[ -n $record && $record != hotfix-* && ${caller_name:-} == "$record" ]]; then
+    end_self=$caller_pid
+  else
+    line="cd $main && $(tool_command prd) rm $name${force:+ --force}${keep:+ --keep-branch}"
+    [[ -n $registry ]] || line+=" --no-registry"
+    if [[ -z $caller && ($record == prd-* || $record == plan-*) ]] && node "$(dirname "$0")/sessions.mjs" ancestor >/dev/null 2>&1; then
+      line+=" && $(tool_command prd) end"
+    fi
+    die "rm: this shell is inside $name, which rm would delete under it; run instead: $line"
+  fi
+fi
+
 # Whether a finished PRD marks its topic done: decided now, while its plan (and
 # this script's own checkout, maybe the worktree) is still here.
 mark_done="" flags=""
@@ -86,6 +116,8 @@ if [[ $branch == "$slice_prefix"* ]] && git -C "$main" merge-base --is-ancestor 
   slice_merged=true
 fi
 git -C "$main" worktree remove ${force:+--force} "$dir"
+# The caller was inside it (its own session, above): keep a cwd that exists.
+[[ -z $end_self ]] || cd "$main"
 release_slot "$name"
 # The run log (run-log.mjs): a slice's end, for pnpm prd metrics. Never fails.
 [[ $branch != "$slice_prefix"* ]] || run_log slice-end "name=$name" "branch=$branch" "merged:=$slice_merged"
@@ -134,4 +166,11 @@ elif git -C "$main" merge-base --is-ancestor "$branch" "$parent" 2>/dev/null; th
   fi
 else
   echo "Removed $name; kept $branch: it isn't merged into $parent yet"
+fi
+
+# Its own orchestrator or planner called this from inside the worktree (above):
+# this was its last step, so end it, as pnpm prd end would.
+if [[ -n $end_self ]]; then
+  echo "Ending $record (pid $end_self): its worktree is gone, so this was its last step."
+  end_pid "$end_self" "$record"
 fi
