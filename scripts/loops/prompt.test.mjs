@@ -494,6 +494,18 @@ describe("waiting on a check", () => {
       expect(out).toContain("never `pgrep -f`");
     }
   });
+
+  it("the slice prompt runs its check in the background and hands long exploration to a helper", () => {
+    const out = ok("slice", "T", "1");
+    expect(out).toContain(
+      "Run it with the Bash tool's background mode and wait for its completion notification, never polling it",
+    );
+    expect(out).toContain("Only to wait on a check another session started, run `pnpm prd wait check`");
+    expect(out).toContain(
+      "**Past about 10 reads into unfamiliar code, hand the exploration to one Explore helper**",
+    );
+    expect(out).toContain("long check output goes to a haiku helper too");
+  });
 });
 
 describe("plan and backlog", () => {
