@@ -94,8 +94,7 @@ describe("messages", () => {
         "By: dev keeper",
         "Statuses from git: B-5 ready → landed.",
         "",
-        "Backlog-Tool: note",
-        "Backlog-Tool: set",
+        "Backlog-Tool: note, set",
         "Backlog-Ids: B-1, B-2",
       ].join("\n"),
     );
@@ -111,5 +110,33 @@ describe("messages", () => {
       ids: ["B-1", "B-2", "B-3", "B-4"],
     });
     expect(parseMessage(three).blocks).toHaveLength(3);
+  });
+
+  it("two amends of the same commit leave one Backlog-Tool trailer, the other trailers in order", () => {
+    const two = amendedMessage(writeMessage(first), second);
+    const three = amendedMessage(two, { tool: "note", ids: ["B-3"], text: "B-3: note", lines: ["By: z"] });
+    const trailerLines = three.split("\n\n").at(-1)?.split("\n");
+    expect(trailerLines).toEqual(["Backlog-Tool: note, set, note", "Backlog-Ids: B-1, B-2, B-3"]);
+    expect(three.match(/^Backlog-Tool:/gm)).toHaveLength(1);
+  });
+
+  it("still reads a commit written with a trailer line per write", () => {
+    const old = [
+      "chore(backlog): B-1, B-2: note, set",
+      "",
+      "B-1: note",
+      "By: prd/x",
+      "",
+      "B-2: set prd=y",
+      "By: y",
+      "",
+      "Backlog-Tool: note",
+      "Backlog-Tool: set",
+      "Backlog-Ids: B-1, B-2",
+    ].join("\n");
+    expect(parseMessage(old)).toMatchObject({ backlog: true, tools: ["note", "set"], ids: ["B-1", "B-2"] });
+    const next = amendedMessage(old, { tool: "note", ids: ["B-3"], text: "B-3: note", lines: ["By: z"] });
+    expect(next.match(/^Backlog-Tool:.*$/gm)).toEqual(["Backlog-Tool: note, set, note"]);
+    expect(parseMessage(next).blocks).toHaveLength(3);
   });
 });

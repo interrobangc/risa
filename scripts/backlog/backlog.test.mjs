@@ -408,8 +408,7 @@ describe("backlog CLI: multi-id writes and amending", () => {
         "B-4: set prd=y",
         "By: Test",
         "",
-        "Backlog-Tool: note",
-        "Backlog-Tool: set",
+        "Backlog-Tool: note, set",
         "Backlog-Ids: B-1, B-4",
       ].join("\n"),
     );
