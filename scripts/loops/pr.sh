@@ -14,7 +14,8 @@
 #   2. pushes the branch (never forced);
 #   3. opens the PR into dev, or updates the open one: the title is the landing
 #      subject (-m, else the one `land` would build); the body lists the
-#      topic's ready backlog items, the check pass (checked_how), and that plans
+#      topic's ready backlog items, the tier and its CI verdict on the tip (ci_verdict,
+#      read only: the landing requests the run), and that plans
 #      and the backlog are written outside review. Rerun it after every push.
 # It prints the PR's URL. Codex reviews each push by itself: then
 # `pnpm prd review <topic> --wait`.
@@ -75,7 +76,6 @@ tip=$(git -C "$main" rev-parse --short "$branch")
 echo "pushed $branch ($tip)"
 
 [[ -n $msg ]] || msg=$(land_subject "$branch")
-gate=$dir; [[ -d $dir ]] || gate=$main
 items=$(node "$(dirname "$0")/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
   node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));
     console.log(r.map(i=>`- ${i.id} (${i.type}): ${i.title}`).join("\n"))')
@@ -89,7 +89,7 @@ $items
 
 **Tier:** $tierline
 
-**Check:** $(checked_how "$gate" "$branch")
+**CI:** $(ci_verdict "$branch" "$tier" "$drift_ref")
 
 Plans, PRDs and the backlog are written outside review (committed straight onto \`$trunk\`), so review the code here, not \`plans/\` or docs prose.
 

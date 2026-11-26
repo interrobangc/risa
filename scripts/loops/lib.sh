@@ -303,23 +303,6 @@ while IFS= read -r _p; do exempt_re+=${exempt_re:+|}${_p//./\\.}; done < <(confi
 exempt_re="(\\.md\$|^($exempt_re)(/|\$))"
 unset _p
 
-# exempt_only DIR FROM TO → succeeds when every file changed between FROM and
-# TO (git diff FROM TO, or FROM...TO when TO is empty) is exempt.
-exempt_only() {
-  local range=$2
-  [[ -n ${3:-} ]] && range="$2 $3"
-  # shellcheck disable=SC2086
-  [[ -z $(git -C "$1" diff --name-only --no-renames $range | grep -Ev "$exempt_re") ]]
-}
-
-# keeps_check DIR FROM TO → succeeds when every file changed from FROM to TO is
-# exempt or one of CI's two lists: such commits keep a recorded pass. The lists
-# aren't exempt themselves, so a branch that changes only them still needs a check.
-keeps_check() {
-  [[ -z $(git -C "$1" diff --name-only --no-renames "$2" "$3" |
-    grep -Ev "$exempt_re" | not_files ${ci_lists[@]+"${ci_lists[@]}"}) ]]
-}
-
 # docs_only BASE TIP → succeeds when BASE...TIP changes something and every
 # file it changes is Markdown (`*.md` anywhere). Tooling scripts are code: they
 # keep the Codex review. An empty diff is not docs only. --no-renames lists both
@@ -338,35 +321,15 @@ propose_tier() {
     ${3:+--declared "$3"}
 }
 
-# checked_ok DIR REV → succeeds when `pnpm prd check` (full or --quick) passed
-# on REV, or on an ancestor of it with only exempt files or CI's lists changed since; or when
-# REV's own changes against dev (dev...REV) are all exempt, so it needs none.
-checked_ok() {
-  local checked tip
-  checked=$(cut -d' ' -f1 "$(checked_file "$1")" 2>/dev/null || true)
-  tip=$(git -C "$1" rev-parse "$2")
-  if [[ -n $checked ]]; then
-    [[ $checked == "$tip" ]] && return 0
-    git -C "$1" merge-base --is-ancestor "$checked" "$tip" 2>/dev/null && keeps_check "$1" "$checked" "$tip" && return 0
-  fi
-  exempt_only "$1" "$trunk...$tip"
-}
-
-# checked_how DIR REV → how REV passed the gate, for reports: "full on <sha>",
-# "quick on <sha> (<why>)", or "none needed (docs and tooling only)".
-checked_how() {
-  local line sha mode why tip
-  line=$(cat "$(checked_file "$1")" 2>/dev/null || true)
-  read -r sha mode _ why <<< "$line"
-  tip=$(git -C "$1" rev-parse "$2")
-  if [[ -n $sha ]] && { [[ $sha == "$tip" ]] ||
-    { git -C "$1" merge-base --is-ancestor "$sha" "$tip" 2>/dev/null && keeps_check "$1" "$sha" "$tip"; }; }; then
-    if [[ $mode == quick ]]; then echo "quick on ${sha:0:7} ($why)"; else echo "full on ${sha:0:7}"; fi
-  elif exempt_only "$1" "$trunk...$tip"; then
-    echo "none needed (docs and tooling only)"
-  else
-    echo "not checked"
-  fi
+# ci_verdict BRANCH TIER BASE → one line for reports: the CI verdict at TIER or
+# higher on BRANCH's tip (ci gate --peek: it reads only, and requests no run),
+# "none needed (tier none)", or "no verdict read" when CI couldn't be asked.
+ci_verdict() {
+  local line
+  if [[ $2 == none ]]; then echo "none needed (tier none)"; return 0; fi
+  line=$(cd "$main" && node "$loops_lib_dir/../ci/ci.mjs" gate "$1" --tier "$2" \
+    --base "$(git -C "$main" rev-parse "$3")" --peek 2>&1 | grep -m1 -E '^(verdict|no )' || true)
+  echo "${line:-no verdict read}"
 }
 
 # use_node → put the Node that .nvmrc names (here, else the main checkout's)

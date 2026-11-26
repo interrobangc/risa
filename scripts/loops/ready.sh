@@ -46,16 +46,12 @@ if ((${#blockers[@]})); then
 else
   echo "# $branch is ready to land"
   echo
-  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, $synced. Check: $(checked_how "$dir" "$branch")."
+  echo "\`$branch\` at \`$tip\`: $ahead commit(s) ahead of \`$trunk\`, $synced."
   if proposed=$(propose_tier "$trunk" "$branch" 2>/dev/null); then
     { read -r ptier; read -r pwhy; } <<< "$proposed"
     echo
     echo "Proposed tier: **$ptier** ($pwhy)."
-    if [[ $ptier != none ]]; then
-      peek=$(cd "$main" && node "$(cd "$(dirname "$0")/.." && pwd)/ci/ci.mjs" gate "$branch" --tier "$ptier" \
-        --base "$(git -C "$main" rev-parse "$trunk")" --peek 2>&1 | grep -m1 -E '^(verdict|no )' || true)
-      echo "CI: ${peek:-no verdict read}"
-    fi
+    [[ $ptier == none ]] || echo "CI: $(ci_verdict "$branch" "$ptier" "$trunk")"
   fi
 fi
 
