@@ -97,13 +97,18 @@ cd "$dir"
 # worktree, here).
 if project_command hooksInstall >/dev/null 2>&1; then run_project hooksInstall; fi
 
-((stack)) || stack_hook stackDown "$dir" --base "$base" >/dev/null || die "stackless env failed for $name"
+# The stackless env (.env.loop) first, stack or not, so a failed install leaves
+# a worktree without a stack, its slot given back, that a later stack up can take.
+stack_hook stackDown "$dir" --base "$base" >/dev/null || die "stackless env failed for $name"
 # Integration tests use this worktree's own test database (the testDb hook),
 # stack or not; it's created on the first run.
 test_facts=$(stack_hook testDb use "$name") || die "test database setup failed for $name"
 
 use_node
-run_project install
+run_project install || {
+  ((stack)) && release_slot "$name"
+  die "install failed for $name (it stays a worktree without a stack)"
+}
 
 prd=$(tool_command prd)
 if ((stack)); then
