@@ -1,6 +1,7 @@
 // The boundary lint (boundary.mjs): each rule and form on a sample project, the
 // manifest and the allowlist, and this repo itself, which must pass.
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -385,6 +386,25 @@ describe("this repo", () => {
 
   it("crosses the line only where the allowlist says", () => {
     expect(result.failures).toEqual([]);
+  });
+
+  it("ignores a CI test step's output written while it runs (B-753's progress file)", () => {
+    const dir = join(ROOT, "ci-results");
+    const file = join(dir, `boundary-${process.pid}.progress.json`);
+    const made = !existsSync(dir);
+    mkdirSync(dir, { recursive: true });
+    const started = ["scripts/loops/boundary.test.mjs", "scripts/loops/boundary.mjs"];
+    writeFileSync(
+      file,
+      JSON.stringify({ limitSeconds: 300, started, finished: [], failed: [], timedOut: [] }),
+    );
+    try {
+      const during = lintRepo(ROOT);
+      expect(during.failures).toEqual([]);
+      expect(during.problems).toEqual([]);
+    } finally {
+      rmSync(made ? dir : file, { recursive: true, force: true });
+    }
   });
 
   it("passes from the command line too", () => {
