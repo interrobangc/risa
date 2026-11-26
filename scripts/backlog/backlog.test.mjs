@@ -829,4 +829,22 @@ describe("backlog CLI: a broken project config", () => {
         .stderr,
     ).toMatch(/^backlog: .*backlog\.idPrefix: must be an id prefix/);
   });
+
+  it("names the command that imported the backlog's modules, not backlog", () => {
+    const cfg = join(dir, "risa.json");
+    writeFileSync(cfg, "{ not json");
+    for (const [script, who] of [
+      ["../loops/planner-model.mjs", "planner-model"],
+      ["../loops/open-session.mjs", "open-session"],
+    ]) {
+      const r = spawnSync("node", [new URL(script, import.meta.url).pathname, "x", dir], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...env, RISA_CONFIG: cfg },
+      });
+      expect(r.status, script).toBe(2);
+      expect(r.stderr).toMatch(new RegExp(`^${who}: \\S.*not JSON.*\\n$`));
+      expect(r.stderr).not.toMatch(/\n\s+at /);
+    }
+  });
 });

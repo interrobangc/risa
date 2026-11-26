@@ -14,10 +14,11 @@
 //      - commit: 1a2b3c4
 //
 //      Free notes (any Markdown) until the next item.
-import { backlogIds, loadConfigOrExit } from "../loops/config.mjs";
+import { backlogIds, commandName, loadConfigOrExit } from "../loops/config.mjs";
 
-// A broken config is one `backlog:` line and exit 2 (this loads first, before any command).
-const { config } = loadConfigOrExit("backlog");
+// A broken config is one line, named for the command that imported this (`backlog:` for the
+// CLI), and exit 2 (this loads first, before any command).
+const { config } = loadConfigOrExit(commandName("backlog"));
 /** The id form (prefix and pattern), from the project config. */
 export const IDS = backlogIds(config);
 

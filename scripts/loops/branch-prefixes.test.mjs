@@ -102,6 +102,16 @@ describe("the bash scripts, on the sample project's prefixes", () => {
     expect(sh(main, "pr.sh", "prd/x").out).toContain("prd/x: pr takes a topic/ or quick/ branch");
   });
 
+  it("prd's help names the branches by their prefixes", () => {
+    const { status, out } = sh(main, "prd.sh", "help");
+    expect(status).toBe(0);
+    expect(out).toContain("land quick/<name> --pr|--local");
+    expect(out).toContain("land draft/<topic>");
+    expect(out).toContain("On a part/ branch that is all");
+    expect(out).not.toMatch(/(?<![\w-])(prd|slice|plan|hotfix)\/</);
+    expect(out).not.toMatch(/(?<![\w-])(prd|slice|plan|hotfix)\/ (branch|worktree)/);
+  });
+
   it("rotate finds a PRD worktree, and refuses a slice's shell, by their prefixes", () => {
     expect(sh(main, "rotate.sh", "y").out).toContain("rotate: no PRD worktree for y");
     expect(sh(main, "rotate.sh", "y").out).toContain("on topic/y)");

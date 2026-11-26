@@ -15,10 +15,11 @@
 // "old": it is recognised and refused, never read as rows (it was converted
 // once, by hand-run tooling since removed).
 
-import { loadConfigOrExit } from "../loops/config.mjs";
+import { commandName, loadConfigOrExit } from "../loops/config.mjs";
 import { BacklogError } from "./format.mjs";
 
-const { config } = loadConfigOrExit("backlog");
+// A broken config: one line named for the command that imported this, and exit 2.
+const { config } = loadConfigOrExit(commandName("backlog"));
 
 /** hold: waits on the user; done: finished; standing: never finishes, runs while it has waiting items; alone: nothing else runs beside it; design: its planner runs on Fable. */
 export const FLAGS = ["hold", "done", "standing", "alone", "design"];
