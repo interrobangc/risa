@@ -51,10 +51,12 @@ const start = (args, extra = {}) => {
   p.exit = new Promise((r) => child.once("exit", (code, signal) => r(code ?? signal)));
   return p;
 };
-const until = async (cond, ms = 10_000) => {
+// until(cond, ms, state) → once cond() holds; past ms, fails with state()'s
+// account of what it saw instead, so a CI-only timeout says which part stuck.
+const until = async (cond, ms = 10_000, state) => {
   const end = Date.now() + ms;
   while (!cond()) {
-    if (Date.now() > end) throw new Error("timed out");
+    if (Date.now() > end) throw new Error(`timed out after ${ms} ms${state ? `:\n${state()}` : ""}`);
     await sleep(50);
   }
 };
@@ -276,16 +278,23 @@ describe("pnpm prd check's check lease", SLOW, () => {
 
   // Every run's command holds until the test creates `go`, so nothing ends
   // while the test looks: no real-time race between a 2 s fake check, the
-  // takers' start-up (slow under load) and `holders`. `delay` spawns one taker
-  // late, past where the old 2 s fake would have ended (B-654).
+  // takers' start-up (slow under load) and `holders` (B-654). The late case
+  // spawns its fifth taker only once the first four have settled (two started,
+  // two told to wait), a state, not a fixed sleep; both cases give the four
+  // start-ups the same budget, since they are the same work (B-824: the late
+  // case's first wait had half of it and was the only one that timed out on CI).
+  // Each case has its own lease root, so nothing an earlier test left can count.
   it.each([
-    ["all at once", 0],
-    ["one taker slowed", 2500],
+    ["all at once", false],
+    ["one taker slowed", true],
   ])(
     "makes the runs beyond the default limit of two wait, and holders shows who holds what (%s)",
-    async (_, delay) => {
-      const log = join(root, `check-log-${delay}`);
-      const go = join(root, `check-go-${delay}`);
+    async (name, late) => {
+      const here = join(root, `check-${late ? "late" : "once"}`);
+      const extra = { CARETOOK_LEASE_ROOT: join(here, "leases") };
+      mkdirSync(here);
+      const log = join(here, "log");
+      const go = join(here, "go");
       writeFileSync(log, "");
       // A fake pnpm check: note its start, hold until `go`, note its end.
       const fake = [
@@ -293,19 +302,27 @@ describe("pnpm prd check's check lease", SLOW, () => {
         "-c",
         `echo start >> ${log}; while [ ! -e ${go} ]; do sleep 0.05; done; echo end >> ${log}`,
       ];
-      const run = () => start(["run", "check", "--label", "pnpm check", "--", ...fake]);
+      const run = () => start(["run", "check", "--label", "pnpm check", "--", ...fake], extra);
       const lines = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
       const waiting = (r) => r.err.includes("All 2 check leases are taken; waiting");
+      const settled = (n) => () => lines().length === 2 && runs.filter(waiting).length === n;
+      // What each taker saw, for a timeout: the log, each run's exit and stderr, holders.
+      const state = () =>
+        [
+          `${name}: log ${JSON.stringify(lines())}`,
+          ...runs.map(
+            (r, i) =>
+              `run ${i} (pid ${r.child.pid}, exit ${r.child.exitCode ?? r.child.signalCode ?? "-"}): ${JSON.stringify(r.err)}`,
+          ),
+          cli(["holders", "check"], extra).out,
+        ].join("\n");
       const runs = [];
       for (let i = 0; i < 4; i++) runs.push(run());
-      if (delay) {
-        await until(() => lines().length === 2 && runs.filter(waiting).length === 2);
-        await sleep(delay);
-      }
+      if (late) await until(settled(2), 20_000, state);
       runs.push(run());
       // Each taker's own state: two started, three told they wait.
-      await until(() => lines().length === 2 && runs.filter(waiting).length === 3, 20_000);
-      const { out } = cli(["holders"]);
+      await until(settled(3), 20_000, state);
+      const { out } = cli(["holders"], extra);
       expect(out).toMatch(/^check leases: 2 of 2 held$/m);
       expect(out.match(/lease \d: \S+: pnpm check \(pid \d+/g)).toHaveLength(2);
       expect(out).toMatch(/^browser leases: 0 of 2 held$/m);
