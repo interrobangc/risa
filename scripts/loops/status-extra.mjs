@@ -10,12 +10,12 @@
 // show; the dispatcher's always prints.
 // Ended sessions older than a day are left out to keep the list short.
 //
-//   node status-extra.mjs      CARETOOK_SESSIONS_DIR and CARETOOK_ASKS_DIR name the folders;
+//   node status-extra.mjs      RISA_SESSIONS_DIR and RISA_ASKS_DIR name the folders;
 //                              the dispatcher's files are in the main checkout's .loops
-//                              (CARETOOK_DISPATCH_MAIN names another main checkout); the
-//                              workers' worktrees, heartbeats, leases (CARETOOK_LEASE_ROOT,
-//                              CARETOOK_BROWSER_LEASES) and logs (CARETOOK_RUN_LOG,
-//                              CARETOOK_CHECK_LOG) are beside the sessions folder
+//                              (RISA_DISPATCH_MAIN names another main checkout); the
+//                              workers' worktrees, heartbeats, leases (RISA_LEASE_ROOT,
+//                              RISA_BROWSER_LEASES) and logs (RISA_RUN_LOG,
+//                              RISA_CHECK_LOG) are beside the sessions folder
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -328,8 +328,8 @@ export function gatherWorkers(sessionsDir, { now = Date.now(), env = process.env
   const live = new Map();
   for (const { name, record } of readRecords(sessionsDir))
     if (record.pid && isLive(record, processOf(record.pid, now), now)) live.set(record.pid, name);
-  const leaseRoot = env.CARETOOK_LEASE_ROOT || join(loops, ".lease");
-  const browserRoot = env.CARETOOK_BROWSER_LEASES || undefined;
+  const leaseRoot = env.RISA_LEASE_ROOT || join(loops, ".lease");
+  const browserRoot = env.RISA_BROWSER_LEASES || undefined;
   // The process table only when it's needed: commands need a live session, workerFacts a worktree.
   const table = live.size ? processCwds() : undefined;
   const facts = workerFacts({
@@ -346,28 +346,28 @@ export function gatherWorkers(sessionsDir, { now = Date.now(), env = process.env
   if (!leases.length && !commands.length && !facts.some((f) => branchKinds().is(f.branch, "slice")))
     return "";
   const data = readData({
-    runLog: env.CARETOOK_RUN_LOG || join(loops, ".run-log.jsonl"),
-    checkLog: env.CARETOOK_CHECK_LOG || join(loops, ".check-times.log"),
+    runLog: env.RISA_RUN_LOG || join(loops, ".run-log.jsonl"),
+    checkLog: env.RISA_CHECK_LOG || join(loops, ".check-times.log"),
   });
   return workersPart({ facts, leases, commands, usual: (q) => usualTime(data, q), now });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const s = process.env.CARETOOK_SESSIONS_DIR;
-  const a = process.env.CARETOOK_ASKS_DIR;
+  const s = process.env.RISA_SESSIONS_DIR;
+  const a = process.env.RISA_ASKS_DIR;
   if (!s || !a) {
-    console.error("CARETOOK_SESSIONS_DIR and CARETOOK_ASKS_DIR must be set");
+    console.error("RISA_SESSIONS_DIR and RISA_ASKS_DIR must be set");
     process.exit(2);
   }
   let dispatcher = "";
   try {
-    dispatcher = dispatcherPart(pathsOf(process.env.CARETOOK_DISPATCH_MAIN || mainCheckout()));
+    dispatcher = dispatcherPart(pathsOf(process.env.RISA_DISPATCH_MAIN || mainCheckout()));
   } catch {
     /* no git here: no dispatcher part */
   }
   let requests = "";
   try {
-    requests = pendingPart(process.env.CARETOOK_REQUESTS_DIR || join(dirname(s), ".requests"));
+    requests = pendingPart(process.env.RISA_REQUESTS_DIR || join(dirname(s), ".requests"));
   } catch {
     /* an unreadable store: no requests part */
   }

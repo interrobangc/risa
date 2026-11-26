@@ -1,5 +1,5 @@
 // The run log: one append-only JSON-lines file, .loops/.run-log.jsonl in the
-// main checkout (CARETOOK_RUN_LOG moves it; tests always do). Each line is an
+// main checkout (RISA_RUN_LOG moves it; tests always do). Each line is an
 // event: { time, kind, topic, …its own fields }. metrics.mjs reads it.
 //
 // Kinds and who writes them:
@@ -17,7 +17,7 @@
 //
 //   node run-log.mjs append [--log <file>] [--once <field,…>] <kind> [key=value | key:=<json>]…
 //
-// The shell side is run_log in lib.sh: --log is $CARETOOK_RUN_LOG, else the main
+// The shell side is run_log in lib.sh: --log is $RISA_RUN_LOG, else the main
 // checkout's; its output and failures are dropped.
 //
 // key=value is a string; key:=<json> a number, boolean or null (exit:=1).
@@ -110,7 +110,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const args = process.argv.slice(2);
     if (args.shift() === "append") {
-      let file = process.env.CARETOOK_RUN_LOG;
+      let file = process.env.RISA_RUN_LOG;
       let once = [];
       while (args[0]?.startsWith("--")) {
         const flag = args.shift();

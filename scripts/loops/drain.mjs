@@ -2,10 +2,10 @@
 //
 // drainDecision (pure) turns the usage reading (usage.mjs mergeReadings) into one of
 //   normal    nothing held;
-//   draining  a plan window (5-hour or weekly) at CARETOOK_USAGE_DRAIN (95%) or more:
+//   draining  a plan window (5-hour or weekly) at RISA_USAGE_DRAIN (95%) or more:
 //             no start, plan or reopen (`pnpm prd dispatch --resume` doesn't override it),
 //             and a new slice worktree is refused (new.sh slice runs `drain.mjs check`);
-//   limited   a plan window at CARETOOK_USAGE_STOP (98%) or more, a reading showing overage
+//   limited   a plan window at RISA_USAGE_STOP (98%) or more, a reading showing overage
 //             (a plan window at 100%: extra usage, if it's on, is being spent), or a session
 //             stopped on a limit whose reset hasn't passed: as draining, and the tick ends
 //             each managed session (marked stalled, error "limited"), except one running a
@@ -14,15 +14,15 @@
 //             session request, rotation or `claude -p` probe: a probe would spend on extra
 //             usage and succeed, so it can't show the limit has reset); resuming goes by the
 //             reading's reset time.
-// with the reset time. An unknown reading (none, or all over CARETOOK_USAGE_STALE_MIN old)
+// with the reset time. An unknown reading (none, or all over RISA_USAGE_STALE_MIN old)
 // never drains: with a session live longer than that, it files one report per incident.
-// CARETOOK_USAGE_WATCH=off: always normal.
+// RISA_USAGE_WATCH=off: always normal.
 //
 // limitActions (pure): what a limited tick does to each live session.
 // landingUnder (pure): whether a session runs a landing (land.sh, or a landing journal's pid,
 // among its descendants).
 //
-//   node drain.mjs [--json]   the drain state, from the readings (CARETOOK_USAGE_DIR)
+//   node drain.mjs [--json]   the drain state, from the readings (RISA_USAGE_DIR)
 //   node drain.mjs check      new.sh slice's gate: exit 3 with the reason while draining or
 //                             limited; else 0 (and 0 on any error: watching never hurts the work)
 import { pathToFileURL } from "node:url";
@@ -43,9 +43,9 @@ const percentOf = (/** @type {string | undefined} */ v, /** @type {number} */ d)
 
 /** The lines and the switch, from the environment. */
 export function drainSettings(env = process.env) {
-  const drain = percentOf(env.CARETOOK_USAGE_DRAIN, DRAIN_PERCENT);
-  const stop = percentOf(env.CARETOOK_USAGE_STOP, STOP_PERCENT);
-  return { drain: Math.min(drain, stop), stop, off: env.CARETOOK_USAGE_WATCH === "off" };
+  const drain = percentOf(env.RISA_USAGE_DRAIN, DRAIN_PERCENT);
+  const stop = percentOf(env.RISA_USAGE_STOP, STOP_PERCENT);
+  return { drain: Math.min(drain, stop), stop, off: env.RISA_USAGE_WATCH === "off" };
 }
 
 /**
@@ -68,7 +68,7 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
     why,
     unknown,
   });
-  if (off) return normal("the usage watch is off (CARETOOK_USAGE_WATCH=off)");
+  if (off) return normal("the usage watch is off (RISA_USAGE_WATCH=off)");
   // No "in 2h": the dispatcher logs an idle tick only when its lines change.
   const until = (/** @type {number | null} */ t) =>
     t === null ? "reset unknown" : `until ${clock(t, now, timeZone)}`;
@@ -245,7 +245,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     }
     if (d.state === "normal") process.exit(0);
     process.stdout.write(
-      `usage is ${d.state}: ${d.why}; no new slice worktree until it resets (CARETOOK_USAGE_WATCH=off overrides)\n`,
+      `usage is ${d.state}: ${d.why}; no new slice worktree until it resets (RISA_USAGE_WATCH=off overrides)\n`,
     );
     process.exit(3);
   }

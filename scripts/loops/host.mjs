@@ -40,13 +40,13 @@
 //       runs with (empty: none). Exit 2 on a machine config that doesn't load or
 //       a bad RISA_CLAUDE_CONFIG_DIR.
 //
-// Env: CARETOOK_CLAUDE_BIN (the claude to run; default claude: tests give a
-// stub); NVM_DIR (default ~/.nvm); CARETOOK_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
+// Env: RISA_CLAUDE_BIN (the claude to run; default claude: tests give a
+// stub); NVM_DIR (default ~/.nvm); RISA_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
 // looked for); RISA_CLAUDE_CONFIG_DIR (the Claude config folder every claude
 // started here gets, above the machine config's and risa.json's);
-// CARETOOK_CLAUDE_PROJECTS and CARETOOK_CLAUDE_CONFIG (tests: in place of the
-// folder's projects and its .claude.json, only ever read); CARETOOK_LAUNCH_AGENTS_DIR (~/Library/LaunchAgents) and
-// CARETOOK_LAUNCHCTL (launchctl), both required under Vitest, so no test
+// RISA_CLAUDE_PROJECTS and RISA_CLAUDE_CONFIG (tests: in place of the
+// folder's projects and its .claude.json, only ever read); RISA_LAUNCH_AGENTS_DIR (~/Library/LaunchAgents) and
+// RISA_LAUNCHCTL (launchctl), both required under Vitest, so no test
 // reaches the real folder or launchd.
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, constants, existsSync, readdirSync, readFileSync } from "node:fs";
@@ -120,7 +120,7 @@ export const GH = "gh";
 const CLIS = [CLAUDE, CODEX, GH];
 
 /** The claude to run: a test's stub (Env, above), else claude. */
-export const claudeBin = (env = process.env) => env.CARETOOK_CLAUDE_BIN || CLAUDE;
+export const claudeBin = (env = process.env) => env.RISA_CLAUDE_BIN || CLAUDE;
 /** The name claude's processes show: claudeBin's last part. */
 export const claudeName = (env = process.env) => basename(claudeBin(env));
 
@@ -177,7 +177,7 @@ export function nvmNode(want, env = process.env) {
 // ---- tabs ------------------------------------------------------------------------
 
 /** Where iTerm2 is looked for. */
-export const itermApp = (env = process.env) => env.CARETOOK_ITERM_APP || "/Applications/iTerm.app";
+export const itermApp = (env = process.env) => env.RISA_ITERM_APP || "/Applications/iTerm.app";
 
 /** Whether a tab can open here: iTerm2 is there and osascript on the PATH. */
 export const canOpenTabs = (env = process.env) =>
@@ -277,10 +277,10 @@ export async function notify(title, text, seconds = 5, env = process.env) {
 
 /** The user's LaunchAgents: where a job's plist goes, and launchd's view of it. */
 export function launchd(env = process.env) {
-  if (env.VITEST && (!env.CARETOOK_LAUNCH_AGENTS_DIR || !env.CARETOOK_LAUNCHCTL))
-    throw new Error("host: a test must set CARETOOK_LAUNCH_AGENTS_DIR and CARETOOK_LAUNCHCTL");
-  const dir = env.CARETOOK_LAUNCH_AGENTS_DIR || join(homedir(), "Library/LaunchAgents");
-  const bin = env.CARETOOK_LAUNCHCTL || "launchctl";
+  if (env.VITEST && (!env.RISA_LAUNCH_AGENTS_DIR || !env.RISA_LAUNCHCTL))
+    throw new Error("host: a test must set RISA_LAUNCH_AGENTS_DIR and RISA_LAUNCHCTL");
+  const dir = env.RISA_LAUNCH_AGENTS_DIR || join(homedir(), "Library/LaunchAgents");
+  const bin = env.RISA_LAUNCHCTL || "launchctl";
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
   const domain = `gui/${uid}`;
   const call = (/** @type {string[]} */ args) =>
@@ -429,11 +429,11 @@ export function claudeAccount(env = process.env) {
 
 /** Where a claude with ENV keeps its project transcripts. */
 export const claudeProjects = (env = process.env) =>
-  env.CARETOOK_CLAUDE_PROJECTS || join(claudeHome(env), "projects");
+  env.RISA_CLAUDE_PROJECTS || join(claudeHome(env), "projects");
 
 /** The global state file (.claude.json: trusted folders) of a claude with ENV. */
 export const claudeState = (env = process.env) =>
-  env.CARETOOK_CLAUDE_CONFIG ||
+  env.RISA_CLAUDE_CONFIG ||
   (env[CLAUDE_DIR] ? join(env[CLAUDE_DIR], ".claude.json") : join(homedir(), ".claude.json"));
 
 /** Claude Code's projects folder name for a working directory. */

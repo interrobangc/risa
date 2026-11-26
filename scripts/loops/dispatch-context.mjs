@@ -1,11 +1,11 @@
 // The dispatcher's context follow-up: what it does about a managed orchestrator,
 // backlog or inbox session that stays over the hard context limit
-// (CARETOOK_CONTEXT_HARD_LIMIT, 225k; the hook alone handles the soft one; the
+// (RISA_CONTEXT_HARD_LIMIT, 225k; the hook alone handles the soft one; the
 // inbox session's hard limit is its soft one, 160k). Pure: the tick (dispatch.mjs) gathers the
 // size records, session records, asks and running commands, and acts.
 //
 // For a live managed orchestrator, backlog or inbox session over the hard limit with no keep:
-//   1. the wait (CARETOOK_CONTEXT_NUDGE_MIN, 15) after `hardOverAt`: a nudge,
+//   1. the wait (RISA_CONTEXT_NUDGE_MIN, 15) after `hardOverAt`: a nudge,
 //      left in the size record for the hook to deliver at the next tool call;
 //   2. the same wait after its delivery: one defaulting question. An
 //      orchestrator's or the inbox session's defaults to "rotate it now"; a backlog session's to "leave

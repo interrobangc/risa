@@ -181,7 +181,7 @@ describe("pnpm prd notice, notices and the gated commands", () => {
     spawnSync("bash", [join(main, "scripts/loops/prd.sh"), ...args], {
       cwd,
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_NOTICES_DIR: board, CARETOOK_SESSION: "", ...env },
+      env: { ...process.env, RISA_NOTICES_DIR: board, RISA_SESSION: "", ...env },
     });
 
   beforeAll(() => {
@@ -263,7 +263,7 @@ describe("pnpm prd notice, notices and the gated commands", () => {
     const s = prd(["status"]);
     expect(s.stdout).toMatch(/^NOTICES: 1 \(pnpm prd notices\)$/m);
     expect(s.stdout).not.toContain("for status");
-    const t = prd(["check", "--times"], { env: { CARETOOK_CHECK_LOG: join(board, "none.log") } });
+    const t = prd(["check", "--times"], { env: { RISA_CHECK_LOG: join(board, "none.log") } });
     expect(t.stderr).not.toContain("for status");
   });
 });

@@ -1,4 +1,4 @@
-// lease.sh and lease.mjs against a throwaway lease root (CARETOOK_LEASE_ROOT),
+// lease.sh and lease.mjs against a throwaway lease root (RISA_LEASE_ROOT),
 // so these never take one of the machine's real leases.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -17,19 +17,19 @@ import { LEASE_SH, takeLease } from "./lease.mjs";
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
 // The variable naming the lease root lease.sh reads, named once (the boundary lint counts each).
-const ROOT_VAR = "CARETOOK_LEASE_ROOT";
+const ROOT_VAR = "RISA_LEASE_ROOT";
 // The test hook's variable: a marker pauses a take after its mkdir, write:<marker> before its name file.
-const PAUSE_VAR = "CARETOOK_LEASE_TEST_PAUSE";
+const PAUSE_VAR = "RISA_LEASE_TEST_PAUSE";
 
 let root, env;
 const children = [];
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lease-test-")));
-  env = { ...process.env, [ROOT_VAR]: join(root, "leases"), CARETOOK_LEASE_POLL: "1" };
+  env = { ...process.env, [ROOT_VAR]: join(root, "leases"), RISA_LEASE_POLL: "1" };
   for (const k of Object.keys(env)) {
     if (
-      /^CARETOOK_(BROWSER_LEASES|BROWSER_OLD_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) ||
+      /^RISA_(BROWSER_LEASES|BROWSER_OLD_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) ||
       /_WAIT$/.test(k)
     )
       delete env[k];
@@ -81,7 +81,7 @@ const SLOW = { timeout: 40_000 };
 
 describe("taking and waiting", SLOW, () => {
   it("lets three takers of a three-slot kind in, and the fourth waits for a release", async () => {
-    const extra = { CARETOOK_TRIO_SLOTS: "3" };
+    const extra = { RISA_TRIO_SLOTS: "3" };
     const held = [];
     for (const label of ["one", "two", "three"]) held.push(await hold("trio", label, extra));
     expect(held.map((h) => h.n).sort()).toEqual([1, 2, 3]);
@@ -229,7 +229,7 @@ describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", 
   });
 
   it("counts a check still queued for a lease, and forgets it once it takes one or is killed", async () => {
-    const extra = { CARETOOK_QUEUE_SLOTS: "1" };
+    const extra = { RISA_QUEUE_SLOTS: "1" };
     const first = await hold("queue", "first", { ...extra, lease_worktree: "wt-other" });
     const queued = start(["hold", "queue", "--label", "queued"], { ...extra, ...wt });
     await until(() => queued.err.includes("All 1 queue leases are taken; waiting"));
@@ -398,21 +398,21 @@ describe("pnpm prd check's check lease", SLOW, () => {
 });
 
 describe("browser leases and the old path", SLOW, () => {
-  it("lives under the lease root, and CARETOOK_BROWSER_LEASES still moves it", () => {
+  it("lives under the lease root, and RISA_BROWSER_LEASES still moves it", () => {
     const pid = String(process.pid);
     const r = cli(["take", "browser", "--pid", pid]);
     expect(r.out.trim()).toBe(join(root, "leases", "browser", "1"));
     cli(["release", "browser", "--pid", pid]);
     const own = join(root, "own-browser");
-    const o = cli(["take", "browser", "--pid", pid], { CARETOOK_BROWSER_LEASES: own });
+    const o = cli(["take", "browser", "--pid", pid], { RISA_BROWSER_LEASES: own });
     expect(o.out.trim()).toBe(join(own, "1"));
-    cli(["release", "browser", "--pid", pid], { CARETOOK_BROWSER_LEASES: own });
+    cli(["release", "browser", "--pid", pid], { RISA_BROWSER_LEASES: own });
     expect(existsSync(join(own, "1"))).toBe(false);
   });
 
   it("counts live holders under the old path until they're gone, and lists them", async () => {
     const old = join(root, "old-browser");
-    const extra = { CARETOOK_BROWSER_OLD_LEASES: old, CARETOOK_BROWSER_SLOTS: "2" };
+    const extra = { RISA_BROWSER_OLD_LEASES: old, RISA_BROWSER_SLOTS: "2" };
     // An unsynced worktree's browser.sh holding old lease 2 (a lease.sh name file).
     const holder = spawn("bash", ["-c", "sleep 30; :", "browser.sh"]);
     children.push(holder);
@@ -440,7 +440,7 @@ describe("browser leases and the old path", SLOW, () => {
   it("keeps a holder whose program name differs from its process name (Linux's comm)", () => {
     const holder = spawn("bash", ["-c", "exec -a lease-holder-prog sleep 30"]);
     children.push(holder);
-    const extra = { CARETOOK_BROWSER_SLOTS: "1", CARETOOK_BROWSER_LEASES: join(root, "comm-browser") };
+    const extra = { RISA_BROWSER_SLOTS: "1", RISA_BROWSER_LEASES: join(root, "comm-browser") };
     const pid = String(holder.pid);
     spawnSync("sh", [
       "-c",
@@ -463,7 +463,7 @@ describe("browser leases and the old path", SLOW, () => {
 
 describe("takeLease (Node)", SLOW, () => {
   it("takes a lease, waits behind holders, and releases", async () => {
-    const extra = { ...env, CARETOOK_NODEK_SLOTS: "1" };
+    const extra = { ...env, RISA_NODEK_SLOTS: "1" };
     const first = await takeLease("nodek", { label: "vitest one", env: extra });
     expect(first.n).toBe(1);
     expect(readFileSync(join(first.path, "name"), "utf8")).toMatch(/^check=vitest one$/m);
@@ -479,12 +479,12 @@ describe("takeLease (Node)", SLOW, () => {
     expect(existsSync(dir("nodek", 1))).toBe(false);
   });
 
-  it("rejects when lease.sh gives up, and takes nothing with CARETOOK_LEASES=off", async () => {
-    const extra = { ...env, CARETOOK_NODEK_SLOTS: "1" };
+  it("rejects when lease.sh gives up, and takes nothing with RISA_LEASES=off", async () => {
+    const extra = { ...env, RISA_NODEK_SLOTS: "1" };
     const held = await takeLease("nodek", { env: extra });
     await expect(takeLease("nodek", { wait: 1, env: extra })).rejects.toThrow(/exited with 75/);
     await held.release();
-    const off = await takeLease("nodek", { env: { ...extra, CARETOOK_LEASES: "off" } });
+    const off = await takeLease("nodek", { env: { ...extra, RISA_LEASES: "off" } });
     expect(off).toMatchObject({ n: 0, path: null });
     await off.release();
   });

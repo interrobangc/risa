@@ -34,13 +34,13 @@
 # with --print, it prints the command instead, to paste into a terminal: the
 # host layer says where it looked for iTerm2.
 #
-# Env: CARETOOK_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
+# Env: RISA_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
 # looked for); the saved conversations' folder is the host layer's (host.mjs).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(dirname "$0")
-export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
+export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
 
 name="" print=0 background=0 command="" title="" carry=()
 while (($#)); do

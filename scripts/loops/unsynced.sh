@@ -69,7 +69,7 @@ unsynced_verdict() {
 # and `ready` share this, so a skipped sync never blocks the next step.
 unsynced_safe() {
   local go
-  [[ ${CARETOOK_UNSYNCED:-} != off ]] || return 1
+  [[ ${RISA_UNSYNCED:-} != off ]] || return 1
   IFS=$'\t' read -r go _ <<< "$(unsynced_verdict "$2" "$1")"
   [[ $go == go ]]
 }
@@ -114,7 +114,7 @@ unsynced_dev_brake() {
         if (hit) console.log(hit.text);
       })
       .catch(() => process.exit(3));
-  ' "$here/../ci/blame.mjs" "$here/notices.mjs" "${CARETOOK_NOTICES_DIR:-$loops/.notices}" 2>/dev/null) || rc=$?
+  ' "$here/../ci/blame.mjs" "$here/notices.mjs" "${RISA_NOTICES_DIR:-$loops/.notices}" 2>/dev/null) || rc=$?
   if ((rc != 0)); then
     unread+=("couldn't read the dev-brake notices")
   elif [[ -n $out ]]; then

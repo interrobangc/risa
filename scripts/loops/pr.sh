@@ -20,7 +20,7 @@
 # It prints the PR's URL. Codex reviews each push by itself: then
 # `pnpm prd review <topic> --wait`.
 #
-# Test seam: CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
+# Test seam: RISA_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) never pushes dev and measures the sync against origin/dev instead, so a
 # throwaway branch cut from origin/dev can be opened while local dev is ahead.
 set -euo pipefail
@@ -69,7 +69,7 @@ tierline="$tier (proposed $proposal: $proposal_why)"
 [[ $tier_status != below ]] || tierline+="; below the proposal because: $why"
 
 repo=$(gh_repo) || die "gh couldn't name origin's repository (gh auth status?)"
-if [[ ${CARETOOK_PR_THROWAWAY:-} != 1 ]]; then push_trunk; fi
+if [[ ${RISA_PR_THROWAWAY:-} != 1 ]]; then push_trunk; fi
 git -C "$main" push --quiet origin "refs/heads/$branch:refs/heads/$branch" ||
   die "couldn't push $branch to origin (it is never forced: if origin's copy has moved, find out why first)"
 tip=$(git -C "$main" rev-parse --short "$branch")

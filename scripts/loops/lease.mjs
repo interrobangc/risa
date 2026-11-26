@@ -10,7 +10,7 @@
 // It waits while every lease of the kind is taken (lease.sh's messages go to
 // stderr), and rejects if lease.sh gives up (exit 75). The env (default
 // process.env) sets the limits and directories, as for lease.sh; with
-// CARETOOK_LEASES=off it takes nothing and resolves at once.
+// RISA_LEASES=off it takes nothing and resolves at once.
 import { spawn } from "node:child_process";
 
 export const LEASE_SH = new URL("./lease.sh", import.meta.url).pathname;
@@ -21,7 +21,7 @@ export const LEASE_SH = new URL("./lease.sh", import.meta.url).pathname;
  * @returns {Promise<{ n: number, path: string | null, release: () => Promise<void> }>}
  */
 export function takeLease(kind, { label, wait, env = process.env } = {}) {
-  if (env.CARETOOK_LEASES === "off") return Promise.resolve({ n: 0, path: null, release: async () => {} });
+  if (env.RISA_LEASES === "off") return Promise.resolve({ n: 0, path: null, release: async () => {} });
   const args = [
     LEASE_SH,
     "hold",

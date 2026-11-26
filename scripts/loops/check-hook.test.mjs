@@ -82,8 +82,8 @@ const hook = (args, extra = {}, cwd = repo) => {
       STUB_UNHANDLED: "",
       STUB_TITLE: "",
       SAMPLE_CHECK_EXIT: "",
-      CARETOOK_CHECK_STATE: state,
-      CARETOOK_CHECK_RERUN_MAX: "",
+      RISA_CHECK_STATE: state,
+      RISA_CHECK_RERUN_MAX: "",
       ...extra,
     },
   });
@@ -174,7 +174,7 @@ describe("the check's tooling step reruns a failed test file", () => {
     expect(u.ran).toEqual([TOOLS]);
     const m = hook(["slice", "abc123", "1"], {
       STUB_TESTS: "a.test.mjs:1,b.test.mjs:1",
-      CARETOOK_CHECK_RERUN_MAX: "1",
+      RISA_CHECK_RERUN_MAX: "1",
     });
     expect(m.status).toBe(1);
     expect(m.failed).toEqual(["a.test.mjs", "b.test.mjs"]);

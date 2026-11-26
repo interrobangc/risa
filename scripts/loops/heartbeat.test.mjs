@@ -140,9 +140,9 @@ describe("the hook as a command", () => {
       encoding: "utf8",
       env: {
         PATH: process.env.PATH,
-        CARETOOK_SESSIONS_DIR: sessions,
-        CARETOOK_SESSION_NAME: "prd-topic",
-        CARETOOK_SESSION_PID: String(PID),
+        RISA_SESSIONS_DIR: sessions,
+        RISA_SESSION_NAME: "prd-topic",
+        RISA_SESSION_PID: String(PID),
         ...extra,
       },
     });
@@ -200,9 +200,9 @@ describe("the hook as a command", () => {
       const r = hook(bad);
       expect([r.status, r.stdout, r.stderr]).toEqual([0, "", ""]);
     }
-    const stale = hook({ hook_event_name: "PreToolUse", tool_name: "Read" }, { CARETOOK_SESSION_PID: "77" });
+    const stale = hook({ hook_event_name: "PreToolUse", tool_name: "Read" }, { RISA_SESSION_PID: "77" });
     expect([stale.status, stale.stdout]).toEqual([0, ""]);
-    const none = hook({ hook_event_name: "PreToolUse", tool_name: "Read" }, { CARETOOK_SESSIONS_DIR: "" });
+    const none = hook({ hook_event_name: "PreToolUse", tool_name: "Read" }, { RISA_SESSIONS_DIR: "" });
     expect([none.status, none.stdout]).toEqual([0, ""]);
     expect(existsSync(beats) ? readdirSync(beats).filter((f) => f.endsWith(".json")) : []).toEqual([]);
   });

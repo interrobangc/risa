@@ -17,7 +17,7 @@
 # (stackUp) makes the stack for it: its env files, ports and data. A stackless
 # one gets the stack hook's stackless env (stackDown). If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most max_prds (lib.sh: the
-# stored `pnpm prd dispatch --cap`, else CARETOOK_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
+# stored `pnpm prd dispatch --cap`, else RISA_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
 # (pnpm prd start|slice|plan|hotfix wrap this.)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
@@ -63,14 +63,14 @@ git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branc
 # that can't be had never refuses (watching never hurts the work).
 if [[ $kind == slice ]]; then
   drain_rc=0
-  drain_why=$(CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check 2>/dev/null) || drain_rc=$?
+  drain_why=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check 2>/dev/null) || drain_rc=$?
   if ((drain_rc == 3)); then echo "refused: slice $topic-$n: $drain_why" >&2; exit 1; fi
 fi
 
 # The load gate (load-gate.mjs): a slice waits while the machine is busy (at
-# most CARETOOK_LOAD_WAIT, then it goes ahead); a PRD started by hand only warns.
+# most RISA_LOAD_WAIT, then it goes ahead); a PRD started by hand only warns.
 if [[ $kind == slice ]]; then
-  CARETOOK_LOAD_LANE=light load_gate_wait "slice $topic-$n"
+  RISA_LOAD_LANE=light load_gate_wait "slice $topic-$n"
 elif [[ $kind == prd ]]; then
   read -r gstate gload gthr _ <<< "$(load_gate)"
   [[ $gstate != busy ]] ||

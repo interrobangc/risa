@@ -10,10 +10,10 @@
 // The session settings files (host.mjs settingsFor: orchestrators, backlog and inbox
 // sessions) run `usage.mjs statusline` as the status line, every 60 s as well as on
 // Claude Code's own updates, and `usage.mjs stop-failure` on StopFailure. Both are found
-// beside CARETOOK_CONTEXT_HOOK. Neither ever fails: any error is swallowed (exit 0).
+// beside RISA_CONTEXT_HOOK. Neither ever fails: any error is swallowed (exit 0).
 //
 // One reading per session, written atomically (a temp file renamed in, under a short lock):
-//   .loops/.usage/<session>.json  (CARETOOK_USAGE_DIR; else .usage beside CARETOOK_SESSIONS_DIR)
+//   .loops/.usage/<session>.json  (RISA_USAGE_DIR; else .usage beside RISA_SESSIONS_DIR)
 //     session, pid, at, windows: { fiveHour?, sevenDay?, spend? } (each percent, resetsAt
 //     ISO or null, at: when it was read, and for spend usedUsd, limitUsd, period),
 //     stalled?: { at, error, resetsAt, pid }, account? (the Claude config folder the
@@ -21,7 +21,7 @@
 //   A window the input leaves out keeps its last value and age; a new pid clears a stall.
 //   Each account's usage is its own: a reading counts only for its account's merge.
 //
-// The merge (`mergeReadings`, pure): a window read more than CARETOOK_USAGE_STALE_MIN (15)
+// The merge (`mergeReadings`, pure): a window read more than RISA_USAGE_STALE_MIN (15)
 // ago, or past its reset, doesn't count; with none left the usage is unknown. Of the rest,
 // the latest reset is the current window, and within one reset the highest percent wins,
 // so an older reading never lowers a newer one. A stall lasts until its reset (one with
@@ -55,8 +55,8 @@ export const WINDOWS = /** @type {const} */ ([
 
 /** How old a window's reading may be and still count. */
 export const staleMsOf = (env = process.env) => {
-  const n = Number(env.CARETOOK_USAGE_STALE_MIN);
-  return (env.CARETOOK_USAGE_STALE_MIN && Number.isFinite(n) && n > 0 ? n : 15) * MIN_MS;
+  const n = Number(env.RISA_USAGE_STALE_MIN);
+  return (env.RISA_USAGE_STALE_MIN && Number.isFinite(n) && n > 0 ? n : 15) * MIN_MS;
 };
 
 /** A time as ms: Unix seconds, ms (past 1e12), a numeric string or an ISO string; else null. */
@@ -374,8 +374,8 @@ export function ownLine(/** @type {NonNullable<ReturnType<typeof parseInput>>} *
 
 /** The readings folder. */
 export function usageDirOf(env = process.env) {
-  if (env.CARETOOK_USAGE_DIR) return env.CARETOOK_USAGE_DIR;
-  if (env.CARETOOK_SESSIONS_DIR) return join(dirname(env.CARETOOK_SESSIONS_DIR), ".usage");
+  if (env.RISA_USAGE_DIR) return env.RISA_USAGE_DIR;
+  if (env.RISA_SESSIONS_DIR) return join(dirname(env.RISA_SESSIONS_DIR), ".usage");
   return null;
 }
 
@@ -445,11 +445,11 @@ export function clearStalled(/** @type {string} */ dir, /** @type {string} */ se
 
 /** The session this hook runs for: session.sh's name, else Claude Code's id. */
 const sessionOf = (/** @type {NodeJS.ProcessEnv} */ env, /** @type {string | null} */ id) => {
-  const name = env.CARETOOK_SESSION_NAME || id || "";
+  const name = env.RISA_SESSION_NAME || id || "";
   return NAME_OK.test(name) ? name : null;
 };
 const pidOf = (/** @type {NodeJS.ProcessEnv} */ env) => {
-  const n = Number(env.CARETOOK_SESSION_PID);
+  const n = Number(env.RISA_SESSION_PID);
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 

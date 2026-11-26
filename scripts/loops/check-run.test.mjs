@@ -32,7 +32,7 @@ beforeAll(() => {
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 // A path in the check's state directory, for a stub command to write to.
-const inState = (name) => `"$CARETOOK_CHECK_STATE/${name}"`;
+const inState = (name) => `"$RISA_CHECK_STATE/${name}"`;
 
 // clock: the fake clock's file (none: the real clock).
 const run = (mode, why, cmd, { clock = "", ...extra } = {}) =>
@@ -41,16 +41,16 @@ const run = (mode, why, cmd, { clock = "", ...extra } = {}) =>
     encoding: "utf8",
     env: {
       ...process.env,
-      CARETOOK_CHECK_LOG: logFile,
-      CARETOOK_LOAD_FILE: loadFile,
-      CARETOOK_LOAD_BUSY: "4",
-      CARETOOK_LOAD_POLL: "0.2",
-      CARETOOK_LOAD_GATE: "",
-      CARETOOK_LEASES: "",
-      CARETOOK_CHECK_LIMIT: "",
-      CARETOOK_CHECK_SILENCE: "",
-      CARETOOK_CHECK_BUDGET_LOAD: "1",
-      CARETOOK_CLOCK_FILE: clock,
+      RISA_CHECK_LOG: logFile,
+      RISA_LOAD_FILE: loadFile,
+      RISA_LOAD_BUSY: "4",
+      RISA_LOAD_POLL: "0.2",
+      RISA_LOAD_GATE: "",
+      RISA_LEASES: "",
+      RISA_CHECK_LIMIT: "",
+      RISA_CHECK_SILENCE: "",
+      RISA_CHECK_BUDGET_LOAD: "1",
+      RISA_CLOCK_FILE: clock,
       ...extra,
     },
   });
@@ -61,8 +61,8 @@ describe("check-run.sh", () => {
     expect(run("full", "", "exit 0").status).toBe(0);
     expect(
       run("quick", "tweaked a doc\tand more", "exit 3", {
-        CARETOOK_CHECK_FILES_RUN: "4",
-        CARETOOK_CHECK_FILES_ALL: "90",
+        RISA_CHECK_FILES_RUN: "4",
+        RISA_CHECK_FILES_ALL: "90",
       }).status,
     ).toBe(3);
     expect(lines()).toHaveLength(2);
@@ -82,8 +82,8 @@ describe("check-run.sh", () => {
 });
 
 describe("check-run.sh test-file counts", () => {
-  it("logs the counts a command writes to CARETOOK_CHECK_COUNTS", () => {
-    expect(run("quick", "counts", 'echo "7 31" > "$CARETOOK_CHECK_COUNTS"').status).toBe(0);
+  it("logs the counts a command writes to RISA_CHECK_COUNTS", () => {
+    expect(run("quick", "counts", 'echo "7 31" > "$RISA_CHECK_COUNTS"').status).toBe(0);
     const { runs } = parseLog(readFileSync(logFile, "utf8"));
     expect(runs.at(-1)).toMatchObject({ mode: "quick", reason: "counts", filesRun: 7, filesAll: 31 });
   });
@@ -126,8 +126,8 @@ describe("check-run.sh budget and silence limit", () => {
   it("stops past its budget, exits non-zero, leaves no child, prints the last lines and logs why", () => {
     const pidFile = join(root, "grandchild");
     const r = run("quick", "hangs", hang(pidFile), {
-      CARETOOK_CHECK_LIMIT: "1",
-      CARETOOK_CHECK_KILL_GRACE: "1",
+      RISA_CHECK_LIMIT: "1",
+      RISA_CHECK_KILL_GRACE: "1",
     });
     expect(r.status).toBe(124);
     expect(r.stdout).toMatch(/^Check budget 0m01s \(the hard limit/m);
@@ -146,8 +146,8 @@ describe("check-run.sh budget and silence limit", () => {
   it("stops at its silence limit well inside its budget", () => {
     const pidFile = join(root, "grandchild-quiet");
     const r = run("slice", "goes quiet", hang(pidFile), {
-      CARETOOK_CHECK_SILENCE: "1",
-      CARETOOK_CHECK_KILL_GRACE: "1",
+      RISA_CHECK_SILENCE: "1",
+      RISA_CHECK_KILL_GRACE: "1",
     });
     expect(r.status).toBe(124);
     expect(r.stderr).toMatch(/printed nothing for 1s in the unit step and was stopped/);
@@ -168,8 +168,8 @@ describe("check-run.sh budget and silence limit", () => {
       "slow but talking",
       "for i in 1 2 3 4 5 6 7 8 9 10; do echo tick $i; sleep 0.3; done",
       {
-        CARETOOK_CHECK_LIMIT: "20",
-        CARETOOK_CHECK_SILENCE: "1",
+        RISA_CHECK_LIMIT: "20",
+        RISA_CHECK_SILENCE: "1",
       },
     );
     expect(r.status).toBe(0);
@@ -194,8 +194,8 @@ describe("check-run.sh budget and silence limit", () => {
     const cmd = `sleep 0.6; echo 2000003600 > "${clock}.new"; mv "${clock}.new" "${clock}"; sleep 0.6; echo awake`;
     const r = run("slice", "slept", cmd, {
       clock,
-      CARETOOK_CHECK_LIMIT: "5",
-      CARETOOK_CHECK_SILENCE: "3",
+      RISA_CHECK_LIMIT: "5",
+      RISA_CHECK_SILENCE: "3",
     });
     expect(r.status).toBe(0);
     expect(r.stderr).not.toMatch(/stopped/);
@@ -211,9 +211,9 @@ describe("check-run.sh budget and silence limit", () => {
     const cmd = `echo working; sleep 0.5; ${tick(2000003600)}; ${tick(2000003601)}; ${tick(2000003603)}; sleep 30`;
     const r = run("slice", "slept then hung", cmd, {
       clock,
-      CARETOOK_CHECK_LIMIT: "2",
-      CARETOOK_CHECK_SILENCE: "100",
-      CARETOOK_CHECK_KILL_GRACE: "1",
+      RISA_CHECK_LIMIT: "2",
+      RISA_CHECK_SILENCE: "100",
+      RISA_CHECK_KILL_GRACE: "1",
     });
     expect(r.status).toBe(124);
     expect(lastRun()).toMatchObject({ reason: "slept then hung", breach: "budget" });
@@ -254,12 +254,12 @@ describe("check-run.sh and the load gate", () => {
         cwd: HERE,
         env: {
           ...process.env,
-          CARETOOK_CHECK_LOG: logFile,
-          CARETOOK_LOAD_FILE: loadFile,
-          CARETOOK_LOAD_BUSY: "4",
-          CARETOOK_LOAD_POLL: "0.2",
-          CARETOOK_LOAD_GATE: "",
-          CARETOOK_LEASES: "",
+          RISA_CHECK_LOG: logFile,
+          RISA_LOAD_FILE: loadFile,
+          RISA_LOAD_BUSY: "4",
+          RISA_LOAD_POLL: "0.2",
+          RISA_LOAD_GATE: "",
+          RISA_LEASES: "",
           ...extra,
         },
       });
@@ -289,7 +289,7 @@ describe("check-run.sh and the load gate", () => {
 
   it("goes ahead after the bounded wait and says so", async () => {
     busy();
-    const r = await runAsync("gives up", { CARETOOK_LOAD_WAIT: "1" });
+    const r = await runAsync("gives up", { RISA_LOAD_WAIT: "1" });
     quiet();
     expect(r.status).toBe(0);
     expect(r.out).toMatch(
@@ -300,10 +300,10 @@ describe("check-run.sh and the load gate", () => {
     expect(last().loadWaited).toBeGreaterThanOrEqual(1);
   });
 
-  it("waits for nothing with CARETOOK_LOAD_GATE=off or CARETOOK_LEASES=off", async () => {
+  it("waits for nothing with RISA_LOAD_GATE=off or RISA_LEASES=off", async () => {
     busy();
-    for (const extra of [{ CARETOOK_LOAD_GATE: "off" }, { CARETOOK_LEASES: "off" }]) {
-      const r = await runAsync("no wait", { ...extra, CARETOOK_LOAD_WAIT: "30" });
+    for (const extra of [{ RISA_LOAD_GATE: "off" }, { RISA_LEASES: "off" }]) {
+      const r = await runAsync("no wait", { ...extra, RISA_LOAD_WAIT: "30" });
       expect(r.status).toBe(0);
       expect(r.out).not.toMatch(/busy/);
       expect(last()).toMatchObject({ reason: "no wait", loadWaited: 0 });
@@ -313,8 +313,8 @@ describe("check-run.sh and the load gate", () => {
 
   it("isn't busy when the load can't be read", async () => {
     const r = await runAsync("unread", {
-      CARETOOK_LOAD_FILE: join(root, "no-such-file"),
-      CARETOOK_LOAD_WAIT: "30",
+      RISA_LOAD_FILE: join(root, "no-such-file"),
+      RISA_LOAD_WAIT: "30",
     });
     expect(r.status).toBe(0);
     expect(r.out).not.toMatch(/busy/);
@@ -365,7 +365,7 @@ describe("check-run.sh and the time gate", () => {
       .join("; ");
     return run(mode, `gate ${mode}`, cmd, {
       clock,
-      CARETOOK_CHECK_SLEEP_GAP: "1000",
+      RISA_CHECK_SLEEP_GAP: "1000",
       PATH: `${stubs}:${process.env.PATH}`,
       ...extra,
     });
@@ -439,13 +439,13 @@ describe("check-run.sh and the time gate", () => {
 
 describe("check lease slots", () => {
   const holders = (extra = {}) => {
-    const env = { ...process.env, CARETOOK_LEASE_ROOT: join(root, "leases"), ...extra };
-    delete env.CARETOOK_CHECK_SLOTS;
+    const env = { ...process.env, RISA_LEASE_ROOT: join(root, "leases"), ...extra };
+    delete env.RISA_CHECK_SLOTS;
     Object.assign(env, extra);
     return spawnSync("bash", [join(HERE, "lease.sh"), "holders", "check"], { env, encoding: "utf8" }).stdout;
   };
-  it("defaults to two, and CARETOOK_CHECK_SLOTS changes it", () => {
+  it("defaults to two, and RISA_CHECK_SLOTS changes it", () => {
     expect(holders()).toMatch(/^check leases: 0 of 2 held$/m);
-    expect(holders({ CARETOOK_CHECK_SLOTS: "5" })).toMatch(/^check leases: 0 of 5 held$/m);
+    expect(holders({ RISA_CHECK_SLOTS: "5" })).toMatch(/^check leases: 0 of 5 held$/m);
   });
 });

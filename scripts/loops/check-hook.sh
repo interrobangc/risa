@@ -9,7 +9,7 @@
 # through lib.sh's run_hook from the checkout's top). Its contract:
 #   in:   MODE (slice, quick or full), BASE (the commit the diff is from) and the
 #         OWN test files (the diff's own; some may be deleted), as arguments;
-#         CARETOOK_CHECK_STATE, a directory, and CARETOOK_CHECK_COUNTS, a file,
+#         RISA_CHECK_STATE, a directory, and RISA_CHECK_COUNTS, a file,
 #         in the environment (check-run.sh makes both)
 #   out:  the exit code (0 passed; anything else fails the check with that code);
 #         in the state directory, `step` (the step running, one line, rewritten
@@ -41,4 +41,4 @@ run_hook check "$mode" "$base" "$@" || exit
 harness=()
 [[ $tooling != 2 ]] || harness=(--harness)
 exec node "$here/check-tooling.mjs" ${harness[@]+"${harness[@]}"} \
-  --state "${CARETOOK_CHECK_STATE:-}" --rerun-max "${CARETOOK_CHECK_RERUN_MAX:-20}"
+  --state "${RISA_CHECK_STATE:-}" --rerun-max "${RISA_CHECK_RERUN_MAX:-20}"

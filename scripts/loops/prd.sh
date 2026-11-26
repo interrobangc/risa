@@ -51,7 +51,7 @@ pnpm prd <command>
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it
                               adds, rewords, moves or removes inbox lines on origin/dev; Opus at low effort
                               (--model <m>: another model, this session only; a reopen or rotation is Opus),
-                              Remote Control "inbox", opened in its own directory outside the repository (\$CARETOOK_INBOX_DIR, default ~/.caretook/inbox; created);
+                              Remote Control "inbox", opened in its own directory outside the repository (\$RISA_INBOX_DIR, default ~/.caretook/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on ${hotfix_prefix}<name> from dev, for a fix
@@ -104,7 +104,7 @@ pnpm prd <command>
                               alone for 30 minutes; --all lists every live session
     usage [--json]            the plan's usage limits as the sessions' status lines last read them: the 5-hour
                               and weekly (a gateway's spend limit too) use and reset times, unknown when no
-                              reading is newer than \$CARETOOK_USAGE_STALE_MIN (15) min, and the sessions
+                              reading is newer than \$RISA_USAGE_STALE_MIN (15) min, and the sessions
                               stopped on a rate limit (.loops/.usage/<session>.json)
     rotate [<topic>] [--mid-wave] [--reason <text>]   replace an orchestrator's session with a fresh one
     rotate --self [--brief <file>]    replace the calling backlog session (or orchestrator) with a fresh one
@@ -120,9 +120,9 @@ pnpm prd <command>
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
     ask --topic <t> --question <text> --skeptic <id> [--option <a>]… [--recommend <a|n> --defaults|--waits]
                               file a question past a skeptic (the dispatcher's own need none); prints its id and the PushNotification line to send; a macOS
-                              notification, and \$CARETOOK_ASK_NOTIFY <id> <kind> <topic> <text> when set
+                              notification, and \$RISA_ASK_NOTIFY <id> <kind> <topic> <text> when set
                               (failures ignored). With a recommendation, --defaults takes it after
-                              \$CARETOOK_ASK_DEFAULT_MIN (30) min unanswered; --waits (money, data, a live
+                              \$RISA_ASK_DEFAULT_MIN (30) min unanswered; --waits (money, data, a live
                               deploy, a destructive step, a new dependency, compliance) waits however long
     ask --decided --skeptic <id> --topic <t> --question <text> --option <a>… --chose <a|n>   file what a
                               skeptic decided: settled, never pushed, listed under decided for you
@@ -144,7 +144,7 @@ pnpm prd <command>
                               [--slice <n> --defaults|--waits]   (stall; --waits: a never-list step)
                               record its answer (ask: decide, ask; land: go, no; plan: go, send-back;
                               stall: restart, leave, ask);
-                              prints the id; counts for \$CARETOOK_SKEPTIC_MAX_MIN (60) min
+                              prints the id; counts for \$RISA_SKEPTIC_MAX_MIN (60) min
     skeptic [list] [--topic <t>] [--json]   the verdicts, oldest first
 
   Notices (one-way lines for other sessions, in the main checkout's .loops/.notices; nothing waits on them)
@@ -158,7 +158,7 @@ pnpm prd <command>
 
   Inside a worktree (name or topic defaults to the one you're in)
     serve [name] [--restart|--stop|--built|--dev]   its server in the background (--built: a check build)
-    check [--quick "<why>"]   pnpm check (at most two at once machine-wide; CARETOOK_CHECK_SLOTS), timed in
+    check [--quick "<why>"]   pnpm check (at most two at once machine-wide; RISA_CHECK_SLOTS), timed in
                               .loops/.check-times.log, and record that
                               this commit passed; --quick: typecheck, lint, format, every unit test, and the
                               integration and component test files the diff adds or edits, recorded with its
@@ -234,17 +234,17 @@ cmd=${1:-help}; (($#)) && shift
 # The notice board (notice.mjs): other sessions' live notices on stderr, five
 # lines at most, before the commands that touch shared work. It never fails
 # the command (an unreadable board prints nothing).
-notices_dir=${CARETOOK_NOTICES_DIR:-$loops/.notices}
+notices_dir=${RISA_NOTICES_DIR:-$loops/.notices}
 here_session() {
   local h; h=$(here_name)
-  if [[ -n ${CARETOOK_SESSION:-} ]]; then echo "$CARETOOK_SESSION"
+  if [[ -n ${RISA_SESSION:-} ]]; then echo "$RISA_SESSION"
   elif [[ $h == plan-* ]]; then echo "$h"
   elif [[ -n $h ]]; then echo "prd-$(topic_of "$h")"; fi
 }
 case $cmd in
   check | sync | slice | browser | pr | ready | land)
     [[ $cmd == check && " $* " == *" --times "* ]] ||
-      CARETOOK_NOTICES_DIR=$notices_dir node "$bin/notice.mjs" gate --self "$(here_session 2>/dev/null)" 1>&2 2>/dev/null || true
+      RISA_NOTICES_DIR=$notices_dir node "$bin/notice.mjs" gate --self "$(here_session 2>/dev/null)" 1>&2 2>/dev/null || true
     ;;
 esac
 case $cmd in
@@ -267,12 +267,12 @@ case $cmd in
     t=""
     [[ ${1:-} == "" || ${1:-} == -* ]] || { t=$1; shift; }
     if [[ -z $t ]]; then h=$(here_name); [[ -n $h ]] || die "watch: name a topic, or run it inside its worktree"; t=$(topic_of "$h"); fi
-    CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} \
+    RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions} RISA_ASKS_DIR=${RISA_ASKS_DIR:-$loops/.asks} \
       exec node "$bin/watch.mjs" "$t" "$@" ;;
   metrics)
-    exec node "$bin/metrics.mjs" --run-log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
-      --check-log "${CARETOOK_CHECK_LOG:-$loops/.check-times.log}" \
-      --flake-log "${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}" "$@" ;;
+    exec node "$bin/metrics.mjs" --run-log "${RISA_RUN_LOG:-$loops/.run-log.jsonl}" \
+      --check-log "${RISA_CHECK_LOG:-$loops/.check-times.log}" \
+      --flake-log "${RISA_BROWSER_FLAKES:-$loops/.browser-flakes.log}" "$@" ;;
   land) exec "$bin/land.sh" "$@" ;;
   # The project's dev server and test database, through the config's hooks.
   serve) stack_hook serve "$@"; exit $? ;;
@@ -308,15 +308,15 @@ case $cmd in
   recover) exec "$bin/recover.sh" "$@" ;;
   down) exec "$bin/down.sh" "$@" ;;
   autostart) exec node "$bin/autostart.mjs" "$@" --main "$main" ;;
-  watchdog) CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} exec node "$bin/watchdog.mjs" --main "$main" "$@" ;;
+  watchdog) RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} exec node "$bin/watchdog.mjs" --main "$main" "$@" ;;
   open) exec "$bin/open-session.sh" "$@" ;;
   end) exec "$bin/end-session.sh" "$@" ;;
   bye) exec node "$bin/bye.mjs" "$@" ;;
   rotate) exec "$bin/rotate.sh" "$@" ;;
   context) exec node "$bin/context.mjs" "$@" ;;
   session)
-    CARETOOK_REQUESTS_DIR=${CARETOOK_REQUESTS_DIR:-$loops/.requests} \
-      CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} \
+    RISA_REQUESTS_DIR=${RISA_REQUESTS_DIR:-$loops/.requests} \
+      RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions} \
       exec node "$bin/session-requests.mjs" "$@"
     ;;
   review) exec "$bin/review.sh" "$@" ;;
@@ -358,10 +358,10 @@ case $cmd in
       (($# <= 1)) || die "plan: give a topic before other arguments"
       wrapper=$(cd "$bin" && pwd)/session.sh
       # Its display name is a captain's (captain.mjs), unlike the last; the record stays backlog.
-      captain=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} node "$bin/captain.mjs" next) ||
+      captain=$(RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions} node "$bin/captain.mjs" next) ||
         die "plan: couldn't pick the backlog session's captain"
       cd "$main" && exec "$wrapper" backlog --kind backlog -- \
-        ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$(CARETOOK_CAPTAIN=$captain "$bin/prompt.sh" backlog)"
+        ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$(RISA_CAPTAIN=$captain "$bin/prompt.sh" backlog)"
     fi
     work_switch plan
     topic=$1; shift; open=0 items=()
@@ -391,7 +391,7 @@ case $cmd in
     # --dir and --managed are the reopen's and rotation's (open-session.mjs,
     # rotate-into.sh): the recorded directory, and the dispatcher's record. They
     # pass no --model, so a reopen or rotation is always on inbox_model.
-    model=$inbox_model dir=${CARETOOK_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
+    model=$inbox_model dir=${RISA_INBOX_DIR:-$HOME/.caretook/inbox} managed=()
     while (($#)); do
       case $1 in
         --model) [[ -n ${2:-} && ${2:-} != -* ]] || die "inbox: --model needs a model name (e.g. opus)"; model=$2; shift ;;
@@ -406,12 +406,12 @@ case $cmd in
     [[ -d $dir ]] || { mkdir -p "$dir" || die "inbox: can't create $dir"; fresh=1; }
     dir=$(cd "$dir" && pwd -P)
     if top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null); then
-      die "inbox: $dir is inside the git repository $top, where AGENTS.md would load; set CARETOOK_INBOX_DIR to a directory outside any repository"
+      die "inbox: $dir is inside the git repository $top, where AGENTS.md would load; set RISA_INBOX_DIR to a directory outside any repository"
     fi
     d=$dir
     while :; do
       for f in CLAUDE.md CLAUDE.local.md AGENTS.md; do
-        [[ ! -e $d/$f ]] || die "inbox: $d/$f would load into the inbox session; set CARETOOK_INBOX_DIR to a directory with none above it"
+        [[ ! -e $d/$f ]] || die "inbox: $d/$f would load into the inbox session; set RISA_INBOX_DIR to a directory with none above it"
       done
       [[ $d != / ]] || break
       d=$(dirname "$d")
@@ -468,7 +468,7 @@ case $cmd in
         esac
         shift
       done
-      exec node "$bin/check-times.mjs" --log "${CARETOOK_CHECK_LOG:-$loops/.check-times.log}" ${since:+--since "$since"}
+      exec node "$bin/check-times.mjs" --log "${RISA_CHECK_LOG:-$loops/.check-times.log}" ${since:+--since "$since"}
     fi
     name=$(here_name); [[ -n $name ]] || die "run pnpm prd check inside a .loops worktree"
     dir=$loops/$name; quick=0 why=""
@@ -502,7 +502,7 @@ case $cmd in
     { read -r pmode || true; read -r ptooling || true; read -r pown || true; } <<< "$plan"
     [[ -n $pmode ]] || die "check: the check plan (check-plan.mjs) gave no mode, so no check ran"
     rm -f "$record"
-    # A check lease (lease.sh; CARETOOK_CHECK_SLOTS, default 2) around it, so a
+    # A check lease (lease.sh; RISA_CHECK_SLOTS, default 2) around it, so a
     # wave of loops finishing together doesn't run every pnpm check at once.
     # The project's check (the config's check hook) prints its own steps;
     # check-hook.sh runs it, then the tooling tests when the plan says so.
@@ -557,8 +557,8 @@ case $cmd in
     ;;
   ask | asks | answer)
     # The asking session and topic default to the worktree's: plan-<t> → plan-<t>, else prd-<topic>.
-    export CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks}
-    export CARETOOK_SKEPTIC_DIR=${CARETOOK_SKEPTIC_DIR:-$loops/.skeptic}
+    export RISA_ASKS_DIR=${RISA_ASKS_DIR:-$loops/.asks}
+    export RISA_SKEPTIC_DIR=${RISA_SKEPTIC_DIR:-$loops/.skeptic}
     here=$(here_name) here_args=()
     if [[ $cmd == ask && -n $here ]]; then
       if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
@@ -568,7 +568,7 @@ case $cmd in
     ;;
   skeptic)
     # The recording session and topic default to the worktree's, as for ask.
-    export CARETOOK_SKEPTIC_DIR=${CARETOOK_SKEPTIC_DIR:-$loops/.skeptic}
+    export RISA_SKEPTIC_DIR=${RISA_SKEPTIC_DIR:-$loops/.skeptic}
     here=$(here_name) here_args=()
     if [[ ${1:-} == record && -n $here ]]; then
       if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
@@ -583,9 +583,9 @@ case $cmd in
       if [[ $here == plan-* ]]; then here_args=(--here-topic "${here#plan-}" --here-session "$here")
       else here_topic=$(topic_of "$here"); here_args=(--here-topic "$here_topic" --here-session "prd-$here_topic"); fi
     fi
-    CARETOOK_NOTICES_DIR=$notices_dir exec node "$bin/notice.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
+    RISA_NOTICES_DIR=$notices_dir exec node "$bin/notice.mjs" "$cmd" "$@" ${here_args[@]+"${here_args[@]}"}
     ;;
-  usage) CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} exec node "$bin/usage.mjs" "$@" ;;
+  usage) RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} exec node "$bin/usage.mjs" "$@" ;;
   help | -h | --help) usage ;;
   *) usage >&2; exit 1 ;;
 esac

@@ -38,7 +38,7 @@ const ID = /^s(\d+)$/;
 const ID_FILE = /^s(\d+)\.json$/;
 const FULL_SHA = /^[0-9a-f]{40}$/;
 
-/** How long a verdict counts, in minutes (CARETOOK_SKEPTIC_MAX_MIN). */
+/** How long a verdict counts, in minutes (RISA_SKEPTIC_MAX_MIN). */
 export const DEFAULT_MAX_MIN = 60;
 /** The verdicts each kind of skeptic can give. */
 export const VERDICTS = {
@@ -50,7 +50,7 @@ export const VERDICTS = {
 
 export class SkepticError extends Error {}
 
-/** @param {string | undefined} value CARETOOK_SKEPTIC_MAX_MIN @returns {number} minutes */
+/** @param {string | undefined} value RISA_SKEPTIC_MAX_MIN @returns {number} minutes */
 export function maxAgeMin(value) {
   const n = Number(value);
   return value != null && value !== "" && Number.isFinite(n) && n >= 0 ? n : DEFAULT_MAX_MIN;
@@ -265,7 +265,7 @@ function checkDecided(record, wanted) {
 
 /**
  * Does this record allow this action? Pure, given `now` and `maxMin` (their
- * defaults are the clock and CARETOOK_SKEPTIC_MAX_MIN).
+ * defaults are the clock and RISA_SKEPTIC_MAX_MIN).
  * @param {object | null} record
  * @param {{ use: "land", topic: string, action: string, tip: string }
  *   | { use: "ask", topic: string, questionHash: string, askerClass: "defaults" | "waits",
@@ -278,7 +278,7 @@ function checkDecided(record, wanted) {
 export function checkRecord(
   record,
   wanted,
-  { now = Date.now(), maxMin = maxAgeMin(process.env.CARETOOK_SKEPTIC_MAX_MIN) } = {},
+  { now = Date.now(), maxMin = maxAgeMin(process.env.RISA_SKEPTIC_MAX_MIN) } = {},
 ) {
   if (!record) return no("no such skeptic record");
   if (record.topic !== wanted.topic) return no(`${record.id} is for ${record.topic}, not ${wanted.topic}`);

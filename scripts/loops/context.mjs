@@ -9,16 +9,16 @@
 // it, it adds a reminder to the agent's context. It never blocks a tool call
 // and any error in it is swallowed (exit 0, no output).
 //
-// An orchestrator has two limits: past the soft one (CARETOOK_CONTEXT_LIMIT,
+// An orchestrator has two limits: past the soft one (RISA_CONTEXT_LIMIT,
 // 120k for an orchestrator, 160k for the others) a reminder tells it to rotate
 // unasked between waves only (at the next wave boundary, never --mid-wave), again
-// every further 25k; past the hard one (CARETOOK_CONTEXT_HARD_LIMIT, 225k) it is
-// told to rotate at the next safe point, mid-wave if need be, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN
+// every further 25k; past the hard one (RISA_CONTEXT_HARD_LIMIT, 225k) it is
+// told to rotate at the next safe point, mid-wave if need be, at the crossing and every RISA_CONTEXT_REMIND_MIN
 // (10). A backlog session has only the soft one, and it is never a forced close: past it the
 // session tells the user its size and asks whether to hand off or keep going,
 // and no answer means keep going. The inbox session has one limit, the soft one
 // (its hard limit equals it): past it, it hands off unasked, at the crossing and
-// every CARETOOK_CONTEXT_REMIND_MIN. The dispatcher's follow-up starts at the hard
+// every RISA_CONTEXT_REMIND_MIN. The dispatcher's follow-up starts at the hard
 // limit (`hardOverAt`).
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
@@ -40,12 +40,12 @@
 //                          remindedSize (where its next soft reminder counts from)
 //
 //   pnpm prd context                the calling session's size and its limits
-//   pnpm prd context --keep "<why>" leave it alone for CARETOOK_CONTEXT_KEEP_MIN (30)
+//   pnpm prd context --keep "<why>" leave it alone for RISA_CONTEXT_KEEP_MIN (30)
 //   pnpm prd context --all [--json] every live session
 //
-// CARETOOK_CONTEXT_LIMIT (the soft limit for every kind; else 120000 tokens for an
-// orchestrator, 160000 for the others), CARETOOK_CONTEXT_HARD_LIMIT
-// (225000; never below the soft one) and CARETOOK_CONTEXT_REMIND_MIN (10) are for
+// RISA_CONTEXT_LIMIT (the soft limit for every kind; else 120000 tokens for an
+// orchestrator, 160000 for the others), RISA_CONTEXT_HARD_LIMIT
+// (225000; never below the soft one) and RISA_CONTEXT_REMIND_MIN (10) are for
 // orchestrators, backlog and inbox sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
@@ -89,15 +89,15 @@ const ORCHESTRATOR_SOFT = 120_000;
 const OTHER_SOFT = 160_000;
 /** A session kind's soft limit; the soft-limit variable (above) overrides it for every kind. */
 export const limitOf = (env = process.env, /** @type {string | undefined} */ kind = undefined) =>
-  positive(env.CARETOOK_CONTEXT_LIMIT, kind === "prd" ? ORCHESTRATOR_SOFT : OTHER_SOFT);
+  positive(env.RISA_CONTEXT_LIMIT, kind === "prd" ? ORCHESTRATOR_SOFT : OTHER_SOFT);
 /** An orchestrator's hard limit, never below the soft one. */
 export const hardLimitOf = (env = process.env) =>
-  Math.max(positive(env.CARETOOK_CONTEXT_HARD_LIMIT, 225_000), limitOf(env));
+  Math.max(positive(env.RISA_CONTEXT_HARD_LIMIT, 225_000), limitOf(env));
 /** A session kind's hard limit: a backlog session has none (null); the inbox session's one limit is the soft one. */
 export const hardLimitFor = (/** @type {string | undefined} */ kind, env = process.env) =>
   kind === "backlog" ? null : kind === "inbox" ? limitOf(env) : hardLimitOf(env);
-const remindMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_REMIND_MIN, 10) * MIN_MS;
-const keepMsOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_KEEP_MIN, 30) * MIN_MS;
+const remindMsOf = (env = process.env) => positive(env.RISA_CONTEXT_REMIND_MIN, 10) * MIN_MS;
+const keepMsOf = (env = process.env) => positive(env.RISA_CONTEXT_KEEP_MIN, 30) * MIN_MS;
 
 export const contextDirOf = (/** @type {string} */ sessionsDir) => join(dirname(sessionsDir), ".context");
 export const kilo = (/** @type {number} */ n) => `${Math.round(n / 1000)}k`;
@@ -367,9 +367,9 @@ export function sizeNote(record, { limit = limitOf(), hard = hardLimitOf(), now 
 
 /** The hook: its output for this input (the JSON for claude, or ""). Throws on anything unreadable. */
 export function runHook(/** @type {string} */ raw, env = process.env, now = Date.now()) {
-  const name = env.CARETOOK_SESSION_NAME;
-  const pid = Number(env.CARETOOK_SESSION_PID);
-  const sessions = env.CARETOOK_SESSIONS_DIR;
+  const name = env.RISA_SESSION_NAME;
+  const pid = Number(env.RISA_SESSION_PID);
+  const sessions = env.RISA_SESSIONS_DIR;
   if (!name || !pid || !sessions) return "";
   const session = readRecord(sessions, name);
   if (session?.pid !== pid) return "";
@@ -468,8 +468,8 @@ function cli(/** @type {string[]} */ args) {
     console.error('context --keep needs the reason: pnpm prd context --keep "<why>"');
     return 2;
   }
-  const name = process.env.CARETOOK_SESSION_NAME;
-  const pid = Number(process.env.CARETOOK_SESSION_PID);
+  const name = process.env.RISA_SESSION_NAME;
+  const pid = Number(process.env.RISA_SESSION_PID);
   const session = name ? readRecord(sessions, name) : null;
   if (!name || !pid || session?.pid !== pid) {
     console.error("context: this shell isn't in a session the wrapper started with the context watch");

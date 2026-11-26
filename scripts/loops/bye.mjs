@@ -33,9 +33,9 @@
 // runs it again. It never discards work: it removes no file, worktree, branch
 // or ask. --dry-run only reports; --json prints the facts and the verdict.
 //
-// Env: TRUNK (dev), CARETOOK_SESSIONS_DIR, CARETOOK_ASKS_DIR,
-// CARETOOK_NOTICES_DIR, CARETOOK_LEASE_ROOT (default the main checkout's
-// .loops/…), CARETOOK_CLAUDE_BIN (tests).
+// Env: TRUNK (dev), RISA_SESSIONS_DIR, RISA_ASKS_DIR,
+// RISA_NOTICES_DIR, RISA_LEASE_ROOT (default the main checkout's
+// .loops/…), RISA_CLAUDE_BIN (tests).
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -256,7 +256,7 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
   const branch = top ? (git(top, "branch", "--show-current") ?? "") : "";
   const table = processTable();
   const sessionPid = ancestorClaude(process.pid, table, claudeName());
-  const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");
+  const sessionsDir = env.RISA_SESSIONS_DIR || join(loops, ".sessions");
   const rec = sessionPid
     ? readRecords(sessionsDir).find(
         ({ record }) => record?.pid === sessionPid && isLive(record, processOf(sessionPid)),
@@ -339,7 +339,7 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
   // Leases: the worktree's (by name), and any held under the session's claude.
   const under = sessionPid && role !== "slice" ? descendants(sessionPid, table) : new Set();
   const wtName = own && topic ? basename(own) : null;
-  const leases = readLeases(env.CARETOOK_LEASE_ROOT || join(loops, ".lease")).filter(
+  const leases = readLeases(env.RISA_LEASE_ROOT || join(loops, ".lease")).filter(
     (l) =>
       (wtName && l.worktree === wtName) ||
       (role !== "slice" && l.pid && (l.pid === sessionPid || under.has(l.pid))),
@@ -357,7 +357,7 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
           .map(([pid, row]) => ({ pid, args: row.args }))
       : [];
 
-  const asksDir = env.CARETOOK_ASKS_DIR || join(loops, ".asks");
+  const asksDir = env.RISA_ASKS_DIR || join(loops, ".asks");
   const asks =
     role === "slice" || !rec
       ? []
@@ -366,7 +366,7 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
           .map((a) => ({ id: a.id, text: a.text }));
   const notices =
     topic && role !== "slice"
-      ? listNotices(env.CARETOOK_NOTICES_DIR || join(loops, ".notices"))
+      ? listNotices(env.RISA_NOTICES_DIR || join(loops, ".notices"))
           .filter((n) => n.topic === topic && n.session !== name)
           .map((n) => ({ id: n.id, session: n.session, text: n.text }))
       : [];

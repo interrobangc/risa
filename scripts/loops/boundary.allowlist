@@ -9,9 +9,7 @@ scripts/ci/blame.test.mjs app-path 1
 scripts/ci/blame.test.mjs project-name 1
 scripts/ci/candidate.mjs project-name 1
 scripts/ci/candidate.test.mjs project-name 1
-scripts/ci/ci-io.mjs project-env 3
 scripts/ci/ci-runs.mjs project-name 2
-scripts/ci/ci.mjs project-env 1
 scripts/ci/ci.mjs project-name 1
 scripts/ci/ci.test.mjs app-path 4
 scripts/ci/promote.test.mjs project-name 1
@@ -21,33 +19,15 @@ scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (th
 scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
 scripts/ci/verdict.test.mjs project-to-core 2 # ties the core's verdict fixtures and reader version to the writer, buildVerdict: the core keeps the fixtures at the move, this half goes with the writer
 scripts/deploy/workflows.test.mjs project-to-core 3
-scripts/loops/ask.mjs project-env 21
 scripts/loops/ask.mjs project-name 1
-scripts/loops/ask.test.mjs project-env 22
 scripts/loops/ask.test.mjs project-name 1
-scripts/loops/asks.mjs project-env 1
-scripts/loops/autostart.mjs project-env 5
 scripts/loops/autostart.mjs project-name 1
-scripts/loops/autostart.test.mjs project-env 7
 scripts/loops/autostart.test.mjs project-name 2
 scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
 scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
-scripts/loops/browser.sh project-env 32
-scripts/loops/browser.test.mjs project-env 28
 scripts/loops/bye.mjs app-path 1
-scripts/loops/bye.mjs project-env 9
-scripts/loops/bye.test.mjs project-env 10
-scripts/loops/captain.mjs project-env 2
-scripts/loops/captain.test.mjs project-env 2
-scripts/loops/check-budget.mjs project-env 7
-scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 7
 scripts/loops/check-gate.test.mjs project-name 1
-scripts/loops/check-hook.sh project-env 4 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
-scripts/loops/check-hook.test.mjs project-env 3 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
-scripts/loops/check-run.sh project-env 30
-scripts/loops/check-run.test.mjs project-env 45
-scripts/loops/check-times.mjs project-env 2
 scripts/loops/codex-review.fixtures/clean.json project-name 10
 scripts/loops/codex-review.fixtures/declined.json project-name 8
 scripts/loops/codex-review.fixtures/findings.json project-name 6
@@ -58,121 +38,42 @@ scripts/loops/codex-review.fixtures/running.json project-name 2
 scripts/loops/codex-review.fixtures/stale.json project-name 10
 scripts/loops/codex-review.fixtures/waiting.json project-name 1
 scripts/loops/codex-review.test.mjs project-name 2
-scripts/loops/context-settings.json project-env 14
-scripts/loops/context.mjs project-env 17
-scripts/loops/context.test.mjs project-env 11
-scripts/loops/disk.test.mjs project-env 28
-scripts/loops/dispatch-context.mjs project-env 2
-scripts/loops/dispatch-context.test.mjs project-env 21
-scripts/loops/dispatch-pick.mjs project-env 3
 scripts/loops/dispatch-pick.test.mjs app-path 2
-scripts/loops/dispatch-stuck.mjs project-env 4
-scripts/loops/dispatch.mjs project-env 54
 scripts/loops/dispatch.mjs project-name 1
-scripts/loops/dispatch.test.mjs project-env 57
 scripts/loops/dispatch.test.mjs project-name 1
-scripts/loops/drain.mjs project-env 10
 scripts/loops/drain.test.mjs app-path 4
-scripts/loops/drain.test.mjs project-env 22
-scripts/loops/end-session.sh project-env 4
-scripts/loops/gc.sh project-env 1
-scripts/loops/heartbeat.mjs project-env 3
 scripts/loops/heartbeat.test.mjs app-path 1
-scripts/loops/heartbeat.test.mjs project-env 5
-scripts/loops/host.mjs project-env 16 # the iTerm2 and LaunchAgents knobs, moved here from autostart.mjs, dispatch.mjs and open-session.sh, and the claude stub's, from dispatch.mjs and sessions.mjs: the RISA_ rename, orchestration-split-3 slice 4; the Claude folders' test stand-ins, from open-session.mjs and open-session.sh: orchestration-split-3 slice 7
-scripts/loops/host.test.mjs project-env 16 # sets the host layer's knobs: the RISA_ rename, orchestration-split-3 slice 4; the usage readings' knobs for the per-account test, orchestration-split-3 slice 7
-scripts/loops/inbox-settings.json project-env 14
-scripts/loops/inventory-facts.mjs project-env 13
 scripts/loops/inventory-facts.mjs project-name 1
 scripts/loops/inventory.mjs project-name 1
 scripts/loops/inventory.test.mjs project-name 9
-scripts/loops/keep-alive.mjs project-env 1
 scripts/loops/land-fixture.mjs app-path 1
-scripts/loops/land-fixture.mjs project-env 4
 scripts/loops/land-force-resume.test.mjs app-path 6
-scripts/loops/land-force-resume.test.mjs project-env 7
 scripts/loops/land-gate.test.mjs app-path 5
-scripts/loops/land-gate.test.mjs project-env 3
-scripts/loops/land-journal.mjs project-env 1
 scripts/loops/land-unsynced.test.mjs app-path 30
-scripts/loops/land-unsynced.test.mjs project-env 10
 scripts/loops/land-unsynced.test.mjs project-name 3
-scripts/loops/land.sh project-env 14
 scripts/loops/land.test.mjs app-path 20
 scripts/loops/land.test.mjs core-to-project 5
-scripts/loops/land.test.mjs project-env 5
-scripts/loops/lease.mjs project-env 2
-scripts/loops/lease.sh project-env 25
-scripts/loops/lease.test.mjs project-env 18
-scripts/loops/lib.sh project-env 27
 scripts/loops/lib.sh project-name 1
-scripts/loops/load-gate.mjs project-env 14
 scripts/loops/load-gate.test.mjs app-path 4
-scripts/loops/load-gate.test.mjs project-env 47
-scripts/loops/ls.sh project-env 9
-scripts/loops/metrics.mjs project-env 3
 scripts/loops/metrics.test.mjs core-to-project 1
-scripts/loops/metrics.test.mjs project-env 2
-scripts/loops/new.sh project-env 5
-scripts/loops/notice.mjs project-env 6
-scripts/loops/notices.test.mjs project-env 3
-scripts/loops/open-session.mjs project-env 7
 scripts/loops/open-session.mjs project-name 3
-scripts/loops/open-session.sh project-env 3
-scripts/loops/open-session.test.mjs project-env 10
 scripts/loops/open-session.test.mjs project-name 7
-scripts/loops/pr.sh project-env 2
-scripts/loops/prd.sh project-env 40
 scripts/loops/prd.sh project-name 3
-scripts/loops/prompts/backlog.sh project-env 4 # tool knobs (CARETOOK_CAPTAIN, CARETOOK_MAX_PRDS): the RISA_ rename, orchestration-split-3 slice 4
 scripts/loops/reclaim.sh app-path 8
 scripts/loops/reclaim.test.mjs app-path 4
-scripts/loops/reclaim.test.mjs project-env 3
 scripts/loops/reclaim.test.mjs project-name 1
 scripts/loops/recover-lib.test.mjs project-name 2
-scripts/loops/recover.sh project-env 18
 scripts/loops/recover.sh project-name 1
-scripts/loops/recover.test.mjs project-env 29
 scripts/loops/recover.test.mjs project-name 1
-scripts/loops/review.sh project-env 2
-scripts/loops/review.test.mjs project-env 1
-scripts/loops/rotate-into.sh project-env 6
-scripts/loops/rotate.sh project-env 2
 scripts/loops/rotate.test.mjs app-path 3
-scripts/loops/rotate.test.mjs project-env 11
 scripts/loops/rotate.test.mjs project-name 1
-scripts/loops/run-log.mjs project-env 3
-scripts/loops/run-log.test.mjs project-env 4
-scripts/loops/sample-project/prompt-golden.txt project-env 2 # backlog.sh's CARETOOK_MAX_PRDS, rendered: goes with the RISA_ rename, orchestration-split-3 slice 4
-scripts/loops/session-requests.mjs project-env 5
-scripts/loops/session-requests.test.mjs project-env 2
-scripts/loops/session.sh project-env 15
 scripts/loops/session.sh project-name 1
-scripts/loops/sessions.mjs project-env 4
-scripts/loops/sessions.test.mjs project-env 20
 scripts/loops/sessions.test.mjs project-name 1
-scripts/loops/skeptic.mjs project-env 4
-scripts/loops/skeptics.mjs project-env 4
-scripts/loops/skeptics.test.mjs project-env 5
 scripts/loops/slice-fields.test.mjs app-path 3
-scripts/loops/stack-lib.sh project-env 2 # gc_stopped_after's CARETOOK_GC_STOPPED_HOURS, a tool knob (the gc ages stay core): the RISA_ rename, orchestration-split-3
-scripts/loops/stack.test.mjs project-env 2
-scripts/loops/status-extra.mjs project-env 17
-scripts/loops/status-extra.test.mjs project-env 20
 scripts/loops/tidy-cli.mjs core-to-project 1
-scripts/loops/tidy-cli.mjs project-env 6
-scripts/loops/tidy-cli.test.mjs project-env 6
 scripts/loops/tidy.test.mjs project-name 1
-scripts/loops/tooling-lint.mjs project-env 2
-scripts/loops/unsynced.sh project-env 2
 scripts/loops/unsynced.sh project-name 2
-scripts/loops/usage.mjs project-env 12
-scripts/loops/usage.test.mjs project-env 13
-scripts/loops/watch.mjs project-env 27
 scripts/loops/watch.test.mjs app-path 1
-scripts/loops/watch.test.mjs project-env 9
-scripts/loops/watchdog.mjs project-env 20
-scripts/loops/watchdog.test.mjs project-env 10
 scripts/loops/workers.test.mjs app-path 1
 scripts/project/check-areas.d/_global project-to-core 3 # the core's folders (scripts/loops, scripts/backlog, scripts/ci) map to no check, so the check-areas lint covers every tracked file: the rules go when the core moves out
 scripts/project/check-plan-rules.json project-to-core 2 # scripts/ci asks for the full suite (the rule and its reason): the folder holds core files until the move, then only Caretook's

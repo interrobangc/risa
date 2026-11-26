@@ -32,7 +32,7 @@
 # on a known dev brake (a brake verdict on the tip of dev it measures against or
 # on origin/dev's tip after a fetch, or a live dev-brake notice; no verdict is not
 # a brake; an unreadable state warns), or with
-# CARETOOK_UNSYNCED=off: those keep the drift refusal.
+# RISA_UNSYNCED=off: those keep the drift refusal.
 # --tier <t>: the tier to wait for; the default is what the diff proposes
 # (check-plan.mjs). Below the proposal it needs --why "<reason>", and the report
 # names both; `none` under a real proposal takes --force. The gate
@@ -75,7 +75,7 @@
 #
 # The landing journal (land-journal.mjs): from just before its first step that
 # changes anything (the PR path's push, the local merge), a landing records each
-# step in .loops/.landing/<branch>.json (CARETOOK_LANDING_DIR) before running it,
+# step in .loops/.landing/<branch>.json (RISA_LANDING_DIR) before running it,
 # and removes the record at the end; the to-test file's body is written there
 # first too, so a resume can place it. While a record is there, land refuses the
 # branch. --resume <branch> reads the record, asks git and GitHub how far it got,
@@ -86,9 +86,9 @@
 # an unknown state, or a MERGE_HEAD that isn't the recorded tip, never aborted).
 # It never reruns a merge. No record: it says so and exits 0.
 #
-# Test seams: CARETOOK_LAND_KILL_AT=<step> (a throwaway branch only) kills land
+# Test seams: RISA_LAND_KILL_AT=<step> (a throwaway branch only) kills land
 # with SIGKILL just before it records that step, as a crash would.
-# CARETOOK_PR_THROWAWAY=1 (a branch with "throwaway" in its name
+# RISA_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) measures the sync against origin/dev instead of dev, and stops the PR
 # path after its refusals, printing the merge it would run: nothing is pushed
 # or merged.
@@ -104,7 +104,7 @@ proposal="" proposal_why="" tierline="" gate_base="" gate_run="" gate_flakes="" 
 unsynced="" unsynced_tc="" unsynced_line="" unsynced_report=""
 skeptics="" byuser="" skeptic_tip="" verdict_lines="" resume="" journal_at="" noticed=""
 ci_bin="$(cd "$(dirname "$0")/.." && pwd)/ci/ci.mjs"
-skeptic_dir=${CARETOOK_SKEPTIC_DIR:-$loops/.skeptic}
+skeptic_dir=${RISA_SKEPTIC_DIR:-$loops/.skeptic}
 while (($#)); do
   case $1 in
     -m) msg=${2:?-m "subject"}; shift 2 ;;
@@ -181,13 +181,13 @@ land_log_end() {
 }
 # The landing journal (land-journal.mjs; the header says what it holds). Its
 # writes never fail a landing: a failure only warns.
-journal_dir=${CARETOOK_LANDING_DIR:-$loops/.landing}
+journal_dir=${RISA_LANDING_DIR:-$loops/.landing}
 journal=$journal_dir/${branch//\//-}.json
 journal_body=${journal%.json}.to-test.md
 journal_bin="$(dirname "$0")/land-journal.mjs"
 # journal_step STEP [key=value…] → record STEP as the one about to run.
 journal_step() {
-  if [[ -n ${CARETOOK_LAND_KILL_AT:-} && $CARETOOK_LAND_KILL_AT == "$1" && $branch == *throwaway* ]]; then
+  if [[ -n ${RISA_LAND_KILL_AT:-} && $RISA_LAND_KILL_AT == "$1" && $branch == *throwaway* ]]; then
     kill -KILL $$
   fi
   journal_at=$1
@@ -259,7 +259,7 @@ if [[ -z $resume ]]; then
   # judge_unsynced → the refusals that need no CI: sets unsynced, or refuses.
   judge_unsynced() {
     local go why
-    [[ ${CARETOOK_UNSYNCED:-} != off ]] || drift_refusal "CARETOOK_UNSYNCED=off"
+    [[ ${RISA_UNSYNCED:-} != off ]] || drift_refusal "RISA_UNSYNCED=off"
     [[ -z $force || -n $byuser ]] || drift_refusal "a skeptic's go doesn't cover an unsynced tip: sync, or --force --by-user on the user's word"
     [[ -z $fixes ]] || drift_refusal "a landing with --fixes lands only synced"
     IFS=$'\t' read -r go why _ <<< "$(unsynced_verdict "$drift_ref" "$branch")"
@@ -573,7 +573,7 @@ post_landed() {
 }
 # post_notice TEXT → TEXT on the notice board for six hours, from the landing's session.
 post_notice() {
-  CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
+  RISA_NOTICES_DIR=${RISA_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
     --session "$(landing_session)" --topic "$topic" --for 360 "$1" >/dev/null 2>&1
 }
 # install_main → main_install (lib.sh) after a landing; when it couldn't install,
@@ -791,8 +791,8 @@ run_gate
 land_unsynced
 [[ -z $unsynced_line ]] || merge+=(--body "$unsynced_line")
 skeptic_report
-if [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]]; then
-  echo "CARETOOK_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push $trunk, then run:"
+if [[ ${RISA_PR_THROWAWAY:-} == 1 ]]; then
+  echo "RISA_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push $trunk, then run:"
   printf ' %q' "${merge[@]:1}"; echo # the gh command, without host_cli
   exit 0
 fi

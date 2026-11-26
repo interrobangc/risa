@@ -25,17 +25,17 @@
 // the quiet limit of each other (a usage limit, a network loss) are one finding
 // and nothing is acted on; `--wait` raises a finding once.
 //
-// Files, per topic, in the main checkout's .loops/.watch/<topic>/ (CARETOOK_WATCH_DIR):
+// Files, per topic, in the main checkout's .loops/.watch/<topic>/ (RISA_WATCH_DIR):
 //   marks.jsonl  what the orchestrator did, appended by --mark: { slice, mark, at,
 //                until? (left: its recheck time), ask? (asked: its id), note? }
 //   state.json   the last reading's time, the clock reset, each slice's pending
 //                action and since when (the dispatcher reads it), raised findings
 //
-// Settings (minutes unless said): CARETOOK_WATCH_QUIET_MIN (20),
-// CARETOOK_WATCH_RESTART_MIN (10), CARETOOK_WATCH_NO_PROGRESS_MIN (45),
-// CARETOOK_WATCH_LEFT_MIN (60, a `left` mark's recheck without --until),
-// CARETOOK_WATCH_SLEEP_GAP (seconds, 600), CARETOOK_WATCH_POLL (seconds, 60);
-// CARETOOK_WATCH_WAKE=off ignores the wake time (tests).
+// Settings (minutes unless said): RISA_WATCH_QUIET_MIN (20),
+// RISA_WATCH_RESTART_MIN (10), RISA_WATCH_NO_PROGRESS_MIN (45),
+// RISA_WATCH_LEFT_MIN (60, a `left` mark's recheck without --until),
+// RISA_WATCH_SLEEP_GAP (seconds, 600), RISA_WATCH_POLL (seconds, 60);
+// RISA_WATCH_WAKE=off ignores the wake time (tests).
 // `--wait` exits 0 with the actions once there is one, 75 at --timeout (14400 s).
 //
 // Pure: decide, watchFacts, planStates, readingClock, parseUntil. The rest
@@ -69,12 +69,12 @@ export function settingsFrom(/** @type {NodeJS.ProcessEnv} */ env = {}) {
     return env[k] && Number.isFinite(v) && v > 0 ? v : d;
   };
   return {
-    quietMin: num("CARETOOK_WATCH_QUIET_MIN", 20),
-    restartMin: num("CARETOOK_WATCH_RESTART_MIN", 10),
-    noProgressMin: num("CARETOOK_WATCH_NO_PROGRESS_MIN", 45),
-    leftMin: num("CARETOOK_WATCH_LEFT_MIN", 60),
-    sleepGapSec: num("CARETOOK_WATCH_SLEEP_GAP", 600),
-    pollSec: num("CARETOOK_WATCH_POLL", 60),
+    quietMin: num("RISA_WATCH_QUIET_MIN", 20),
+    restartMin: num("RISA_WATCH_RESTART_MIN", 10),
+    noProgressMin: num("RISA_WATCH_NO_PROGRESS_MIN", 45),
+    leftMin: num("RISA_WATCH_LEFT_MIN", 60),
+    sleepGapSec: num("RISA_WATCH_SLEEP_GAP", 600),
+    pollSec: num("RISA_WATCH_POLL", 60),
   };
 }
 
@@ -425,9 +425,9 @@ function writeState(/** @type {string} */ dir, /** @type {string} */ topic, /** 
   }
 }
 
-/** macOS's last wake (sysctl kern.waketime), or null; CARETOOK_WATCH_WAKE=off: none. */
+/** macOS's last wake (sysctl kern.waketime), or null; RISA_WATCH_WAKE=off: none. */
 function wakeTime(/** @type {NodeJS.ProcessEnv} */ env) {
-  if (env.CARETOOK_WATCH_WAKE === "off") return null;
+  if (env.RISA_WATCH_WAKE === "off") return null;
   try {
     const out = execFileSync("sysctl", ["-n", "kern.waketime"], {
       encoding: "utf8",
@@ -456,10 +456,10 @@ function mergingIn(/** @type {string} */ dir) {
  */
 export function reading({ topic, env, now = Date.now(), raise = false }) {
   const settings = settingsFrom(env);
-  const sessionsDir = env.CARETOOK_SESSIONS_DIR ?? "";
+  const sessionsDir = env.RISA_SESSIONS_DIR ?? "";
   const loops = dirname(sessionsDir);
-  const watchDir = env.CARETOOK_WATCH_DIR || join(loops, ".watch");
-  const asksDir = env.CARETOOK_ASKS_DIR || join(loops, ".asks");
+  const watchDir = env.RISA_WATCH_DIR || join(loops, ".watch");
+  const asksDir = env.RISA_ASKS_DIR || join(loops, ".asks");
   /** @type {Map<number, string>} */
   const live = new Map();
   for (const { name, record } of readRecords(sessionsDir))
@@ -467,8 +467,8 @@ export function reading({ topic, env, now = Date.now(), raise = false }) {
   const facts = workerFacts({
     loops,
     sessionsDir,
-    leaseRoot: env.CARETOOK_LEASE_ROOT || join(loops, ".lease"),
-    browserRoot: env.CARETOOK_BROWSER_LEASES || undefined,
+    leaseRoot: env.RISA_LEASE_ROOT || join(loops, ".lease"),
+    browserRoot: env.RISA_BROWSER_LEASES || undefined,
     live: (session, pid) => live.get(pid) === session,
     now,
   });
@@ -491,8 +491,8 @@ export function reading({ topic, env, now = Date.now(), raise = false }) {
     if (f.branch.startsWith(branchKinds().branch("slice", topic, ""))) merging[f.name] = mergingIn(f.dir);
   const { workers, orchestrator } = watchFacts({ topic, facts, plan, asks, merging });
   const data = readData({
-    runLog: env.CARETOOK_RUN_LOG || join(loops, ".run-log.jsonl"),
-    checkLog: env.CARETOOK_CHECK_LOG || join(loops, ".check-times.log"),
+    runLog: env.RISA_RUN_LOG || join(loops, ".run-log.jsonl"),
+    checkLog: env.RISA_CHECK_LOG || join(loops, ".check-times.log"),
     flakeLog: "",
   });
   const prev = readState(watchDir, topic);
@@ -559,8 +559,8 @@ async function main(/** @type {string[]} */ argv) {
     else usage(`unknown argument ${a}`);
   }
   const env = process.env;
-  if (!env.CARETOOK_SESSIONS_DIR) usage("CARETOOK_SESSIONS_DIR must be set");
-  const watchDir = env.CARETOOK_WATCH_DIR || join(dirname(env.CARETOOK_SESSIONS_DIR ?? ""), ".watch");
+  if (!env.RISA_SESSIONS_DIR) usage("RISA_SESSIONS_DIR must be set");
+  const watchDir = env.RISA_WATCH_DIR || join(dirname(env.RISA_SESSIONS_DIR ?? ""), ".watch");
 
   if (mark) {
     const [slice, what] = mark;

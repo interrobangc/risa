@@ -407,7 +407,7 @@ const readyToAsk = (pid) =>
   });
 const answer = (id, text) =>
   execFileSync("node", [scripts("ask.mjs"), "answer", id, text], {
-    env: { ...env, CARETOOK_ASKS_DIR: asksDir },
+    env: { ...env, RISA_ASKS_DIR: asksDir },
     encoding: "utf8",
   });
 
@@ -467,25 +467,25 @@ describe("the tick", () => {
     env = {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
-      CARETOOK_CLAUDE_BIN: "claude-stub",
-      CARETOOK_ITERM_APP: join(root, "iTerm.app"),
-      CARETOOK_SESSIONS_DIR: "",
-      CARETOOK_ASKS_DIR: "",
-      CARETOOK_ASK_NOTIFY: "",
-      CARETOOK_LOAD_FILE: join(root, "load"),
-      CARETOOK_LOAD_BUSY: "8",
-      CARETOOK_LOAD_GATE: "",
-      CARETOOK_CONTEXT_LIMIT: "",
-      CARETOOK_CONTEXT_HARD_LIMIT: "",
-      CARETOOK_CONTEXT_NUDGE_MIN: "",
-      CARETOOK_CONTEXT_WATCH: "",
-      CARETOOK_KEEP_SESSIONS: "off",
+      RISA_CLAUDE_BIN: "claude-stub",
+      RISA_ITERM_APP: join(root, "iTerm.app"),
+      RISA_SESSIONS_DIR: "",
+      RISA_ASKS_DIR: "",
+      RISA_ASK_NOTIFY: "",
+      RISA_LOAD_FILE: join(root, "load"),
+      RISA_LOAD_BUSY: "8",
+      RISA_LOAD_GATE: "",
+      RISA_CONTEXT_LIMIT: "",
+      RISA_CONTEXT_HARD_LIMIT: "",
+      RISA_CONTEXT_NUDGE_MIN: "",
+      RISA_CONTEXT_WATCH: "",
+      RISA_KEEP_SESSIONS: "off",
       // The drain (drain.mjs): off, and never the machine's own readings or landings.
-      CARETOOK_USAGE_WATCH: "off",
-      CARETOOK_USAGE_DIR: "",
-      CARETOOK_LANDING_DIR: "",
-      CARETOOK_PICKUP_EVERY: "off",
-      CARETOOK_CLOCK_FILE: clock,
+      RISA_USAGE_WATCH: "off",
+      RISA_USAGE_DIR: "",
+      RISA_LANDING_DIR: "",
+      RISA_PICKUP_EVERY: "off",
+      RISA_CLOCK_FILE: clock,
       STUB_STATE: stubs,
     };
   });
@@ -727,7 +727,7 @@ describe("the tick", () => {
 
   it("does nothing with the watch off", () => {
     readyToAsk(liveSession());
-    tick(["--once"], { CARETOOK_CONTEXT_WATCH: "off" });
+    tick(["--once"], { RISA_CONTEXT_WATCH: "off" });
     expect(listAsks(asksDir)).toEqual([]);
   });
 
@@ -735,7 +735,7 @@ describe("the tick", () => {
     const pid = liveSession();
     readyToAsk(pid);
     // The fake clock is ahead of the ask's real one: a long default keeps it open.
-    tick(["--once"], { CARETOOK_ASK_DEFAULT_MIN: "9999999" });
+    tick(["--once"], { RISA_ASK_DEFAULT_MIN: "9999999" });
     const { id } = listAsks(asksDir)[0];
     writeSize({ pid, size: 1000 });
     tick();

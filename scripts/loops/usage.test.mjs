@@ -304,7 +304,7 @@ describe("the commands", () => {
   const prd = (args, env) =>
     spawnSync("bash", [join(HERE, "prd.sh"), ...args], {
       encoding: "utf8",
-      env: { ...process.env, TZ: "UTC", CARETOOK_USAGE_DIR: "", ...env },
+      env: { ...process.env, TZ: "UTC", RISA_USAGE_DIR: "", ...env },
     });
   const fresh = () => {
     const main = mkdtempSync(join(root, "main-"));
@@ -313,9 +313,9 @@ describe("the commands", () => {
     return {
       dir: join(main, ".loops", ".usage"),
       env: {
-        CARETOOK_SESSIONS_DIR: sessions,
-        CARETOOK_SESSION_NAME: "prd-a",
-        CARETOOK_SESSION_PID: "99999999",
+        RISA_SESSIONS_DIR: sessions,
+        RISA_SESSION_NAME: "prd-a",
+        RISA_SESSION_PID: "99999999",
       },
     };
   };
@@ -359,7 +359,7 @@ describe("the commands", () => {
     writeFileSync(blocked, "not a folder\n");
     const r = node(["statusline"], {
       stdin: JSON.stringify(input({ five: [1, now + MIN] })),
-      env: { ...env, CARETOOK_USAGE_DIR: join(blocked, "usage") },
+      env: { ...env, RISA_USAGE_DIR: join(blocked, "usage") },
     });
     expect(r.status).toBe(0);
     expect(r.stderr).toBe("");
@@ -401,7 +401,7 @@ describe("the commands", () => {
   it("pnpm prd usage and status's line show usage, unknown and the reset time", () => {
     const main = mkdtempSync(join(root, "prd-"));
     const usage = join(main, "usage");
-    const status = (env) => node(["status"], { env: { CARETOOK_USAGE_DIR: usage, ...env } });
+    const status = (env) => node(["status"], { env: { RISA_USAGE_DIR: usage, ...env } });
     const none = status();
     expect(none.status).toBe(0);
     expect(none.stdout).toBe("USAGE: unknown (no reading in the last 15m) (pnpm prd usage)\n");
@@ -420,18 +420,18 @@ describe("the commands", () => {
       new RegExp(`^USAGE: 5h 61% \\(resets (\\w{3} )?${clockOf(reset)}, in 2h\\) · read 1m ago`),
     );
 
-    const r = prd(["usage"], { CARETOOK_USAGE_DIR: usage });
+    const r = prd(["usage"], { RISA_USAGE_DIR: usage });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toMatch(/^Usage, read 1m ago from 1 session:\n {2}5-hour +61% {2}resets /);
     expect(r.stdout).toContain(`${clockOf(reset)}, in 2h`);
-    const json = JSON.parse(prd(["usage", "--json"], { CARETOOK_USAGE_DIR: usage }).stdout);
+    const json = JSON.parse(prd(["usage", "--json"], { RISA_USAGE_DIR: usage }).stdout);
     expect(json).toMatchObject({ known: true, fiveHour: { percent: 61, resetsAt: reset }, resetsAt: reset });
 
     // A stale reading reads as unknown, and the stale-age setting is honoured.
-    expect(status({ CARETOOK_USAGE_STALE_MIN: "0.5" }).stdout).toBe(
+    expect(status({ RISA_USAGE_STALE_MIN: "0.5" }).stdout).toBe(
       "USAGE: unknown (no reading in the last 30s) (pnpm prd usage)\n",
     );
-    expect(prd(["usage"], { CARETOOK_USAGE_DIR: join(main, "none") }).stdout).toMatch(
+    expect(prd(["usage"], { RISA_USAGE_DIR: join(main, "none") }).stdout).toMatch(
       /^Usage: unknown: no current reading/,
     );
   });
@@ -440,10 +440,10 @@ describe("the commands", () => {
     for (const f of ["context-settings.json", "inbox-settings.json"]) {
       const s = JSON.parse(readFileSync(join(HERE, f), "utf8"));
       expect(s.statusLine).toMatchObject({ type: "command", refreshInterval: 60 });
-      expect(s.statusLine.command).toContain('"$(dirname "$CARETOOK_CONTEXT_HOOK")/usage.mjs" statusline');
+      expect(s.statusLine.command).toContain('"$(dirname "$RISA_CONTEXT_HOOK")/usage.mjs" statusline');
       expect(s.hooks.StopFailure[0].hooks[0].command).toContain('usage.mjs" stop-failure');
     }
-    // The command as a shell runs it: the hook's folder found from CARETOOK_CONTEXT_HOOK, silent without it.
+    // The command as a shell runs it: the hook's folder found from RISA_CONTEXT_HOOK, silent without it.
     const s = JSON.parse(readFileSync(join(HERE, "context-settings.json"), "utf8"));
     const { dir, env } = fresh();
     const now = Date.now();
@@ -455,7 +455,7 @@ describe("the commands", () => {
       });
     expect(run({}).stdout).toBe("");
     expect(files(dir)).toEqual([]);
-    const r = run({ CARETOOK_CONTEXT_HOOK: join(HERE, "context.mjs") });
+    const r = run({ RISA_CONTEXT_HOOK: join(HERE, "context.mjs") });
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("5h 5%\n");
     expect(files(dir)).toEqual(["prd-a.json"]);

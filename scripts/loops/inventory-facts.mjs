@@ -12,9 +12,9 @@
 //     --facts           the raw facts as JSON
 //
 // DIR defaults to the main checkout of the repo this file is in. Env: TRUNK
-// (dev), CARETOOK_LEASE_ROOT (DIR/.loops/.lease), CARETOOK_MIN_FREE_GB (10),
-// CARETOOK_FREE_GB (overrides the df reading, for tests), CARETOOK_SESSIONS_DIR
-// (DIR/.loops/.sessions), CARETOOK_LANDING_DIR (DIR/.loops/.landing: the
+// (dev), RISA_LEASE_ROOT (DIR/.loops/.lease), RISA_MIN_FREE_GB (10),
+// RISA_FREE_GB (overrides the df reading, for tests), RISA_SESSIONS_DIR
+// (DIR/.loops/.sessions), RISA_LANDING_DIR (DIR/.loops/.landing: the
 // landing journal).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -142,10 +142,10 @@ function readyFacts(/** @type {string} */ dir, /** @type {NodeJS.ProcessEnv} */ 
 const listening = (/** @type {number} */ port, /** @type {NodeJS.ProcessEnv} */ env) =>
   run("lsof", ["-nP", `-tiTCP:${port}`, "-sTCP:LISTEN"], env).out !== "";
 
-/** Free GB on the volume holding DIR (CARETOOK_FREE_GB overrides it). */
+/** Free GB on the volume holding DIR (RISA_FREE_GB overrides it). */
 export function freeGb(/** @type {string} */ dir, /** @type {NodeJS.ProcessEnv} */ env = process.env) {
-  if (env.CARETOOK_FREE_GB) {
-    const n = Number(env.CARETOOK_FREE_GB);
+  if (env.RISA_FREE_GB) {
+    const n = Number(env.RISA_FREE_GB);
     return Number.isFinite(n) ? n : null;
   }
   const r = run("df", ["-Pk", dir], env);
@@ -279,7 +279,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     }
   }
   // Machine-wide leases (lease.sh): reported; a dead holder is taken over by the next taker.
-  const leaseRoot = env.CARETOOK_LEASE_ROOT || join(loops, ".lease");
+  const leaseRoot = env.RISA_LEASE_ROOT || join(loops, ".lease");
   for (const kind of dirs(leaseRoot))
     for (const n of dirs(join(leaseRoot, kind))) {
       const info = leaseInfo(join(leaseRoot, kind, n, "name"));
@@ -313,7 +313,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
   const testDbRunning = testDb.status === 127 || (dockerUp && fact("running", testDb.out) === "yes");
 
   // Which session records the dispatcher manages (session.sh --managed).
-  const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");
+  const sessionsDir = env.RISA_SESSIONS_DIR || join(loops, ".sessions");
   /** @type {string[]} */
   const managed = [];
   let records = [];
@@ -332,7 +332,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     }
 
   // Landings cut off midway (land-journal.mjs): one record each.
-  const landings = listRecords(env.CARETOOK_LANDING_DIR || join(loops, ".landing")).map((r) => ({
+  const landings = listRecords(env.RISA_LANDING_DIR || join(loops, ".landing")).map((r) => ({
     branch: String(r.branch ?? ""),
     path: String(r.path ?? ""),
     step: String(r.step ?? ""),
@@ -340,7 +340,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     file: r.file,
   }));
 
-  const min = Number(env.CARETOOK_MIN_FREE_GB);
+  const min = Number(env.RISA_MIN_FREE_GB);
   return {
     landings,
     worktrees,
@@ -356,7 +356,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     ...(downRecordError ? { downRecordError } : {}),
     disk: {
       freeGb: freeGb(main, env),
-      minGb: env.CARETOOK_MIN_FREE_GB && min >= 0 ? min : DEFAULT_MIN_FREE_GB,
+      minGb: env.RISA_MIN_FREE_GB && min >= 0 ? min : DEFAULT_MIN_FREE_GB,
     },
   };
 }

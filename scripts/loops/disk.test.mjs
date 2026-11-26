@@ -1,7 +1,7 @@
 // The disk guard (lib.sh: free_gb, require_disk, disk_line) and its callers:
 // new.sh for a stacked worktree, stack.sh up, browser.sh's check build, and the
 // status line. A throwaway repo with these scripts copied in, fake pnpm, lsof
-// and df, the stack hooks on the sample project's stub, and CARETOOK_FREE_GB
+// and df, the stack hooks on the sample project's stub, and RISA_FREE_GB
 // standing in for the real reading: nothing here touches real containers,
 // slots, worktrees or the disk.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -52,8 +52,8 @@ const sh = (script, args = [], opts = {}) =>
   });
 const calls = () => (existsSync(log) ? readFileSync(log, "utf8") : "");
 const leases = () => (existsSync(join(loops, ".slots")) ? readdirSync(join(loops, ".slots")) : []);
-const LOW = { CARETOOK_FREE_GB: "9" };
-const ROOMY = { CARETOOK_FREE_GB: "10" };
+const LOW = { RISA_FREE_GB: "9" };
+const ROOMY = { RISA_FREE_GB: "10" };
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "disk-test-")));
@@ -75,13 +75,13 @@ beforeAll(() => {
     NVM_DIR: nvm,
     FAKE_LOG: log,
     TRUNK: "dev",
-    CARETOOK_FREE_GB: "",
-    CARETOOK_MIN_FREE_GB: "",
-    CARETOOK_LEASE_ROOT: join(root, "leases"),
-    CARETOOK_BROWSER_LEASES: join(root, "leases/browser"),
-    CARETOOK_BROWSER_FLAKES: join(root, "flakes.log"),
-    CARETOOK_BROWSER_BUSY: "100000",
-    CARETOOK_BROWSER_SILENCE: "10",
+    RISA_FREE_GB: "",
+    RISA_MIN_FREE_GB: "",
+    RISA_LEASE_ROOT: join(root, "leases"),
+    RISA_BROWSER_LEASES: join(root, "leases/browser"),
+    RISA_BROWSER_FLAKES: join(root, "flakes.log"),
+    RISA_BROWSER_BUSY: "100000",
+    RISA_BROWSER_SILENCE: "10",
     SAMPLE_STACK_STATE: join(root, "stack-state"),
     SAMPLE_STACK_LOG: log,
   };
@@ -125,7 +125,7 @@ beforeEach(() => rmSync(log, { force: true }));
 const refused = (r, what) => {
   expect(r.status).not.toBe(0);
   expect(r.stderr).toContain(`Refusing ${what}: only 9 GB free`);
-  expect(r.stderr).toMatch(/under the 10 GB line \(CARETOOK_MIN_FREE_GB\)/);
+  expect(r.stderr).toMatch(/under the 10 GB line \(RISA_MIN_FREE_GB\)/);
   expect(r.stderr).toMatch(/pnpm prd reclaim/);
 };
 
@@ -141,20 +141,20 @@ describe("the reading", () => {
     expect(lib("free_gb").stdout.trim()).toBe("12");
   });
 
-  it("takes CARETOOK_FREE_GB over df, and CARETOOK_MIN_FREE_GB as the line", () => {
-    expect(lib("free_gb", { CARETOOK_FREE_GB: "3.7" }).stdout.trim()).toBe("3");
+  it("takes RISA_FREE_GB over df, and RISA_MIN_FREE_GB as the line", () => {
+    expect(lib("free_gb", { RISA_FREE_GB: "3.7" }).stdout.trim()).toBe("3");
     expect(lib("min_free_gb").stdout.trim()).toBe("10");
-    expect(lib("min_free_gb", { CARETOOK_MIN_FREE_GB: "25" }).stdout.trim()).toBe("25");
-    expect(lib("min_free_gb", { CARETOOK_MIN_FREE_GB: "lots" }).status).not.toBe(0);
+    expect(lib("min_free_gb", { RISA_MIN_FREE_GB: "25" }).stdout.trim()).toBe("25");
+    expect(lib("min_free_gb", { RISA_MIN_FREE_GB: "lots" }).status).not.toBe(0);
   });
 
-  it("allows exactly the line, refuses under it, and moves with CARETOOK_MIN_FREE_GB", () => {
+  it("allows exactly the line, refuses under it, and moves with RISA_MIN_FREE_GB", () => {
     expect(lib("require_disk x", ROOMY).status).toBe(0);
     expect(lib("require_disk x", LOW).status).not.toBe(0);
-    expect(lib("require_disk x", { CARETOOK_FREE_GB: "9", CARETOOK_MIN_FREE_GB: "5" }).status).toBe(0);
-    expect(lib("require_disk x", { CARETOOK_FREE_GB: "12", CARETOOK_MIN_FREE_GB: "20" }).status).not.toBe(0);
+    expect(lib("require_disk x", { RISA_FREE_GB: "9", RISA_MIN_FREE_GB: "5" }).status).toBe(0);
+    expect(lib("require_disk x", { RISA_FREE_GB: "12", RISA_MIN_FREE_GB: "20" }).status).not.toBe(0);
     // The real df reading (12 GB) against a 20 GB line.
-    expect(lib("require_disk x", { CARETOOK_MIN_FREE_GB: "20" }).stderr).toMatch(/only 12 GB free/);
+    expect(lib("require_disk x", { RISA_MIN_FREE_GB: "20" }).stderr).toMatch(/only 12 GB free/);
   });
 });
 
@@ -169,14 +169,14 @@ describe("new.sh", () => {
 
   it("refuses under a raised line too", () => {
     const r = sh("new.sh", ["slice", "t", "2"], {
-      env: { CARETOOK_FREE_GB: "40", CARETOOK_MIN_FREE_GB: "50" },
+      env: { RISA_FREE_GB: "40", RISA_MIN_FREE_GB: "50" },
     });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/only 40 GB free.*under the 50 GB line/);
   });
 
   it("never refuses a stackless worktree", () => {
-    const r = sh("new.sh", ["slice", "t", "1"], { env: { CARETOOK_FREE_GB: "1" } });
+    const r = sh("new.sh", ["slice", "t", "1"], { env: { RISA_FREE_GB: "1" } });
     expect(r.status, r.stderr).toBe(0);
     expect(existsSync(join(loops, "t-1"))).toBe(true);
   });
@@ -202,7 +202,7 @@ describe("stack.sh up", () => {
   it("refuses to restart a stopped stack below the line, and starts it above", () => {
     const dir = join(loops, "t-2");
     refused(sh("stack.sh", ["up"], { cwd: dir, env: LOW }), "a stack for t-2");
-    const r = sh("stack.sh", ["up"], { cwd: dir, env: { CARETOOK_FREE_GB: "9", CARETOOK_MIN_FREE_GB: "8" } });
+    const r = sh("stack.sh", ["up"], { cwd: dir, env: { RISA_FREE_GB: "9", RISA_MIN_FREE_GB: "8" } });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toMatch(/already has a stack/);
     expect(calls()).toMatch(/^stack up t-2 /m);
@@ -232,7 +232,7 @@ describe("browser.sh's check build", () => {
 
 describe("pnpm prd status", () => {
   it("prints the disk line, flagged when low", () => {
-    const ok = sh("ls.sh", [], { env: { CARETOOK_FREE_GB: "120" } });
+    const ok = sh("ls.sh", [], { env: { RISA_FREE_GB: "120" } });
     expect(ok.stdout).toMatch(/^disk: 120 GB free \(line 10 GB\)$/m);
     const low = sh("ls.sh", [], { env: LOW });
     expect(low.stdout).toMatch(

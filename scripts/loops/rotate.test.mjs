@@ -1,7 +1,7 @@
 // Rotation (`pnpm prd rotate`: rotate.sh, rotate-into.sh, rotate.mjs) and the
 // done flag `pnpm prd rm` writes, against a throwaway repo with these scripts
-// and the backlog tool copied in, a stub claude (CARETOOK_CLAUDE_BIN, named
-// claude-stub so no walk up finds a real claude), CARETOOK_ITERM_APP pointing
+// and the backlog tool copied in, a stub claude (RISA_CLAUDE_BIN, named
+// claude-stub so no walk up finds a real claude), RISA_ITERM_APP pointing
 // nowhere (the opener prints its command) and the stack hooks on the sample
 // project's stub (config-fixture.mjs's stubHookConfig). Nothing here
 // starts a real claude, opens a tab or signals a process it didn't start.
@@ -109,16 +109,16 @@ const STUB = `#!/usr/bin/env bash
 mkdir -p "$STUB_STATE"
 echo "$$" > "$STUB_STATE/pid"
 printf '%s\\n' "$@" > "$STUB_STATE/args"
-[[ -z \${STUB_NAME:-} ]] || cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
+[[ -z \${STUB_NAME:-} ]] || cat "$RISA_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
 case \${STUB_MODE:-exit} in
   exit) exit 0 ;;
   wait)
-    trap 'cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-term"; exit 143' TERM
+    trap 'cat "$RISA_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-term"; exit 143' TERM
     touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
   stubborn) trap '' TERM; touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
   rotate) bash "$PRD_SH" rotate > "$STUB_STATE/rotate.out" 2>&1; echo "$?" > "$STUB_STATE/rotate.code" ;;
   self)
-    trap 'cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-term" 2>/dev/null; exit 143' TERM
+    trap 'cat "$RISA_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-term" 2>/dev/null; exit 143' TERM
     bash "$PRD_SH" rotate --self \${STUB_ARGS:-} > "$STUB_STATE/rotate.out" 2>&1; echo "$?" > "$STUB_STATE/rotate.code"
     [[ -n \${STUB_STAY:-} ]] || exit 0
     touch "$STUB_STATE/ready"; for i in $(seq 200); do sleep 0.1; done ;;
@@ -248,10 +248,10 @@ beforeAll(() => {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
     TRUNK: "dev",
-    CARETOOK_CLAUDE_BIN: stub,
-    CARETOOK_ITERM_APP: join(root, "no-iterm"),
-    CARETOOK_SESSIONS_DIR: "",
-    CARETOOK_ROTATE_WAIT: "",
+    RISA_CLAUDE_BIN: stub,
+    RISA_ITERM_APP: join(root, "no-iterm"),
+    RISA_SESSIONS_DIR: "",
+    RISA_ROTATE_WAIT: "",
     BACKLOG_BY: "",
     STUB_STATE: state,
     PRD_SH: scripts("prd.sh"),
@@ -494,7 +494,7 @@ describe("rotate-into.sh", () => {
     const s = start(stub, [], { STUB_MODE: "stubborn" }, wt);
     await until(() => existsSync(join(state, "ready")));
     const pid = stubPid();
-    const r = runLine(`cd ${wt} && ${scripts("rotate-into.sh")} prd-w ${pid}`, { CARETOOK_ROTATE_WAIT: "1" });
+    const r = runLine(`cd ${wt} && ${scripts("rotate-into.sh")} prd-w ${pid}`, { RISA_ROTATE_WAIT: "1" });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(`pid ${pid} ignored TERM for 1s: killed it.`);
     expect((await s.done).signal).toBe("SIGKILL");
@@ -711,7 +711,7 @@ describe("pnpm prd rotate --self", () => {
 
   describe("the inbox session", () => {
     const inboxDir = () => join(root, "home/.caretook/inbox");
-    const inboxEnv = () => ({ CARETOOK_INBOX_DIR: join(root, "elsewhere") });
+    const inboxEnv = () => ({ RISA_INBOX_DIR: join(root, "elsewhere") });
     const startInbox = async (extraArgs = "") => {
       mkdirSync(inboxDir(), { recursive: true });
       const s = start(

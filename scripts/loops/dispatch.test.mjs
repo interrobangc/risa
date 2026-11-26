@@ -2,7 +2,7 @@
 // with the dispatcher and its modules copied in, and stubs for the rest: the
 // worktree command (new.sh), the opener (open-session.sh), tidy (tidy-cli.mjs)
 // and the backlog command (backlog.mjs, its registry rows a JSON file), a stub
-// claude (CARETOOK_CLAUDE_BIN), osascript, a load file and a clock file.
+// claude (RISA_CLAUDE_BIN), osascript, a load file and a clock file.
 // Nothing here starts a real claude, opens a tab or reads the real load.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
@@ -79,7 +79,7 @@ describe("the pure parts", () => {
     expect(tidyDue({}, TIDY_EVERY_MS, idle)).toBe(false);
   });
 
-  it("picks up once a period, never paused or off; CARETOOK_PICKUP_EVERY sets the period", () => {
+  it("picks up once a period, never paused or off; RISA_PICKUP_EVERY sets the period", () => {
     const every = pickupEvery(undefined);
     expect(every).toBe(PICKUP_EVERY_S * 1000);
     expect(pickupEvery("60")).toBe(60_000);
@@ -280,7 +280,7 @@ const worktree = (name, branch) => {
 };
 const answer = (id, text) =>
   execFileSync("node", [scripts("ask.mjs"), "answer", id, text], {
-    env: { ...env, CARETOOK_ASKS_DIR: asks },
+    env: { ...env, RISA_ASKS_DIR: asks },
     encoding: "utf8",
   });
 const askFile = (id) => JSON.parse(readFileSync(join(asks, `${id}.json`), "utf8"));
@@ -363,36 +363,36 @@ beforeAll(() => {
   env = {
     ...process.env,
     PATH: `${bin}:${process.env.PATH}`,
-    CARETOOK_CLAUDE_BIN: join(bin, "claude-stub"),
-    CARETOOK_ITERM_APP: join(root, "iTerm.app"),
-    CARETOOK_SESSIONS_DIR: "",
-    CARETOOK_ASKS_DIR: "",
-    CARETOOK_ASK_NOTIFY: "",
-    CARETOOK_REQUESTS_DIR: "",
-    CARETOOK_NOTICES_DIR: "",
-    CARETOOK_MAX_BACKLOG_SESSIONS: "",
-    CARETOOK_LOAD_FILE: join(root, "load"),
-    CARETOOK_LOAD_BUSY: "8",
-    CARETOOK_LOAD_GATE: "",
-    CARETOOK_MAX_PRDS: "",
-    CARETOOK_MAX_PLANNERS: "",
-    CARETOOK_FIXES_MIN: "",
-    CARETOOK_CLOCK_FILE: clock,
+    RISA_CLAUDE_BIN: join(bin, "claude-stub"),
+    RISA_ITERM_APP: join(root, "iTerm.app"),
+    RISA_SESSIONS_DIR: "",
+    RISA_ASKS_DIR: "",
+    RISA_ASK_NOTIFY: "",
+    RISA_REQUESTS_DIR: "",
+    RISA_NOTICES_DIR: "",
+    RISA_MAX_BACKLOG_SESSIONS: "",
+    RISA_LOAD_FILE: join(root, "load"),
+    RISA_LOAD_BUSY: "8",
+    RISA_LOAD_GATE: "",
+    RISA_MAX_PRDS: "",
+    RISA_MAX_PLANNERS: "",
+    RISA_FIXES_MIN: "",
+    RISA_CLOCK_FILE: clock,
     // Off unless a test turns it on, and never the machine's real processes.
-    CARETOOK_KEEP_SESSIONS: "off",
-    CARETOOK_PROCESS_FILE: join(root, "processes"),
+    RISA_KEEP_SESSIONS: "off",
+    RISA_PROCESS_FILE: join(root, "processes"),
     // The drain: off unless a test turns it on; never the machine's own readings or landings.
-    CARETOOK_USAGE_WATCH: "off",
-    CARETOOK_USAGE_DIR: "",
-    CARETOOK_USAGE_DRAIN: "",
-    CARETOOK_USAGE_STOP: "",
-    CARETOOK_USAGE_STALE_MIN: "",
-    CARETOOK_LANDING_DIR: "",
+    RISA_USAGE_WATCH: "off",
+    RISA_USAGE_DIR: "",
+    RISA_USAGE_DRAIN: "",
+    RISA_USAGE_STOP: "",
+    RISA_USAGE_STALE_MIN: "",
+    RISA_LANDING_DIR: "",
     // Off unless a test turns it on; never the machine's own inbox folder or Claude Code files.
-    CARETOOK_PICKUP_EVERY: "off",
-    CARETOOK_INBOX_DIR: inboxDir,
-    CARETOOK_CLAUDE_PROJECTS: join(root, "projects"),
-    CARETOOK_CLAUDE_CONFIG: claudeConfig,
+    RISA_PICKUP_EVERY: "off",
+    RISA_INBOX_DIR: inboxDir,
+    RISA_CLAUDE_PROJECTS: join(root, "projects"),
+    RISA_CLAUDE_CONFIG: claudeConfig,
     STUB_STATE: state,
     STUB_ROWS: rowsFile,
   };
@@ -455,20 +455,20 @@ describe("one tick per action", () => {
     expect(openCalls()[0][1]).toContain('--model fable --remote-control plan-pd "$(');
   });
 
-  it("the PRD cap defaults to four, and CARETOOK_MAX_PRDS overrides it", () => {
+  it("the PRD cap defaults to four, and RISA_MAX_PRDS overrides it", () => {
     const names = ["w", "x", "y"];
     for (const n of names) worktree(n, `prd/${n}`);
     const running = names.map((topic) => ({ topic, state: "running" }));
     setRows([...running, { topic: "a", state: "planned" }]);
     expect(ok(["--dry-run"])).toContain("start a:");
-    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
+    expect(ok(["--dry-run"], { RISA_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
     worktree("z", "prd/z");
     setRows([...running, { topic: "z", state: "running" }, { topic: "a", state: "planned" }]);
     expect(ok(["--dry-run"])).toContain("no free slot (4 of 4 running)");
-    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "5" })).toContain("start a:");
+    expect(ok(["--dry-run"], { RISA_MAX_PRDS: "5" })).toContain("start a:");
   });
 
-  it("--cap stores the PRD cap, read every tick over CARETOOK_MAX_PRDS; default clears it", () => {
+  it("--cap stores the PRD cap, read every tick over RISA_MAX_PRDS; default clears it", () => {
     const names = ["w", "x", "y"];
     for (const n of names) worktree(n, `prd/${n}`);
     setRows([...names.map((topic) => ({ topic, state: "running" })), { topic: "a", state: "planned" }]);
@@ -479,12 +479,12 @@ describe("one tick per action", () => {
     expect(logText()).toContain("PRD cap 2 (pnpm prd dispatch --cap; was 4)");
     expect(readdirSync(join(loops, ".notices")).length).toBeGreaterThan(0);
     // Lowering ends nothing: the running three stay, and no start.
-    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "6" })).toContain("no free slot (3 of 2 running)");
+    expect(ok(["--dry-run"], { RISA_MAX_PRDS: "6" })).toContain("no free slot (3 of 2 running)");
     expect(ok(["--cap", "6"])).toContain("3 more may start");
     expect(ok(["--dry-run"])).toContain("start a:");
     expect(ok(["--cap", "default"])).toContain("PRD cap 4 (default; was 6)");
     expect(existsSync(join(loops, ".prd-cap"))).toBe(false);
-    expect(ok(["--dry-run"], { CARETOOK_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
+    expect(ok(["--dry-run"], { RISA_MAX_PRDS: "3" })).toContain("no free slot (3 of 3 running)");
     for (const bad of ["0", "20", "two", ""]) {
       const r = dispatch(["--cap", bad]);
       expect(r.status).toBe(2);
@@ -618,7 +618,7 @@ describe("one tick per action", () => {
       { topic: "a", state: "planned" },
       { topic: "b", state: "planned" },
     ]);
-    const out = ok(["--dry-run"], { CARETOOK_ITERM_APP: join(root, "nowhere") });
+    const out = ok(["--dry-run"], { RISA_ITERM_APP: join(root, "nowhere") });
     expect(out).toContain("start a: planned, and nothing stops it");
     expect(out).toContain("  b: waits a tick: a starts first");
     expect(out).toContain("(dry run: nothing written, nothing opened)");
@@ -631,7 +631,7 @@ describe("one tick per action", () => {
 
   it("refuses to run without iTerm2", () => {
     setRows([{ topic: "a", state: "planned" }]);
-    const r = dispatch(["--once"], { CARETOOK_ITERM_APP: join(root, "nowhere") });
+    const r = dispatch(["--once"], { RISA_ITERM_APP: join(root, "nowhere") });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("dispatch needs iTerm2");
     expect(calls("new")).toEqual([]);
@@ -652,7 +652,7 @@ describe("one tick per action", () => {
         .filter((l) => l.includes("new.sh")),
     ).toHaveLength(1);
     // The next tick sees no worktree opened by hand and no slot taken: it starts a again.
-    const next = ok(["--dry-run"], { CARETOOK_MAX_PRDS: "1" });
+    const next = ok(["--dry-run"], { RISA_MAX_PRDS: "1" });
     expect(next).toContain("start a: planned, and nothing stops it");
     expect(next).not.toContain("opened by hand");
   });
@@ -877,7 +877,7 @@ describe("deaths and the reopen ask", () => {
     expect(ask.options).toEqual(["reopen again", "hold the topic"]);
     const helper = openCalls()[2];
     expect(helper.slice(2)).toEqual(["--title", HELPER_SESSION, "--background"]);
-    expect(helper[1]).toContain(`${env.CARETOOK_CLAUDE_BIN} --model haiku --remote-control dispatch-push`);
+    expect(helper[1]).toContain(`${env.RISA_CLAUDE_BIN} --model haiku --remote-control dispatch-push`);
     expect(helper[1]).toContain("a: prd-a (a) died again after 2 reopens");
     expect(dstate().asked).toEqual({ "prd-a": { id: "a1", topic: "a" } });
     // While it's open: no fourth reopen and no second ask.
@@ -992,7 +992,7 @@ describe("defaults on silence", () => {
     expect(ok()).toContain('ask a1 (a) defaulted to "yes": no answer came');
     expect(getAsk(asks, "a1")).toMatchObject({ answer: "yes", defaulted: true });
     const waited = execFileSync("node", [scripts("ask.mjs"), "ask", "--wait", "a1"], {
-      env: { ...env, CARETOOK_ASKS_DIR: asks },
+      env: { ...env, RISA_ASKS_DIR: asks },
       encoding: "utf8",
     });
     expect(waited.split("\n")[0]).toBe("yes");
@@ -1097,7 +1097,7 @@ describe("the session-request tick", () => {
     ok();
     const [open] = opensOf("labels");
     const r = spawnSync("bash", ["-c", open[1]], {
-      env: { ...env, CARETOOK_CLAUDE_BIN: stub },
+      env: { ...env, RISA_CLAUDE_BIN: stub },
       encoding: "utf8",
     });
     expect(r.status).toBe(0);
@@ -1157,13 +1157,13 @@ describe("the session-request tick", () => {
   it("the keep-alive never reopens a named session", () => {
     deadRecord("backlog-gone", { kind: "backlog", remote: "backlog - gone" });
     writeFileSync(join(root, "processes"), "claude-stub --remote-control backlog You are\n");
-    ok(["--once"], { CARETOOK_KEEP_SESSIONS: "on" });
+    ok(["--once"], { RISA_KEEP_SESSIONS: "on" });
     expect(openCalls()).toEqual([]);
   });
 
   it("a kept session opened on this tick counts toward the limit", () => {
     file("one");
-    expect(ok(["--once"], { CARETOOK_KEEP_SESSIONS: "on", CARETOOK_MAX_BACKLOG_SESSIONS: "1" })).toContain(
+    expect(ok(["--once"], { RISA_KEEP_SESSIONS: "on", RISA_MAX_BACKLOG_SESSIONS: "1" })).toContain(
       "1 backlog sessions are live, the limit is 1",
     );
     expect(opensOf("one")).toEqual([]);
@@ -1171,7 +1171,7 @@ describe("the session-request tick", () => {
 });
 
 describe("the keep-alive tick", () => {
-  const on = { CARETOOK_KEEP_SESSIONS: "on" };
+  const on = { RISA_KEEP_SESSIONS: "on" };
   const keptOpens = () => openCalls().filter((c) => c[0] === "backlog");
   const dieAndTick = (at) => {
     setClock(at);
@@ -1196,7 +1196,7 @@ describe("the keep-alive tick", () => {
 
   it("takes no slot: a start the slots allow happens on the same tick", () => {
     setRows([{ topic: "a", state: "planned" }]);
-    const out = ok(["--once"], { ...on, CARETOOK_MAX_PRDS: "1" });
+    const out = ok(["--once"], { ...on, RISA_MAX_PRDS: "1" });
     expect(out).toContain("start a:");
     expect(keptOpens()).toHaveLength(1);
     expect(calls("new")).toEqual(["prd a"]);
@@ -1285,7 +1285,7 @@ describe("the keep-alive tick", () => {
   it("a dismissed question is asked again, never read as an open", () => {
     const id = toQuestion();
     execFileSync("node", [scripts("ask.mjs"), "asks", "--done", id], {
-      env: { ...env, CARETOOK_ASKS_DIR: asks },
+      env: { ...env, RISA_ASKS_DIR: asks },
       encoding: "utf8",
     });
     expect(dieAndTick(T0 + 600)).toContain("asking again");
@@ -1325,7 +1325,7 @@ describe("the keep-alive tick", () => {
 });
 
 describe("the inbox session's keep-alive", () => {
-  const on = { CARETOOK_KEEP_SESSIONS: "on" };
+  const on = { RISA_KEEP_SESSIONS: "on" };
   const inboxOpens = () => openCalls().filter((c) => c[0] === "inbox");
   /** The inbox folder made and trusted, as a first `pnpm prd inbox` by hand leaves it. */
   const trust = () => {
@@ -1351,7 +1351,7 @@ describe("the inbox session's keep-alive", () => {
     trust();
     writeFileSync(join(root, "processes"), backlogLive);
     setRows([{ topic: "a", state: "planned" }]);
-    const out = ok(["--once"], { ...on, CARETOOK_MAX_PRDS: "1" });
+    const out = ok(["--once"], { ...on, RISA_MAX_PRDS: "1" });
     expect(out).toContain("keep-alive inbox: open (no live inbox session)");
     expect(out).toContain("start a:");
     expect(inboxOpens()).toEqual([["inbox", "--background"]]);
@@ -1395,7 +1395,7 @@ describe("the inbox session's keep-alive", () => {
 });
 
 describe("the pickup", () => {
-  const every = { CARETOOK_PICKUP_EVERY: "300" };
+  const every = { RISA_PICKUP_EVERY: "300" };
   const pickups = () => calls("prd");
 
   it("runs dev-sync once a period, not every tick, and says nothing when there was nothing", () => {
@@ -1431,7 +1431,7 @@ describe("the pickup", () => {
   });
 
   it("runs by default, never paused, off or in a dry run", () => {
-    ok(["--once"], { CARETOOK_PICKUP_EVERY: "" });
+    ok(["--once"], { RISA_PICKUP_EVERY: "" });
     expect(pickups()).toHaveLength(1);
     rmSync(join(loops, ".dispatch.json"), { force: true });
     ok(["--pause", "t"]);
@@ -1555,7 +1555,7 @@ describe("the stuck decision", () => {
     const gap = stuckSettings({}).gapMs;
     expect(gap).toBe(600_000);
     expect(stuckSettings({}, 300).gapMs).toBe(900_000);
-    expect(stuckSettings({ CARETOOK_STUCK_MIN: "5" }).limitMs).toBe(300_000);
+    expect(stuckSettings({ RISA_STUCK_MIN: "5" }).limitMs).toBe(300_000);
     expect(stuckClock(undefined, NOW, gap)).toBeNull();
     expect(stuckClock({ lastTickAt: NOW - 60_000 }, NOW, gap)).toBeNull();
     expect(stuckClock({ lastTickAt: NOW - gap - 1 }, NOW, gap)).toBe(NOW);
@@ -1891,7 +1891,7 @@ describe("the stuck tick", () => {
 describe("the drain", () => {
   let procs = [];
   const usageDir = () => join(loops, ".usage");
-  const on = { CARETOOK_USAGE_WATCH: "" };
+  const on = { RISA_USAGE_WATCH: "" };
   /** A current reading (by the fake clock) of the 5-hour window, from a session of its own. */
   const reading = (percent, resetSecs = T0 + 3600) => {
     mkdirSync(usageDir(), { recursive: true });
@@ -1943,7 +1943,7 @@ describe("the drain", () => {
     procs = [];
   });
 
-  it("draining: no start, plan or reopen, and --resume doesn't override it; CARETOOK_USAGE_WATCH=off does", () => {
+  it("draining: no start, plan or reopen, and --resume doesn't override it; RISA_USAGE_WATCH=off does", () => {
     reading(96);
     worktree("d", "prd/d");
     deadRecord("prd-d", { kind: "prd", topic: "d" });
@@ -2061,7 +2061,7 @@ describe("the drain", () => {
     deadRecord("prd-d", { kind: "prd", topic: "d" });
     setRows([{ topic: "d", state: "running" }]);
     createRequest(join(loops, ".requests"), { name: "notes", now: T0 * 1000 });
-    const extra = { ...on, CARETOOK_CLAUDE_BIN: claude, CARETOOK_KEEP_SESSIONS: "" };
+    const extra = { ...on, RISA_CLAUDE_BIN: claude, RISA_KEEP_SESSIONS: "" };
     // Past the reopen limit: a normal tick would file an ask and open its helper.
     writeFileSync(join(loops, ".dispatch.json"), JSON.stringify({ reopens: { "prd-d": 2 } }));
     for (let t = 0; t < 3; t++) {

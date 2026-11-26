@@ -89,7 +89,7 @@ describe("the last captain, from the backlog record", () => {
     for (let i = 0; i < 5; i++) {
       const r = spawnSync("node", [join(HERE, "captain.mjs"), "next"], {
         encoding: "utf8",
-        env: { ...process.env, CARETOOK_SESSIONS_DIR: dir },
+        env: { ...process.env, RISA_SESSIONS_DIR: dir },
       });
       expect(r.status).toBe(0);
       const c = r.stdout.trim();
@@ -104,7 +104,7 @@ describe("the backlog prompt's captain line", () => {
   const prompt = (/** @type {string | undefined} */ captain) =>
     spawnSync("bash", [join(HERE, "prompt.sh"), "backlog"], {
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_CAPTAIN: captain ?? "" },
+      env: { ...process.env, RISA_CAPTAIN: captain ?? "" },
     }).stdout;
 
   it("names the captain when one is drawn, with its limits", () => {

@@ -390,9 +390,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   let since;
   let json = false;
   const files = {
-    runLog: process.env.CARETOOK_RUN_LOG,
-    checkLog: process.env.CARETOOK_CHECK_LOG,
-    flakeLog: process.env.CARETOOK_BROWSER_FLAKES,
+    runLog: process.env.RISA_RUN_LOG,
+    checkLog: process.env.RISA_CHECK_LOG,
+    flakeLog: process.env.RISA_BROWSER_FLAKES,
   };
   const flags = { "--run-log": "runLog", "--check-log": "checkLog", "--flake-log": "flakeLog" };
   for (let i = 0; i < args.length; i++) {

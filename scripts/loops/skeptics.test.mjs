@@ -1,6 +1,6 @@
 // The skeptic: the store, the pure checker and the brief against throwaway
 // directories, and `pnpm prd skeptic` / `prompt skeptic` through prd.sh with
-// CARETOOK_SKEPTIC_DIR set. Nothing reads or writes the real .loops/.skeptic.
+// RISA_SKEPTIC_DIR set. Nothing reads or writes the real .loops/.skeptic.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -165,9 +165,9 @@ describe("the store", () => {
     expect(maxAgeMin("5")).toBe(5);
   });
 
-  it("applies CARETOOK_SKEPTIC_MAX_MIN when the caller names no limit", () => {
+  it("applies RISA_SKEPTIC_MAX_MIN when the caller names no limit", () => {
     const r = land();
-    vi.stubEnv("CARETOOK_SKEPTIC_MAX_MIN", "5");
+    vi.stubEnv("RISA_SKEPTIC_MAX_MIN", "5");
     try {
       expect(checkRecord(r, wantLand(), { now: NOW + 6 * 60_000 }).reason).toMatch(/over 5 minutes/);
     } finally {
@@ -362,8 +362,8 @@ describe("the brief", () => {
 
 describe("the commands", () => {
   const prd = (...args) => {
-    const env = { ...process.env, CARETOOK_SKEPTIC_DIR: dir };
-    delete env.CARETOOK_SESSION;
+    const env = { ...process.env, RISA_SKEPTIC_DIR: dir };
+    delete env.RISA_SESSION;
     const r = spawnSync("bash", [PRD_SH, ...args], { encoding: "utf8", env });
     return { code: r.status, out: r.stdout, err: r.stderr };
   };

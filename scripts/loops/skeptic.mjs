@@ -11,7 +11,7 @@
 //   [list] [--topic <t>] [--json]                           the verdicts, oldest first
 //   brief ask|land|plan|stall --evidence <file>                   (pnpm prd prompt skeptic …)
 //
-// The directory is CARETOOK_SKEPTIC_DIR (prd.sh sets the main checkout's
+// The directory is RISA_SKEPTIC_DIR (prd.sh sets the main checkout's
 // .loops/.skeptic). The topic and session default to what prd.sh passes as
 // --here-topic and --here-session.
 import { readFileSync } from "node:fs";
@@ -33,7 +33,7 @@ const fail = (msg) => {
 };
 
 const dirOf = () =>
-  process.env.CARETOOK_SKEPTIC_DIR || fail("CARETOOK_SKEPTIC_DIR isn't set (run this through pnpm prd)");
+  process.env.RISA_SKEPTIC_DIR || fail("RISA_SKEPTIC_DIR isn't set (run this through pnpm prd)");
 
 function parse(argv, valued, flags = []) {
   const opts = { offer: [] };
@@ -81,7 +81,7 @@ function record(argv) {
     why: opts.why,
     topic:
       opts.topic || opts["here-topic"] || fail("skeptic record needs --topic <topic> outside a worktree"),
-    session: opts.session || process.env.CARETOOK_SESSION || opts["here-session"] || null,
+    session: opts.session || process.env.RISA_SESSION || opts["here-session"] || null,
     option: opts.option ?? null,
     tip: opts.tip ?? null,
     action: opts.action ?? null,

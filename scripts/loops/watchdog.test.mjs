@@ -295,7 +295,7 @@ describe("pnpm prd watchdog (stub recover)", () => {
     // Logs its args and whether it may report; exits with $root/recover-exit (0).
     writeFileSync(
       join(bin, "recover"),
-      `#!/bin/sh\necho "$* report=\${CARETOOK_RECOVER_REPORT:-on}" >> "${recoverLog}"\nexit $(cat "${root}/recover-exit" 2>/dev/null || echo 0)\n`,
+      `#!/bin/sh\necho "$* report=\${RISA_RECOVER_REPORT:-on}" >> "${recoverLog}"\nexit $(cat "${root}/recover-exit" 2>/dev/null || echo 0)\n`,
     );
     for (const f of ["docker", "recover"]) chmodSync(join(bin, f), 0o755);
     writeFileSync(join(root, "clock"), String(NOW / 1000));
@@ -305,14 +305,14 @@ describe("pnpm prd watchdog (stub recover)", () => {
         ["HOME", "TMPDIR", "TZ"].flatMap((k) => (k in process.env ? [[k, process.env[k]]] : [])),
       ),
       PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
-      CARETOOK_RECOVER_BIN: join(bin, "recover"),
-      CARETOOK_CLOCK_FILE: join(root, "clock"),
-      CARETOOK_BOOT_TIME: String(NOW / 1000 - 300),
-      CARETOOK_FREE_GB: "50",
-      CARETOOK_SESSIONS_DIR: join(loops, ".sessions"),
-      CARETOOK_USAGE_DIR: join(loops, ".usage"),
-      CARETOOK_LEASE_ROOT: join(loops, ".lease"),
-      CARETOOK_LANDING_DIR: join(loops, ".landing"),
+      RISA_RECOVER_BIN: join(bin, "recover"),
+      RISA_CLOCK_FILE: join(root, "clock"),
+      RISA_BOOT_TIME: String(NOW / 1000 - 300),
+      RISA_FREE_GB: "50",
+      RISA_SESSIONS_DIR: join(loops, ".sessions"),
+      RISA_USAGE_DIR: join(loops, ".usage"),
+      RISA_LEASE_ROOT: join(loops, ".lease"),
+      RISA_LANDING_DIR: join(loops, ".landing"),
     };
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -388,7 +388,7 @@ describe("pnpm prd watchdog (stub recover)", () => {
         reason: `limited: ${d.why}`,
       });
       // Off for the drain is off for the watchdog too: the stale lock is acted on.
-      const off = run(["--dry-run", "--json"], { CARETOOK_USAGE_WATCH: "off" });
+      const off = run(["--dry-run", "--json"], { RISA_USAGE_WATCH: "off" });
       expect(JSON.parse(off.stdout)).toMatchObject({ action: "recover" });
     } finally {
       rmSync(join(loops, ".usage"), { recursive: true, force: true });

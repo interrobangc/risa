@@ -4,7 +4,7 @@
 #
 #   session.sh <name> [--kind prd|plan|backlog|hotfix|recovery|inbox] [--topic <t>] [--auto] [--managed] -- <claude args…>
 #
-# Runs ${CARETOOK_CLAUDE_BIN:-claude} with the args as this script's child, in
+# Runs ${RISA_CLAUDE_BIN:-claude} with the args as this script's child, in
 # the foreground (the terminal stays the session's), and keeps
 # .loops/.sessions/<name>.json (sessions.mjs): at start pid, kind, topic,
 # started, the command, the model (claude's --model, if given), remote (its --remote-control), dir (where it runs), auto and
@@ -22,7 +22,7 @@ set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
-export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
+export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
 
 name=${1:-}; (($#)) && shift
 [[ -n $name && $name != -* ]] || die "usage: session.sh <name> [--kind prd|plan|backlog|hotfix|recovery|inbox] [--topic <t>] [--auto] [--managed] -- <claude args…>"
@@ -50,7 +50,7 @@ case $kind in
   prd | plan | backlog | hotfix | recovery | inbox) ;;
   *) die "session.sh: --kind prd|plan|backlog|hotfix|recovery|inbox (${kind:-none from the name $name})" ;;
 esac
-claude_bin=${CARETOOK_CLAUDE_BIN:-claude}
+claude_bin=${RISA_CLAUDE_BIN:-claude}
 
 # The command as a line, each long argument (the prompt) cut short.
 command=$claude_bin
@@ -78,11 +78,11 @@ done
 # The main backlog session's display name is a captain's (captain.mjs, given as
 # its --remote-control): the tab's title too, which Claude Code is told not to
 # retitle. A session it starts doesn't inherit that.
-if [[ -n ${CARETOOK_CAPTAIN_TITLE:-} ]]; then unset CARETOOK_CAPTAIN_TITLE CLAUDE_CODE_DISABLE_TERMINAL_TITLE; fi
+if [[ -n ${RISA_CAPTAIN_TITLE:-} ]]; then unset RISA_CAPTAIN_TITLE CLAUDE_CODE_DISABLE_TERMINAL_TITLE; fi
 if [[ $name == backlog && $kind == backlog && -n $remote && $remote != backlog ]]; then
-  export CARETOOK_CAPTAIN_TITLE=1 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
-  # The tab's title by escape (OSC 0) when this is a terminal (CARETOOK_TAB_TITLE=always: tests).
-  if [[ -t 1 || ${CARETOOK_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$remote"; fi
+  export RISA_CAPTAIN_TITLE=1 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
+  # The tab's title by escape (OSC 0) when this is a terminal (RISA_TAB_TITLE=always: tests).
+  if [[ -t 1 || ${RISA_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$remote"; fi
 fi
 
 # A brief left from before never leads a later prompt: whoever uses one has
@@ -105,9 +105,9 @@ case $claude_env in
   *=*) export "${claude_env?}" ;;
   *) unset "$claude_env" ;;
 esac
-unset CARETOOK_SESSION_NAME CARETOOK_SESSION_PID CARETOOK_CONTEXT_HOOK
+unset RISA_SESSION_NAME RISA_SESSION_PID RISA_CONTEXT_HOOK
 if [[ -n $settings ]]; then
-  export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
+  export RISA_SESSION_NAME=$name RISA_CONTEXT_HOOK=$bin/context.mjs
   set -- --settings "$settings" "$@"
 fi
 
@@ -118,7 +118,7 @@ pidfile=$(mktemp "${TMPDIR:-/tmp}/caretook-session.XXXXXX")
 trap 'rm -f "$pidfile"' EXIT
 code=0
 bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" model="$9" remote="${10}" dir="${11}" rotating= ended= exit= &&
-  echo $$ > "${12}" && shift 12 && export CARETOOK_SESSION_PID=$$ && exec "$@"' _ \
+  echo $$ > "${12}" && shift 12 && export RISA_SESSION_PID=$$ && exec "$@"' _ \
   "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$model" "$remote" "$(pwd -P)" "$pidfile" "$claude_bin" "$@" || code=$?
 
 pid=$(cat "$pidfile" 2>/dev/null || true)

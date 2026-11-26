@@ -16,13 +16,13 @@
 # under `session.sh <name>` instead, and the record takes its pid; anything
 # else (a pid that isn't the session's, two live sessions) is refused (B-810).
 #
-# It sends TERM, then KILL after CARETOOK_END_WAIT seconds (default 10).
+# It sends TERM, then KILL after RISA_END_WAIT seconds (default 10).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
-export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
-wait_secs=${CARETOOK_END_WAIT:-10}
+export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
+wait_secs=${RISA_END_WAIT:-10}
 
 (($# <= 1)) || die "usage: pnpm prd end [<name>]"
 

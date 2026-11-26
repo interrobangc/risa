@@ -19,7 +19,7 @@
 //     else the one live claude under `session.sh <name>` in that dir (a reopen
 //     the record doesn't name), else a refusal: never another process.
 //
-// CLI (CARETOOK_SESSIONS_DIR: the records' folder, default .loops/.sessions of
+// CLI (RISA_SESSIONS_DIR: the records' folder, default .loops/.sessions of
 // the main checkout):
 //   node sessions.mjs set <name> key=value…   merge fields into the record (made
 //                                             if missing); pid and exit are
@@ -48,7 +48,7 @@
 //                                             ancestor claude: "<name>\t<kind>\t<pid>\t<topic>"
 //                                             (exit 1, saying why: no ancestor, or
 //                                             it has no live record)
-// The claude name is basename($CARETOOK_CLAUDE_BIN), default claude (host.mjs).
+// The claude name is basename($RISA_CLAUDE_BIN), default claude (host.mjs).
 //
 // Under Vitest (VITEST set, and inherited by every script a test runs), a write
 // to a `.loops/.sessions` outside the OS temp dir is refused (B-871): a test
@@ -265,7 +265,7 @@ export function processOf(/** @type {number} */ pid, now = Date.now()) {
 export const claudeName = () => hostClaudeName();
 
 export const defaultDir = () => {
-  if (process.env.CARETOOK_SESSIONS_DIR) return process.env.CARETOOK_SESSIONS_DIR;
+  if (process.env.RISA_SESSIONS_DIR) return process.env.RISA_SESSIONS_DIR;
   const here = dirname(fileURLToPath(import.meta.url));
   const first = execFileSync("git", ["-C", here, "worktree", "list", "--porcelain"], { encoding: "utf8" })
     .split("\n")[0]

@@ -3,7 +3,7 @@
 // since the merge base, staged, unstaged and untracked), so a tooling-only
 // change that needs no `pnpm check` is still linted. Only the changed files,
 // so it stays fast. Exit 1 on an error.
-//   CARETOOK_TOOLING_LINT=off skips it (the check's own static steps lint and
+//   RISA_TOOLING_LINT=off skips it (the check's own static steps lint and
 //   format everything, so its tooling step runs only the tests). TRUNK names the
 //   trunk (default dev).
 import { spawnSync } from "node:child_process";
@@ -15,7 +15,7 @@ const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" })
 const lines = (r) => (r.status === 0 ? r.stdout.split("\n").filter(Boolean) : []);
 
 const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
-if (process.env.CARETOOK_TOOLING_LINT === "off") process.exit(0);
+if (process.env.RISA_TOOLING_LINT === "off") process.exit(0);
 
 const trunk = [process.env.TRUNK || "dev", `origin/${process.env.TRUNK || "dev"}`].find(
   (ref) => git("rev-parse", "--verify", "-q", `${ref}^{commit}`).status === 0,

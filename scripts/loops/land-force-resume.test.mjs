@@ -30,14 +30,14 @@ describe("land.sh's --force and --no-review", () => {
     return {
       GH_CI: join(root, "gh-ci.mjs"),
       GH_CI_FIXTURE: join(root, "fixture.json"),
-      CARETOOK_CI_POLL: "0",
-      CARETOOK_LOAD_GATE: "off",
-      CARETOOK_NOTICES_DIR: join(root, "notices"),
-      CARETOOK_SKEPTIC_DIR: store(),
+      RISA_CI_POLL: "0",
+      RISA_LOAD_GATE: "off",
+      RISA_NOTICES_DIR: join(root, "notices"),
+      RISA_SKEPTIC_DIR: store(),
     };
   };
   // Off the seam: land measures against the local dev, not origin/dev.
-  const unseamed = { CARETOOK_PR_THROWAWAY: "" };
+  const unseamed = { RISA_PR_THROWAWAY: "" };
   const seam = (args, byCommit, extra = {}) => landWith({ ...ciEnv(byCommit), ...extra }, ...args);
   const brakeOn = (sha) => ({
     [sha]: [
@@ -251,7 +251,7 @@ describe("land.sh --resume", () => {
         PR_HEAD: spawnSync("git", ["-C", repo, "rev-parse", "prd/throwaway-x"], {
           encoding: "utf8",
         }).stdout.trim(),
-        CARETOOK_NOTICES_DIR: board(),
+        RISA_NOTICES_DIR: board(),
         GH_MERGE_LOG: mergeLog(),
         ...extra,
       },
@@ -259,7 +259,7 @@ describe("land.sh --resume", () => {
   const PRD = ["throwaway-x", "-m", "feat(throwaway-x): t (B-1)", "--force", "--no-review", "--by-user"];
   const HOTFIX = ["hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"];
   const killedAt = (args, step) => {
-    const r = run(args, { CARETOOK_LAND_KILL_AT: step });
+    const r = run(args, { RISA_LAND_KILL_AT: step });
     expect(r.signal, r.stderr + r.stdout).toBe("SIGKILL");
     return r;
   };

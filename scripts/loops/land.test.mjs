@@ -14,7 +14,7 @@ import { root, repo, git, commit, landWith, land, branch, useLandRepo } from "./
 
 useLandRepo();
 // The notice board's directory, which land.sh reads from the environment.
-const NOTICES_DIR = "CARETOOK_NOTICES_DIR";
+const NOTICES_DIR = "RISA_NOTICES_DIR";
 
 const docsOnly = () =>
   spawnSync("bash", ["-c", "source scripts/loops/lib.sh && docs_only dev feature"], {
@@ -103,7 +103,7 @@ describe("land.sh on the PR path", () => {
       env: {
         ...process.env,
         PATH: `${join(root, "bin")}:${process.env.PATH}`,
-        CARETOOK_PR_THROWAWAY: "1",
+        RISA_PR_THROWAWAY: "1",
         PR_HEAD: "0".repeat(40),
       },
     });
@@ -634,8 +634,8 @@ describe("land.sh's run log", () => {
           ...process.env,
           PATH: `${join(root, "bin")}:${process.env.PATH}`,
           PR_HEAD: git("rev-parse", "prd/throwaway-x"),
-          CARETOOK_NOTICES_DIR: join(root, "notices"),
-          CARETOOK_RUN_LOG: log(),
+          RISA_NOTICES_DIR: join(root, "notices"),
+          RISA_RUN_LOG: log(),
           ...extra,
         },
       },
@@ -668,7 +668,7 @@ describe("land.sh's run log", () => {
   it("a run log it can't write never stops a landing", () => {
     branch({ "apps/web/b.ts": "2" });
     writeFileSync(join(root, "not-a-dir"), "x");
-    const r = landFor({ CARETOOK_RUN_LOG: join(root, "not-a-dir", "run-log.jsonl") });
+    const r = landFor({ RISA_RUN_LOG: join(root, "not-a-dir", "run-log.jsonl") });
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toContain("Landed prd/throwaway-x");
   });

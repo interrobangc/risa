@@ -1,9 +1,9 @@
 // The load gate: is the machine too busy to start more work? Busy is the
-// 5-minute load above CARETOOK_LOAD_BUSY (default twice the core count, or
-// LIGHT_BUSY with CARETOOK_LOAD_LANE=light: quick and slice checks, slice starts);
-// CARETOOK_LOAD_GATE=off is never busy, and a load that can't be read isn't
+// 5-minute load above RISA_LOAD_BUSY (default twice the core count, or
+// LIGHT_BUSY with RISA_LOAD_LANE=light: quick and slice checks, slice starts);
+// RISA_LOAD_GATE=off is never busy, and a load that can't be read isn't
 // busy either. A check (check-run.sh, inside its lease) and a slice worktree's
-// creation (new.sh) wait while it's busy, for at most CARETOOK_LOAD_WAIT
+// creation (new.sh) wait while it's busy, for at most RISA_LOAD_WAIT
 // seconds (load_gate_wait in lib.sh); `pnpm prd start` only warns; the
 // dispatcher starts nothing new; `pnpm prd status` prints it.
 //
@@ -11,7 +11,7 @@
 //   node load-gate.mjs --say    one line for people (pnpm prd status)
 //   node load-gate.mjs --json   the whole result
 //
-// CARETOOK_LOAD_FILE stands in for the reading (tests): the file's numbers are
+// RISA_LOAD_FILE stands in for the reading (tests): the file's numbers are
 // the 1, 5 and 15 minute loads (one number alone is the 5-minute load).
 import { readFileSync } from "node:fs";
 import { availableParallelism, loadavg } from "node:os";
@@ -32,9 +32,9 @@ const positive = (s) =>
  * @returns {Gate}
  */
 export function loadGate({ load, cores, env = {} }) {
-  const off = env.CARETOOK_LOAD_GATE === "off";
-  const set = positive(env.CARETOOK_LOAD_BUSY);
-  const threshold = set ?? (env.CARETOOK_LOAD_LANE === "light" ? LIGHT_BUSY : 2 * cores);
+  const off = env.RISA_LOAD_GATE === "off";
+  const set = positive(env.RISA_LOAD_BUSY);
+  const threshold = set ?? (env.RISA_LOAD_LANE === "light" ? LIGHT_BUSY : 2 * cores);
   const readable = typeof load === "number" && Number.isFinite(load);
   return {
     busy: !off && readable && load > threshold,
@@ -53,12 +53,12 @@ export function parseLoad(text) {
   return nums.length >= 2 ? nums[1] : nums[0];
 }
 
-/** The gate on this machine: the load from CARETOOK_LOAD_FILE, else the OS. */
+/** The gate on this machine: the load from RISA_LOAD_FILE, else the OS. */
 export function readLoadGate(env = process.env) {
   let load;
-  if (env.CARETOOK_LOAD_FILE) {
+  if (env.RISA_LOAD_FILE) {
     try {
-      load = parseLoad(readFileSync(env.CARETOOK_LOAD_FILE, "utf8"));
+      load = parseLoad(readFileSync(env.RISA_LOAD_FILE, "utf8"));
     } catch {
       load = null;
     }
@@ -79,11 +79,11 @@ export function stateOf(g) {
 /** @param {Gate} g @param {Record<string, string | undefined>} [env] */
 export function sayGate(g, env = {}) {
   const against = g.setting
-    ? `${fmt(g.threshold)} (CARETOOK_LOAD_BUSY)`
+    ? `${fmt(g.threshold)} (RISA_LOAD_BUSY)`
     : `${fmt(g.threshold)} (twice ${g.cores} cores)`;
-  if (g.off) return "load gate: off (CARETOOK_LOAD_GATE=off)";
+  if (g.off) return "load gate: off (RISA_LOAD_GATE=off)";
   if (g.load === null) return `load gate: can't read the load; not busy (threshold ${against})`;
-  const wait = positive(env.CARETOOK_LOAD_WAIT) ?? 600;
+  const wait = positive(env.RISA_LOAD_WAIT) ?? 600;
   const waiting = g.setting
     ? "checks and slice starts wait"
     : `full checks wait (quick checks and slices above ${LIGHT_BUSY})`;

@@ -65,14 +65,14 @@ beforeEach(() => {
   rmSync(log, { force: true });
   // osascript: each argument on a line, then the script from stdin; $FAIL is its exit.
   stub("osascript", `printf '%s\\n' "$@" >> "${log}"\ncat >> "${log}"\nexit \${FAIL:-0}`);
-  env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, CARETOOK_ITERM_APP: iterm };
+  env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, RISA_ITERM_APP: iterm };
 });
 
 describe("tabs", () => {
   it("open where iTerm2 is and osascript is on the PATH, and nowhere else", () => {
     expect(itermApp({})).toBe("/Applications/iTerm.app");
     expect(canOpenTabs(env)).toBe(true);
-    expect(canOpenTabs({ ...env, CARETOOK_ITERM_APP: join(root, "nowhere") })).toBe(false);
+    expect(canOpenTabs({ ...env, RISA_ITERM_APP: join(root, "nowhere") })).toBe(false);
     expect(canOpenTabs({ ...env, PATH: empty })).toBe(false);
     expect(onPath("osascript", env)).toBe(join(bin, "osascript"));
     expect(HOST_TOOLS).toEqual(["osascript"]);
@@ -89,7 +89,7 @@ describe("tabs", () => {
   });
 
   it("exit NO_TABS naming where iTerm2 was looked for, without calling osascript", () => {
-    const r = tab(["exec claude", "prd-a", "0"], { CARETOOK_ITERM_APP: join(root, "nowhere") });
+    const r = tab(["exec claude", "prd-a", "0"], { RISA_ITERM_APP: join(root, "nowhere") });
     expect(r.status).toBe(NO_TABS);
     expect(r.stdout.trim()).toBe(join(root, "nowhere"));
     expect(logged()).toBe("");
@@ -137,13 +137,13 @@ esac`,
   });
 
   it("refuses under a test without the temp folder and stub", () => {
-    expect(() => launchd({ VITEST: "true", CARETOOK_LAUNCHCTL: launchctl })).toThrow(
-      /a test must set CARETOOK_LAUNCH_AGENTS_DIR and CARETOOK_LAUNCHCTL/,
+    expect(() => launchd({ VITEST: "true", RISA_LAUNCHCTL: launchctl })).toThrow(
+      /a test must set RISA_LAUNCH_AGENTS_DIR and RISA_LAUNCHCTL/,
     );
   });
 
   it("loads, asks about and unloads a job in the user's domain", () => {
-    const l = launchd({ ...env, CARETOOK_LAUNCH_AGENTS_DIR: agents, CARETOOK_LAUNCHCTL: launchctl });
+    const l = launchd({ ...env, RISA_LAUNCH_AGENTS_DIR: agents, RISA_LAUNCHCTL: launchctl });
     const domain = `gui/${process.getuid?.() ?? 0}`;
     expect(l.dir).toBe(agents);
     expect(l.fileOf("com.example.job")).toBe(join(agents, "com.example.job.plist"));
@@ -178,11 +178,11 @@ describe("the CLIs", () => {
       stub(name, `echo "${name} $*" >> "${log}"\ncat\nexit \${FAIL:-0}`);
   });
 
-  it("name claude, codex and gh, claude as CARETOOK_CLAUDE_BIN gives it", () => {
+  it("name claude, codex and gh, claude as RISA_CLAUDE_BIN gives it", () => {
     expect([CLAUDE, CODEX, GH]).toEqual(["claude", "codex", "gh"]);
     expect(claudeBin({})).toBe("claude");
-    expect(claudeBin({ CARETOOK_CLAUDE_BIN: "/x/claude-stub" })).toBe("/x/claude-stub");
-    expect(claudeName({ CARETOOK_CLAUDE_BIN: "/x/claude-stub" })).toBe("claude-stub");
+    expect(claudeBin({ RISA_CLAUDE_BIN: "/x/claude-stub" })).toBe("/x/claude-stub");
+    expect(claudeName({ RISA_CLAUDE_BIN: "/x/claude-stub" })).toBe("claude-stub");
     expect(claudeName({})).toBe("claude");
   });
 
@@ -203,7 +203,7 @@ describe("the CLIs", () => {
     expect([r.status, r.stdout]).toEqual([0, "in"]);
     expect(cli(["codex", "review"], { FAIL: "4" }).status).toBe(4);
     expect(cli(["claude", "-p", "ok"]).status).toBe(0);
-    expect(cli(["claude", "-p", "ok"], { CARETOOK_CLAUDE_BIN: join(bin, "claude-stub") }).status).toBe(0);
+    expect(cli(["claude", "-p", "ok"], { RISA_CLAUDE_BIN: join(bin, "claude-stub") }).status).toBe(0);
     expect(logged()).toBe("gh pr view 7\ncodex review\nclaude -p ok\nclaude-stub -p ok\n");
     const missing = cli(["gh", "x"], { PATH: empty });
     expect(missing.status).toBe(127);
@@ -298,7 +298,7 @@ describe("Claude Code's files", () => {
 
   it("gives every claude it starts the folder: the CLI's claude and session.sh's lines", () => {
     stub("claude-env", `echo "dir=\${CLAUDE_CONFIG_DIR-unset}" >> "${log}"`);
-    const claude = { CARETOOK_CLAUDE_BIN: join(bin, "claude-env") };
+    const claude = { RISA_CLAUDE_BIN: join(bin, "claude-env") };
     expect(HOST_CLI(["claude", "-p"], { ...claude, [CONFIG_DIR_VAR]: "/acct" }).status).toBe(0);
     expect(HOST_CLI(["claude", "-p"], { ...claude, CLAUDE_CONFIG_DIR: "" }).status).toBe(0);
     expect(logged()).toBe("dir=/acct\ndir=\n");
@@ -350,9 +350,9 @@ describe("Claude Code's files", () => {
     const now = Date.parse("2026-11-26T12:00:00Z");
     const input = (/** @type {number} */ p) =>
       JSON.stringify({ rate_limits: { five_hour: { used_percentage: p, resets_at: now / 1000 + 3600 } } });
-    const at = (/** @type {Record<string, string>} */ e) => ({ CARETOOK_USAGE_DIR: usage, ...e });
-    runStatusLine(input(90), at({ CARETOOK_SESSION_NAME: "prd-w", CLAUDE_CONFIG_DIR: "/acct/work" }), now);
-    runStatusLine(input(20), at({ CARETOOK_SESSION_NAME: "backlog" }), now);
+    const at = (/** @type {Record<string, string>} */ e) => ({ RISA_USAGE_DIR: usage, ...e });
+    runStatusLine(input(90), at({ RISA_SESSION_NAME: "prd-w", CLAUDE_CONFIG_DIR: "/acct/work" }), now);
+    runStatusLine(input(20), at({ RISA_SESSION_NAME: "backlog" }), now);
     expect(claudeAccount({ CLAUDE_CONFIG_DIR: "/acct/work" })).toBe("/acct/work");
     expect(claudeAccount({})).toBeNull();
     const pct = (/** @type {Record<string, string>} */ e) =>

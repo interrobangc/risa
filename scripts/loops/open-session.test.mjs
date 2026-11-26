@@ -1,6 +1,6 @@
 // The session opener (`pnpm prd open`: open-session.sh, open-session.mjs)
 // against a throwaway repo with these scripts copied in, real git worktrees, a
-// temporary Claude projects folder (CARETOOK_CLAUDE_PROJECTS), session records
+// temporary Claude projects folder (RISA_CLAUDE_PROJECTS), session records
 // in the repo's .loops/.sessions and a fake osascript that records its script
 // and arguments. Nothing here opens a real iTerm2 tab or starts claude.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -113,10 +113,10 @@ beforeAll(() => {
     FAKE_LOG: log,
     FAKE_STATE: state,
     TRUNK: "dev",
-    CARETOOK_CLAUDE_PROJECTS: projects,
-    CARETOOK_ITERM_APP: iterm,
+    RISA_CLAUDE_PROJECTS: projects,
+    RISA_ITERM_APP: iterm,
     // A recorded session's own sessions dir would leak in and win over the test repo's.
-    CARETOOK_SESSIONS_DIR: "",
+    RISA_SESSIONS_DIR: "",
   };
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
@@ -185,7 +185,7 @@ describe("backlog, recovery and hotfix sessions", () => {
       title: "Pike",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(CARETOOK_CAPTAIN=Pike scripts/loops/prompt.sh backlog)"`,
+      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(RISA_CAPTAIN=Pike scripts/loops/prompt.sh backlog)"`,
     });
   });
 
@@ -262,9 +262,9 @@ describe("backlog, recovery and hotfix sessions", () => {
     ).toBe(`cd /m && ${prd} inbox --dir /d`);
   });
 
-  it("the inbox directory is the record's, else CARETOOK_INBOX_DIR, else ~/.caretook/inbox", () => {
-    expect(inboxDirOf({ dir: "/r" }, { CARETOOK_INBOX_DIR: "/e" })).toBe("/r");
-    expect(inboxDirOf(null, { CARETOOK_INBOX_DIR: "/e" })).toBe("/e");
+  it("the inbox directory is the record's, else RISA_INBOX_DIR, else ~/.caretook/inbox", () => {
+    expect(inboxDirOf({ dir: "/r" }, { RISA_INBOX_DIR: "/e" })).toBe("/r");
+    expect(inboxDirOf(null, { RISA_INBOX_DIR: "/e" })).toBe("/e");
     expect(inboxDirOf({}, {})).toMatch(/\/\.caretook\/inbox$/);
   });
 
@@ -321,7 +321,7 @@ describe("backlog, recovery and hotfix sessions", () => {
     const captain = /^backlog as ([A-Za-z]+) /m.exec(out)?.[1];
     expect(CAPTAINS).toContain(captain);
     expect(out).toContain(
-      `--model sonnet --remote-control ${captain} "$(CARETOOK_CAPTAIN=${captain} scripts/loops/prompt.sh backlog)"`,
+      `--model sonnet --remote-control ${captain} "$(RISA_CAPTAIN=${captain} scripts/loops/prompt.sh backlog)"`,
     );
     expect(out).not.toContain("--continue");
     rmSync(folder, { recursive: true });
@@ -697,7 +697,7 @@ describe("pnpm prd open", () => {
   });
 
   it("prints the command without iTerm2, and with --print", () => {
-    const out = ok(["auto"], { CARETOOK_ITERM_APP: join(root, "no-such-app") });
+    const out = ok(["auto"], { RISA_ITERM_APP: join(root, "no-such-app") });
     expect(out).toMatch(/iTerm2 isn't here/);
     expect(out).toContain(
       `  cd ${join(loops, "auto")} && ${join(main, "scripts/loops/session.sh")} prd-auto --auto -- --remote-control prd-auto "$(scripts/loops/prompt.sh orchestrator auto --resume --auto)"`,

@@ -17,7 +17,7 @@
 #   --resolve <id>     resolve a thread first: a fixed finding (Codex leaves its
 #                      threads open, outdated) or a declined one (reply on the
 #                      thread with the reason first); repeatable
-#   --wait [min]       poll every 60 s (CARETOOK_REVIEW_POLL) until Codex has
+#   --wait [min]       poll every 60 s (RISA_REVIEW_POLL) until Codex has
 #                      answered on the head (clean, carried or not, or findings), for up to min
 #                      minutes (default 20); a waiting or stale verdict keeps it
 #                      waiting, and out of credits ends it at once (no review is
@@ -106,7 +106,7 @@ fi
 
 verdict
 if [[ -n $wait ]]; then
-  poll=${CARETOOK_REVIEW_POLL:-60}
+  poll=${RISA_REVIEW_POLL:-60}
   deadline=$(($(date +%s) + wait * 60))
   while [[ $state == waiting || $state == stale ]]; do
     if (($(date +%s) + poll > deadline)); then

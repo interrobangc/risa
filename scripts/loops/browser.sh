@@ -35,18 +35,18 @@
 # compares with a commit instead of the working tree. --list
 # prints each file's checks and runs nothing. No checks needed → exit 0.
 #
-# A failed check is retried once (--no-retry, or CARETOOK_BROWSER_RETRY=0, turns
+# A failed check is retried once (--no-retry, or RISA_BROWSER_RETRY=0, turns
 # it off) when the failure looks like contention: the load was above
-# CARETOOK_BROWSER_BUSY (default 40) at its start or end, or the log shows a
+# RISA_BROWSER_BUSY (default 40) at its start or end, or the log shows a
 # timeout, a 401 or PSYNC_S2101. It first waits (up to 5 min) for the load to
 # drop below that. A pass on the retry is FLAKY: it counts as passing, and is
 # recorded in $main/.loops/.browser-flakes.log so flaky steps can be fixed.
-# Every check's result also goes to the run log (run-log.mjs, CARETOOK_RUN_LOG)
+# Every check's result also goes to the run log (run-log.mjs, RISA_RUN_LOG)
 # for pnpm prd metrics.
 #
 # Each run holds a browser lease (lease.sh), the directory $main/.loops/.lease/browser/<N>.
 # When every lease is taken it waits, polling every 5 s, and gives up after
-# CARETOOK_BROWSER_WAIT seconds (default 1200). A lease whose holder is gone is
+# RISA_BROWSER_WAIT seconds (default 1200). A lease whose holder is gone is
 # taken over. The lease is released on every exit: success, failure, timeout,
 # Ctrl-C, kill.
 #
@@ -65,9 +65,9 @@
 # never exits, and whether it's in the lean set (e2e, the suite), in suite
 # order. --changed runs what the files need, lean or not. Three limits end a
 # check, each as TIMEOUT (so the one retry applies):
-#   - silence: no output line for CARETOOK_BROWSER_SILENCE seconds (default 90);
+#   - silence: no output line for RISA_BROWSER_SILENCE seconds (default 90);
 #   - its cap: --timeout S, else the manifest's cap, else 600 s;
-#   - the suite cap (--suite and --changed): CARETOOK_BROWSER_SUITE_CAP seconds,
+#   - the suite cap (--suite and --changed): RISA_BROWSER_SUITE_CAP seconds,
 #     default the sum of the selected checks' caps. Past it the running check is
 #     killed, nothing is retried, and the rest are listed as NOT-RUN.
 # A kill stops the check's whole process tree (node, Chrome, proxies).
@@ -75,15 +75,15 @@
 # they print their last line ($hang_done: "N/M passed", or "errors:"). Their
 # verdict comes from the "N/M passed" line, or "ended" when they print none.
 #
-# Env: CARETOOK_BROWSER_SLOTS (leases, default 2), CARETOOK_BROWSER_WAIT (s),
-# CARETOOK_BROWSER_SUITE (the suite, space or comma separated; default the
-# manifest's e2e checks), CARETOOK_BROWSER_SILENCE (s, default 90),
-# CARETOOK_BROWSER_SUITE_CAP (s), CARETOOK_BROWSER_PAUSE (s between suite
+# Env: RISA_BROWSER_SLOTS (leases, default 2), RISA_BROWSER_WAIT (s),
+# RISA_BROWSER_SUITE (the suite, space or comma separated; default the
+# manifest's e2e checks), RISA_BROWSER_SILENCE (s, default 90),
+# RISA_BROWSER_SUITE_CAP (s), RISA_BROWSER_PAUSE (s between suite
 # checks, default 2: Better Auth allows about 3 sign-ins per 10 s per client
-# IP, and the fixtures give every device its own), CARETOOK_BROWSER_RETRY (0: no
-# retry), CARETOOK_BROWSER_BUSY (the load that counts as busy, default 40),
-# CARETOOK_BROWSER_LEASES and CARETOOK_BROWSER_FLAKES (the lease directory and
-# the flakes log; tests point them elsewhere), CARETOOK_BROWSER_RESULTS (a file
+# IP, and the fixtures give every device its own), RISA_BROWSER_RETRY (0: no
+# retry), RISA_BROWSER_BUSY (the load that counts as busy, default 40),
+# RISA_BROWSER_LEASES and RISA_BROWSER_FLAKES (the lease directory and
+# the flakes log; tests point them elsewhere), RISA_BROWSER_RESULTS (a file
 # that --suite and --changed append "<check><TAB><result><TAB><retried 0|1>" to,
 # for CI's browser job).
 set -euo pipefail
@@ -96,13 +96,13 @@ default_cap=600
 # The line each never-exiting check prints last, once its work is done.
 hang_done='^([0-9]+/[0-9]+ passed|errors: )'
 hang_grace=2
-wait_max=${CARETOOK_BROWSER_WAIT:-1200}
-pause=${CARETOOK_BROWSER_PAUSE:-2}
-retry=${CARETOOK_BROWSER_RETRY:-1}
-busy=${CARETOOK_BROWSER_BUSY:-40}
-silence=${CARETOOK_BROWSER_SILENCE:-90}
-suite_cap=${CARETOOK_BROWSER_SUITE_CAP:-}
-flakes_log=${CARETOOK_BROWSER_FLAKES:-$loops/.browser-flakes.log}
+wait_max=${RISA_BROWSER_WAIT:-1200}
+pause=${RISA_BROWSER_PAUSE:-2}
+retry=${RISA_BROWSER_RETRY:-1}
+busy=${RISA_BROWSER_BUSY:-40}
+silence=${RISA_BROWSER_SILENCE:-90}
+suite_cap=${RISA_BROWSER_SUITE_CAP:-}
+flakes_log=${RISA_BROWSER_FLAKES:-$loops/.browser-flakes.log}
 # Log lines that mean contention more often than a bug (Playwright's included:
 # "Timeout 15000ms exceeded", "Test timeout of 90000ms exceeded").
 transient='(timed out|Timed out|timeout|Timeout [0-9]+ms|TIMEOUT| 401|401 |PSYNC_S2101|ECONNRESET|socket hang up)'
@@ -133,8 +133,8 @@ while (($#)); do
   esac
 done
 [[ -z $timeout || $timeout =~ ^[0-9]+$ ]] || die "--timeout takes whole seconds"
-[[ $silence =~ ^[0-9]+$ ]] || die "CARETOOK_BROWSER_SILENCE takes whole seconds"
-[[ -z $suite_cap || $suite_cap =~ ^[0-9]+$ ]] || die "CARETOOK_BROWSER_SUITE_CAP takes whole seconds"
+[[ $silence =~ ^[0-9]+$ ]] || die "RISA_BROWSER_SILENCE takes whole seconds"
+[[ -z $suite_cap || $suite_cap =~ ^[0-9]+$ ]] || die "RISA_BROWSER_SUITE_CAP takes whole seconds"
 [[ $mode != one || -n $check ]] || { usage >&2; exit 1; }
 
 top=$(git rev-parse --show-toplevel 2>/dev/null) || die "run pnpm prd browser inside the repo or a .loops worktree"
@@ -262,7 +262,7 @@ trap 'exit 143' TERM
 
 # Leases come from lease.sh (kind browser): write_lease LABEL relabels ours
 # (the suite does, per check), acquire LABEL takes one, waiting while all are
-# taken, and gives up with exit 75 after CARETOOK_BROWSER_WAIT seconds.
+# taken, and gives up with exit 75 after RISA_BROWSER_WAIT seconds.
 lease_say=vsay
 write_lease() { lease_write "$1"; }
 acquire() {
@@ -519,7 +519,7 @@ if [[ $mode == changed ]]; then
   }
   if [[ -n $full ]]; then
     # The lean set, plus whatever else the other files named.
-    read -r -a more <<< "${CARETOOK_BROWSER_SUITE:-$suite_default}"
+    read -r -a more <<< "${RISA_BROWSER_SUITE:-$suite_default}"
     selected+=("${more[@]}")
     echo "A change needs the whole lean set (build, config, dependencies, sync rules or migrations)."
   fi
@@ -542,14 +542,14 @@ if [[ $mode == changed ]]; then
   [[ -n $list_only ]] && exit 0
 else
   # --suite: every check.
-  read -r -a suite <<< "${CARETOOK_BROWSER_SUITE:-$suite_default}"
+  read -r -a suite <<< "${RISA_BROWSER_SUITE:-$suite_default}"
 fi
 
 # record_result CHECK RESULT RETRIED → one line for a caller that asks
-# (CARETOOK_BROWSER_RESULTS).
+# (RISA_BROWSER_RESULTS).
 record_result() {
-  if [[ -n ${CARETOOK_BROWSER_RESULTS:-} ]]; then
-    printf '%s\t%s\t%s\n' "$(resolve_check "$1" || echo "$1")" "$2" "$3" >> "$CARETOOK_BROWSER_RESULTS"
+  if [[ -n ${RISA_BROWSER_RESULTS:-} ]]; then
+    printf '%s\t%s\t%s\n' "$(resolve_check "$1" || echo "$1")" "$2" "$3" >> "$RISA_BROWSER_RESULTS"
   fi
 }
 

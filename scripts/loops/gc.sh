@@ -10,7 +10,7 @@
 #     rm.sh (worktree, stack, test database, branch). One with uncommitted
 #     changes is refused and kept, and so is one its wave still needs (not
 #     landed, or a requested run of its topic with no verdict).
-#   - a stack stopped for over CARETOOK_GC_STOPPED_HOURS (24): taken down with
+#   - a stack stopped for over RISA_GC_STOPPED_HOURS (24): taken down with
 #     `stack.sh down` (containers, data, slot); the worktree stays.
 set -euo pipefail
 # shellcheck source=stack-lib.sh

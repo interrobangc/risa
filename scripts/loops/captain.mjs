@@ -7,7 +7,7 @@
 // `backlog-<name>` request sessions, inbox and every other role keep their names.
 //
 // CLI: node captain.mjs next   a new captain for the main backlog session,
-//                              unlike its record's remote (CARETOOK_SESSIONS_DIR)
+//                              unlike its record's remote (RISA_SESSIONS_DIR)
 import { pathToFileURL } from "node:url";
 import { defaultDir, readRecord } from "./sessions.mjs";
 
@@ -61,5 +61,5 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     console.error("usage: captain.mjs next");
     process.exit(2);
   }
-  console.log(nextCaptain(process.env.CARETOOK_SESSIONS_DIR || defaultDir()));
+  console.log(nextCaptain(process.env.RISA_SESSIONS_DIR || defaultDir()));
 }

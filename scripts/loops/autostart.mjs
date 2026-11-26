@@ -21,7 +21,7 @@
 //
 // launchd itself is the host layer's (host.mjs: the LaunchAgents folder and
 // launchctl, each with its variable, both required under Vitest). Env:
-// CARETOOK_NODE_BIN (the Node 24 to put first; default this one when it is 24,
+// RISA_NODE_BIN (the Node 24 to put first; default this one when it is 24,
 // else nvm's newest v24, which the host layer finds).
 import { spawnSync } from "node:child_process";
 import {
@@ -121,7 +121,7 @@ export function which(/** @type {string} */ name, /** @type {string} */ path) {
 
 /** The Node 24 binary to put first, or null. */
 export function nodeBin(env = process.env) {
-  if (env.CARETOOK_NODE_BIN) return env.CARETOOK_NODE_BIN;
+  if (env.RISA_NODE_BIN) return env.RISA_NODE_BIN;
   if (process.versions.node.split(".")[0] === "24") return process.execPath;
   const dir = nvmNode("24", env);
   return dir ? join(dir, "node") : null;
@@ -136,7 +136,7 @@ export function where(env = process.env) {
 function install(/** @type {string} */ main, env = process.env) {
   const w = where(env);
   const node = nodeBin(env);
-  if (!node) throw new Error("autostart: no Node 24 found (nvm install 24, or CARETOOK_NODE_BIN)");
+  if (!node) throw new Error("autostart: no Node 24 found (nvm install 24, or RISA_NODE_BIN)");
   const found = TOOLS.map((t) => [t, which(t, env.PATH ?? "")]);
   const path = jobPath(
     dirname(node),
@@ -232,7 +232,7 @@ async function status(/** @type {string} */ main, env = process.env) {
     );
   try {
     const { readUsage } = await import("./usage.mjs");
-    if (readUsage(env.CARETOOK_USAGE_DIR || join(loops, ".usage"), { env }).spendLimit)
+    if (readUsage(env.RISA_USAGE_DIR || join(loops, ".usage"), { env }).spendLimit)
       console.log(
         "  a spend limit is configured: the watchdog won't recover while limited, but only turning extra usage off in the account fully guarantees no extra spend",
       );

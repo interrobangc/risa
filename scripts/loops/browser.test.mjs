@@ -115,20 +115,20 @@ beforeAll(() => {
   env = {
     ...rest,
     PATH: `${dirname(process.execPath)}:${process.env.PATH}`,
-    CARETOOK_BROWSER_LEASES: join(root, "leases"),
-    CARETOOK_BROWSER_FLAKES: join(root, "flakes.log"),
-    CARETOOK_RUN_LOG: join(root, "run-log.jsonl"),
+    RISA_BROWSER_LEASES: join(root, "leases"),
+    RISA_BROWSER_FLAKES: join(root, "flakes.log"),
+    RISA_RUN_LOG: join(root, "run-log.jsonl"),
     // Generous, so a loaded machine's slow Node start isn't silence; the silent
     // check's test sets 2.
-    CARETOOK_BROWSER_SILENCE: "10",
-    CARETOOK_BROWSER_PAUSE: "0",
-    CARETOOK_BROWSER_BUSY: "100000",
-    CARETOOK_BROWSER_SUITE: "",
-    CARETOOK_BROWSER_SUITE_CAP: "",
-    CARETOOK_BROWSER_RETRY: "1",
+    RISA_BROWSER_SILENCE: "10",
+    RISA_BROWSER_PAUSE: "0",
+    RISA_BROWSER_BUSY: "100000",
+    RISA_BROWSER_SUITE: "",
+    RISA_BROWSER_SUITE_CAP: "",
+    RISA_BROWSER_RETRY: "1",
     // A one-check run never consults the load gate; off, so a suite's doesn't wait
     // on the real machine's load either (the busy-gate test sets it back).
-    CARETOOK_LOAD_GATE: "off",
+    RISA_LOAD_GATE: "off",
     FAKE_STATE: join(root, "state"),
     FAKE_PARENT: String(process.pid),
   };
@@ -166,7 +166,7 @@ const killGroups = () => {
 // drop the leases too, so the next test starts with none held.
 afterEach(() => {
   killGroups();
-  rmSync(env.CARETOOK_BROWSER_LEASES, { recursive: true, force: true });
+  rmSync(env.RISA_BROWSER_LEASES, { recursive: true, force: true });
 });
 afterAll(() => {
   killGroups();
@@ -206,7 +206,7 @@ const run = async (args, extra = {}) => {
 };
 const leasesLeft = () => {
   try {
-    return readdirSync(env.CARETOOK_BROWSER_LEASES).filter((n) => !n.startsWith("."));
+    return readdirSync(env.RISA_BROWSER_LEASES).filter((n) => !n.startsWith("."));
   } catch {
     return [];
   }
@@ -250,7 +250,7 @@ describe("a check's run", SLOW, () => {
   it("stops its check, worker and all, when it's TERMed while the check runs", async () => {
     const pidFile = join(env.FAKE_STATE, "specsilent.pid");
     rmSync(pidFile, { force: true });
-    const { child, done } = start(["--no-retry", "specsilent"], { CARETOOK_BROWSER_SILENCE: "60" });
+    const { child, done } = start(["--no-retry", "specsilent"], { RISA_BROWSER_SILENCE: "60" });
     expect(await until(() => existsSync(pidFile), 60_000)).toBe(true);
     const worker = Number(readFileSync(pidFile, "utf8"));
     child.kill("SIGTERM");
@@ -284,7 +284,7 @@ describe("a run that's interrupted or throws", SLOW, () => {
         "specsilent",
       ],
       // Silence and cap far off: only the fixture's own parent check can end it in time.
-      { cwd: repo, env: { ...env, CARETOOK_BROWSER_SILENCE: "600" }, stdio: ["ignore", "pipe", "inherit"] },
+      { cwd: repo, env: { ...env, RISA_BROWSER_SILENCE: "600" }, stdio: ["ignore", "pipe", "inherit"] },
     );
     const group = Number(await new Promise((r) => wrapper.stdout.once("data", (d) => r(String(d).trim()))));
     groups.add(group);
@@ -300,7 +300,7 @@ describe("a run that's interrupted or throws", SLOW, () => {
     rmSync(pidFile, { force: true });
     let group = 0;
     const midRun = async () => {
-      group = start(["--no-retry", "specsilent"], { CARETOOK_BROWSER_SILENCE: "600" }).child.pid;
+      group = start(["--no-retry", "specsilent"], { RISA_BROWSER_SILENCE: "600" }).child.pid;
       await until(() => existsSync(pidFile), 60_000);
       throw new Error("mid-run");
     };
@@ -344,17 +344,17 @@ describe("one spec", SLOW, () => {
     const loadFile = join(root, "busy-load");
     writeFileSync(loadFile, "99 99 99\n");
     const busy = {
-      CARETOOK_LOAD_GATE: "",
-      CARETOOK_LOAD_FILE: loadFile,
-      CARETOOK_LOAD_BUSY: "1",
-      CARETOOK_LOAD_WAIT: "1",
-      CARETOOK_LOAD_POLL: "1",
+      RISA_LOAD_GATE: "",
+      RISA_LOAD_FILE: loadFile,
+      RISA_LOAD_BUSY: "1",
+      RISA_LOAD_WAIT: "1",
+      RISA_LOAD_POLL: "1",
     };
     const one = await run(["specpass"], busy);
     cleanSpec(one.out, one.status);
     expect(one.out).not.toMatch(/busy|load dropped|Gave up waiting for the load/);
     // The gate is busy: a suite (which does wait on it) says so.
-    const suite = await run(["--suite"], { ...busy, CARETOOK_BROWSER_SUITE: "specpass" });
+    const suite = await run(["--suite"], { ...busy, RISA_BROWSER_SUITE: "specpass" });
     expect(suite.out).toMatch(/^The machine is busy \(5-minute load 99, over 1\)/m);
     expect(suite.out).toMatch(/^Gave up waiting for the load after \d+s/m);
   });
@@ -396,7 +396,7 @@ describe("one spec", SLOW, () => {
     writeFileSync(slow, "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2500);\n");
     const { out, status } = await run(["specbusy"], {
       NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${slow}`.trim(),
-      CARETOOK_BROWSER_SILENCE: "60",
+      RISA_BROWSER_SILENCE: "60",
     });
     expect(status, out).toBe(124);
     expect(out.match(/^TIMEOUT \(killed at its 15s cap\)$/gm), out).toHaveLength(2);
@@ -410,7 +410,7 @@ describe("one spec", SLOW, () => {
   });
 
   it("kills a silent spec at the silence limit", async () => {
-    const { out, status, secs } = await run(["--no-retry", "specsilent"], { CARETOOK_BROWSER_SILENCE: "5" });
+    const { out, status, secs } = await run(["--no-retry", "specsilent"], { RISA_BROWSER_SILENCE: "5" });
     expect(status).toBe(124);
     expect(out).toMatch(/^TIMEOUT \(silent: no output for 5s\)$/m);
     expect(secs).toBeLessThan(40);
@@ -421,14 +421,14 @@ describe("one spec", SLOW, () => {
     expect(status).toBe(0);
     expect(out).toMatch(/^FAIL flaky\n {2}Error: timed out waiting for x/m);
     expect(out).toMatch(/^■ specflaky\.mjs: FLAKY/m);
-    expect(readFileSync(env.CARETOOK_BROWSER_FLAKES, "utf8")).toMatch(/\tspecflaky\.mjs\t/);
+    expect(readFileSync(env.RISA_BROWSER_FLAKES, "utf8")).toMatch(/\tspecflaky\.mjs\t/);
   });
 });
 
 describe("a suite", SLOW, () => {
   it("appends each check's result for CI's browser job", async () => {
     const results = join(root, "results.tsv");
-    await run(["--suite", "--no-retry"], { CARETOOK_BROWSER_RESULTS: results });
+    await run(["--suite", "--no-retry"], { RISA_BROWSER_RESULTS: results });
     expect(readFileSync(results, "utf8")).toBe("specpass\tpass\t0\nspecfail\tFAIL\t0\n");
   });
 
@@ -443,8 +443,8 @@ describe("a suite", SLOW, () => {
 
   it("stops at the suite cap and lists the rest as not run", async () => {
     const { out, status } = await run(["--suite"], {
-      CARETOOK_BROWSER_SUITE: "specpass specslow specpass",
-      CARETOOK_BROWSER_SUITE_CAP: "15",
+      RISA_BROWSER_SUITE: "specpass specslow specpass",
+      RISA_BROWSER_SUITE_CAP: "15",
     });
     expect(status).toBe(1);
     expect(out).toMatch(/^TIMEOUT \(killed at its ([1-9]|1[0-5])s suite cap\)$/m);
@@ -518,7 +518,7 @@ describe("the run log", SLOW, () => {
     const log = join(root, "results-run-log.jsonl");
     const state = join(root, "results-state");
     mkdirSync(state);
-    const extra = { CARETOOK_RUN_LOG: log, FAKE_STATE: state };
+    const extra = { RISA_RUN_LOG: log, FAKE_STATE: state };
     expect((await run(["specpass"], extra)).status).toBe(0);
     expect((await run(["specflaky"], extra)).status).toBe(0);
     expect((await run(["--no-retry", "specfail"], extra)).status).not.toBe(0);

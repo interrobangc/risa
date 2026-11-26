@@ -85,19 +85,19 @@ esac`,
       ...process.env,
       HOME: join(root, "home"),
       PATH: `${tools}:/usr/bin:/bin`,
-      CARETOOK_LAUNCH_AGENTS_DIR: agents,
-      CARETOOK_LAUNCHCTL: join(root, "sbin/launchctl"),
-      CARETOOK_NODE_BIN: join(root, "node24/node"),
-      CARETOOK_USAGE_DIR: join(main, ".loops/.usage"),
+      RISA_LAUNCH_AGENTS_DIR: agents,
+      RISA_LAUNCHCTL: join(root, "sbin/launchctl"),
+      RISA_NODE_BIN: join(root, "node24/node"),
+      RISA_USAGE_DIR: join(main, ".loops/.usage"),
     };
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   beforeEach(() => rmSync(calls, { force: true }));
 
   it("refuses to run under a test without the temp folder and stub", () => {
-    const r = run("status", { CARETOOK_LAUNCH_AGENTS_DIR: "", VITEST: "true" });
+    const r = run("status", { RISA_LAUNCH_AGENTS_DIR: "", VITEST: "true" });
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(/a test must set CARETOOK_LAUNCH_AGENTS_DIR and CARETOOK_LAUNCHCTL/);
+    expect(r.stderr).toMatch(/a test must set RISA_LAUNCH_AGENTS_DIR and RISA_LAUNCHCTL/);
   });
 
   it("install writes a valid plist with the full path and loads it", () => {

@@ -170,9 +170,9 @@ not_files() {
   if (($#)); then grep -vxF -f <(printf '%s\n' "$@") || true; else cat; fi
 }
 # The PRD cap (lanes): `pnpm prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
-# wins over CARETOOK_MAX_PRDS; the default is 4. max_prds_from says which one set it.
+# wins over RISA_MAX_PRDS; the default is 4. max_prds_from says which one set it.
 prd_cap_file=$loops/.prd-cap
-max_prds=${CARETOOK_MAX_PRDS:-4} max_prds_from=${CARETOOK_MAX_PRDS:+CARETOOK_MAX_PRDS}
+max_prds=${RISA_MAX_PRDS:-4} max_prds_from=${RISA_MAX_PRDS:+RISA_MAX_PRDS}
 max_prds_from=${max_prds_from:-default}
 if [[ -r $prd_cap_file ]] && _cap=$(<"$prd_cap_file") && [[ $_cap =~ ^[1-9][0-9]?$ ]]; then
   max_prds=$_cap max_prds_from="pnpm prd dispatch --cap"
@@ -258,12 +258,12 @@ end_pid() {
 }
 
 # run_log [--once <field,…>] KIND [key=value|key:=json]… → one event in the run log
-# (run-log.mjs; $CARETOOK_RUN_LOG, else .loops/.run-log.jsonl in the main
+# (run-log.mjs; $RISA_RUN_LOG, else .loops/.run-log.jsonl in the main
 # checkout). It never prints and never fails: watching never hurts the work.
 run_log() {
   local once=()
   if [[ ${1:-} == --once ]]; then once=(--once "${2:-}"); shift 2; fi
-  node "$loops_lib_dir/run-log.mjs" append --log "${CARETOOK_RUN_LOG:-$loops/.run-log.jsonl}" \
+  node "$loops_lib_dir/run-log.mjs" append --log "${RISA_RUN_LOG:-$loops/.run-log.jsonl}" \
     ${once[@]+"${once[@]}"} "$@" </dev/null >/dev/null 2>&1 || true
 }
 
@@ -470,7 +470,7 @@ file_mtime() {
 }
 
 # The load gate (load-gate.mjs decides; busy is the 5-minute load over
-# CARETOOK_LOAD_BUSY, default twice the cores). load_gate → "<busy|ok|off|unread>
+# RISA_LOAD_BUSY, default twice the cores). load_gate → "<busy|ok|off|unread>
 # <load> <threshold> <cores>"; a missing or failing script reads as unread (not busy).
 load_gate() {
   local s out
@@ -479,21 +479,21 @@ load_gate() {
   echo "${out:-unread - - -}"
 }
 
-# load_gate_wait WHAT: while the machine is busy, poll (CARETOOK_LOAD_POLL, 15 s)
-# for at most CARETOOK_LOAD_WAIT (600 s), then go ahead and say so. Sets
-# load_waited to the seconds waited. CARETOOK_LOAD_GATE=off or
-# CARETOOK_LEASES=off waits for nothing. Always returns 0.
+# load_gate_wait WHAT: while the machine is busy, poll (RISA_LOAD_POLL, 15 s)
+# for at most RISA_LOAD_WAIT (600 s), then go ahead and say so. Sets
+# load_waited to the seconds waited. RISA_LOAD_GATE=off or
+# RISA_LEASES=off waits for nothing. Always returns 0.
 load_waited=0
 load_gate_wait() {
-  local what=$1 max=${CARETOOK_LOAD_WAIT:-600} poll=${CARETOOK_LOAD_POLL:-15} t0 state l thr _c said=""
+  local what=$1 max=${RISA_LOAD_WAIT:-600} poll=${RISA_LOAD_POLL:-15} t0 state l thr _c said=""
   load_waited=0
-  [[ ${CARETOOK_LOAD_GATE:-} == off || ${CARETOOK_LEASES:-} == off ]] && return 0
+  [[ ${RISA_LOAD_GATE:-} == off || ${RISA_LEASES:-} == off ]] && return 0
   [[ $max =~ ^[0-9]+$ ]] || max=600
   t0=$(date +%s)
   while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy ]]; do
     load_waited=$(($(date +%s) - t0))
     if [[ -z $said ]]; then
-      echo "The machine is busy (5-minute load $l, over $thr): waiting up to ${max}s before $what (CARETOOK_LOAD_WAIT)…"
+      echo "The machine is busy (5-minute load $l, over $thr): waiting up to ${max}s before $what (RISA_LOAD_WAIT)…"
       said=1
     fi
     if ((load_waited >= max)); then
@@ -510,21 +510,21 @@ load_gate_wait() {
 }
 
 # The disk guard: free space on the volume holding the main checkout, against
-# CARETOOK_MIN_FREE_GB (default 10). new.sh (a stacked worktree), stack.sh up
+# RISA_MIN_FREE_GB (default 10). new.sh (a stacked worktree), stack.sh up
 # and browser.sh's check build call require_disk; ls.sh prints disk_line.
-# CARETOOK_FREE_GB stands in for the reading (tests).
+# RISA_FREE_GB stands in for the reading (tests).
 
 # min_free_gb → the line, in whole GB.
 min_free_gb() {
-  local m=${CARETOOK_MIN_FREE_GB:-10}
-  [[ $m =~ ^[0-9]+$ ]] || die "CARETOOK_MIN_FREE_GB takes whole GB (got $m)"
+  local m=${RISA_MIN_FREE_GB:-10}
+  [[ $m =~ ^[0-9]+$ ]] || die "RISA_MIN_FREE_GB takes whole GB (got $m)"
   echo "$m"
 }
 
 # free_gb → whole GB free on the main checkout's volume, or nothing when df
 # can't tell.
 free_gb() {
-  if [[ -n ${CARETOOK_FREE_GB:-} ]]; then echo "${CARETOOK_FREE_GB%%.*}"; return 0; fi
+  if [[ -n ${RISA_FREE_GB:-} ]]; then echo "${RISA_FREE_GB%%.*}"; return 0; fi
   df -Pk "$main" 2>/dev/null | awk 'NR == 2 && $4 ~ /^[0-9]+$/ { printf "%d\n", $4 / 1048576 }'
 }
 
@@ -535,7 +535,7 @@ require_disk() {
   free=$(free_gb) min=$(min_free_gb)
   [[ $free =~ ^[0-9]+$ ]] || return 0
   ((free >= min)) && return 0
-  die "Refusing $1: only $free GB free on the disk holding $main, under the $min GB line (CARETOOK_MIN_FREE_GB).
+  die "Refusing $1: only $free GB free on the disk holding $main, under the $min GB line (RISA_MIN_FREE_GB).
 See what can go, and free it: pnpm prd reclaim"
 }
 
@@ -613,16 +613,16 @@ land_subject() {
 }
 
 # pr_seam BRANCH → sets drift_ref, what a PR's branch must be synced with: dev,
-# or origin/dev under the live-test seam CARETOOK_PR_THROWAWAY=1 (pr.sh and
+# or origin/dev under the live-test seam RISA_PR_THROWAWAY=1 (pr.sh and
 # land.sh: they then never push dev, and land stops before the merge). The seam
 # takes only a branch with "throwaway" in its name.
 pr_seam() {
   drift_ref=$trunk
-  [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]] || return 0
-  [[ $1 == *throwaway* ]] || die "CARETOOK_PR_THROWAWAY=1 is for throwaway branches only (a name with \"throwaway\" in it)"
+  [[ ${RISA_PR_THROWAWAY:-} == 1 ]] || return 0
+  [[ $1 == *throwaway* ]] || die "RISA_PR_THROWAWAY=1 is for throwaway branches only (a name with \"throwaway\" in it)"
   git -C "$main" fetch --quiet origin "$trunk" || die "couldn't fetch origin/$trunk"
   drift_ref=origin/$trunk
-  echo "CARETOOK_PR_THROWAWAY: $trunk is never pushed; $1 is measured against $drift_ref"
+  echo "RISA_PR_THROWAWAY: $trunk is never pushed; $1 is measured against $drift_ref"
 }
 
 # with_backlog_lock CMD… → run CMD in a subshell under pnpm backlog's lock (the

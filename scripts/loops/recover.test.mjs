@@ -2,7 +2,7 @@
 // inventory-facts.mjs, inventory.mjs) against a throwaway repo with these
 // scripts copied in, real git worktrees, the sample project's stub stack hook
 // (its state and calls shared with the fakes), and fake lsof, open, sleep,
-// claude, nvm and osascript (with CARETOOK_ITERM_APP a folder here):
+// claude, nvm and osascript (with RISA_ITERM_APP a folder here):
 // nothing here touches real containers, servers, slots, sessions, tabs, asks or worktrees,
 // and the dry run must change nothing on disk. The dispatcher is a node process that
 // only sleeps, its pid in the lock; the fake tab for it starts one (a minute at most).
@@ -56,10 +56,10 @@ fi
   open: `#!/usr/bin/env bash
 echo "open $*" >> "$FAKE_LOG"
 `,
-  // A fake clock: with CARETOOK_CLOCK_FILE, sleeping moves it on.
+  // A fake clock: with RISA_CLOCK_FILE, sleeping moves it on.
   sleep: `#!/usr/bin/env bash
 echo "sleep $*" >> "$FAKE_LOG"
-[[ -z \${CARETOOK_CLOCK_FILE:-} ]] || echo $(($(cat "$CARETOOK_CLOCK_FILE") + \${1%.*})) > "$CARETOOK_CLOCK_FILE"
+[[ -z \${RISA_CLOCK_FILE:-} ]] || echo $(($(cat "$RISA_CLOCK_FILE") + \${1%.*})) > "$RISA_CLOCK_FILE"
 `,
   // The recovery agent (--remote-control): logs one line and records its cwd and
   // args, one per line, in $FAKE_STATE/agent-args. A probe (-p) fails
@@ -150,20 +150,20 @@ function build() {
     NVM_DIR: join(root, "nvm"),
     TZ: "UTC",
     TRUNK: "dev",
-    CARETOOK_FREE_GB: "50",
-    CARETOOK_MIN_FREE_GB: "",
-    CARETOOK_LEASE_ROOT: "",
-    CARETOOK_CLOCK_FILE: "",
-    CARETOOK_ITERM_APP: join(root, "iTerm.app"),
-    CARETOOK_SESSIONS_DIR: "",
-    CARETOOK_LANDING_DIR: "",
-    CARETOOK_ASKS_DIR: "",
+    RISA_FREE_GB: "50",
+    RISA_MIN_FREE_GB: "",
+    RISA_LEASE_ROOT: "",
+    RISA_CLOCK_FILE: "",
+    RISA_ITERM_APP: join(root, "iTerm.app"),
+    RISA_SESSIONS_DIR: "",
+    RISA_LANDING_DIR: "",
+    RISA_ASKS_DIR: "",
   };
   mkdirSync(join(root, "iTerm.app"));
   for (const k of [
-    "CARETOOK_RECOVER_PROBE_SECS",
-    "CARETOOK_RECOVER_STEP_SECS",
-    "CARETOOK_RECOVER_DISPATCH_SECS",
+    "RISA_RECOVER_PROBE_SECS",
+    "RISA_RECOVER_STEP_SECS",
+    "RISA_RECOVER_DISPATCH_SECS",
     "SAMPLE_STACK_FAIL",
   ])
     delete env[k];
@@ -392,9 +392,9 @@ describe("recover --dry-run", () => {
   });
 
   it("flags low disk", () => {
-    const inv = json({ CARETOOK_FREE_GB: "3", CARETOOK_MIN_FREE_GB: "5" });
+    const inv = json({ RISA_FREE_GB: "3", RISA_MIN_FREE_GB: "5" });
     expect(inv.disk).toEqual({ freeGb: 3, minGb: 5, low: true });
-    expect(okRecover(["--dry-run"], { CARETOOK_FREE_GB: "3" })).toMatch(
+    expect(okRecover(["--dry-run"], { RISA_FREE_GB: "3" })).toMatch(
       /disk: 3 GB free \(line: 10 GB\) · LOW/,
     );
   });
@@ -584,7 +584,7 @@ describe("down and recover", () => {
     allDown();
     const clock = join(state, "clock");
     put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000)); // 12:00 UTC
-    const out = okRecover(["--at", "15:00"], { CARETOOK_CLOCK_FILE: clock });
+    const out = okRecover(["--at", "15:00"], { RISA_CLOCK_FILE: clock });
     expect(out).toMatch(/Waiting until 15:00 \(in 3h00m\)/);
     const lines = calls().split("\n");
     const slept = lines.filter((l) => l.startsWith("sleep ")).map((l) => Number(l.split(" ")[1]));
@@ -602,12 +602,12 @@ describe("down and recover", () => {
       .split("\n")
       .filter((l) => l.startsWith("sleep "))
       .map((l) => Number(l.split(" ")[1]));
-  const STEP = { CARETOOK_RECOVER_STEP_SECS: String(6 * 3600) };
+  const STEP = { RISA_RECOVER_STEP_SECS: String(6 * 3600) };
 
   it("--at a time that has passed waits until tomorrow", () => {
     const clock = join(state, "clock");
     put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000));
-    const out = okRecover(["--at=09:30"], { ...STEP, CARETOOK_CLOCK_FILE: clock });
+    const out = okRecover(["--at=09:30"], { ...STEP, RISA_CLOCK_FILE: clock });
     expect(out).toMatch(/Waiting until 09:30 \(in 21h30m\)/);
     expect(Number(readFileSync(clock, "utf8"))).toBe(Date.UTC(2026, 10, 20, 9, 30, 0) / 1000);
     expect(slept()).toEqual([21600, 21600, 21600, 12600]);
@@ -619,7 +619,7 @@ describe("down and recover", () => {
     const out = okRecover(["--at", "03:30"], {
       ...STEP,
       TZ: "America/Los_Angeles",
-      CARETOOK_CLOCK_FILE: clock,
+      RISA_CLOCK_FILE: clock,
     });
     expect(out).toMatch(/Waiting until 03:30 \(in 23h30m\)/);
     expect(Number(readFileSync(clock, "utf8"))).toBe(Date.UTC(2026, 10, 20, 11, 30, 0) / 1000);
@@ -629,11 +629,11 @@ describe("down and recover", () => {
   it("refuses a step that isn't a whole number of seconds", () => {
     put("clock", String(Date.UTC(2026, 10, 19, 12, 0, 0) / 1000));
     const r = recover(["--at", "13:00"], {
-      CARETOOK_RECOVER_STEP_SECS: "0",
-      CARETOOK_CLOCK_FILE: join(state, "clock"),
+      RISA_RECOVER_STEP_SECS: "0",
+      RISA_CLOCK_FILE: join(state, "clock"),
     });
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toMatch(/CARETOOK_RECOVER_STEP_SECS must be a whole number/);
+    expect(r.stderr).toMatch(/RISA_RECOVER_STEP_SECS must be a whole number/);
     expect(calls()).not.toMatch(/^sleep /m);
   });
 
@@ -881,7 +881,7 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
   it("a failed reopen keeps the intent and opens no agent; the next run retries it", () => {
     crashed();
     put("dispatch-fails", "");
-    let r = recover([], { CARETOOK_RECOVER_DISPATCH_SECS: "0" });
+    let r = recover([], { RISA_RECOVER_DISPATCH_SECS: "0" });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/didn't take its lock within 0s; its intent is kept/);
     expect(r.stderr).toMatch(/Didn't recover:\n {2}dispatcher/);
@@ -1041,9 +1041,9 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     rmSync(marker);
   });
 
-  it("--unattended with CARETOOK_RECOVER_REPORT=off (the watchdog's later tries) files no report", () => {
+  it("--unattended with RISA_RECOVER_REPORT=off (the watchdog's later tries) files no report", () => {
     crashed();
-    const r = recover(["--unattended"], { SAMPLE_STACK_FAIL: "start:t", CARETOOK_RECOVER_REPORT: "off" });
+    const r = recover(["--unattended"], { SAMPLE_STACK_FAIL: "start:t", RISA_RECOVER_REPORT: "off" });
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/not reported again this incident/);
     expect(reports()).toEqual([]);

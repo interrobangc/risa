@@ -102,12 +102,12 @@ describe("checkBudget", () => {
 });
 
 describe("hardLimit", () => {
-  it("is 20 minutes for slice and quick checks, 40 for full, or CARETOOK_CHECK_LIMIT", () => {
+  it("is 20 minutes for slice and quick checks, 40 for full, or RISA_CHECK_LIMIT", () => {
     expect(hardLimit("slice", {})).toBe(1200);
     expect(hardLimit("quick", {})).toBe(1200);
     expect(hardLimit("full", {})).toBe(2400);
-    expect(hardLimit("full", { CARETOOK_CHECK_LIMIT: "90" })).toBe(90);
-    expect(hardLimit("full", { CARETOOK_CHECK_LIMIT: "soon" })).toBe(2400);
+    expect(hardLimit("full", { RISA_CHECK_LIMIT: "90" })).toBe(90);
+    expect(hardLimit("full", { RISA_CHECK_LIMIT: "soon" })).toBe(2400);
   });
 });
 
@@ -129,7 +129,7 @@ describe("check-budget.mjs CLI", () => {
   const cli = (args, env = {}) =>
     spawnSync("node", [join(HERE, "check-budget.mjs"), ...args], {
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_CHECK_LIMIT: "", CARETOOK_CHECK_SILENCE: "", ...env },
+      env: { ...process.env, RISA_CHECK_LIMIT: "", RISA_CHECK_SILENCE: "", ...env },
     });
 
   it("prints the two limits, then the description, from the log", () => {
@@ -146,8 +146,8 @@ describe("check-budget.mjs CLI", () => {
 
   it("falls back to the hard limit with no log, and takes the settings from env", () => {
     const r = cli(["--mode", "quick", "--branch", "dev", "--log", join(root, "none"), "--load", "1"], {
-      CARETOOK_CHECK_LIMIT: "300",
-      CARETOOK_CHECK_SILENCE: "60",
+      RISA_CHECK_LIMIT: "300",
+      RISA_CHECK_SILENCE: "60",
     });
     expect(r.stdout.split("\n")[0]).toBe("300 60");
   });

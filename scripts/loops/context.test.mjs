@@ -355,9 +355,9 @@ afterAll(() => {
 
 const baseEnv = () => ({
   PATH: process.env.PATH,
-  CARETOOK_SESSIONS_DIR: sessions,
-  CARETOOK_SESSION_NAME: "prd-t",
-  CARETOOK_SESSION_PID: String(PID),
+  RISA_SESSIONS_DIR: sessions,
+  RISA_SESSION_NAME: "prd-t",
+  RISA_SESSION_PID: String(PID),
 });
 const hook = (input, extra = {}) =>
   spawnSync("node", [CONTEXT, "hook"], {
@@ -383,13 +383,13 @@ describe("the hook as a command", () => {
     expect(contextOf(first.stdout).hookEventName).toBe("PostToolUse");
     expect(contextOf(first.stdout).additionalContext).toContain("240k");
     expect(hook({ transcript_path: transcript }).stdout).toBe("");
-    const again = hook({ transcript_path: transcript }, { CARETOOK_CONTEXT_REMIND_MIN: "0.00001" });
+    const again = hook({ transcript_path: transcript }, { RISA_CONTEXT_REMIND_MIN: "0.00001" });
     expect(contextOf(again.stdout).additionalContext).toContain("240k");
   });
 
   it("takes the soft and hard limits from the environment", () => {
     writeFileSync(transcript, assistant(1, 120_000));
-    const env = { CARETOOK_CONTEXT_LIMIT: "100000", CARETOOK_CONTEXT_HARD_LIMIT: "110000" };
+    const env = { RISA_CONTEXT_LIMIT: "100000", RISA_CONTEXT_HARD_LIMIT: "110000" };
     const r = hook({ transcript_path: transcript }, env);
     expect(contextOf(r.stdout).additionalContext).toContain("past the hard limit of 110k");
     writeFileSync(transcript, assistant(1, 105_000));
@@ -463,7 +463,7 @@ describe("the hook as a command", () => {
       join(sessions, "backlog.json"),
       JSON.stringify({ pid: PID, kind: "backlog", started: new Date().toISOString() }),
     );
-    const asBacklog = { CARETOOK_SESSION_NAME: "backlog" };
+    const asBacklog = { RISA_SESSION_NAME: "backlog" };
     writeFileSync(transcript, assistant(1, 170_000));
     mkdirSync(join(root, "s1", "subagents"), { recursive: true });
     writeFileSync(
@@ -481,7 +481,7 @@ describe("the hook as a command", () => {
       join(sessions, "inbox.json"),
       JSON.stringify({ pid: PID, kind: "inbox", started: new Date().toISOString() }),
     );
-    const asInbox = { CARETOOK_SESSION_NAME: "inbox" };
+    const asInbox = { RISA_SESSION_NAME: "inbox" };
     writeFileSync(transcript, assistant(1, 170_000));
     mkdirSync(join(root, "s1", "subagents"), { recursive: true });
     writeFileSync(
@@ -517,7 +517,7 @@ describe("the hook as a command", () => {
       env: { PATH: process.env.PATH },
     });
     expect([own.status, own.stdout]).toEqual([0, ""]);
-    expect(hook({ transcript_path: transcript }, { CARETOOK_SESSION_PID: "77" }).stdout).toBe("");
+    expect(hook({ transcript_path: transcript }, { RISA_SESSION_PID: "77" }).stdout).toBe("");
     expect(existsSync(join(context, "prd-t.json"))).toBe(false);
   });
 });
@@ -540,7 +540,7 @@ describe("pnpm prd context", () => {
       join(sessions, "backlog.json"),
       JSON.stringify({ pid: PID, kind: "backlog", started: new Date().toISOString() }),
     );
-    const asBacklog = { CARETOOK_SESSION_NAME: "backlog" };
+    const asBacklog = { RISA_SESSION_NAME: "backlog" };
     writeFileSync(transcript, assistant(1, 240_000));
     hook({ transcript_path: transcript }, asBacklog);
     expect(cli([], asBacklog).stdout).toBe("backlog: 240k over soft (soft 160k, no hard limit)\n");
@@ -559,7 +559,7 @@ describe("pnpm prd context", () => {
   });
 
   it("refuses --keep outside a wrapped session and from a slice branch", () => {
-    expect(cli(["--keep", "x"], { CARETOOK_SESSION_NAME: "" }).status).toBe(1);
+    expect(cli(["--keep", "x"], { RISA_SESSION_NAME: "" }).status).toBe(1);
     const repo = join(root, "slice");
     mkdirSync(repo);
     spawnSync("git", ["init", "-q", "-b", "slice/t/1", repo]);

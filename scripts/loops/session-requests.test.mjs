@@ -354,8 +354,8 @@ describe("the command", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        CARETOOK_REQUESTS_DIR: dir,
-        CARETOOK_SESSIONS_DIR: join(root, "no-sessions"),
+        RISA_REQUESTS_DIR: dir,
+        RISA_SESSIONS_DIR: join(root, "no-sessions"),
       },
     });
 

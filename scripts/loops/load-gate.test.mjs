@@ -37,21 +37,21 @@ describe("loadGate", () => {
     expect(loadGate({ load: 9, cores: 16 }).busy).toBe(false);
   });
 
-  it("takes CARETOOK_LOAD_BUSY over the default, and ignores one that isn't a positive number", () => {
-    const env = { CARETOOK_LOAD_BUSY: "30" };
+  it("takes RISA_LOAD_BUSY over the default, and ignores one that isn't a positive number", () => {
+    const env = { RISA_LOAD_BUSY: "30" };
     expect(loadGate({ load: 25, cores: 10, env })).toMatchObject({
       busy: false,
       threshold: 30,
       setting: true,
     });
     expect(loadGate({ load: 31, cores: 10, env }).busy).toBe(true);
-    expect(loadGate({ load: 25, cores: 10, env: { CARETOOK_LOAD_BUSY: "5.5" } }).threshold).toBe(5.5);
+    expect(loadGate({ load: 25, cores: 10, env: { RISA_LOAD_BUSY: "5.5" } }).threshold).toBe(5.5);
     for (const bad of ["lots", "0", "-3", ""])
-      expect(loadGate({ load: 1, cores: 10, env: { CARETOOK_LOAD_BUSY: bad } }).threshold).toBe(20);
+      expect(loadGate({ load: 1, cores: 10, env: { RISA_LOAD_BUSY: bad } }).threshold).toBe(20);
   });
 
-  it("is never busy with CARETOOK_LOAD_GATE=off", () => {
-    const g = loadGate({ load: 999, cores: 1, env: { CARETOOK_LOAD_GATE: "off" } });
+  it("is never busy with RISA_LOAD_GATE=off", () => {
+    const g = loadGate({ load: 999, cores: 1, env: { RISA_LOAD_GATE: "off" } });
     expect(g).toMatchObject({ busy: false, off: true });
     expect(stateOf(g)).toBe("off");
   });
@@ -82,11 +82,11 @@ describe("readLoadGate and the words", () => {
   beforeAll(() => (dir = realpathSync(mkdtempSync(join(tmpdir(), "load-gate-")))));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it("reads CARETOOK_LOAD_FILE, and a missing file is unread", () => {
+  it("reads RISA_LOAD_FILE, and a missing file is unread", () => {
     writeFileSync(join(dir, "load"), "1 9 1\n");
-    const env = { CARETOOK_LOAD_FILE: join(dir, "load"), CARETOOK_LOAD_BUSY: "4" };
+    const env = { RISA_LOAD_FILE: join(dir, "load"), RISA_LOAD_BUSY: "4" };
     expect(readLoadGate(env)).toMatchObject({ busy: true, load: 9, threshold: 4 });
-    expect(readLoadGate({ ...env, CARETOOK_LOAD_FILE: join(dir, "none") })).toMatchObject({
+    expect(readLoadGate({ ...env, RISA_LOAD_FILE: join(dir, "none") })).toMatchObject({
       busy: false,
       load: null,
     });
@@ -96,10 +96,10 @@ describe("readLoadGate and the words", () => {
     expect(sayGate(loadGate({ load: 3.25, cores: 10 }))).toBe(
       "load gate: 5-minute load 3.25 against 20 (twice 10 cores): not busy",
     );
-    expect(sayGate(loadGate({ load: 31, cores: 10, env: { CARETOOK_LOAD_BUSY: "30" } }), {})).toBe(
-      "load gate: 5-minute load 31 over 30 (CARETOOK_LOAD_BUSY): BUSY, checks and slice starts wait up to 600s",
+    expect(sayGate(loadGate({ load: 31, cores: 10, env: { RISA_LOAD_BUSY: "30" } }), {})).toBe(
+      "load gate: 5-minute load 31 over 30 (RISA_LOAD_BUSY): BUSY, checks and slice starts wait up to 600s",
     );
-    expect(sayGate(loadGate({ load: 1, cores: 2, env: { CARETOOK_LOAD_GATE: "off" } }))).toMatch(/off/);
+    expect(sayGate(loadGate({ load: 1, cores: 2, env: { RISA_LOAD_GATE: "off" } }))).toMatch(/off/);
     expect(sayGate(loadGate({ load: null, cores: 2 }))).toMatch(/can't read the load; not busy/);
   });
 
@@ -107,9 +107,9 @@ describe("readLoadGate and the words", () => {
     writeFileSync(join(dir, "load"), "1 9 1\n");
     const env = {
       ...process.env,
-      CARETOOK_LOAD_FILE: join(dir, "load"),
-      CARETOOK_LOAD_BUSY: "4",
-      CARETOOK_LOAD_GATE: "",
+      RISA_LOAD_FILE: join(dir, "load"),
+      RISA_LOAD_BUSY: "4",
+      RISA_LOAD_GATE: "",
     };
     const cli = (...a) => spawnSync("node", [join(HERE, "load-gate.mjs"), ...a], { env, encoding: "utf8" });
     expect(cli().stdout).toMatch(/^busy 9 4 \d+\n$/);
@@ -185,16 +185,16 @@ describe("the scripts that wait or warn", () => {
       SAMPLE_STACK_STATE: join(root, "stack-state"),
       NVM_DIR: nvm,
       TRUNK: "dev",
-      CARETOOK_FREE_GB: "100",
-      CARETOOK_MIN_FREE_GB: "",
-      CARETOOK_MAX_PRDS: "",
-      CARETOOK_LOAD_FILE: loadFile,
-      CARETOOK_LOAD_BUSY: "4",
-      CARETOOK_LOAD_POLL: "0.2",
-      CARETOOK_LOAD_WAIT: "",
-      CARETOOK_LOAD_GATE: "",
-      CARETOOK_LEASES: "",
-      CARETOOK_LEASE_ROOT: join(root, "leases"),
+      RISA_FREE_GB: "100",
+      RISA_MIN_FREE_GB: "",
+      RISA_MAX_PRDS: "",
+      RISA_LOAD_FILE: loadFile,
+      RISA_LOAD_BUSY: "4",
+      RISA_LOAD_POLL: "0.2",
+      RISA_LOAD_WAIT: "",
+      RISA_LOAD_GATE: "",
+      RISA_LEASES: "",
+      RISA_LEASE_ROOT: join(root, "leases"),
     };
     execFileSync("git", ["init", "-q", "-b", "dev", main]);
     for (const [k, v] of [
@@ -248,7 +248,7 @@ describe("the scripts that wait or warn", () => {
   it("a slice start goes ahead after the bounded wait and says so", async () => {
     busy();
     try {
-      const r = await run("new.sh", ["slice", "t", "1"], { CARETOOK_LOAD_WAIT: "1" });
+      const r = await run("new.sh", ["slice", "t", "1"], { RISA_LOAD_WAIT: "1" });
       expect(r.status, r.out).toBe(0);
       expect(r.out).toMatch(
         /Gave up waiting for the load after \d+s \(still 9, over 4\): starting slice t-1 anyway/,
@@ -260,13 +260,13 @@ describe("the scripts that wait or warn", () => {
     }
   });
 
-  it("a slice start waits for nothing with CARETOOK_LOAD_GATE=off or CARETOOK_LEASES=off", async () => {
+  it("a slice start waits for nothing with RISA_LOAD_GATE=off or RISA_LEASES=off", async () => {
     busy();
     try {
-      for (const extra of [{ CARETOOK_LOAD_GATE: "off" }, { CARETOOK_LEASES: "off" }]) {
+      for (const extra of [{ RISA_LOAD_GATE: "off" }, { RISA_LEASES: "off" }]) {
         try {
           const t0 = Date.now();
-          const r = await run("new.sh", ["slice", "t", "1"], { ...extra, CARETOOK_LOAD_WAIT: "30" });
+          const r = await run("new.sh", ["slice", "t", "1"], { ...extra, RISA_LOAD_WAIT: "30" });
           expect(r.status, r.out).toBe(0);
           expect(r.out).not.toMatch(/busy/);
           expect(Date.now() - t0).toBeLessThan(15_000);
@@ -280,13 +280,13 @@ describe("the scripts that wait or warn", () => {
   });
 
   it("is off in the tooling tests' shared env (vitest.config.ts), so their slice starts never poll", async () => {
-    expect(process.env.CARETOOK_LOAD_GATE).toBe("off");
+    expect(process.env.RISA_LOAD_GATE).toBe("off");
     busy();
     try {
       const t0 = Date.now();
       const r = await run("new.sh", ["slice", "t", "1"], {
-        CARETOOK_LOAD_GATE: process.env.CARETOOK_LOAD_GATE,
-        CARETOOK_LOAD_WAIT: "30",
+        RISA_LOAD_GATE: process.env.RISA_LOAD_GATE,
+        RISA_LOAD_WAIT: "30",
       });
       expect(r.status, r.out).toBe(0);
       expect(r.out).not.toMatch(/busy/);
@@ -299,7 +299,7 @@ describe("the scripts that wait or warn", () => {
 
   it("pnpm prd start only warns", async () => {
     busy();
-    const r = await run("prd.sh", ["start", "w"], { CARETOOK_LOAD_WAIT: "30" });
+    const r = await run("prd.sh", ["start", "w"], { RISA_LOAD_WAIT: "30" });
     quiet();
     expect(r.status, r.out).toBe(0);
     expect(r.out).toMatch(/Warning: the machine is busy \(5-minute load 9, over 4\); starting w anyway/);
@@ -311,19 +311,19 @@ describe("the scripts that wait or warn", () => {
     busy();
     let r = await run("prd.sh", ["status"]);
     expect(r.out).toContain(
-      "load gate: 5-minute load 9 over 4 (CARETOOK_LOAD_BUSY): BUSY, checks and slice starts wait up to 600s",
+      "load gate: 5-minute load 9 over 4 (RISA_LOAD_BUSY): BUSY, checks and slice starts wait up to 600s",
     );
     quiet();
     r = await run("prd.sh", ["status"]);
-    expect(r.out).toContain("load gate: 5-minute load 1 against 4 (CARETOOK_LOAD_BUSY): not busy");
+    expect(r.out).toContain("load gate: 5-minute load 1 against 4 (RISA_LOAD_BUSY): not busy");
   });
 
-  it("pnpm prd start and status default to a cap of four, and CARETOOK_MAX_PRDS overrides it", async () => {
+  it("pnpm prd start and status default to a cap of four, and RISA_MAX_PRDS overrides it", async () => {
     fresh("w");
     for (const n of ["c1", "c2", "c3"])
       git(main, "worktree", "add", "-q", "-b", `prd/${n}`, join(loops, n), "dev");
     expect((await run("prd.sh", ["status"])).out).toContain("PRD worktrees: 3 of 4");
-    const low = await run("prd.sh", ["start", "e"], { CARETOOK_MAX_PRDS: "3" });
+    const low = await run("prd.sh", ["start", "e"], { RISA_MAX_PRDS: "3" });
     expect(low.status).toBe(1);
     expect(low.out).toContain("already 3 PRD worktrees (cap 3;");
     const fourth = await run("prd.sh", ["start", "d"]);
@@ -333,26 +333,26 @@ describe("the scripts that wait or warn", () => {
     const fifth = await run("prd.sh", ["start", "e"]);
     expect(fifth.status).toBe(1);
     expect(fifth.out).toContain("already 4 PRD worktrees (cap 4;");
-    expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
+    expect((await run("prd.sh", ["status"], { RISA_MAX_PRDS: "5" })).out).toContain(
       "PRD worktrees: 4 of 5",
     );
     for (const n of ["c1", "c2", "c3", "d"]) fresh(n);
   });
 
-  it("a stored --cap (.loops/.prd-cap) wins over CARETOOK_MAX_PRDS for start and status", async () => {
+  it("a stored --cap (.loops/.prd-cap) wins over RISA_MAX_PRDS for start and status", async () => {
     fresh("w");
     for (const n of ["k1", "k2"]) git(main, "worktree", "add", "-q", "-b", `prd/${n}`, join(loops, n), "dev");
     writeFileSync(join(loops, ".prd-cap"), "2\n");
     try {
-      expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
+      expect((await run("prd.sh", ["status"], { RISA_MAX_PRDS: "5" })).out).toContain(
         "PRD worktrees: 2 of 2 (pnpm prd dispatch --cap)",
       );
-      const third = await run("prd.sh", ["start", "e"], { CARETOOK_MAX_PRDS: "5" });
+      const third = await run("prd.sh", ["start", "e"], { RISA_MAX_PRDS: "5" });
       expect(third.status).toBe(1);
       expect(third.out).toContain("already 2 PRD worktrees (cap 2; from pnpm prd dispatch --cap:");
       writeFileSync(join(loops, ".prd-cap"), "junk\n");
-      expect((await run("prd.sh", ["status"], { CARETOOK_MAX_PRDS: "5" })).out).toContain(
-        "PRD worktrees: 2 of 5 (CARETOOK_MAX_PRDS)",
+      expect((await run("prd.sh", ["status"], { RISA_MAX_PRDS: "5" })).out).toContain(
+        "PRD worktrees: 2 of 5 (RISA_MAX_PRDS)",
       );
     } finally {
       rmSync(join(loops, ".prd-cap"), { force: true });

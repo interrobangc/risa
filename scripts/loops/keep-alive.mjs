@@ -107,7 +107,7 @@ export function keepAliveDecision({
       why,
       ...(reset ? { reset } : {}),
     });
-    if (off) return none("CARETOOK_KEEP_SESSIONS is off");
+    if (off) return none("RISA_KEEP_SESSIONS is off");
     if (paused) return none("the dispatcher is paused");
     const e = keep[kind] ?? {};
     if (e.stopped) return none("stopped until the dispatcher next starts");

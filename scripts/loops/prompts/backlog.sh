@@ -14,7 +14,7 @@ elif [[ ${2:-} == --no-brief ]]; then
 elif (($# > 1)); then
   die "prompt: backlog takes only --brief <file>, --no-brief or --guide"
 fi
-cap_line="- **The lanes** (how many PRDs run at once): on the user's word, from the phone too (\"after this, only 3 lanes\", \"go to 6\"), run \`$prd_cmd dispatch --cap <n>\` (1 to 19) or \`--cap default\` (back to \`CARETOOK_MAX_PRDS\`, else 4) yourself and say what it printed. The dispatcher reads it on its next tick and \`$prd_cmd start\` obeys it; lowering ends nothing: running PRDs finish and new starts wait until fewer run. \`$prd_cmd status\` shows the cap and what set it."
+cap_line="- **The lanes** (how many PRDs run at once): on the user's word, from the phone too (\"after this, only 3 lanes\", \"go to 6\"), run \`$prd_cmd dispatch --cap <n>\` (1 to 19) or \`--cap default\` (back to \`RISA_MAX_PRDS\`, else 4) yourself and say what it printed. The dispatcher reads it on its next tick and \`$prd_cmd start\` obeys it; lowering ends nothing: running PRDs finish and new starts wait until fewer run. \`$prd_cmd status\` shows the cap and what set it."
 if dpid=$(dispatch_pid); then
   dispatch_read="the dispatcher: it is running (pid $dpid), so it plans and starts topics itself, one at a time, in the registry's row order (\`$prd_cmd status\` shows whether it is paused and its last line; \`$prd_cmd dispatch --dry-run\` shows what it would do next and why it passes each topic over). Name it in your report"
   run_what="move up, hold or leave each topic"
@@ -43,11 +43,11 @@ $cap_line
 EOF
   exit 0
 fi
-# CARETOOK_CAPTAIN: the captain whose name this session wears (prd.sh plan,
+# RISA_CAPTAIN: the captain whose name this session wears (prd.sh plan,
 # rotate-into.sh, open-session.mjs set it); a light touch of their manner, nothing more.
 captain_line=""
-[[ ! ${CARETOOK_CAPTAIN:-} =~ ^[A-Za-z]+$ ]] ||
-  printf -v captain_line -- "- You are Captain %s: let a light touch of their manner color your replies, at most one per reply, never inside questions, options or commands. Substance, rules and brevity are unchanged.\n" "$CARETOOK_CAPTAIN"
+[[ ! ${RISA_CAPTAIN:-} =~ ^[A-Za-z]+$ ]] ||
+  printf -v captain_line -- "- You are Captain %s: let a light touch of their manner color your replies, at most one per reply, never inside questions, options or commands. Substance, rules and brevity are unchanged.\n" "$RISA_CAPTAIN"
 cat <<EOF
 You are the new backlog/inbox planning agent. Ask what this session is for first, then collect only what that answer needs: a fresh session stays small.
 

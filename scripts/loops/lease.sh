@@ -13,11 +13,11 @@
 #                                                           kind is worktree W's (default: this one);
 #                                                           exit 75 after S seconds (default 3600)
 #
-# Kinds and their limits: browser (CARETOOK_BROWSER_SLOTS, default 2), check
-# (CARETOOK_CHECK_SLOTS, default 2), anything else (CARETOOK_<KIND>_SLOTS,
-# default 1). The wait is --wait S, else CARETOOK_<KIND>_WAIT, else 1200 s
-# (check: 1800 s); giving up exits 75. Waiters poll every CARETOOK_<KIND>_POLL
-# (else CARETOOK_LEASE_POLL, else 5) seconds.
+# Kinds and their limits: browser (RISA_BROWSER_SLOTS, default 2), check
+# (RISA_CHECK_SLOTS, default 2), anything else (RISA_<KIND>_SLOTS,
+# default 1). The wait is --wait S, else RISA_<KIND>_WAIT, else 1200 s
+# (check: 1800 s); giving up exits 75. Waiters poll every RISA_<KIND>_POLL
+# (else RISA_LEASE_POLL, else 5) seconds.
 #
 # A lease is the directory <dir>/<N> (mkdir is the atomic take), holding a
 # `name` file of key=value lines: kind, worktree, check (what the holder is
@@ -30,14 +30,14 @@
 # trap EXIT, TERM and INT, and a SIGKILLed holder is taken over).
 #
 # Where: the main checkout's .loops/.lease/<kind>/, browser included.
-# CARETOOK_LEASE_ROOT moves every kind (tests use a temp dir);
-# CARETOOK_BROWSER_LEASES moves the browser kind alone. CARETOOK_LEASES=off
+# RISA_LEASE_ROOT moves every kind (tests use a temp dir);
+# RISA_BROWSER_LEASES moves the browser kind alone. RISA_LEASES=off
 # takes nothing (every take succeeds at once).
 #
 # The move: browser leases used to live in .loops/.browser/<N>, and a worktree
 # that hasn't synced since still takes them there. While any live holder is
-# left in that old directory (CARETOOK_BROWSER_OLD_LEASES moves it; with
-# CARETOOK_LEASE_ROOT or CARETOOK_BROWSER_LEASES set there is none unless it's
+# left in that old directory (RISA_BROWSER_OLD_LEASES moves it; with
+# RISA_LEASE_ROOT or RISA_BROWSER_LEASES set there is none unless it's
 # set), each one counts against the limit here, and `holders` lists them. An
 # old browser.sh can't see the new directory, so the limit holds only once
 # every worktree has run `pnpm prd sync`. Drop this once nothing uses the old path.
@@ -58,12 +58,12 @@ lease_path="" lease_n="" lease_kind="" lease_started=""
 # Tests only: "<marker>" pauses a take between its mkdir and recording the lease
 # (lease_test_pause), "write:<marker>" before it writes the name file
 # (lease_test_write_pause).
-lease_test_hook=${CARETOOK_LEASE_TEST_PAUSE:-}
+lease_test_hook=${RISA_LEASE_TEST_PAUSE:-}
 
 lease_valid_kind() { [[ $1 =~ ^[a-z][a-z0-9-]*$ ]]; }
 
-# lease_var KIND SUFFIX → CARETOOK_<KIND>_<SUFFIX>.
-lease_var() { echo "CARETOOK_$(tr '[:lower:]-' '[:upper:]_' <<< "$1")_$2"; }
+# lease_var KIND SUFFIX → RISA_<KIND>_<SUFFIX>.
+lease_var() { echo "RISA_$(tr '[:lower:]-' '[:upper:]_' <<< "$1")_$2"; }
 
 # lease_env KIND SUFFIX DEFAULT → that variable's value, or DEFAULT.
 lease_env() {
@@ -72,12 +72,12 @@ lease_env() {
   echo "${!v:-$3}"
 }
 
-lease_root() { echo "${CARETOOK_LEASE_ROOT:-$loops/.lease}"; }
+lease_root() { echo "${RISA_LEASE_ROOT:-$loops/.lease}"; }
 
 # lease_dir KIND → the directory its leases live in.
 lease_dir() {
-  if [[ $1 == browser && -n ${CARETOOK_BROWSER_LEASES:-} ]]; then
-    echo "$CARETOOK_BROWSER_LEASES"
+  if [[ $1 == browser && -n ${RISA_BROWSER_LEASES:-} ]]; then
+    echo "$RISA_BROWSER_LEASES"
   else
     echo "$(lease_root)/$1"
   fi
@@ -85,12 +85,12 @@ lease_dir() {
 
 # lease_old_dir KIND → the browser kind's old directory (.loops/.browser), whose
 # live holders still count (see the top); nothing for other kinds, or when the
-# leases were moved (tests) and CARETOOK_BROWSER_OLD_LEASES isn't set.
+# leases were moved (tests) and RISA_BROWSER_OLD_LEASES isn't set.
 lease_old_dir() {
   [[ $1 == browser ]] || return 0
-  if [[ -n ${CARETOOK_BROWSER_OLD_LEASES:-} ]]; then
-    echo "$CARETOOK_BROWSER_OLD_LEASES"
-  elif [[ -z ${CARETOOK_LEASE_ROOT:-}${CARETOOK_BROWSER_LEASES:-} ]]; then
+  if [[ -n ${RISA_BROWSER_OLD_LEASES:-} ]]; then
+    echo "$RISA_BROWSER_OLD_LEASES"
+  elif [[ -z ${RISA_LEASE_ROOT:-}${RISA_BROWSER_LEASES:-} ]]; then
     echo "$loops/.browser"
   fi
 }
@@ -126,7 +126,7 @@ lease_wait_max() {
   [[ $1 == check ]] && d=1800
   lease_env "$1" WAIT "$d"
 }
-lease_poll() { lease_env "$1" POLL "${CARETOOK_LEASE_POLL:-5}"; }
+lease_poll() { lease_env "$1" POLL "${RISA_LEASE_POLL:-5}"; }
 
 # lease_here → the worktree's name (main for the main checkout).
 lease_here() {
@@ -400,7 +400,7 @@ lease_wait() {
 lease_take() {
   local kind=$1 label=$2 wait_max=${3:-} dir slots poll n free old waited=0 announced=""
   lease_valid_kind "$kind" || { echo "lease: not a kind: $kind" >&2; return 64; }
-  if [[ ${CARETOOK_LEASES:-} == off ]]; then
+  if [[ ${RISA_LEASES:-} == off ]]; then
     lease_kind=$kind lease_path="" lease_n=0
     return 0
   fi

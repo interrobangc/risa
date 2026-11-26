@@ -1,6 +1,6 @@
 // pnpm prd ask | asks | answer (ask.mjs through prd.sh) against a throwaway
-// CARETOOK_ASKS_DIR. osascript is a stub that records its arguments (never a
-// real notification), and CARETOOK_ASK_NOTIFY names stub hooks.
+// RISA_ASKS_DIR. osascript is a stub that records its arguments (never a
+// real notification), and RISA_ASK_NOTIFY names stub hooks.
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,15 +32,15 @@ beforeEach(() => {
   env = {
     ...process.env,
     PATH: `${stubs}:${process.env.PATH}`,
-    CARETOOK_ASKS_DIR: dir,
-    CARETOOK_SKEPTIC_DIR: skepticDir,
-    CARETOOK_ASK_POLL: "0.2",
+    RISA_ASKS_DIR: dir,
+    RISA_SKEPTIC_DIR: skepticDir,
+    RISA_ASK_POLL: "0.2",
   };
   for (const k of [
-    "CARETOOK_ASK_NOTIFY",
-    "CARETOOK_ASK_NOTIFY_TIMEOUT",
-    "CARETOOK_SESSION",
-    "CARETOOK_ASK_DEFAULT_MIN",
+    "RISA_ASK_NOTIFY",
+    "RISA_ASK_NOTIFY_TIMEOUT",
+    "RISA_SESSION",
+    "RISA_ASK_DEFAULT_MIN",
   ])
     delete env[k];
 });
@@ -87,7 +87,7 @@ const askQuestion = (extra) =>
     ],
     extra,
   );
-/** A question that takes "yes" after CARETOOK_ASK_DEFAULT_MIN minutes. */
+/** A question that takes "yes" after RISA_ASK_DEFAULT_MIN minutes. */
 const askDefaulting = (minutes, extra = {}) =>
   prd(
     [
@@ -104,7 +104,7 @@ const askDefaulting = (minutes, extra = {}) =>
       "yes",
       "--defaults",
     ],
-    { CARETOOK_ASK_DEFAULT_MIN: String(minutes), ...extra },
+    { RISA_ASK_DEFAULT_MIN: String(minutes), ...extra },
   );
 const stored = (id) => JSON.parse(readFileSync(join(dir, `${id}.json`), "utf8"));
 const hhmm = (iso) => {
@@ -138,28 +138,28 @@ describe("pnpm prd ask", () => {
     expect(JSON.parse(readFileSync(join(dir, "a1.json"), "utf8")).session).toBe("prd-demo");
   });
 
-  it("runs CARETOOK_ASK_NOTIFY with the id, kind, topic and text", () => {
+  it("runs RISA_ASK_NOTIFY with the id, kind, topic and text", () => {
     const out = join(root, "hook.args");
-    const r = askQuestion({ CARETOOK_ASK_NOTIFY: hook("notify-ok", `printf '%s\\n' "$@" > "${out}"`) });
+    const r = askQuestion({ RISA_ASK_NOTIFY: hook("notify-ok", `printf '%s\\n' "$@" > "${out}"`) });
     expect(r.status, r.stderr).toBe(0);
     expect(readFileSync(out, "utf8")).toBe("a1\nquestion\ndemo\nLand wave 1 now?\n");
   });
 
   it("ignores a failing hook", () => {
-    const r = askQuestion({ CARETOOK_ASK_NOTIFY: hook("notify-fail", "exit 3") });
+    const r = askQuestion({ RISA_ASK_NOTIFY: hook("notify-fail", "exit 3") });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/^a1\n/);
-    expect(r.stderr).toMatch(/CARETOOK_ASK_NOTIFY exit 3 \(ignored\)/);
+    expect(r.stderr).toMatch(/RISA_ASK_NOTIFY exit 3 \(ignored\)/);
   });
 
   it("bounds a hanging hook's time", () => {
     const t = Date.now();
     const r = askQuestion({
-      CARETOOK_ASK_NOTIFY: hook("notify-hang", "sleep 30"),
-      CARETOOK_ASK_NOTIFY_TIMEOUT: "1",
+      RISA_ASK_NOTIFY: hook("notify-hang", "sleep 30"),
+      RISA_ASK_NOTIFY_TIMEOUT: "1",
     });
     expect(r.status).toBe(0);
-    expect(r.stderr).toMatch(/CARETOOK_ASK_NOTIFY timed out \(ignored\)/);
+    expect(r.stderr).toMatch(/RISA_ASK_NOTIFY timed out \(ignored\)/);
     expect(Date.now() - t).toBeLessThan(10_000);
   });
 
@@ -233,12 +233,12 @@ describe("defaults on silence", () => {
   });
 
   it("asks shows the countdown from a fixed now, and a due ask as due without settling it: it can still be answered", () => {
-    // CARETOOK_CLOCK_FILE: ask files at, and asks lists from, these epoch seconds.
+    // RISA_CLOCK_FILE: ask files at, and asks lists from, these epoch seconds.
     const clockFile = join(root, "clock");
     const T = 1_794_999_960; // a whole minute (2026-11-18)
     const at = (s) => {
       writeFileSync(clockFile, String(T + s));
-      return { CARETOOK_CLOCK_FILE: clockFile };
+      return { RISA_CLOCK_FILE: clockFile };
     };
     expect(askDefaulting(30, at(0)).status).toBe(0);
     const when = hhmm(stored("a1").defaultAt);
@@ -386,7 +386,7 @@ describe("a skeptic before every ask", () => {
     expect(DISPATCHER_SESSIONS).toEqual([DISPATCH_SESSION, CONTEXT_SESSION, KEEP_SESSION, STUCK_SESSION]);
     for (const s of DISPATCHER_SESSIONS) expect(raw(question("--session", s, "--waits")).status).toBe(0);
     expect(raw(question("--session", "prd-demo", "--waits")).status).toBe(1);
-    expect(raw(question("--waits"), { CARETOOK_SESSION: "dispatch" }).status).toBe(1);
+    expect(raw(question("--waits"), { RISA_SESSION: "dispatch" }).status).toBe(1);
   });
 
   it("a report needs none, and refuses one", () => {
@@ -505,7 +505,7 @@ describe("a skeptic before every ask", () => {
 
     it("files a settled record, with no push line and no notification", () => {
       const hookFile = join(root, "decided-hook");
-      const r = raw(decided(decide()), { CARETOOK_ASK_NOTIFY: `touch ${hookFile}; true` });
+      const r = raw(decided(decide()), { RISA_ASK_NOTIFY: `touch ${hookFile}; true` });
       expect(r.status).toBe(0);
       expect(r.stdout.split("\n")[0]).toBe("a1");
       expect(r.stdout).not.toContain("Now send a PushNotification");

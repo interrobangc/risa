@@ -170,9 +170,9 @@ export function applyHeartbeat(current, event, { session, pid, now }) {
  * @param {{ pid: number } | null} session the live session's record
  */
 export function recordHeartbeat(input, env, now, session) {
-  const name = env.CARETOOK_SESSION_NAME;
-  const pid = Number(env.CARETOOK_SESSION_PID);
-  const sessions = env.CARETOOK_SESSIONS_DIR;
+  const name = env.RISA_SESSION_NAME;
+  const pid = Number(env.RISA_SESSION_PID);
+  const sessions = env.RISA_SESSIONS_DIR;
   if (!name || !pid || !sessions || !nameOk(name) || session?.pid !== pid) return false;
   const event = heartbeatEvent(input, dirname(sessions));
   if (!event) return false;

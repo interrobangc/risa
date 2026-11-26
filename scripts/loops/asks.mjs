@@ -44,7 +44,7 @@ import { join } from "node:path";
 
 const ID_FILE = /^a(\d+)\.json$/;
 
-/** How long a defaulting question waits for an answer, in minutes (CARETOOK_ASK_DEFAULT_MIN). */
+/** How long a defaulting question waits for an answer, in minutes (RISA_ASK_DEFAULT_MIN). */
 export const DEFAULT_WAIT_MIN = 30;
 /** The questions that never default: they take --waits. */
 export const NEVER_DEFAULT =

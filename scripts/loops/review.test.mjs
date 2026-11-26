@@ -64,7 +64,7 @@ const reviewWith = (env, name, ...args) =>
       ...process.env,
       PATH: `${join(root, "bin")}:${process.env.PATH}`,
       PR_FIXTURE: fixture(name),
-      CARETOOK_RUN_LOG: log(),
+      RISA_RUN_LOG: log(),
       ...env,
     },
   });

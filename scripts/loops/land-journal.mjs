@@ -1,5 +1,5 @@
 // The landing journal: one small record per landing in the main checkout's
-// .loops/.landing/ (CARETOOK_LANDING_DIR moves it; tests always do), written by
+// .loops/.landing/ (RISA_LANDING_DIR moves it; tests always do), written by
 // land.sh before each step and removed at the end, so a landing cut off midway
 // (a crash, a restart, a usage limit) says how far it got. Git wins: the record
 // says where to look, git and GitHub say what happened.

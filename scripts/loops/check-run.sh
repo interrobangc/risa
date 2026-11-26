@@ -3,35 +3,35 @@
 # append one tab-separated line to the check log, pass or fail, then exit with
 # COMMAND's status. prd.sh check runs it inside the check lease, so the seconds
 # leave out the wait for a lease. First it waits while the machine is busy (the
-# load gate: load_gate_wait in lib.sh, at most CARETOOK_LOAD_WAIT, 600 s, then
+# load gate: load_gate_wait in lib.sh, at most RISA_LOAD_WAIT, 600 s, then
 # it goes ahead and says so); the seconds leave that out too, and the log
 # records it.
 #
 # The budget and the silence limit (check-budget.mjs): the budget from the
 # usual time of passing checks like this one, scaled for load, between 10
-# minutes and the hard limit (CARETOOK_CHECK_LIMIT, else 1200 s for a slice or
-# quick check and 2400 for a full one); the silence limit, CARETOOK_CHECK_SILENCE
+# minutes and the hard limit (RISA_CHECK_LIMIT, else 1200 s for a slice or
+# quick check and 2400 for a full one); the silence limit, RISA_CHECK_SILENCE
 # (480 s) scaled the same way, on the command's output. Past either, COMMAND and
-# everything under it get TERM, then KILL after CARETOOK_CHECK_KILL_GRACE (10 s);
+# everything under it get TERM, then KILL after RISA_CHECK_KILL_GRACE (10 s);
 # the check prints the step and its last 30 lines and exits 124. A gap of over
-# CARETOOK_CHECK_SLEEP_GAP (30 s) between two readings of the clock is the
+# RISA_CHECK_SLEEP_GAP (30 s) between two readings of the clock is the
 # machine asleep: it counts against neither limit, nor in the seconds logged.
-# CARETOOK_CLOCK_FILE (tests): epoch seconds to read instead of the clock;
-# CARETOOK_CHECK_BUDGET_LOAD (tests): the load the limits scale for.
+# RISA_CLOCK_FILE (tests): epoch seconds to read instead of the clock;
+# RISA_CHECK_BUDGET_LOAD (tests): the load the limits scale for.
 # If check-budget.mjs fails, the hard limit and the default silence apply.
 #
 # Fields: start (UTC), worktree, branch, mode, reason, seconds, 5-minute load
 # at start, load at end, exit code, test files run, test files in all (those
 # two stay empty until a quick check reports them: the command writes
-# "<run> <all>" to the file named by CARETOOK_CHECK_COUNTS, which check-run.sh
-# sets; CARETOOK_CHECK_FILES_RUN and CARETOOK_CHECK_FILES_ALL override it), the
+# "<run> <all>" to the file named by RISA_CHECK_COUNTS, which check-run.sh
+# sets; RISA_CHECK_FILES_RUN and RISA_CHECK_FILES_ALL override it), the
 # seconds waited for the load, the step that failed (or was running at the
 # limit), the failed test files and the flaky ones (comma-separated), and the
 # limit that stopped it (budget or silence; none for a check that ended), the
 # time gate's verdict and the step times (`<step>:<seconds>`, comma-separated,
 # in the order they ran; a step run twice is summed). The command reports the
 # step, the failed and flaky files and the step times in the directory named by
-# CARETOOK_CHECK_STATE: `step`, `failed`, `flaky`, `times` (`<seconds> <step>`
+# RISA_CHECK_STATE: `step`, `failed`, `flaky`, `times` (`<seconds> <step>`
 # lines), and `slowest` (`<seconds> <file>` lines, its test steps' slowest files).
 #
 # The time gate (time-gate.mjs, the gates' data in the tier data): a quick or
@@ -41,7 +41,7 @@
 # files. A `fail` (an armed measure past its cutoff) exits 125: a time breach, not
 # a test failure. A full check, a failed or stopped one, or a gate that can't
 # read its data logs no verdict.
-# Env: CARETOOK_CHECK_LOG (default: .loops/.check-times.log in the main checkout).
+# Env: RISA_CHECK_LOG (default: .loops/.check-times.log in the main checkout).
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=lib.sh
@@ -49,16 +49,16 @@ source "$here/lib.sh"
 
 mode=${1:?mode}; why=${2:-}; shift 2
 [[ ${1:-} == -- ]] && shift
-log=${CARETOOK_CHECK_LOG:-$loops/.check-times.log}
+log=${RISA_CHECK_LOG:-$loops/.check-times.log}
 if [[ $mode == full ]]; then hard=2400; else hard=1200; fi
-[[ ${CARETOOK_CHECK_LIMIT:-} =~ ^[0-9]+$ ]] && ((CARETOOK_CHECK_LIMIT > 0)) && hard=$CARETOOK_CHECK_LIMIT
-sleep_gap=${CARETOOK_CHECK_SLEEP_GAP:-30}
+[[ ${RISA_CHECK_LIMIT:-} =~ ^[0-9]+$ ]] && ((RISA_CHECK_LIMIT > 0)) && hard=$RISA_CHECK_LIMIT
+sleep_gap=${RISA_CHECK_SLEEP_GAP:-30}
 [[ $sleep_gap =~ ^[0-9]+$ ]] || sleep_gap=30
 
-# now → epoch seconds: the clock, or CARETOOK_CLOCK_FILE's (tests).
+# now → epoch seconds: the clock, or RISA_CLOCK_FILE's (tests).
 now() {
   local t=""
-  [[ -z ${CARETOOK_CLOCK_FILE:-} ]] || t=$(cat "$CARETOOK_CLOCK_FILE" 2>/dev/null)
+  [[ -z ${RISA_CLOCK_FILE:-} ]] || t=$(cat "$RISA_CLOCK_FILE" 2>/dev/null)
   [[ $t =~ ^[0-9]+$ ]] || t=$(date +%s)
   echo "$t"
 }
@@ -71,7 +71,7 @@ load5() { load_avg | tr -d ',' | awk 'NF >= 2 && $2 ~ /^[0-9.]+$/ { print $2; fo
 # parent has died can't be found from the parent any more.
 tree() { local c; echo "$1"; for c in $(pgrep -P "$1" 2>/dev/null); do tree "$c"; done; }
 stop_tree() {
-  local pids p left i grace=${CARETOOK_CHECK_KILL_GRACE:-10}
+  local pids p left i grace=${RISA_CHECK_KILL_GRACE:-10}
   pids=$(tree "$1")
   # shellcheck disable=SC2086
   kill -TERM $pids 2>/dev/null
@@ -87,11 +87,11 @@ stop_tree() {
 }
 
 # Quick and slice checks are short: they wait only above the light limit (30).
-if [[ $mode == full ]]; then load_gate_wait "the check"; else CARETOOK_LOAD_LANE=light load_gate_wait "the check"; fi
+if [[ $mode == full ]]; then load_gate_wait "the check"; else RISA_LOAD_LANE=light load_gate_wait "the check"; fi
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ); l0=$(load5)
 branch=$(git branch --show-current 2>/dev/null)
-budget=$hard silence=${CARETOOK_CHECK_SILENCE:-480}
-{ read -r b s; read -r said; } < <(node "$here/check-budget.mjs" --mode "$mode" --branch "$branch" --log "$log" --load "${CARETOOK_CHECK_BUDGET_LOAD:-$l0}" 2>/dev/null) || true
+budget=$hard silence=${RISA_CHECK_SILENCE:-480}
+{ read -r b s; read -r said; } < <(node "$here/check-budget.mjs" --mode "$mode" --branch "$branch" --log "$log" --load "${RISA_CHECK_BUDGET_LOAD:-$l0}" 2>/dev/null) || true
 if [[ ${b:-} =~ ^[0-9]+$ && ${s:-} =~ ^[0-9]+$ ]] && ((b > 0 && s > 0)); then
   budget=$b silence=$s
   echo "$said"
@@ -99,8 +99,8 @@ else
   [[ $silence =~ ^[0-9]+$ ]] && ((silence > 0)) || silence=480
   echo "Check budget ${budget}s (the hard limit; its usual time couldn't be read); silence limit ${silence}s."
 fi
-counts=$(mktemp); export CARETOOK_CHECK_COUNTS=$counts
-state=$(mktemp -d); export CARETOOK_CHECK_STATE=$state
+counts=$(mktemp); export RISA_CHECK_COUNTS=$counts
+state=$(mktemp -d); export RISA_CHECK_STATE=$state
 # The output goes on to stdout and stderr as before, and into $state/out for
 # the silence limit and the last lines.
 # Colours stay on for a terminal, though the command now writes to a pipe.
@@ -149,9 +149,9 @@ if [[ -n $breach ]]; then
   code=124
   {
     if [[ $breach == budget ]]; then
-      echo "The check passed its budget of ${budget}s in the ${step:-first} step and was stopped (the hard limit, CARETOOK_CHECK_LIMIT, is ${hard}s)."
+      echo "The check passed its budget of ${budget}s in the ${step:-first} step and was stopped (the hard limit, RISA_CHECK_LIMIT, is ${hard}s)."
     else
-      echo "The check printed nothing for ${silence}s in the ${step:-first} step and was stopped (CARETOOK_CHECK_SILENCE)."
+      echo "The check printed nothing for ${silence}s in the ${step:-first} step and was stopped (RISA_CHECK_SILENCE)."
     fi
     echo "A stopped check is a hang, not a test failure. Its last 30 lines:"
     tail -n 30 "$out" | sed 's/^/  | /'
@@ -168,7 +168,7 @@ failed="" flaky=""
 if [[ -n $breach ]]; then failed=""; elif ((code)); then failed=$(list "$state/failed"); else step=""; fi
 flaky=$(list "$state/flaky")
 read -r crun call < "$counts" 2>/dev/null || true; rm -f "$counts"
-files_run=${CARETOOK_CHECK_FILES_RUN:-${crun:-}}; files_all=${CARETOOK_CHECK_FILES_ALL:-${call:-}}
+files_run=${RISA_CHECK_FILES_RUN:-${crun:-}}; files_all=${RISA_CHECK_FILES_ALL:-${call:-}}
 secs=$(($(now) - t0 - slept)); ((secs >= 0)) || secs=0; l1=$(load5)
 verdict=""
 if [[ -z $breach ]] && ((code == 0)); then

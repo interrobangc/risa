@@ -42,8 +42,8 @@
 // CLI: node open-session.mjs <worktree dir> [--carry-on]  → JSON {session, kind, topic, mode, auto, managed, command}
 //      (the main backlog session's adds title: its captain, the tab's title and Remote Control name)
 //      node open-session.mjs --main <name> <main checkout>   the same, for a backlog, recovery or inbox record
-// Env: the Claude folders' stand-ins for tests (host.mjs); CARETOOK_INBOX_DIR (the inbox session's directory when its record has none;
-// default ~/.caretook/inbox); CARETOOK_SESSIONS_DIR (default .sessions beside the worktree).
+// Env: the Claude folders' stand-ins for tests (host.mjs); RISA_INBOX_DIR (the inbox session's directory when its record has none;
+// default ~/.caretook/inbox); RISA_SESSIONS_DIR (default .sessions beside the worktree).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -93,9 +93,9 @@ const MAIN_PROMPTS = /** @type {Record<string, string>} */ ({
   inbox: "inbox",
 });
 
-/** The inbox session's directory: its record's, else CARETOOK_INBOX_DIR, else ~/.caretook/inbox (prd.sh's). */
+/** The inbox session's directory: its record's, else RISA_INBOX_DIR, else ~/.caretook/inbox (prd.sh's). */
 export function inboxDirOf(/** @type {{ dir?: string } | null | undefined} */ record, env = process.env) {
-  return record?.dir || env.CARETOOK_INBOX_DIR || join(homedir(), ".caretook", "inbox");
+  return record?.dir || env.RISA_INBOX_DIR || join(homedir(), ".caretook", "inbox");
 }
 
 /**
@@ -240,7 +240,7 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
     managed,
     command:
       `cd ${sh(main)} && ${sh(wrapper)} ${sh(name)} --kind ${kind}${managed ? " --managed" : ""} -- ` +
-      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(remote)} "$(${captained ? `CARETOOK_CAPTAIN=${sh(remote)} ` : ""}scripts/loops/prompt.sh ${role})"`,
+      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(remote)} "$(${captained ? `RISA_CAPTAIN=${sh(remote)} ` : ""}scripts/loops/prompt.sh ${role})"`,
   };
 }
 
@@ -256,7 +256,7 @@ function refuseLive(
 export function chooseMainFor(
   /** @type {string} */ name,
   /** @type {string} */ main,
-  sessions = process.env.CARETOOK_SESSIONS_DIR || join(main, ".loops", ".sessions"),
+  sessions = process.env.RISA_SESSIONS_DIR || join(main, ".loops", ".sessions"),
 ) {
   const record = readRecord(sessions, name);
   if (!record || !MAIN_PROMPTS[record.kind ?? ""])
@@ -286,7 +286,7 @@ const ownMain = () => {
 export function chooseFor(
   /** @type {string} */ dir,
   projects = /** @type {string | undefined} */ (undefined),
-  sessions = process.env.CARETOOK_SESSIONS_DIR || join(dirname(dir), ".sessions"),
+  sessions = process.env.RISA_SESSIONS_DIR || join(dirname(dir), ".sessions"),
   { carryOn = false } = {},
 ) {
   const branch = execFileSync("git", ["-C", dir, "branch", "--show-current"], { encoding: "utf8" }).trim();

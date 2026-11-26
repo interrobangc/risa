@@ -1,6 +1,6 @@
 // `pnpm prd bye` (bye.mjs): the pure verdict, then the command against a
 // throwaway repo (with a bare origin) with the scripts copied in, a stub
-// claude (CARETOOK_CLAUDE_BIN, named claude-stub so no walk up finds a real
+// claude (RISA_CLAUDE_BIN, named claude-stub so no walk up finds a real
 // claude) and temporary sessions, asks, notices and lease folders. Nothing here
 // touches the real main checkout, origin or asks queue, and the only processes
 // it signals are ones it started.
@@ -138,8 +138,8 @@ mkdir -p "$STUB_STATE"
 echo "$$" > "$STUB_STATE/pid"
 [[ -z \${STUB_NAME:-} ]] || node "$SESSIONS_MJS" set "$STUB_NAME" pid=$$ kind="$STUB_KIND" topic="\${STUB_TOPIC:-}" started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if [[ -n \${STUB_LEASE:-} ]]; then
-  mkdir -p "$CARETOOK_LEASE_ROOT/check/1"
-  printf 'kind=check\\nworktree=%s\\ncheck=stub\\npid=%s\\ncmd=claude-stub\\nstarted=1\\n' "$STUB_LEASE" "$$" > "$CARETOOK_LEASE_ROOT/check/1/name"
+  mkdir -p "$RISA_LEASE_ROOT/check/1"
+  printf 'kind=check\\nworktree=%s\\ncheck=stub\\npid=%s\\ncmd=claude-stub\\nstarted=1\\n' "$STUB_LEASE" "$$" > "$RISA_LEASE_ROOT/check/1/name"
 fi
 [[ -z \${STUB_JOB:-} ]] || { bash -c 'sleep 30; true' & }
 trap 'touch "$STUB_STATE/ended"; exit 143' TERM
@@ -217,13 +217,13 @@ beforeAll(() => {
   env = {
     ...process.env,
     TRUNK: "dev",
-    CARETOOK_CLAUDE_BIN: stub,
-    CARETOOK_SESSIONS_DIR: join(loops, ".sessions"),
-    CARETOOK_ASKS_DIR: asksDir,
-    CARETOOK_NOTICES_DIR: noticesDir,
-    CARETOOK_LEASE_ROOT: leaseRoot,
-    CARETOOK_END_WAIT: "5",
-    CARETOOK_SESSION: "",
+    RISA_CLAUDE_BIN: stub,
+    RISA_SESSIONS_DIR: join(loops, ".sessions"),
+    RISA_ASKS_DIR: asksDir,
+    RISA_NOTICES_DIR: noticesDir,
+    RISA_LEASE_ROOT: leaseRoot,
+    RISA_END_WAIT: "5",
+    RISA_SESSION: "",
     STUB_STATE: state,
     STUB_CWD: main,
     PRD_SH: scripts("prd.sh"),

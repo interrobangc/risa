@@ -6,13 +6,13 @@
 // The budget: over the last 20 passing runs of the same mode (slice, quick,
 // full) and branch kind (slice, prd, plan, hotfix, other), the larger of twice
 // the median and the slowest plus 20%, scaled up for load, then held between
-// the floor (10 minutes) and the hard limit (test-gates': CARETOOK_CHECK_LIMIT,
+// the floor (10 minutes) and the hard limit (test-gates': RISA_CHECK_LIMIT,
 // else 20 minutes for a slice or quick check and 40 for a full one). With under
 // five samples it is the hard limit. A floor above the hard limit gives way to it.
 //
 // Load scaling: the 5-minute load now against the median load the samples
 // started at (15 when none recorded one), never below 1 and at most 3 times.
-// The silence limit is CARETOOK_CHECK_SILENCE (480 s) scaled the same way.
+// The silence limit is RISA_CHECK_SILENCE (480 s) scaled the same way.
 // 480 s: the longest silent stretch measured in a check was its static step
 // (tsc, ESLint and Prettier print only once all three finish), 67 to 133 s, at
 // worst 261 s, so about twice that.
@@ -37,10 +37,10 @@ const median = (xs) => {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
 
-/** test-gates' hard limit for a mode: CARETOOK_CHECK_LIMIT when it's a number, else 1200 (2400 for full). */
+/** test-gates' hard limit for a mode: RISA_CHECK_LIMIT when it's a number, else 1200 (2400 for full). */
 export function hardLimit(mode, env = process.env) {
-  const set = Number(env.CARETOOK_CHECK_LIMIT);
-  if (env.CARETOOK_CHECK_LIMIT && Number.isFinite(set) && set > 0) return set;
+  const set = Number(env.RISA_CHECK_LIMIT);
+  if (env.RISA_CHECK_LIMIT && Number.isFinite(set) && set > 0) return set;
   return mode === "full" ? 2400 : 1200;
 }
 
@@ -108,8 +108,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     branch: opt.branch ?? "",
     load: num(opt.load, null),
     ceiling,
-    floor: num(env.CARETOOK_CHECK_BUDGET_FLOOR, DEFAULTS.floor),
-    silence: num(env.CARETOOK_CHECK_SILENCE, DEFAULTS.silence),
+    floor: num(env.RISA_CHECK_BUDGET_FLOOR, DEFAULTS.floor),
+    silence: num(env.RISA_CHECK_SILENCE, DEFAULTS.silence),
   });
   console.log(`${b.budget} ${b.silence}`);
   console.log(describeBudget(b, { mode, branch: opt.branch ?? "" }));

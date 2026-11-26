@@ -26,17 +26,17 @@
 // dispatcher never disagree. And a recover already running.
 //
 // A failed recover backs off (10, 20, then every 30 minutes) and only the first
-// failure of an incident files recover's report (CARETOOK_RECOVER_REPORT=off for
+// failure of an incident files recover's report (RISA_RECOVER_REPORT=off for
 // the rest); a healthy tick or a good recover ends the incident. recover exiting
 // 75 means another one runs: no failure. State: .loops/.watchdog.json. It prints
 // a line only when its decision changes (launchd's log, .loops/.watchdog.log),
 // and it never fails: a reading or write that breaks is logged and it exits 0.
 //
-// Env: the drain's (CARETOOK_USAGE_STOP, CARETOOK_USAGE_DRAIN, CARETOOK_USAGE_WATCH,
-// CARETOOK_USAGE_STALE_MIN: drain.mjs),
-// CARETOOK_BOOT_TIME (tests: the last boot, epoch seconds), CARETOOK_CLOCK_FILE
-// (tests: the current epoch second), CARETOOK_RECOVER_BIN (tests: recover.sh),
-// CARETOOK_SESSIONS_DIR, CARETOOK_USAGE_DIR.
+// Env: the drain's (RISA_USAGE_STOP, RISA_USAGE_DRAIN, RISA_USAGE_WATCH,
+// RISA_USAGE_STALE_MIN: drain.mjs),
+// RISA_BOOT_TIME (tests: the last boot, epoch seconds), RISA_CLOCK_FILE
+// (tests: the current epoch second), RISA_RECOVER_BIN (tests: recover.sh),
+// RISA_SESSIONS_DIR, RISA_USAGE_DIR.
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -168,10 +168,10 @@ const readObject = (/** @type {string} */ p) => {
   }
 };
 
-/** The last boot, in ms: CARETOOK_BOOT_TIME (epoch seconds), else sysctl kern.boottime; null if unknown. */
+/** The last boot, in ms: RISA_BOOT_TIME (epoch seconds), else sysctl kern.boottime; null if unknown. */
 export function bootTime(env = process.env) {
-  if (env.CARETOOK_BOOT_TIME) {
-    const n = Number(env.CARETOOK_BOOT_TIME);
+  if (env.RISA_BOOT_TIME) {
+    const n = Number(env.RISA_BOOT_TIME);
     return Number.isFinite(n) && n > 0 ? n * 1000 : null;
   }
   try {
@@ -186,11 +186,11 @@ export function bootTime(env = process.env) {
   }
 }
 
-/** Now, in ms: CARETOOK_CLOCK_FILE's epoch second, else the clock. */
+/** Now, in ms: RISA_CLOCK_FILE's epoch second, else the clock. */
 export function nowOf(env = process.env) {
-  if (env.CARETOOK_CLOCK_FILE)
+  if (env.RISA_CLOCK_FILE)
     try {
-      const n = Number(readFileSync(env.CARETOOK_CLOCK_FILE, "utf8").trim());
+      const n = Number(readFileSync(env.RISA_CLOCK_FILE, "utf8").trim());
       if (Number.isFinite(n)) return n * 1000;
     } catch {
       /* the clock */
@@ -206,8 +206,8 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
     state: join(loops, ".watchdog.json"),
     stayDown: join(loops, ".stay-down.json"),
     dispatchState: join(loops, ".dispatch.json"),
-    sessions: env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions"),
-    usage: env.CARETOOK_USAGE_DIR || join(loops, ".usage"),
+    sessions: env.RISA_SESSIONS_DIR || join(loops, ".sessions"),
+    usage: env.RISA_USAGE_DIR || join(loops, ".usage"),
   };
 }
 
@@ -293,11 +293,11 @@ async function main() {
   if (line !== facts.state.lastLine || d.action === "recover") console.log(`${stamp(facts.now)} ${line}`);
   let code = null;
   if (d.action === "recover") {
-    const recover = env.CARETOOK_RECOVER_BIN || join(here, "recover.sh");
+    const recover = env.RISA_RECOVER_BIN || join(here, "recover.sh");
     const r = spawnSync(recover, ["--unattended"], {
       cwd: mainDir,
       stdio: ["ignore", "inherit", "inherit"],
-      env: { ...env, ...(d.report ? {} : { CARETOOK_RECOVER_REPORT: "off" }) },
+      env: { ...env, ...(d.report ? {} : { RISA_RECOVER_REPORT: "off" }) },
     });
     code = r.status ?? 1;
     const end = nowOf(env);

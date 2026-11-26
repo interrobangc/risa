@@ -96,7 +96,7 @@ describe("run_log in lib.sh", () => {
     spawnSync("bash", ["-c", `set -euo pipefail; source scripts/loops/lib.sh; ${script}`], {
       cwd: repo,
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_RUN_LOG: "", ...env },
+      env: { ...process.env, RISA_RUN_LOG: "", ...env },
     });
 
   it("appends to the main checkout's .loops/.run-log.jsonl by default", () => {
@@ -114,10 +114,10 @@ describe("run_log in lib.sh", () => {
     ]);
   });
 
-  it("CARETOOK_RUN_LOG moves it, and --once passes through", () => {
+  it("RISA_RUN_LOG moves it, and --once passes through", () => {
     const log = join(root, "elsewhere.jsonl");
     const r = sh(`run_log --once pr,head codex pr:=3 head=aa; run_log --once pr,head codex pr:=3 head=aa`, {
-      CARETOOK_RUN_LOG: log,
+      RISA_RUN_LOG: log,
     });
     expect(r.status, r.stderr).toBe(0);
     expect(lines(log)).toHaveLength(1);
@@ -125,7 +125,7 @@ describe("run_log in lib.sh", () => {
 
   it("a failed write leaves the caller's exit unchanged and prints nothing", () => {
     writeFileSync(join(root, "a-file"), "x");
-    const bad = { CARETOOK_RUN_LOG: join(root, "a-file", "run-log.jsonl") };
+    const bad = { RISA_RUN_LOG: join(root, "a-file", "run-log.jsonl") };
     let r = sh(`run_log land-end exit:=0; echo after; exit 7`, bad);
     expect(r.status).toBe(7);
     expect(r.stdout).toBe("after\n");

@@ -107,20 +107,20 @@ describe("the drain decision", () => {
     expect(decide(stalled(iso(NOW - MIN))).state).toBe("normal");
   });
 
-  it("CARETOOK_USAGE_DRAIN, CARETOOK_USAGE_STOP and CARETOOK_USAGE_WATCH=off", () => {
+  it("RISA_USAGE_DRAIN, RISA_USAGE_STOP and RISA_USAGE_WATCH=off", () => {
     expect(drainSettings({})).toEqual({ drain: 95, stop: 98, off: false });
-    expect(drainSettings({ CARETOOK_USAGE_DRAIN: "70", CARETOOK_USAGE_STOP: "95" })).toEqual({
+    expect(drainSettings({ RISA_USAGE_DRAIN: "70", RISA_USAGE_STOP: "95" })).toEqual({
       drain: 70,
       stop: 95,
       off: false,
     });
-    expect(drainSettings({ CARETOOK_USAGE_DRAIN: "nope", CARETOOK_USAGE_STOP: "-1" })).toMatchObject({
+    expect(drainSettings({ RISA_USAGE_DRAIN: "nope", RISA_USAGE_STOP: "-1" })).toMatchObject({
       drain: 95,
       stop: 98,
     });
     // A drain line over the stop line drains at the stop line.
-    expect(drainSettings({ CARETOOK_USAGE_DRAIN: "99" }).drain).toBe(98);
-    const off = drainSettings({ CARETOOK_USAGE_WATCH: "off" });
+    expect(drainSettings({ RISA_USAGE_DRAIN: "99" }).drain).toBe(98);
+    const off = drainSettings({ RISA_USAGE_WATCH: "off" });
     expect(decide(usageOf({ fiveHour: { percent: 100 } }), off)).toMatchObject({
       state: "normal",
       unknown: false,
@@ -338,17 +338,17 @@ describe("new.sh slice while draining", () => {
       SAMPLE_STACK_STATE: join(root, "stack-state"),
       NVM_DIR: nvm,
       TRUNK: "dev",
-      CARETOOK_FREE_GB: "100",
-      CARETOOK_MIN_FREE_GB: "",
-      CARETOOK_MAX_PRDS: "",
-      CARETOOK_LOAD_GATE: "off",
-      CARETOOK_LEASE_ROOT: join(root, "leases"),
-      CARETOOK_USAGE_DIR: "",
-      CARETOOK_SESSIONS_DIR: "",
-      CARETOOK_USAGE_WATCH: "",
-      CARETOOK_USAGE_DRAIN: "",
-      CARETOOK_USAGE_STOP: "",
-      CARETOOK_USAGE_STALE_MIN: "",
+      RISA_FREE_GB: "100",
+      RISA_MIN_FREE_GB: "",
+      RISA_MAX_PRDS: "",
+      RISA_LOAD_GATE: "off",
+      RISA_LEASE_ROOT: join(root, "leases"),
+      RISA_USAGE_DIR: "",
+      RISA_SESSIONS_DIR: "",
+      RISA_USAGE_WATCH: "",
+      RISA_USAGE_DRAIN: "",
+      RISA_USAGE_STOP: "",
+      RISA_USAGE_STALE_MIN: "",
     };
     execFileSync("git", ["init", "-q", "-b", "dev", main]);
     for (const [k, v] of [
@@ -396,10 +396,10 @@ describe("new.sh slice while draining", () => {
     }
   });
 
-  it("makes it under the line, with CARETOOK_USAGE_WATCH=off, or on an unknown or unreadable reading", () => {
+  it("makes it under the line, with RISA_USAGE_WATCH=off, or on an unknown or unreadable reading", () => {
     const cases = [
       [() => reading(50), {}],
-      [() => reading(99), { CARETOOK_USAGE_WATCH: "off" }],
+      [() => reading(99), { RISA_USAGE_WATCH: "off" }],
       [() => rmSync(usage, { recursive: true, force: true }), {}],
       [
         () => {

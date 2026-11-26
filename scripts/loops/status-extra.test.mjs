@@ -128,7 +128,7 @@ describe("statusParts", () => {
   it("runs as a CLI from the two folders", () => {
     const r = spawnSync("node", [join(HERE, "status-extra.mjs")], {
       encoding: "utf8",
-      env: { ...process.env, CARETOOK_SESSIONS_DIR: empty, CARETOOK_ASKS_DIR: asks },
+      env: { ...process.env, RISA_SESSIONS_DIR: empty, RISA_ASKS_DIR: asks },
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("OPEN ASKS: 2");
@@ -136,9 +136,9 @@ describe("statusParts", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        CARETOOK_SESSIONS_DIR: empty,
-        CARETOOK_ASKS_DIR: empty,
-        CARETOOK_DISPATCH_MAIN: empty,
+        RISA_SESSIONS_DIR: empty,
+        RISA_ASKS_DIR: empty,
+        RISA_DISPATCH_MAIN: empty,
       },
     });
     expect(none.stdout).toBe("DISPATCHER: stopped: start it in a tab of its own with pnpm prd dispatch\n\n");
@@ -156,17 +156,17 @@ describe("statusParts", () => {
         encoding: "utf8",
         env: {
           ...process.env,
-          CARETOOK_SESSIONS_DIR: beside,
-          CARETOOK_ASKS_DIR: empty,
-          CARETOOK_DISPATCH_MAIN: empty,
-          CARETOOK_REQUESTS_DIR: "",
+          RISA_SESSIONS_DIR: beside,
+          RISA_ASKS_DIR: empty,
+          RISA_DISPATCH_MAIN: empty,
+          RISA_REQUESTS_DIR: "",
           ...extra,
         },
       }).stdout;
     const byDefault = run({});
     expect(byDefault).toContain("SESSION REQUESTS: 1 pending");
     expect(byDefault).toContain("backlog - beside");
-    const override = run({ CARETOOK_REQUESTS_DIR: named });
+    const override = run({ RISA_REQUESTS_DIR: named });
     expect(override).toContain("backlog - named");
     expect(override).not.toContain("backlog - beside");
   });
@@ -190,9 +190,9 @@ describe("the dispatcher's part", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        CARETOOK_SESSIONS_DIR: empty,
-        CARETOOK_ASKS_DIR: empty,
-        CARETOOK_DISPATCH_MAIN: main,
+        RISA_SESSIONS_DIR: empty,
+        RISA_ASKS_DIR: empty,
+        RISA_DISPATCH_MAIN: main,
       },
     }).stdout;
 
@@ -418,13 +418,13 @@ describe("the workers part", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        CARETOOK_SESSIONS_DIR: own,
-        CARETOOK_ASKS_DIR: empty,
-        CARETOOK_DISPATCH_MAIN: empty,
-        CARETOOK_LEASE_ROOT: "",
-        CARETOOK_BROWSER_LEASES: "",
-        CARETOOK_RUN_LOG: join(base, "none.jsonl"),
-        CARETOOK_CHECK_LOG: join(base, "none.log"),
+        RISA_SESSIONS_DIR: own,
+        RISA_ASKS_DIR: empty,
+        RISA_DISPATCH_MAIN: empty,
+        RISA_LEASE_ROOT: "",
+        RISA_BROWSER_LEASES: "",
+        RISA_RUN_LOG: join(base, "none.jsonl"),
+        RISA_CHECK_LOG: join(base, "none.log"),
       },
     }).stdout;
     expect(out).toMatch(/^lease check 1 +topic-3 +pnpm check \(slice\) +\d+s +usual - +held$/m);

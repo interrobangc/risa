@@ -61,13 +61,13 @@ echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)
 
 # The dispatcher, recorded sessions and open asks (status-extra.mjs): sessions and asks print nothing,
 # heading included, when there are none.
-extra=$(CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions} CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$(dirname "$0")/status-extra.mjs" 2>/dev/null || true)
+extra=$(RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions} RISA_ASKS_DIR=${RISA_ASKS_DIR:-$loops/.asks} node "$(dirname "$0")/status-extra.mjs" 2>/dev/null || true)
 [[ -z $extra ]] || printf '\n%s\n' "${extra%$'\n'}"
 # The usage limits (usage.mjs status): one line, unknown when no session has read them lately.
-usage=$(CARETOOK_USAGE_DIR=${CARETOOK_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/usage.mjs" status 2>/dev/null || true)
+usage=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/usage.mjs" status 2>/dev/null || true)
 [[ -z $usage ]] || printf '\n%s\n' "$usage"
 # The live notices' count (notice.mjs status): nothing when there are none.
-notices=$(CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
+notices=$(RISA_NOTICES_DIR=${RISA_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" status 2>/dev/null || true)
 [[ -z $notices ]] || printf '\n%s\n' "${notices%$'\n'}"
 
 # Each live branch's latest whole-tier CI verdict (ci.mjs status; cached, and short when GitHub is away).
@@ -109,7 +109,7 @@ echo
 echo
 # The load, against the cores and the 1-minute load browser checks treat as busy.
 load=$(load_avg) cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo '?')
-busy=${CARETOOK_BROWSER_BUSY:-40} l1=${load%% *}
+busy=${RISA_BROWSER_BUSY:-40} l1=${load%% *}
 echo "load: $load (1, 5, 15 min) on $cores cores$( ((${l1%%.*} > busy)) && echo " · BUSY: over $busy, browser checks will wait before retrying")"
 # The load gate checks and slice starts wait on (load-gate.mjs).
 node "$(dirname "$0")/load-gate.mjs" --say 2>/dev/null || true

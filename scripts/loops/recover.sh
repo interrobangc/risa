@@ -25,7 +25,7 @@
 #                                    record, a stale lock or a kept intent says
 #                                    so), only when every step above succeeded;
 #                                    it waits for the new one to hold its lock
-#                                    (CARETOOK_RECOVER_DISPATCH_SECS, 60) and only
+#                                    (RISA_RECOVER_DISPATCH_SECS, 60) and only
 #                                    then drops the intent
 #                                 7. print the gc offers; delete the down
 #                                    record once used
@@ -39,14 +39,14 @@
 #   recover.sh --unattended       for a job with no terminal (the watchdog):
 #                                 the recovery agent opens in a background tab,
 #                                 and a failure files one report (pnpm prd ask
-#                                 --report, topic recover; CARETOOK_RECOVER_REPORT=off
+#                                 --report, topic recover; RISA_RECOVER_REPORT=off
 #                                 files none: the watchdog's later tries in one
 #                                 incident). A stay-down mark (pnpm prd down
 #                                 --stay) makes it do nothing
 #   recover.sh --at HH:MM         sleep until then (tomorrow's when it has
 #                                 passed), then recover: after a usage limit
 #   recover.sh --wait             probe with `claude -p` every
-#                                 CARETOOK_RECOVER_PROBE_SECS (600) until one
+#                                 RISA_RECOVER_PROBE_SECS (600) until one
 #                                 succeeds, then recover (after --at, if both)
 #   recover.sh --dry-run          the inventory (every .loops worktree's class and
 #                                 why, stale and live locks, Docker, the shared
@@ -62,9 +62,9 @@
 # the recovery agent again). A recover by hand (not --unattended, not a dry run)
 # deletes the stay-down mark (.loops/.stay-down.json): the machine comes back.
 #
-# Env: CARETOOK_RECOVER_DISPATCH_SECS (60: the wait for the reopened dispatcher's lock),
-# CARETOOK_RECOVER_PROBE_SECS (600), CARETOOK_RECOVER_STEP_SECS (300: --at's
-# longest sleep before it rechecks the clock); CARETOOK_CLOCK_FILE (tests: a
+# Env: RISA_RECOVER_DISPATCH_SECS (60: the wait for the reopened dispatcher's lock),
+# RISA_RECOVER_PROBE_SECS (600), RISA_RECOVER_STEP_SECS (300: --at's
+# longest sleep before it rechecks the clock); RISA_CLOCK_FILE (tests: a
 # file holding the current epoch second, in place of the clock).
 set -euo pipefail
 # shellcheck source=stack-lib.sh
@@ -121,8 +121,8 @@ release_lock() {
 # report TEXT → one report in the asks queue (unattended: nobody watches this
 # terminal). Filing it failing is only a warning.
 report() {
-  [[ ${CARETOOK_RECOVER_REPORT:-on} != off ]] || { echo "recover: (not reported again this incident) $1" >&2; return 0; }
-  CARETOOK_ASKS_DIR=${CARETOOK_ASKS_DIR:-$loops/.asks} node "$bin/ask.mjs" ask --topic recover --session recover \
+  [[ ${RISA_RECOVER_REPORT:-on} != off ]] || { echo "recover: (not reported again this incident) $1" >&2; return 0; }
+  RISA_ASKS_DIR=${RISA_ASKS_DIR:-$loops/.asks} node "$bin/ask.mjs" ask --topic recover --session recover \
     --report "$1" </dev/null >/dev/null 2>&1 || echo "recover: couldn't file the report: $1" >&2
 }
 
@@ -139,17 +139,17 @@ on_exit() {
 }
 
 now_secs() {
-  if [[ -n ${CARETOOK_CLOCK_FILE:-} ]]; then cat "$CARETOOK_CLOCK_FILE"; else date +%s; fi
+  if [[ -n ${RISA_CLOCK_FILE:-} ]]; then cat "$RISA_CLOCK_FILE"; else date +%s; fi
 }
 
-# wait_until EPOCH → sleep in steps of at most CARETOOK_RECOVER_STEP_SECS until
+# wait_until EPOCH → sleep in steps of at most RISA_RECOVER_STEP_SECS until
 # then (a laptop asleep doesn't count sleep(1) time, so it rechecks the clock).
 # fmt_wait SECS → 3h05m, or 4m10s under an hour.
 fmt_wait() { if (($1 >= 3600)); then printf '%dh%02dm' $(($1 / 3600)) $(($1 % 3600 / 60)); else fmt_secs "$1"; fi; }
 
 wait_until() {
-  local left step=${CARETOOK_RECOVER_STEP_SECS:-300}
-  [[ $step =~ ^[0-9]+$ ]] && ((step > 0)) || die "recover: CARETOOK_RECOVER_STEP_SECS must be a whole number of seconds"
+  local left step=${RISA_RECOVER_STEP_SECS:-300}
+  [[ $step =~ ^[0-9]+$ ]] && ((step > 0)) || die "recover: RISA_RECOVER_STEP_SECS must be a whole number of seconds"
   while :; do
     left=$(($1 - $(now_secs)))
     ((left > 0)) || return 0
@@ -167,8 +167,8 @@ wait_for_time() {
 
 # wait_for_claude → probe with a one-word headless prompt until one exits 0.
 wait_for_claude() {
-  local every=${CARETOOK_RECOVER_PROBE_SECS:-600} n=1
-  [[ $every =~ ^[0-9]+$ ]] && ((every > 0)) || die "recover: CARETOOK_RECOVER_PROBE_SECS must be a whole number of seconds"
+  local every=${RISA_RECOVER_PROBE_SECS:-600} n=1
+  [[ $every =~ ^[0-9]+$ ]] && ((every > 0)) || die "recover: RISA_RECOVER_PROBE_SECS must be a whole number of seconds"
   echo "Waiting for Claude to answer (a claude -p probe every $(fmt_wait "$every")), then recovering. Ctrl-C to stop."
   until host_cli claude -p ok </dev/null >/dev/null 2>&1; do
     echo "  probe $n: no answer yet (usage limit?); next at $(date -r $(($(now_secs) + every)) +%H:%M 2>/dev/null || echo "+$(fmt_secs "$every")")"
@@ -214,7 +214,7 @@ keep_intent() {
 # reopen_dispatcher → open it in a background tab, then wait until it holds its
 # lock; only then drop the intent. Any failure keeps the intent for the next run.
 reopen_dispatcher() {
-  local limit=${CARETOOK_RECOVER_DISPATCH_SECS:-60} deadline pid
+  local limit=${RISA_RECOVER_DISPATCH_SECS:-60} deadline pid
   echo "• the dispatcher (it was running)"
   "$bin/open-session.sh" --command "cd $(printf %q "$main") && scripts/loops/prd.sh dispatch" --title dispatch --background \
     </dev/null 2>&1 | sed 's/^/  /' || { echo "  couldn't open its tab; its intent is kept" >&2; return 1; }

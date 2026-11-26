@@ -1,6 +1,6 @@
 // Session records (sessions.mjs), the wrapper that writes them (session.sh) and
 // `pnpm prd end` (end-session.sh), against a throwaway repo with these scripts
-// copied in and a stub claude (CARETOOK_CLAUDE_BIN). The stub is named
+// copied in and a stub claude (RISA_CLAUDE_BIN). The stub is named
 // claude-stub, never claude, so no walk up from a test can find the real
 // claude session the tests may be running under.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -147,7 +147,7 @@ describe("the pure part", () => {
     const node = (...a) =>
       spawnSync("node", [join(HERE, "sessions.mjs"), "set", ...a], {
         encoding: "utf8",
-        env: { ...process.env, CARETOOK_SESSIONS_DIR: dir },
+        env: { ...process.env, RISA_SESSIONS_DIR: dir },
       });
     try {
       writeRecord(dir, "prd-t", { pid: 20 });
@@ -277,8 +277,8 @@ mkdir -p "$STUB_STATE"
 echo "$$" > "$STUB_STATE/pid"
 printf '%s\\n' "$@" > "$STUB_STATE/args"
 pwd -P > "$STUB_STATE/cwd"
-echo "\${CARETOOK_SESSION_NAME:-} \${CARETOOK_CONTEXT_HOOK:-}" > "$STUB_STATE/hook"
-[[ -z \${STUB_NAME:-} ]] || cat "$CARETOOK_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
+echo "\${RISA_SESSION_NAME:-} \${RISA_CONTEXT_HOOK:-}" > "$STUB_STATE/hook"
+[[ -z \${STUB_NAME:-} ]] || cat "$RISA_SESSIONS_DIR/$STUB_NAME.json" > "$STUB_STATE/record-at-start" 2>/dev/null || true
 case \${STUB_MODE:-exit} in
   exit) exit "\${STUB_EXIT:-0}" ;;
   ancestor) bash -c 'node "$SESSIONS_MJS" ancestor; echo "exit $?"' > "$STUB_STATE/ancestor" ;;
@@ -362,9 +362,9 @@ beforeAll(() => {
   env = {
     ...process.env,
     TRUNK: "dev",
-    CARETOOK_CLAUDE_BIN: stub,
-    CARETOOK_SESSIONS_DIR: "",
-    CARETOOK_END_WAIT: "",
+    RISA_CLAUDE_BIN: stub,
+    RISA_SESSIONS_DIR: "",
+    RISA_END_WAIT: "",
     STUB_STATE: state,
     SESSIONS_MJS: scripts("sessions.mjs"),
     PRD_SH: scripts("prd.sh"),
@@ -506,20 +506,20 @@ describe("liveness", () => {
     const argsOf = () => readFileSync(join(state, "args"), "utf8").trim().split("\n");
     expect(run("session.sh", ["prd-t", "--", "go"]).status).toBe(0);
     expect(argsOf()).toEqual(["--settings", scripts("context-settings.json"), "go"]);
-    const inherited = { CARETOOK_SESSION_NAME: "prd-other", CARETOOK_CONTEXT_HOOK: "/elsewhere" };
+    const inherited = { RISA_SESSION_NAME: "prd-other", RISA_CONTEXT_HOOK: "/elsewhere" };
     expect(run("session.sh", ["plan-t", "--", "go"], inherited).status).toBe(0);
     expect(argsOf()).toEqual(["go"]);
     const shown = join(root, "env-stub");
     writeFileSync(
       shown,
-      `#!/usr/bin/env bash\necho "\${CARETOOK_SESSION_NAME:-none} \${CARETOOK_CONTEXT_HOOK:-none}" > "$STUB_STATE/env"\n`,
+      `#!/usr/bin/env bash\necho "\${RISA_SESSION_NAME:-none} \${RISA_CONTEXT_HOOK:-none}" > "$STUB_STATE/env"\n`,
     );
     chmodSync(shown, 0o755);
     expect(
-      run("session.sh", ["plan-t", "--", "go"], { ...inherited, CARETOOK_CLAUDE_BIN: shown }).status,
+      run("session.sh", ["plan-t", "--", "go"], { ...inherited, RISA_CLAUDE_BIN: shown }).status,
     ).toBe(0);
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe("none none");
-    expect(run("session.sh", ["prd-t", "--", "go"], { CARETOOK_CLAUDE_BIN: shown }).status).toBe(0);
+    expect(run("session.sh", ["prd-t", "--", "go"], { RISA_CLAUDE_BIN: shown }).status).toBe(0);
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe(`prd-t ${scripts("context.mjs")}`);
   });
 
@@ -580,7 +580,7 @@ describe("pnpm prd end", () => {
   it("kills a session that ignores TERM after the wait", async () => {
     const s = start("bash", [scripts("session.sh"), "prd-t", "--", "x"], { STUB_MODE: "stubborn" });
     await until(() => existsSync(join(state, "ready")));
-    const r = run("prd.sh", ["end", "prd-t"], { CARETOOK_END_WAIT: "1" });
+    const r = run("prd.sh", ["end", "prd-t"], { RISA_END_WAIT: "1" });
     expect(r.stdout).toMatch(/ignored TERM for 1s: killed it/);
     expect((await s.done).code).toBe(137);
   });
@@ -690,7 +690,7 @@ describe("sessions start through the wrapper", () => {
   it("each start of the main backlog session is a new captain, its tab titled the same", () => {
     let last = null;
     for (let i = 0; i < 6; i++) {
-      const r = run("prd.sh", ["plan"], { CARETOOK_TAB_TITLE: "always" });
+      const r = run("prd.sh", ["plan"], { RISA_TAB_TITLE: "always" });
       expect(r.status).toBe(0);
       const captain = readFileSync(join(state, "args"), "utf8").split("\n")[5];
       expect(CAPTAINS).toContain(captain);
@@ -703,7 +703,7 @@ describe("sessions start through the wrapper", () => {
 
   it("titles no other session's tab: a backlog-<name> one keeps its name", () => {
     const r = run("session.sh", ["backlog-notes", "--", "--remote-control", "backlog - notes", "x"], {
-      CARETOOK_TAB_TITLE: "always",
+      RISA_TAB_TITLE: "always",
     });
     expect(r.status).toBe(0);
     expect(r.stdout).not.toContain("\x1b]0;");
@@ -733,7 +733,7 @@ describe("the inbox session", () => {
   const home = () => join(root, "home");
   const inboxDir = () => join(home(), ".caretook/inbox");
   const inbox = (args = [], extra = {}) =>
-    run("prd.sh", ["inbox", ...args], { CARETOOK_INBOX_DIR: inboxDir(), ...extra });
+    run("prd.sh", ["inbox", ...args], { RISA_INBOX_DIR: inboxDir(), ...extra });
   beforeEach(() => rmSync(home(), { recursive: true, force: true }));
 
   it("starts in its own directory outside the repository, creating it, on Opus at low effort", () => {
@@ -780,7 +780,7 @@ describe("the inbox session", () => {
     expect(inbox().status).toBe(0);
     expect(record("inbox")).toMatchObject({ dir: inboxDir(), managed: false });
     const other = join(home(), "other-inbox");
-    expect(inbox(["--dir", other, "--managed"], { CARETOOK_INBOX_DIR: "" }).status).toBe(0);
+    expect(inbox(["--dir", other, "--managed"], { RISA_INBOX_DIR: "" }).status).toBe(0);
     expect(readFileSync(join(state, "cwd"), "utf8").trim()).toBe(other);
     expect(record("inbox")).toMatchObject({ kind: "inbox", dir: other, managed: true, model: "opus" });
     expect(inbox(["--dir", join(main, "scripts")]).stderr).toContain("where AGENTS.md would load");
@@ -798,7 +798,7 @@ describe("the inbox session", () => {
   });
 
   it("refuses a directory inside a repository or under a CLAUDE.md or AGENTS.md", () => {
-    const inside = inbox([], { CARETOOK_INBOX_DIR: join(main, "inbox-here") });
+    const inside = inbox([], { RISA_INBOX_DIR: join(main, "inbox-here") });
     expect(inside.status).not.toBe(0);
     expect(inside.stderr).toContain(`is inside the git repository ${main}, where AGENTS.md would load`);
     mkdirSync(home(), { recursive: true });
