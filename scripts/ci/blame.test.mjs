@@ -270,7 +270,7 @@ describe("the split", () => {
       slicesNear(
         [
           { subject: "feat(t): a (slice 2, B-1)", files: ["scripts/loops/x.mjs"] },
-          { subject: "feat(t): b (slice 3)", files: ["apps/web/y.ts"] },
+          { subject: "feat(t): b (slice 3)", files: ["web/y.ts"] },
           { subject: "chore: merge dev", files: ["scripts/loops/z.mjs"] },
         ],
         UNIT,

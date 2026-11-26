@@ -32,7 +32,7 @@ beforeEach(() => {
   git("config", "core.hooksPath", "/dev/null");
   mkdirSync(join(repo, "scripts/loops"), { recursive: true });
   for (const f of ["lib.sh", "config.mjs"]) copyFileSync(join(HERE, f), join(repo, "scripts/loops", f));
-  commit({ "apps/web/a.ts": "1", "README.md": "r" }, "base");
+  commit({ "web/a.ts": "1", "README.md": "r" }, "base");
   git("checkout", "-qb", "feature");
 });
 afterEach(() => rmSync(repo, { recursive: true, force: true }));
@@ -47,24 +47,24 @@ describe("check_base", () => {
 
   it("a quick check with no pass recorded starts where the branch left dev", () => {
     const left = git("rev-parse", "dev");
-    commit({ "apps/web/b.ts": "1" }, "work");
+    commit({ "web/b.ts": "1" }, "work");
     expect(base("quick")).toBe(left);
   });
 
   it("a quick check starts from a recorded full pass", () => {
-    const passed = commit({ "apps/web/b.ts": "1" }, "work");
+    const passed = commit({ "web/b.ts": "1" }, "work");
     record(`${passed} full`);
-    commit({ "apps/web/c.ts": "1" }, "more");
+    commit({ "web/c.ts": "1" }, "more");
     expect(base("quick")).toBe(passed);
   });
 
   it("a slice starts where it left its PRD branch, whatever is recorded", () => {
     git("checkout", "-qb", "prd/topic");
-    const left = commit({ "apps/web/p.ts": "1" }, "prd work");
+    const left = commit({ "web/p.ts": "1" }, "prd work");
     git("checkout", "-qb", "slice/topic/1");
-    const mine = commit({ "apps/web/s.ts": "1" }, "slice work");
+    const mine = commit({ "web/s.ts": "1" }, "slice work");
     record(`${mine} full`);
-    commit({ "apps/web/t.ts": "1" }, "more");
+    commit({ "web/t.ts": "1" }, "more");
     expect(base("slice")).toBe(left);
   });
 });

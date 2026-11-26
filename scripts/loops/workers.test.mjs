@@ -150,7 +150,7 @@ describe("factsOf", () => {
     const proc = (pid, cwd, command) => ({ pid, ppid: 1, cwd, ageSeconds: 120, command });
     const f = facts({
       processes: [
-        proc(11, "/fixture/.loops/topic-3/apps/web", "node vitest run"),
+        proc(11, "/fixture/.loops/topic-3/web/app", "node vitest run"),
         proc(12, "/fixture/.loops/topic-3", "/usr/local/bin/claude --settings x"),
         proc(13, "/fixture/.loops/topic-3", "-zsh"),
         proc(14, "/fixture/.loops/topic-3", "node status-extra.mjs"),

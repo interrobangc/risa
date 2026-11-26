@@ -57,7 +57,7 @@ describe("worktreeKind and hotCollision", () => {
     expect(hotCollision(["scripts/loops/open-session."], ["scripts/loops/open-session.mjs"])).toBe(
       "scripts/loops/open-session.mjs",
     );
-    expect(hotCollision(["apps/web/"], ["scripts/"])).toBeNull();
+    expect(hotCollision(["web/"], ["scripts/"])).toBeNull();
     expect(hotCollision([], ["scripts/"])).toBeNull();
   });
 });
@@ -286,7 +286,7 @@ describe("rule 4: starts", () => {
     const rows = [
       row("check-speed", "running", { hot: ["scripts/loops/prompt.sh"] }),
       row("a", "planned", { hot: ["scripts/loops/"] }),
-      row("b", "planned", { hot: ["apps/web/"] }),
+      row("b", "planned", { hot: ["web/"] }),
     ];
     const p = go({ rows, ...runningFacts(["check-speed"]) });
     expect(p.topic).toBe("b");

@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
-import { root, repo, git, commit, landWith, land, branch, useLandRepo } from "./land-fixture.mjs";
+import { root, repo, config, git, commit, landWith, land, branch, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
 // The notice board's directory, which land.sh reads from the environment.
@@ -40,7 +40,7 @@ describe("docs_only", () => {
   });
   it("is false when a code file is renamed to .md, true for a Markdown rename", () => {
     git("checkout", "-q", "feature");
-    git("mv", "apps/web/a.ts", "apps/web/a.md");
+    git("mv", "web/a.ts", "web/a.md");
     git("commit", "-qm", "rename code");
     expect(docsOnly()).toBe(false);
     git("reset", "-q", "--hard", "dev");
@@ -63,17 +63,17 @@ describe("CI's two lists on dev", () => {
     spawnSync("bash", ["-c", `source scripts/loops/lib.sh && ${body}`], { cwd: repo, encoding: "utf8" });
 
   it.each(LISTS)("a dev commit changing only %s is not drift", (list) => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     commit({ [list]: "a line\n" }, "chore(backlog): filed from CI");
     expect(lib("trunk_drift prd/throwaway-x").stdout).toBe("");
-    commit({ "apps/web/a.ts": "changed" }, "real work");
-    expect(lib("trunk_drift prd/throwaway-x").stdout.trim()).toBe("apps/web/a.ts");
+    commit({ "web/a.ts": "changed" }, "real work");
+    expect(lib("trunk_drift prd/throwaway-x").stdout.trim()).toBe("web/a.ts");
   });
 
   it("names the lists dev changed and the branch didn't, for sync to take", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     expect(lib("trunk_lists prd/throwaway-x").stdout).toBe("");
-    commit({ [QUARANTINE]: "a line\n", "apps/web/a.ts": "changed" }, "dev work");
+    commit({ [QUARANTINE]: "a line\n", "web/a.ts": "changed" }, "dev work");
     expect(lib("trunk_lists prd/throwaway-x").stdout.trim()).toBe(QUARANTINE);
     git("checkout", "-q", "prd/throwaway-x");
     commit({ [QUARANTINE]: "its own\n" }, "the branch's own list");
@@ -127,9 +127,9 @@ describe("land.sh on the PR path", () => {
   });
   // A code branch Codex reviewed clean, then dev moved (another file) and the branch merged it.
   const reviewedThenSynced = () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     const reviewed = git("rev-parse", "prd/throwaway-x");
-    commit({ "apps/web/dev.ts": "dev moved" }, "dev work");
+    commit({ "web/dev.ts": "dev moved" }, "dev work");
     git("push", "-q", "origin", "dev");
     git("checkout", "-q", "prd/throwaway-x");
     git("merge", "-q", "--no-ff", "-m", "chore(throwaway-x): merge dev", "dev");
@@ -149,7 +149,7 @@ describe("land.sh on the PR path", () => {
   it("refuses a stale verdict when the branch added work after the dev merge", () => {
     const reviewed = reviewedThenSynced();
     git("checkout", "-q", "prd/throwaway-x");
-    commit({ "apps/web/b.ts": "3" }, "more work");
+    commit({ "web/b.ts": "3" }, "more work");
     git("checkout", "-q", "dev");
     const r = landWith(reviewedClean(reviewed), "--force", "--by-user");
     expect(r.status).not.toBe(0);
@@ -167,12 +167,12 @@ describe("land.sh on the PR path", () => {
 describe("land.sh's doc budget", () => {
   // A copy of the config with a change, its data files beside it.
   const withConfig = (change) => {
-    const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    const raw = JSON.parse(readFileSync(config, "utf8"));
     change(raw);
     writeFileSync(join(root, "budget.json"), JSON.stringify(raw));
     for (const rel of [raw.paths.tierData, raw.paths.checkPlanRules]) {
       mkdirSync(dirname(join(root, rel)), { recursive: true });
-      cpSync(join(dirname(FIXTURE_CONFIG), rel), join(root, rel));
+      cpSync(join(dirname(config), rel), join(root, rel));
     }
     return { RISA_CONFIG: join(root, "budget.json") };
   };
@@ -229,7 +229,7 @@ describe("land.sh writes a to-test file", () => {
   const files = () => (existsSync(join(repo, "to-test")) ? readdirSync(join(repo, "to-test")) : []);
 
   it("writes one file with its parts after a code landing", () => {
-    branch({ "apps/web/b.ts": "2", "plans/throwaway-x-prd.md": "# PRD: Throwaway (a test topic)\n" });
+    branch({ "web/b.ts": "2", "plans/throwaway-x-prd.md": "# PRD: Throwaway (a test topic)\n" });
     const r = landFor();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(files()).toHaveLength(1);
@@ -244,7 +244,7 @@ describe("land.sh writes a to-test file", () => {
       "## What landed",
       "## What to try, and where",
       "http://localhost:5173",
-      "apps/web/b.ts",
+      "web/b.ts",
       "the check was skipped (--force)",
       "merged without a clean Codex verdict (--no-review)",
       "## Follow-ups and still open",
@@ -264,7 +264,7 @@ describe("land.sh writes a to-test file", () => {
 
   it("writes one after a local hotfix landing too, naming the local merge", () => {
     git("checkout", "-qb", "hotfix/throwaway-y");
-    commit({ "apps/web/c.ts": "3" }, "fix it");
+    commit({ "web/c.ts": "3" }, "fix it");
     git("checkout", "-q", "dev");
     const r = spawnSync(
       "bash",
@@ -343,7 +343,7 @@ describe("land.sh writes a to-test file", () => {
   });
 
   it("writes none when the merge fails", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     const r = landFor(true);
     expect(r.status).not.toBe(0);
     expect(files()).toEqual([]);
@@ -441,7 +441,7 @@ describe("land.sh posts a landing notice", () => {
     );
 
   it("posts one for a code landing, with the topic and the commit, for six hours", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     const r = prdLand();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     const [n, ...more] = notices();
@@ -455,7 +455,7 @@ describe("land.sh posts a landing notice", () => {
 
   it("posts one for a local hotfix landing too", () => {
     git("checkout", "-qb", "hotfix/throwaway-y");
-    commit({ "apps/web/c.ts": "3" }, "fix it");
+    commit({ "web/c.ts": "3" }, "fix it");
     git("checkout", "-q", "dev");
     const r = landFor(["hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"]);
     expect(r.status, r.stderr + r.stdout).toBe(0);
@@ -475,7 +475,7 @@ describe("land.sh posts a landing notice", () => {
   });
 
   it("still lands when the notice can't be posted", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     writeFileSync(join(root, "not-a-dir"), "x");
     const r = prdLand({ [NOTICES_DIR]: join(root, "not-a-dir", "notices") });
     expect(r.status, r.stderr + r.stdout).toBe(0);
@@ -645,7 +645,7 @@ describe("land.sh's run log", () => {
     );
 
   it("records a landing's start and its end, landed", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     const r = landFor();
     expect(r.status, r.stderr + r.stdout).toBe(0);
     const [start, end, ...more] = events();
@@ -661,7 +661,7 @@ describe("land.sh's run log", () => {
   });
 
   it("records a failed landing's failure, with its exit", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     const r = landFor({ GH_MERGE_FAIL: "1" });
     expect(r.status).not.toBe(0);
     expect(events().map((e) => e.kind)).toEqual(["land-start", "land-end"]);
@@ -669,7 +669,7 @@ describe("land.sh's run log", () => {
   });
 
   it("a run log it can't write never stops a landing", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "web/b.ts": "2" });
     writeFileSync(join(root, "not-a-dir"), "x");
     const r = landFor({ RISA_RUN_LOG: join(root, "not-a-dir", "run-log.jsonl") });
     expect(r.status, r.stderr + r.stdout).toBe(0);

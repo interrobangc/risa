@@ -79,7 +79,7 @@ describe("the pure part", () => {
     const rows = [
       { topic: "f", flags: ["standing"], hot: ["scripts/loops/"] },
       { topic: "g", flags: ["standing"], hot: [] },
-      { topic: "p", flags: [], hot: ["apps/web/"] },
+      { topic: "p", flags: [], hot: ["web/"] },
     ];
     expect(clearsHot(rows, "f")).toBe(true);
     expect(clearsHot(rows, "g")).toBe(false);
@@ -871,7 +871,7 @@ The registry.
 | \`unm\` | — | — | — | not merged |
 | \`notable\` | — | — | — | no table |
 | \`fixes-x\` | standing, alone | — | \`scripts/loops/\`, \`docs/\` | a fixes wave |
-| \`busy\` | — | — | \`apps/web/\` | a PRD with hot files |
+| \`busy\` | — | — | \`web/\` | a PRD with hot files |
 | \`tailp\` | — | — | — | landed, then its plan's status |
 | \`taild\` | — | — | — | landed, then docs |
 | \`tailc\` | — | — | — | landed, then code |
@@ -1069,7 +1069,7 @@ Intro.
     r = run("rm.sh", ["busy"]);
     expect(r.status).toBe(0);
     expect(r.stdout).not.toContain("hot files");
-    expect(rowOf("busy").hot).toEqual(["apps/web/"]);
+    expect(rowOf("busy").hot).toEqual(["web/"]);
   });
 
   it("reads the registry once per rm (B-545)", () => {

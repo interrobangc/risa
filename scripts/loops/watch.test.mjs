@@ -237,7 +237,7 @@ describe("watchFacts and the state", () => {
     };
     const facts = [
       f("topic", "prd/topic", [{ ...agent, agent: null, lastActivityAt: at(3) }]),
-      f("topic-4", "slice/topic/4", [agent], { changes: ["packages/data/src/db/migrations/0009_x.sql"] }),
+      f("topic-4", "slice/topic/4", [agent], { changes: ["db/migrations/0009_x.sql"] }),
       f("other-4", "slice/other/4", [agent]),
     ];
     const plan = planStates(

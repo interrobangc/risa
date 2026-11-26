@@ -27,7 +27,7 @@
         "id": "PRRT_kwDOVx-WLM66gPsf",
         "isResolved": false,
         "isOutdated": false,
-        "path": "apps/web/app/lib/app-shell/me.ts",
+        "path": "web/app/lib/app-shell/me.ts",
         "line": 86,
         "originalLine": 86,
         "comments": {
@@ -54,7 +54,7 @@
         "id": "PRRT_kwDOVx-WLM66gPsh",
         "isResolved": false,
         "isOutdated": false,
-        "path": "packages/data/src/db/schema/timeline/entryRules.ts",
+        "path": "db/src/db/schema/timeline/entryRules.ts",
         "line": 39,
         "originalLine": 39,
         "comments": {

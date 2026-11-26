@@ -370,10 +370,10 @@ describe("new.sh slice while draining", () => {
     git(main, "add", ".");
     git(main, "commit", "-q", "-m", "chore: init");
     git(main, "branch", "prd/t");
-    mkdirSync(join(main, "packages/data"), { recursive: true });
-    mkdirSync(join(main, "apps/web"), { recursive: true });
-    writeFileSync(join(main, "packages/data/.env"), 'DATABASE_URL="x"\nSEED_USER_PASSWORD="pw-fictional"\n');
-    writeFileSync(join(main, "apps/web/.env"), 'BETTER_AUTH_URL="x"\nCRON_SECRET="s"\n');
+    mkdirSync(join(main, "db"), { recursive: true });
+    mkdirSync(join(main, "web"), { recursive: true });
+    writeFileSync(join(main, "db/.env"), 'DATABASE_URL="x"\nSEED_USER_PASSWORD="pw-fictional"\n');
+    writeFileSync(join(main, "web/.env"), 'BETTER_AUTH_URL="x"\nCRON_SECRET="s"\n');
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 

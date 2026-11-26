@@ -23,7 +23,7 @@ Stack: yes · Reads: docs/loops.md, AGENTS.md (all of it, once) · Tests: unit, 
 
 ## Slice 3: Some given, other separators
 
-Reads: docs/domain/sync.md; tests: component
+Reads: handbook/sync.md; tests: component
 
 ## Slice 4: Malformed
 
@@ -75,7 +75,7 @@ describe("sliceFields", () => {
 
   it("accepts ; and | separators and any case", () => {
     const f = sliceFields(plan, 3);
-    expect(f).toMatchObject({ stack: false, reads: ["docs/domain/sync.md"], tests: ["component"] });
+    expect(f).toMatchObject({ stack: false, reads: ["handbook/sync.md"], tests: ["component"] });
     expect(f.missing).toEqual(["stack"]);
     expect(sliceFields(plan, 12)).toMatchObject({
       stack: false,
@@ -174,7 +174,7 @@ describe("the command line", () => {
   it("prints the fields of a plan on stdin, with warnings on stderr", () => {
     const r = spawnSync("node", [CLI, "3"], { input: plan, encoding: "utf8" });
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe("Stack: no\nReads: docs/domain/sync.md\nTests: component\n");
+    expect(r.stdout).toBe("Stack: no\nReads: handbook/sync.md\nTests: component\n");
     expect(r.stderr).toBe("warning: slice 3: no Stack field\n");
   });
 

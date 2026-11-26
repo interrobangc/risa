@@ -74,7 +74,7 @@ const put = (...p) => {
 
 // The caches reclaim frees in a .loops worktree, and the main checkout's copies
 // it must keep.
-const CACHES = ["apps/web/build", "node_modules/.vite", "apps/web/node_modules/.vite"];
+const CACHES = ["web/build", "node_modules/.vite", "web/app/node_modules/.vite"];
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "reclaim-test-")));
@@ -123,6 +123,9 @@ beforeAll(() => {
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   config = stubHookConfig(main);
+  // The check build on the sample project's path, not the fixture config's own.
+  const raw = JSON.parse(readFileSync(config, "utf8"));
+  writeFileSync(config, JSON.stringify({ ...raw, stack: { ...raw.stack, checkBuild: "web/build" } }));
   env.RISA_CONFIG = config;
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
   for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
@@ -165,9 +168,9 @@ describe("reclaim --list", () => {
     const out = ok(["--list"]);
     expect(out).toMatch(/^disk: 42 GB free \(line 10 GB\)$/m);
     expect(out).toMatch(/^ {2}worktree +2\.0 MB +t-3 \(slice\/t\/3 is merged into prd\/t\)$/m);
-    expect(out).toMatch(/^ {2}build +2\.0 MB +t-1\/apps\/web\/build /m);
+    expect(out).toMatch(/^ {2}build +2\.0 MB +t-1\/web\/build /m);
     expect(out).toMatch(/^ {2}vite +2\.0 MB +t-1\/node_modules\/\.vite /m);
-    expect(out).toMatch(/^ {2}vite +2\.0 MB +t-1\/apps\/web\/node_modules\/\.vite /m);
+    expect(out).toMatch(/^ {2}vite +2\.0 MB +t-1\/web\/app\/node_modules\/\.vite /m);
     expect(out).toMatch(
       /^ {2}volume +12\.2 MB +sample-loop9_data \(dangling; no worktree uses sample-loop9\)$/m,
     );

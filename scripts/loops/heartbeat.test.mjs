@@ -31,7 +31,7 @@ describe("worktreesIn and worktreeOfCwd", () => {
 
   it("finds a cwd's worktree, the main checkout as main, anything else as null", () => {
     expect(worktreeOfCwd(`${LOOPS}/topic`, LOOPS)).toBe("topic");
-    expect(worktreeOfCwd(`${LOOPS}/topic/apps/web`, LOOPS)).toBe("topic");
+    expect(worktreeOfCwd(`${LOOPS}/topic/web/app`, LOOPS)).toBe("topic");
     expect(worktreeOfCwd("/fixture/main", LOOPS)).toBe("main");
     expect(worktreeOfCwd("/somewhere", LOOPS)).toBeNull();
   });

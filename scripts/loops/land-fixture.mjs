@@ -8,11 +8,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach } from "vitest";
 
-// For its RISA_CONFIG: the scripts land runs read this repo's config through it.
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG, sampleFoldersConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
-export let root, repo;
+/** Each test's config (`root/config/`), for RISA_CONFIG: sampleFoldersConfig's. */
+export let root, repo, config;
 export const git = (...a) =>
   execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
 export const commit = (files, msg) => {
@@ -130,6 +130,8 @@ export function useLandRepo() {
     process.env.RISA_RUN_LOG = join(root, "run-log.jsonl");
     // The landing journal outside it too, for the same reason.
     process.env.RISA_LANDING_DIR = join(root, "landing");
+    // The scripts land runs read the config through RISA_CONFIG (they pass process.env on).
+    config = process.env.RISA_CONFIG = sampleFoldersConfig(join(root, "config"));
     mkdirSync(join(root, "bin"));
     writeFileSync(join(root, "bin", "gh"), GH);
     chmodSync(join(root, "bin", "gh"), 0o755);
@@ -159,7 +161,7 @@ export function useLandRepo() {
     ];
     commit(
       {
-        "apps/web/a.ts": "1",
+        "web/a.ts": "1",
         "README.md": "r",
         "scripts/backlog/backlog.mjs": BACKLOG(items),
       },
@@ -169,7 +171,10 @@ export function useLandRepo() {
     git("checkout", "-qb", "feature");
     git("checkout", "-q", "dev");
   });
-  afterEach(() => rmSync(root, { recursive: true, force: true }));
+  afterEach(() => {
+    process.env.RISA_CONFIG = FIXTURE_CONFIG;
+    rmSync(root, { recursive: true, force: true });
+  });
 }
 
 export const branch = (files) => {

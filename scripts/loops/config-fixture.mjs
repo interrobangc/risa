@@ -12,8 +12,12 @@
 //                         path, as a project's do. Its browser hook is the sample's
 //                         (sample-project/tools/browser-hook.sh). The core's tests run no
 //                         project script.
+//
+//   sampleFoldersConfig(dir)  writes DIR/risa.json: that config with its check plan's
+//                         rules on the sample project's folders (web/, db/), and returns
+//                         its path, for a test whose made-up files sit there.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_NAME } from "./config.mjs";
 
@@ -65,4 +69,50 @@ export function stubHookConfig(dir, { base = FIXTURE_CONFIG, copy = false } = {}
   const path = join(dir, CONFIG_NAME);
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`);
   return path;
+}
+
+// The check plan's rules on the sample project's folders (web/ app code, db/
+// server code), with the fixture config's tiers.
+const RULES = {
+  ownTests: "\\.(int\\.test\\.ts|browser\\.test\\.tsx)$",
+  suite: {
+    tier: "full",
+    rules: [
+      { match: "^db/migrations/", why: "a migration" },
+      { match: "^db/.*seed", flags: "i", why: "seeds" },
+      { match: "^pnpm-lock\\.yaml$", why: "the lockfile" },
+      { match: "(^|/)package\\.json$", why: "a package.json" },
+      { match: "^vitest\\.config\\.ts$", why: "the Vitest config" },
+      { match: "^\\.github/(workflows|actions)/", why: "the CI workflow" },
+      { match: "^scripts/ci/", why: "scripts/ci" },
+    ],
+  },
+  byPath: [
+    { match: "^web/", tier: "components", why: "app code" },
+    { match: "^db/", tier: "integration", why: "server code" },
+  ],
+  reachesCode: [
+    { match: "^(db|web)/test/", why: "test setup" },
+    { match: "(^|/)tsconfig[^/]*\\.json$", why: "a TypeScript config" },
+    { match: "(^|/)eslint\\.config\\.[^/]+$", why: "the ESLint config" },
+  ],
+};
+
+/**
+ * A copy of the fixture config in DIR, its tier data beside it and its check
+ * plan's rules the sample folders' (RULES), for a test whose made-up files sit
+ * there: a config's paths start from its own folder.
+ * @param {string} dir
+ * @returns {string} its path
+ */
+export function sampleFoldersConfig(dir) {
+  const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+  const put = (/** @type {string} */ rel, /** @type {string} */ text) => {
+    mkdirSync(dirname(join(dir, rel)), { recursive: true });
+    writeFileSync(join(dir, rel), text);
+  };
+  put(raw.paths.tierData, readFileSync(join(dirname(FIXTURE_CONFIG), raw.paths.tierData), "utf8"));
+  put(raw.paths.checkPlanRules, `${JSON.stringify(RULES, null, 2)}\n`);
+  put("risa.json", `${JSON.stringify(raw, null, 2)}\n`);
+  return join(dir, "risa.json");
 }

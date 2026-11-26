@@ -15,9 +15,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { brakeNotice } from "../ci/blame.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
-import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 import { sharedNames } from "./config.mjs";
-import { root, repo, git, commit, landWith, branch, GH_CI, useLandRepo } from "./land-fixture.mjs";
+import { root, repo, config, git, commit, landWith, branch, GH_CI, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
 
@@ -85,7 +84,7 @@ exit 0
 
   it("records the landing's end after the unsynced typecheck", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const r = go();
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(steps()).toEqual(["typegen", "typecheck"]);
@@ -102,7 +101,7 @@ exit 0
 
   it("lands over drift on other files: typegen then typecheck, the line printed and in --body", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const r = go();
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(steps()).toEqual(["typegen", "typecheck"]);
@@ -116,13 +115,13 @@ exit 0
   // A sample config with other commands and another id prefix: the landing runs
   // and takes what it says.
   const sample = (change) => {
-    const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    const raw = JSON.parse(readFileSync(config, "utf8"));
     change(raw);
     writeFileSync(join(root, "sample.json"), JSON.stringify(raw));
     // Its paths start from its own folder: the tier data and rules the check plan reads go there too.
     for (const rel of [raw.paths.tierData, raw.paths.checkPlanRules]) {
       mkdirSync(dirname(join(root, rel)), { recursive: true });
-      cpSync(join(dirname(FIXTURE_CONFIG), rel), join(root, rel));
+      cpSync(join(dirname(config), rel), join(root, rel));
     }
     return { RISA_CONFIG: join(root, "sample.json") };
   };
@@ -155,24 +154,24 @@ exit 0
   it("counts only the commits that are drift", () => {
     started();
     toDev({ "plans/backlog.md": "b" });
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     expect(go().stdout).toContain("`dev` had 1 commit since");
   });
 
   it("refuses a shared file", () => {
-    started({ "apps/web/a.ts": "mine", [OWN]: "own" });
-    toDev({ "apps/web/a.ts": "theirs" });
+    started({ "web/a.ts": "mine", [OWN]: "own" });
+    toDev({ "web/a.ts": "theirs" });
     const r = go();
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("has moved since prd/throwaway-x last synced");
-    expect(r.stderr).toContain("changed apps/web/a.ts");
+    expect(r.stderr).toContain("changed web/a.ts");
     expect(steps()).toEqual([]);
   });
 
   it.each([
-    ["a migration", "packages/data/src/db/migrations/0001_x.sql"],
-    ["a package.json", "apps/web/package.json"],
-    ["test setup", "packages/data/test/setup.ts"],
+    ["a migration", "db/migrations/0001_x.sql"],
+    ["a package.json", "web/package.json"],
+    ["test setup", "db/test/setup.ts"],
   ])("refuses dev bringing %s, naming it", (_kind, file) => {
     started();
     toDev({ [file]: "x" });
@@ -184,7 +183,7 @@ exit 0
 
   it("keeps the drift refusal with --fixes and with RISA_UNSYNCED=off", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const refused = [go({}, "--fixes", "B-9"), go({ RISA_UNSYNCED: "off" })];
     for (const r of refused) {
       expect(r.status).not.toBe(0);
@@ -194,7 +193,7 @@ exit 0
   });
 
   describe("on the branch's CI verdict", () => {
-    const TEST = "apps/web/x.test.ts";
+    const TEST = "web/x.test.ts";
     const failing = { job: "unit", file: TEST, name: "fails" };
     const verdict = (tip, kind) => ({
       version: 1,
@@ -209,8 +208,8 @@ exit 0
     });
     const withVerdict = (kind) => {
       toDev({ [TEST]: "t" });
-      started({ "apps/web/b.ts": "2" });
-      toDev({ "apps/web/dev.ts": "d" });
+      started({ "web/b.ts": "2" });
+      toDev({ "web/dev.ts": "d" });
       const tip = git("rev-parse", "prd/throwaway-x");
       writeFileSync(
         join(root, "fixture.json"),
@@ -246,7 +245,7 @@ exit 0
 
   describe("on a known dev brake", () => {
     const board = () => join(root, "notices");
-    const failure = { key: "k1", job: "unit", file: "apps/web/x.test.ts", name: "fails" };
+    const failure = { key: "k1", job: "unit", file: "web/x.test.ts", name: "fails" };
     const ciVerdict = (sha, kind) => ({
       version: 1,
       commit: sha,
@@ -272,7 +271,7 @@ exit 0
       );
     const drifted = (files) => {
       started(files);
-      toDev({ "apps/web/dev.ts": "d" });
+      toDev({ "web/dev.ts": "d" });
       return git("rev-parse", "origin/dev");
     };
     const refused = (r, why) => {
@@ -305,7 +304,7 @@ exit 0
     });
 
     it("refuses a gated branch with a clean verdict of its own when dev reads brake", () => {
-      const dev = drifted({ "apps/web/b.ts": "2" });
+      const dev = drifted({ "web/b.ts": "2" });
       runs([
         [git("rev-parse", "prd/throwaway-x"), "green"],
         [dev, "brake"],
@@ -316,7 +315,7 @@ exit 0
 
     it("reads the tip land measures against, not a local dev ahead of it", () => {
       const measured = drifted();
-      commit({ "apps/web/local.ts": "l" }, "unpushed dev work");
+      commit({ "web/local.ts": "l" }, "unpushed dev work");
       runs([[measured, "brake"]]);
       refused(go(), `CI reads a brake on dev's tip ${measured.slice(0, 8)}`);
     });
@@ -398,7 +397,7 @@ exit 0
 
   it("lands nothing on a failing typecheck, and restores the worktree", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const r = go({ PNPM_FAIL: "1" });
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("doesn't typecheck");
@@ -409,7 +408,7 @@ exit 0
 
   it("restores the worktree after an interrupt", async () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const hung = join(root, "hung");
     const child = spawn(
       "bash",
@@ -441,7 +440,7 @@ exit 0
 
   it("aborts a leftover marked merge at the next land", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     leftover();
     const r = go();
     expect(r.status, r.stdout + r.stderr).toBe(0);
@@ -451,7 +450,7 @@ exit 0
 
   it("aborts a leftover marked merge at the next sync", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     leftover();
     const r = syncIt("--force");
     expect(r.status, r.stdout + r.stderr).toBe(0);
@@ -468,7 +467,7 @@ exit 0
 
   it("sync skips a merge dev's changes don't need, and --force merges them", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const before = inWt("rev-parse", "HEAD");
     const skip = syncIt();
     expect(skip.status, skip.stdout + skip.stderr).toBe(0);
@@ -497,7 +496,7 @@ exit 0
 
   it("leaves a merge that isn't the marked one alone", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     leftover();
     const marker = join(inWt("rev-parse", "--absolute-git-dir"), sharedNames().unsyncedMerge);
     writeFileSync(marker, `${"0".repeat(40)} ${"1".repeat(40)} 999999\nnever\n`);
@@ -509,7 +508,7 @@ exit 0
 
   it("refuses a worktree holding a browser lease", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const lease = join(root, "leases", "browser", "1");
     mkdirSync(lease, { recursive: true });
     writeFileSync(
@@ -525,7 +524,7 @@ exit 0
 
   it("refuses a dirty worktree and one that's missing", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     writeFileSync(join(wt(), "stray.txt"), "x");
     expect(go().stderr).toContain("uncommitted changes");
     rmSync(join(wt(), "stray.txt"));
@@ -537,7 +536,7 @@ exit 0
 
   it("refuses when dev moves onto a shared file during the typecheck", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const other = join(root, "other");
     execFileSync("git", ["clone", "-q", "-b", "dev", join(root, "origin.git"), other]);
     mkdirSync(join(other, "scripts", "loops"), { recursive: true });
@@ -563,10 +562,10 @@ exit 0
 
   it("typechecks once more when dev moves onto other files, then lands", () => {
     started();
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const other = join(root, "other");
     execFileSync("git", ["clone", "-q", "-b", "dev", join(root, "origin.git"), other]);
-    writeFileSync(join(other, "apps/web/later.ts"), "later");
+    writeFileSync(join(other, "web/later.ts"), "later");
     execFileSync("git", ["-C", other, "add", "-A"]);
     execFileSync("git", [
       "-C",
@@ -590,7 +589,7 @@ exit 0
 
   it("lands a Markdown-only branch with no worktree and no typecheck", () => {
     branch({ "docs/x.md": "d" });
-    toDev({ "apps/web/dev.ts": "d" });
+    toDev({ "web/dev.ts": "d" });
     const r = go();
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(steps()).toEqual([]);
@@ -602,7 +601,7 @@ exit 0
     commit({ [OWN]: "own" }, "fix it");
     git("checkout", "-q", "dev");
     git("worktree", "add", "-q", join(repo, ".loops", "hotfix-throwaway-y"), "hotfix/throwaway-y");
-    commit({ "apps/web/dev.ts": "d" }, "dev work");
+    commit({ "web/dev.ts": "d" }, "dev work");
     const r = spawnSync(
       "bash",
       ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "-m", "fix(web): c"],
