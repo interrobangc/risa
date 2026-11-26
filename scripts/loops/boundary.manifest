@@ -191,9 +191,13 @@ scripts/loops/inventory.mjs core
 scripts/loops/inventory.test.mjs core
 scripts/loops/keep-alive.mjs core
 scripts/loops/keep-alive.test.mjs core
+scripts/loops/land-fixture.mjs core
+scripts/loops/land-force-resume.test.mjs core
+scripts/loops/land-gate.test.mjs core
 scripts/loops/land-journal.mjs core
 scripts/loops/land-journal.test.mjs core
 scripts/loops/land-skeptic.mjs core
+scripts/loops/land-unsynced.test.mjs core
 scripts/loops/land.sh core
 scripts/loops/land.test.mjs core
 scripts/loops/lease.mjs core
