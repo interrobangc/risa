@@ -16,13 +16,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { LEASE_SH, takeLease } from "./lease.mjs";
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
+// The variable naming the lease root lease.sh reads, named once (the boundary lint counts each).
+const ROOT_VAR = "CARETOOK_LEASE_ROOT";
 
 let root, env;
 const children = [];
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lease-test-")));
-  env = { ...process.env, CARETOOK_LEASE_ROOT: join(root, "leases"), CARETOOK_LEASE_POLL: "1" };
+  env = { ...process.env, [ROOT_VAR]: join(root, "leases"), CARETOOK_LEASE_POLL: "1" };
   for (const k of Object.keys(env)) {
     if (
       /^CARETOOK_(BROWSER_LEASES|BROWSER_OLD_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) ||
@@ -71,7 +73,7 @@ const cli = (args, extra = {}) => {
   const r = spawnSync("bash", [LEASE_SH, ...args], { env: { ...env, ...extra }, encoding: "utf8" });
   return { out: r.stdout, err: r.stderr, status: r.status };
 };
-const dir = (kind, n) => join(env.CARETOOK_LEASE_ROOT, kind, String(n));
+const dir = (kind, n) => join(env[ROOT_VAR], kind, String(n));
 
 const SLOW = { timeout: 40_000 };
 
@@ -185,7 +187,7 @@ describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", 
 
     first.child.stdin.end();
     await until(() => holdLine(queued), 8000);
-    const waiting = join(env.CARETOOK_LEASE_ROOT, "queue", ".waiting");
+    const waiting = join(env[ROOT_VAR], "queue", ".waiting");
     expect(existsSync(join(waiting, String(queued.child.pid)))).toBe(false);
     queued.child.stdin.end();
     await Promise.all([first.exit, queued.exit]);
@@ -291,7 +293,7 @@ describe("pnpm prd check's check lease", SLOW, () => {
     "makes the runs beyond the default limit of two wait, and holders shows who holds what (%s)",
     async (name, late) => {
       const here = join(root, `check-${late ? "late" : "once"}`);
-      const extra = { CARETOOK_LEASE_ROOT: join(here, "leases") };
+      const extra = { [ROOT_VAR]: join(here, "leases") };
       mkdirSync(here);
       const log = join(here, "log");
       const go = join(here, "go");
