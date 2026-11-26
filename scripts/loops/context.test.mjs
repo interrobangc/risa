@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { agentTranscript, hardLimitFor, hookDecision, sizeFromTranscript } from "./context.mjs";
+import { agentTranscript, hardLimitFor, hookDecision, limitOf, sizeFromTranscript } from "./context.mjs";
 import { processOf } from "./sessions.mjs";
 
 const CONTEXT = new URL("./context.mjs", import.meta.url).pathname;
@@ -104,13 +104,17 @@ describe("hookDecision", () => {
     expect(d.record).toEqual({ pid: PID, size: 160_000, readAt: iso(NOW) });
   });
 
-  it("asks an orchestrator to judge past soft, then only every further 25k, whatever the time", () => {
+  it("tells an orchestrator to rotate at the next wave boundary past soft, then only every further 25k, whatever the time", () => {
     const first = hookDecision(null, { ...facts, size: 170_000 });
     expect(first.message).toContain("170k");
     expect(first.message).toContain("soft limit of 160k");
     expect(first.message).toContain("hard limit is 225k");
-    expect(first.message).toContain("Judge whether to rotate now");
-    expect(first.message).toContain('pnpm prd rotate --mid-wave --reason "context"');
+    expect(first.message).toContain("Rotate unasked between waves only: at the next wave boundary");
+    expect(first.message).toContain("write _Status_ as the brief");
+    expect(first.message).toContain("run `pnpm prd rotate`, without asking");
+    expect(first.message).toContain("Not mid-wave");
+    expect(first.message).not.toContain('--mid-wave --reason "context"');
+    expect(first.message).not.toContain("Judge");
     expect(first.record.hardOverAt).toBeUndefined();
     const quiet = hookDecision(first.record, { ...facts, size: 194_999, now: NOW + 60 * MIN });
     expect(quiet.message).toBeNull();
@@ -308,6 +312,24 @@ describe("hookDecision", () => {
     expect(hardLimitFor("prd", {})).toBe(225_000);
     expect(hardLimitFor("backlog", {})).toBeNull();
   });
+
+  it("gives an orchestrator a 120k soft limit and every other kind 160k: at 125k only the orchestrator hears", () => {
+    expect(limitOf({}, "prd")).toBe(120_000);
+    for (const kind of ["inbox", "backlog", "plan", undefined]) expect(limitOf({}, kind)).toBe(160_000);
+    const at125 = { ...facts, size: 125_000 };
+    const orchestrator = hookDecision(null, { ...at125, limit: limitOf({}, "prd") });
+    expect(orchestrator.message).toContain("at the next wave boundary");
+    expect(orchestrator.message).toContain("Not mid-wave");
+    const inbox = hookDecision(null, {
+      ...at125,
+      limit: limitOf({}, "inbox"),
+      inbox: "pnpm -s -C /m prd rotate --self",
+    });
+    expect(inbox.message).toBeNull();
+    expect(hookDecision(null, { ...at125, limit: limitOf({}, "inbox"), loop: true }).message).toBeNull();
+    // The hard limit stays 225k for an orchestrator; the inbox session's one limit is its 160k.
+    expect(hardLimitFor("prd", {})).toBe(225_000);
+  });
 });
 
 let root, sessions, context, transcript;
@@ -321,7 +343,7 @@ beforeEach(() => {
   mkdirSync(sessions);
   writeFileSync(
     join(sessions, "prd-t.json"),
-    JSON.stringify({ pid: PID, started: new Date().toISOString() }),
+    JSON.stringify({ pid: PID, kind: "prd", started: new Date().toISOString() }),
   );
 });
 afterAll(() => {
@@ -374,6 +396,22 @@ describe("the hook as a command", () => {
     expect(contextOf(hook({ transcript_path: transcript }, env).stdout).additionalContext).toContain(
       "soft limit of 100k",
     );
+  });
+
+  it("at 125k tells an orchestrator to rotate at the next wave boundary, and leaves its slice agent alone", () => {
+    writeFileSync(transcript, assistant(1, 125_000));
+    const orchestrator = contextOf(hook({ transcript_path: transcript }).stdout).additionalContext;
+    expect(orchestrator).toContain("past the soft limit of 120k");
+    expect(orchestrator).toContain("at the next wave boundary");
+    expect(orchestrator).toContain("Not mid-wave");
+    expect(orchestrator).not.toContain('--mid-wave --reason "context"');
+    // A slice agent of that orchestrator: its own transcript, its own 175k limit.
+    mkdirSync(join(root, "s1", "subagents"), { recursive: true });
+    writeFileSync(
+      join(root, "s1", "subagents", "agent-a1.jsonl"),
+      assistant(1, 125_000, 0, { isSidechain: true }),
+    );
+    expect(hook({ transcript_path: transcript, agent_id: "a1" }).stdout).toBe("");
   });
 
   it("delivers a waiting nudge once and marks it in the record", () => {
@@ -491,10 +529,10 @@ describe("pnpm prd context", () => {
   it("prints the caller's size and its limits", () => {
     writeFileSync(transcript, assistant(1, 170_000));
     hook({ transcript_path: transcript });
-    expect(cli([]).stdout).toBe("prd-t: 170k over soft (soft 160k, hard 225k)\n");
+    expect(cli([]).stdout).toBe("prd-t: 170k over soft (soft 120k, hard 225k)\n");
     writeFileSync(transcript, assistant(1, 240_000));
     hook({ transcript_path: transcript });
-    expect(cli([]).stdout).toBe("prd-t: 240k OVER hard (soft 160k, hard 225k)\n");
+    expect(cli([]).stdout).toBe("prd-t: 240k OVER hard (soft 120k, hard 225k)\n");
   });
 
   it("prints a backlog session's soft limit only", () => {
@@ -540,7 +578,10 @@ describe("pnpm prd context", () => {
         join(sessions, "prd-reused.json"),
         JSON.stringify({ pid: child.pid, started: new Date(Date.now() - 10 * MIN).toISOString() }),
       );
-      writeFileSync(join(sessions, "prd-live.json"), JSON.stringify({ pid: child.pid, started }));
+      writeFileSync(
+        join(sessions, "prd-live.json"),
+        JSON.stringify({ pid: child.pid, kind: "prd", started }),
+      );
       writeFileSync(join(sessions, "prd-stale.json"), JSON.stringify({ pid: child.pid, started }));
       writeFileSync(
         join(sessions, "prd-gone.json"),
@@ -562,7 +603,7 @@ describe("pnpm prd context", () => {
       expect(rows.map((r) => r.name)).toEqual(["backlog", "prd-big", "prd-live", "prd-stale"]);
       expect(byName["prd-live"]).toMatchObject({
         size: 165_000,
-        limit: 160_000,
+        limit: 120_000,
         hard: 225_000,
         over: true,
         overHard: false,
@@ -571,6 +612,7 @@ describe("pnpm prd context", () => {
       expect(byName["prd-stale"]).toMatchObject({ size: null, over: false, note: "no size yet" });
       expect(byName["prd-big"]).toMatchObject({ over: true, overHard: true, note: "230k OVER hard" });
       expect(byName.backlog).toMatchObject({
+        limit: 160_000,
         hard: null,
         over: true,
         overHard: false,

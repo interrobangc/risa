@@ -20,7 +20,7 @@ import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten, span } from "./asks.mjs";
-import { contextDirOf, hardLimitFor, sizeNote, sizeRecord } from "./context.mjs";
+import { contextDirOf, hardLimitFor, limitOf, sizeNote, sizeRecord } from "./context.mjs";
 import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
 import { branchKind, readData, usualTime } from "./metrics.mjs";
 import { pendingPart } from "./session-requests.mjs";
@@ -95,6 +95,7 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
       record.managed ? "managed" : "by hand",
       up
         ? sizeNote(sizeRecord(contextDirOf(sessionsDir), name, record.pid ?? 0), {
+            limit: limitOf(process.env, record.kind),
             hard: hardLimitFor(record.kind),
             now,
           })

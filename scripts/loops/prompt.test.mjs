@@ -232,7 +232,11 @@ describe("orchestrator", () => {
         "After a landing and its docs (not the last one), start no new slice; once the slices in flight are merged, commit _Status_ and run `pnpm prd rotate`; with none in flight, rotate at once.",
       );
       expect(out).toContain("`pnpm prd rotate --mid-wave`");
-      expect(out).toContain("**past the context limit** (160k tokens; a hook reminds you)");
+      expect(out).toContain("**past the hard context limit** (225k tokens; a hook reminds you)");
+      expect(out).toContain(
+        "**Past the soft limit** (120k tokens; a hook reminds you) rotate unasked between waves only: at the next wave boundary write _Status_ as the brief, commit it and run `pnpm prd rotate`, never `--mid-wave` for it.",
+      );
+      expect(out).not.toContain("160k");
       expect(out).toContain('`pnpm prd rotate --mid-wave --reason "context"`');
       expect(out).toContain('`pnpm prd context --keep "<why>"` and write the reason in _Status_');
       expect(out).toContain("only on the user's word");
