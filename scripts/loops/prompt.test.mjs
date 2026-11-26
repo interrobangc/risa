@@ -504,6 +504,16 @@ describe("waiting on a check", () => {
   });
 });
 
+describe("helpers", () => {
+  it("the slice prompt hands long exploration and long check output to a helper", () => {
+    const out = ok("slice", "T", "1");
+    expect(out).toContain(
+      "**Past about 10 reads into unfamiliar code, hand the exploration to one Explore helper**",
+    );
+    expect(out).toContain("long check output goes to a haiku helper too");
+  });
+});
+
 describe("plan and backlog", () => {
   it("are unchanged by the resume work", () => {
     const plan = ok("plan", "T", "B-1", "B-2");
