@@ -31,6 +31,9 @@ pnpm prd <command>
 
   Start and stop work
     start <topic>             create (or resume) a PRD's worktree and stack; prints how to open its orchestrator
+    anchors [topic] [--base <ref>]   the plan's anchors on <ref> (default $trunk), run at PRD start: every
+                              backticked path in an unmerged slice exists there and every symbol named
+                              beside a path is in that file; only warns (exit 0): the misses, line numbers
     dispatch [--every <s>]    the dispatcher, left in a tab of its own: every minute it plans, starts and
                               reopens PRDs by itself, one action a tick, in the registry's row order
     dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
@@ -292,6 +295,12 @@ case $cmd in
     [[ ${1:-} == "" || ${1:-} == -* ]] || { t=$1; shift; }
     if [[ -z $t ]]; then h=$(here_name); [[ -n $h ]] || die "status-trim: name a topic, or run it inside its worktree"; t=$(topic_of "$h"); fi
     exec node "$bin/status-trim.mjs" "$t" "$@"
+    ;;
+  anchors)
+    t=""
+    [[ ${1:-} == "" || ${1:-} == -* ]] || { t=$1; shift; }
+    if [[ -z $t ]]; then h=$(here_name); [[ -n $h ]] || die "anchors: name a topic, or run it inside its worktree"; t=$(topic_of "$h"); fi
+    exec node "$bin/anchors.mjs" "$t" --base "$trunk" --plans "$(config_get paths.plans)" "$@"
     ;;
   dispatch) exec node "$bin/dispatch.mjs" "$@" ;;
   recover) exec "$bin/recover.sh" "$@" ;;

@@ -15,6 +15,9 @@
 //     prints "Stack: …", "Reads: …" and "Tests: …", warnings on stderr
 //   node slice-fields.mjs <n> [plan-file] --get stack|reads|tests
 //     prints one field's value only (stack: yes or no)
+// A slice's body is also read for line-number anchors (`file.mjs ~158`,
+// `:231`), which go stale on hot files: `lineAnchors` finds them, and
+// `pnpm prd anchors` (anchors.mjs) warns on each.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -136,6 +139,53 @@ export function sliceFields(planText, n) {
   result.missing = FIELDS.filter((f) => !(f in values));
   for (const f of result.missing) result.warnings.push(`no ${f[0].toUpperCase()}${f.slice(1)} field`);
   return result;
+}
+
+const EXTS = "mjs|cjs|js|jsx|ts|tsx|mts|cts|md|mdx|json|jsonc|ya?ml|sh|bash|sql|css|html|txt|toml|svg|png";
+/** A backticked word ending in one of these extensions names a file (anchors.mjs too). */
+export const FILE_EXT = new RegExp(`\\.(?:${EXTS})$`);
+const FILE_WORD = `[\\w./-]*\\.(?:${EXTS})\\b`;
+/** A file name, maybe backticked, then ~158, :231, line 158 or #L158. */
+const ANCHOR_AFTER_FILE = new RegExp(
+  `(${FILE_WORD})\`?(?:\\s*~\\s*\\d+|:\\d+|#L\\d+|,?\\s+(?:at\\s+|near\\s+)?lines?\\s+~?\\d+)`,
+  "g",
+);
+/** A code span that is only a line number: `~158`, `:231`, `L158`, `line 158`. */
+const ANCHOR_SPAN = /`(?:~\s*\d+|:\d+(?:-\d+)?|L\d+|lines?\s+\d+)`/g;
+
+/**
+ * The line-number anchors in a slice's text (`file.mjs ~158`, `` `:231` ``,
+ * `file.mjs line 40`), as written. A plain number in prose (`~120k`, `3 files`)
+ * is not one.
+ */
+export function lineAnchors(/** @type {string} */ text) {
+  const found = [];
+  for (const re of [ANCHOR_AFTER_FILE, ANCHOR_SPAN])
+    for (const m of text.matchAll(re)) found.push({ at: m.index, text: m[0] });
+  return found.sort((a, b) => a.at - b.at).map((f) => f.text);
+}
+
+/**
+ * Each slice's heading number and body (the heading to the next heading of its
+ * level or above), in plan order.
+ */
+export function sliceSections(/** @type {string} */ planText) {
+  const lines = planText.split(/\r?\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = HEADING.exec(lines[i]);
+    if (!m) continue;
+    const level = /^#+/.exec(lines[i])[0].length;
+    const ends = (/** @type {string} */ l) => {
+      const h = /^(#+)\s/.exec(l);
+      return !!h && h[1].length <= level;
+    };
+    let j = i + 1;
+    while (j < lines.length && !ends(lines[j])) j++;
+    out.push({ n: Number(m[1]), heading: lines[i], body: lines.slice(i + 1, j).join("\n") });
+    i = j - 1;
+  }
+  return out;
 }
 
 /** The three lines prompt.sh prints. */

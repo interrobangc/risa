@@ -4,7 +4,7 @@ For a PRD orchestrator: a top-level session (spawned agents can't spawn), one pe
 
 ## Commands
 
-`pnpm prd help` lists the `pnpm prd` commands; script headers give details.
+`pnpm prd help` lists them; script headers give details. **At start,** fix what `pnpm prd anchors` flags.
 
 ## Models
 
