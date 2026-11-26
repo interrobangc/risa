@@ -17,8 +17,7 @@
 # CARETOOK_CHECK_SLEEP_GAP (30 s) between two readings of the clock is the
 # machine asleep: it counts against neither limit, nor in the seconds logged.
 # CARETOOK_CLOCK_FILE (tests): epoch seconds to read instead of the clock;
-# CARETOOK_CHECK_BUDGET_LOAD (tests): the load the limits scale for;
-# CARETOOK_LOAD_FILE (tests): the load logged and judged (see load5).
+# CARETOOK_CHECK_BUDGET_LOAD (tests): the load the limits scale for.
 # If check-budget.mjs fails, the hard limit and the default silence apply.
 #
 # Fields: start (UTC), worktree, branch, mode, reason, seconds, 5-minute load
@@ -37,8 +36,7 @@
 #
 # The time gate (time-gate.mjs, the gates' data in the tier data): a quick or
 # slice check that passed (the local measure's modes) is judged on its seconds,
-# its load at the start and the end and the core count (CARETOOK_CHECK_CORES in
-# tests, else the machine's): ok, warn, fail or unjudged (a busy machine), with
+# its load at the start and the end and the machine's core count: ok, warn, fail or unjudged (a busy machine), with
 # its lines printed after the check's output, naming the steps and the slowest
 # files. A `fail` (an armed measure past its cutoff) exits 125: a time breach, not
 # a test failure. A full check, a failed or stopped one, or a gate that can't
@@ -67,13 +65,7 @@ now() {
 
 # One number whatever load_avg prints: drop the commas uptime puts after each
 # value and any blank line (a failed sysctl under pipefail), keep the 5-minute field.
-# CARETOOK_LOAD_FILE (tests) stands in for the reading, as for the load gate: the
-# 1, 5 and 15 minute loads, or the 5-minute load alone.
-load5() {
-  { if [[ -n ${CARETOOK_LOAD_FILE:-} ]]; then cat "$CARETOOK_LOAD_FILE" 2>/dev/null; else load_avg; fi; } |
-    tr -d ',' | awk 'NF == 1 && $1 ~ /^[0-9.]+$/ { print $1; found = 1; exit }
-      NF >= 2 && $2 ~ /^[0-9.]+$/ { print $2; found = 1; exit } END { if (!found) print 0 }'
-}
+load5() { load_avg | tr -d ',' | awk 'NF >= 2 && $2 ~ /^[0-9.]+$/ { print $2; found = 1; exit } END { if (!found) print 0 }'; }
 
 # tree PID → PID and everything under it. Taken before the TERM: a child whose
 # parent has died can't be found from the parent any more.
@@ -181,7 +173,6 @@ secs=$(($(now) - t0 - slept)); ((secs >= 0)) || secs=0; l1=$(load5)
 verdict=""
 if [[ -z $breach ]] && ((code == 0)); then
   gate_args=(--mode "$mode" --seconds "$secs" --load-start "$l0" --load-end "$l1" --steps "$steps_file")
-  [[ -z ${CARETOOK_CHECK_CORES:-} ]] || gate_args+=(--cores "$CARETOOK_CHECK_CORES")
   [[ ! -f $state/slowest ]] || gate_args+=(--slowest "$state/slowest")
   if gate=$(node "$here/time-gate.mjs" "${gate_args[@]}" 2> "$state/gate-err"); then
     said=$(sed -n '2,$p' <<< "$gate")
