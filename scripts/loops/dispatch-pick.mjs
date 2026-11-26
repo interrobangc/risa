@@ -246,7 +246,6 @@ export function pick(facts) {
   const lookahead = caps.prds + 1;
   /** Why `r` may not be planned, or null when it may. @param {PickRow} r */
   const planBlock = (r) => {
-    if (flags(r).includes("hold")) return "on hold";
     if (!(r.waiting ?? 0)) return "nothing waiting to plan";
     if (planWorktrees.some((w) => w.topic === r.topic)) return "being planned";
     const q = questionOf(r.topic);

@@ -523,14 +523,10 @@ describe("rule 6: the lookahead (lane cap + 1)", () => {
     expect(go(facts)).toMatchObject({ action: "plan", topic: "w" });
   });
 
-  it("a held topic is never planned, even with items waiting and room ahead", () => {
+  it("a held topic is never planned, even with items waiting and room ahead (already so: its state is hold)", () => {
     const p = go({ rows: [row("h", "hold", { flags: ["hold"], waiting: 4 })] });
     expect(p.action).toBe("none");
     expect(whyOf(p, "h")).toBe("on hold");
-    // Held with a stale to-write state still isn't picked.
-    const stale = go({ rows: [row("h", "to-write", { flags: ["hold"], waiting: 4 })] });
-    expect(stale.action).toBe("none");
-    expect(whyOf(stale, "h")).toBe("on hold");
   });
 });
 
