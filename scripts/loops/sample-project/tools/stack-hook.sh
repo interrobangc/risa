@@ -145,7 +145,7 @@ case $kind in
   serve)
     name=${1:-$(basename "$PWD")}
     fails "serve:$name" && die "serve failed for $name"
-    main=$(git worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
+    main=$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
     port=$(get web_port "$main/.loops/$name/.sample-stack")
     [[ -n $port ]] || die "serve: $name has no stack"
     touch "$st/listen"

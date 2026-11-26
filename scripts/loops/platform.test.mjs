@@ -116,3 +116,15 @@ describe("what pnpm test:tooling runs", () => {
     expect(checkProjects({ ...sample.config, testProjects: undefined }, true)).toBeNull();
   });
 });
+
+describe("lib.sh under CDPATH", () => {
+  it("resolves its own folder once, sourced by a relative path", () => {
+    // A CDPATH that matches the relative folder makes `cd` print it.
+    const r = spawnSync("bash", ["-c", 'source scripts/loops/lib.sh && printf "%s|" "$loops_lib_dir"'], {
+      cwd: join(HERE, "..", ".."),
+      encoding: "utf8",
+      env: { ...process.env, CDPATH: join(HERE, "..", "..") },
+    });
+    expect(r.stdout).toBe(`${HERE}|`);
+  });
+});
