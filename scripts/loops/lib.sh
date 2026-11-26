@@ -3,7 +3,10 @@
 
 # loops_lib_dir → this file's folder, absolute, resolved once as it is sourced:
 # `pnpm prd` runs it by a relative path, and a later `cd` (new.sh's into a new
-# worktree) would point a relative one at another checkout.
+# worktree) would point a relative one at another checkout. With CDPATH set, a
+# relative `cd` prints the folder it found, so $(cd … && pwd) would read it
+# twice: every script sources this first, so it goes here.
+unset CDPATH
 loops_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
@@ -12,7 +15,7 @@ loops_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # The one place a command finds its repo; risa's machine config will answer here.
 # False, main empty, outside a repo.
 find_repo() {
-  main=$(git -C "${1:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | awk 'NR==1{print $2}')
+  main=$(git -C "${1:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
   loops=$main/.loops
   [[ -n $main ]]
 }

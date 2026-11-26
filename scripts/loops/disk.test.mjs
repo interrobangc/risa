@@ -258,7 +258,7 @@ describe("new.sh through the config", () => {
     const r = sh("new.sh", ["--stack", "hotfix", "q"], { env: { ...ROOMY, RISA_CONFIG: sample } });
     expect(r.status, r.stderr).toBe(0);
     expect(calls()).toMatch(
-      /^hooks-install\ntest-db use hotfix-q\npnpm i --offline\nstack up hotfix-q --slot \d+ --base dev\n/m,
+      /^hooks-install\nstack down hotfix-q --base dev\ntest-db use hotfix-q\npnpm i --offline\nstack up hotfix-q --slot \d+ --base dev\n/m,
     );
     expect(calls()).not.toMatch(/pnpm install/);
     expect(git(join(loops, "hotfix-q"), "branch", "--show-current")).toBe("quick/q");

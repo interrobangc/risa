@@ -932,6 +932,33 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     expect(json(extra).warnings.join("\n")).not.toMatch(/migrate was cut off/);
   });
 
+  it("the migrate marker stands while a start runs, and stays only when it got to its migrate", () => {
+    endDispatchers();
+    rmSync(lock(), { force: true });
+    rmSync(intent(), { force: true });
+    put("running", "sample-loop1\n");
+    put("testdb-up", "");
+    put("listen", "6173\n");
+    const marker = join(loops, ".migrate/t-2");
+    rmSync(marker, { force: true });
+
+    // A start that fails before its migrate (the stack's start, its database's wait) leaves none.
+    expect(recover(["--no-agent"], { SAMPLE_STACK_FAIL: "start:t-2" }).status).toBe(1);
+    expect(existsSync(marker)).toBe(false);
+
+    // A start that gets there: the marker stood during the call, and goes once it passes.
+    rmSync(log, { force: true });
+    okRecover(["--no-agent"], { SAMPLE_STACK_MARK: marker });
+    expect(calls()).toMatch(/^stack start t-2 \(record\)$/m);
+    expect(existsSync(marker)).toBe(false);
+
+    // A migrate that fails keeps it for the next run.
+    put("running", "sample-loop1\n");
+    expect(recover(["--no-agent"], { SAMPLE_STACK_FAIL: "migrate:t-2" }).status).toBe(1);
+    expect(existsSync(marker)).toBe(true);
+    rmSync(marker);
+  });
+
   it("--unattended with CARETOOK_RECOVER_REPORT=off (the watchdog's later tries) files no report", () => {
     crashed();
     const r = recover(["--unattended"], { SAMPLE_STACK_FAIL: "start:t", CARETOOK_RECOVER_REPORT: "off" });

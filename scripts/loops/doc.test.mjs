@@ -125,6 +125,22 @@ describe("roleDoc's other errors", () => {
   it("sectionOf finds nothing for a missing heading", () => {
     expect(sectionOf("# A\n\nx\n", "B")).toBeUndefined();
   });
+
+  it("sectionOf closes a fence only on its own marker", () => {
+    // A ``` inside a ~~~ fence, and a shorter ``` inside a ```` one, don't close it.
+    const doc = "## A\n\n~~~\n```\n## B\n~~~\n\n````\n```\n## C\n````\n\nx\n\n## D\n\ny\n";
+    expect(sectionOf(doc, "B")).toBeUndefined();
+    expect(sectionOf(doc, "C")).toBeUndefined();
+    expect(sectionOf(doc, "A")).toBe(doc.slice(0, doc.indexOf("## D")).replace(/\n*$/, "\n"));
+    expect(sectionOf(doc, "D")).toBe("## D\n\ny\n");
+  });
+
+  it("sectionOf strips a heading's closing #s and ends at its own level or above", () => {
+    const doc = "# Top\n\n## A ##\n\na\n\n### Sub\n\ns\n\n## B\n\nb\n";
+    expect(sectionOf(doc, "A")).toBe("## A ##\n\na\n\n### Sub\n\ns\n");
+    expect(sectionOf(doc, "Sub")).toBe("### Sub\n\ns\n");
+    expect(sectionOf("## C#\n\nc\n", "C#")).toBe("## C#\n\nc\n");
+  });
 });
 
 describe("this repo's roles", () => {

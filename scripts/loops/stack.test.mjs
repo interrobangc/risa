@@ -70,7 +70,10 @@ const fixture = () => {
   const nvm = join(root, "nvm");
   mkdirSync(bin);
   mkdirSync(nvm);
-  writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
+  writeFileSync(
+    join(bin, "pnpm"),
+    '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n[[ $1 != install || -z ${FAKE_INSTALL_FAIL:-} ]]\n',
+  );
   writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
   for (const f of ["pnpm", "lsof"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
@@ -146,13 +149,26 @@ describe("new.sh slice", () => {
     const dir = join(loops, "t-2");
     expect(stack(dir)).toMatch(/^project=sample-loop1$/m);
     expect(leases()).toEqual(["1"]);
-    expect(calls()).toMatch(/^stack up t-2 --slot 1 --base prd\/t$/m);
-    expect(calls()).not.toMatch(/^stack down/m);
+    // The stackless env first (before install), then the stack.
+    expect(calls()).toMatch(/^stack down t-2 --base prd\/t\n(.*\n)*stack up t-2 --slot 1 --base prd\/t$/m);
     // The hook's facts, printed.
     expect(out).toMatch(
       /→ http:\/\/localhost:6173\n {2}sample stack sample-loop1 \(project sample-loop1\)\n/,
     );
     expect(out).toMatch(/pnpm test:integration → sample test database sample_t-2/);
+  });
+
+  it("gives the slot back when a stacked worktree's install fails, leaving it stackless", () => {
+    const before = leases();
+    const r = sh("new.sh", ["--stack", "slice", "t", "5"], { env: { FAKE_INSTALL_FAIL: "1" } });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/install failed for t-5 \(it stays a worktree without a stack\)/);
+    const dir = join(loops, "t-5");
+    expect(calls()).toMatch(/^stack down t-5 --base prd\/t$/m);
+    expect(calls()).not.toMatch(/^stack up t-5/m);
+    expect(stack(dir)).toBeNull();
+    expect(leases()).toEqual(before);
+    ok("rm.sh", ["t-5"]);
   });
 
   it("treats missing fields as no stack, and honours --stack", () => {
@@ -366,6 +382,12 @@ describe("status and gc", () => {
     expect(ok("ls.sh", [])).not.toMatch(/stopped stack/);
 
     writeFileSync(secs, `${3 * 86400}\n`);
+    // A failed ready hook is no answer, not "no stack": ls says unknown, gc keeps it.
+    const failed = { env: { SAMPLE_STACK_FAIL: "ready:t-2" } };
+    expect(ok("ls.sh", [], failed)).toMatch(/^t-2 +\? .* unknown +\? \(the stackReady hook failed\)$/m);
+    const kept = ok("gc.sh", ["--list"], failed);
+    expect(kept).toMatch(/^keep {8}t-2 \(its stack is unknown: the stackReady hook failed\)$/m);
+    expect(kept).not.toMatch(/stack down/);
     const out = ok("gc.sh", ["--yes"]);
     expect(out).toMatch(/^stack down {2}t-2 /m);
     expect(calls()).toMatch(/^stack down t-2/m);

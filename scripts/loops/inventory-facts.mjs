@@ -116,17 +116,26 @@ function sliceMerged(
   return lines(merges).some((l) => l.split(" ").slice(1).includes(tip.out));
 }
 
-/** A worktree's stack facts from the stack hook (stackReady): its project, container counts and stopped-since. */
+/**
+ * A worktree's stack facts from the stack hook (stackReady): its project,
+ * container counts and stopped-since. The hook prints ready= on every answer
+ * (exit 0 for yes, 1 for no); a call without it failed, so its project comes
+ * from stackStatus (env files, no engine) and `failed` says the rest is unknown.
+ * No stackReady hook (127) is a project without a stack, not a failure.
+ */
 function readyFacts(/** @type {string} */ dir, /** @type {NodeJS.ProcessEnv} */ env) {
-  const out = runHook("stackReady", [dir], { env }).out;
-  const [up, all] = fact("containers", out).split("/").map(Number);
-  const secs = fact("stopped_secs", out);
+  const r = runHook("stackReady", [dir], { env });
+  const failed = r.status !== 127 && fact("ready", r.out) === "";
+  const out = failed ? runHook("stackStatus", [dir], { env }).out : r.out;
+  const [up, all] = failed ? [] : fact("containers", out).split("/").map(Number);
+  const secs = failed ? "" : fact("stopped_secs", out);
   return {
     stack: fact("project", out) || null,
     up: up || 0,
     all: all || 0,
     stoppedSecs: secs === "" ? null : Number(secs),
     webPort: Number(fact("web_port", out)) || null,
+    failed,
   };
 }
 
@@ -163,7 +172,10 @@ function leaseInfo(/** @type {string} */ file) {
 export function collectFacts({ main, env = process.env, now = Date.now() }) {
   const trunk = env.TRUNK || "dev";
   const loops = join(main, ".loops");
-  const dockerUp = fact("running", runHook("stackEngine", ["status"], { env }).out) === "yes";
+  // No stackEngine hook (127): a project with no engine to start, so it never
+  // "doesn't answer"; likewise no testDb hook is no test database to bring up.
+  const engine = runHook("stackEngine", ["status"], { env });
+  const dockerUp = engine.status === 127 || fact("running", engine.out) === "yes";
 
   // Migrates recover's stack step started and never finished (.loops/.migrate/<name>,
   // holding when it started): a crash cut them off.
@@ -193,6 +205,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       stoppedSecs: stack && dockerUp && up === 0 && all > 0 ? ready.stoppedSecs : null,
       webPort: port,
       serverRunning: port ? listening(port, env) : false,
+      ...(ready.failed ? { stackFailed: true } : {}),
       ...(migrating.has(name) ? { migrating: migrating.get(name) } : {}),
     });
   }
@@ -296,7 +309,8 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     }
   }
 
-  const testDbRunning = dockerUp && fact("running", runHook("testDb", ["facts"], { env }).out) === "yes";
+  const testDb = runHook("testDb", ["facts"], { env });
+  const testDbRunning = testDb.status === 127 || (dockerUp && fact("running", testDb.out) === "yes");
 
   // Which session records the dispatcher manages (session.sh --managed).
   const sessionsDir = env.CARETOOK_SESSIONS_DIR || join(loops, ".sessions");

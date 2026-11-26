@@ -55,22 +55,38 @@ export function knownRoles(config, genericDir = GENERIC_DIR) {
 
 /**
  * The heading's text in a Markdown doc (ATX headings outside code fences), or
- * undefined when it has none.
+ * undefined when it has none. A fence closes only on its own marker (the same
+ * character, at least as long, nothing after it); a heading's closing #s don't
+ * count. The first heading with the text wins, at any level, and its section
+ * runs to the next heading at that level or above.
  * @param {string} markdown
  * @param {string} heading the heading's text, without its #s
  */
 export function sectionOf(markdown, heading) {
   const lines = markdown.split("\n");
-  let fenced = false;
-  /** @type {(number | undefined)[]} each line's heading level */
-  const levels = lines.map((l) => {
-    if (/^\s*(```|~~~)/.test(l)) fenced = !fenced;
-    const m = !fenced && /^(#{1,6})\s/.exec(l);
-    return m ? m[1].length : undefined;
+  /** @type {string | undefined} the open fence's marker */
+  let fence;
+  /** @type {{ level: number, text: string } | undefined}[] */
+  const heads = lines.map((l) => {
+    if (fence) {
+      const close = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(l);
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = undefined;
+      return undefined;
+    }
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(l);
+    if (open) {
+      fence = open[1];
+      return undefined;
+    }
+    const m = /^ {0,3}(#{1,6})(?:\s+(.*?))?\s*$/.exec(l);
+    if (!m) return undefined;
+    const text = (m[2] ?? "").replace(/(^|\s+)#+$/, "").trim();
+    return { level: m[1].length, text };
   });
-  const start = lines.findIndex((l, i) => levels[i] && l.replace(/^#+\s+/, "").trim() === heading.trim());
+  const start = heads.findIndex((h) => h?.text === heading.trim());
   if (start < 0) return undefined;
-  const end = levels.findIndex((lv, i) => i > start && lv !== undefined && lv <= levels[start]);
+  const level = /** @type {{ level: number }} */ (heads[start]).level;
+  const end = heads.findIndex((h, i) => i > start && h !== undefined && h.level <= level);
   return lines
     .slice(start, end < 0 ? undefined : end)
     .join("\n")

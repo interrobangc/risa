@@ -25,9 +25,12 @@ for dir in "$loops"/*/; do
   ahead=$(git -C "$dir" rev-list --count "$parent..HEAD" 2>/dev/null || echo '?')
   dirty=$([[ -n $(git -C "$dir" status --porcelain) ]] && echo dirty || echo clean)
   # One stack hook call per worktree: its project, slot, containers, port and stopped-since.
-  facts=$(stack_hook stackReady "$dir" 2>/dev/null || true)
+  rc=0; facts=$(stack_hook stackReady "$dir" 2>/dev/null) || rc=$?
   proj=$(fact project "$facts")
-  if [[ -n $proj ]]; then
+  # ready= comes with every answer; without one (but no such hook, 127) the hook failed.
+  if ((rc != 127)) && [[ -z $(fact ready "$facts") ]]; then
+    slot=? stack=unknown web="? (the stackReady hook failed)"
+  elif [[ -n $proj ]]; then
     slot=$(fact slot "$facts"); slot=${slot:-?}
     containers=$(fact containers "$facts"); up=${containers%%/*}; up=${up:-0}
     port=$(fact web_port "$facts")

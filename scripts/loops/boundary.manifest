@@ -183,6 +183,7 @@ scripts/loops/gc.sh core
 scripts/loops/heartbeat.mjs core
 scripts/loops/heartbeat.test.mjs core
 scripts/loops/hooks.mjs core
+scripts/loops/hooks.test.mjs core
 scripts/loops/inbox-settings.json core
 scripts/loops/inventory-facts.mjs core
 scripts/loops/inventory.mjs core
