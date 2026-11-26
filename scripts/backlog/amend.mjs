@@ -3,7 +3,7 @@
 //
 // Every backlog commit ends with trailers the tool writes and nothing else
 // does:
-//   Backlog-Tool: <command>     one line per write the commit holds
+//   Backlog-Tool: note, set     one line: each write's command, in order
 //   Backlog-Ids: B-1, B-2       every id those writes covered (when any)
 // A write amends HEAD only when every guard in shouldAmend holds; any doubt
 // means a new commit.
@@ -54,8 +54,10 @@ export const idList = (ids) =>
  */
 
 const subjectOf = (text) => `${PREFIX}${text}`.slice(0, SUBJECT_MAX);
+// One Backlog-Tool line however many writes the commit holds (B-767); older
+// commits wrote a line per write, and parseMessage still reads those.
 const trailers = (tools, ids) => [
-  ...tools.map((t) => `${TOOL_TRAILER}: ${t}`),
+  `${TOOL_TRAILER}: ${tools.join(", ")}`,
   ...(ids.length ? [`${IDS_TRAILER}: ${ids.join(", ")}`] : []),
 ];
 const unique = (xs) => [...new Set(xs)];
@@ -90,14 +92,11 @@ export function parseMessage(raw) {
   if (isTrailers)
     for (const l of last) {
       const [, key, value] = /** @type {RegExpExecArray} */ (re.exec(l));
-      if (key === TOOL_TRAILER) tools.push(value.trim());
-      else
-        ids.push(
-          ...value
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
+      const values = value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      (key === TOOL_TRAILER ? tools : ids).push(...values);
     }
   const body = isTrailers ? paragraphs.slice(0, -1) : paragraphs;
   const backlog = subject.startsWith(PREFIX) && tools.length > 0;
