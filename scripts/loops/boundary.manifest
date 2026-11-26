@@ -39,6 +39,7 @@ scripts/ci/ci-runs.mjs core
 scripts/ci/ci-status.mjs core
 scripts/ci/ci.mjs core
 scripts/ci/ci.test.mjs core
+scripts/ci/component-durations.json project
 scripts/ci/env.mjs project
 scripts/ci/env.test.mjs project
 scripts/ci/filing.mjs core
@@ -58,6 +59,9 @@ scripts/ci/release-jobs.mjs project
 scripts/ci/release-jobs.test.mjs project
 scripts/ci/release.mjs core
 scripts/ci/release.test.mjs core
+scripts/ci/shard-sequencer.mjs project
+scripts/ci/shards.mjs project
+scripts/ci/shards.test.mjs project
 scripts/ci/test-job.mjs project
 scripts/ci/test-job.test.mjs project
 scripts/ci/tier-data.mjs core
