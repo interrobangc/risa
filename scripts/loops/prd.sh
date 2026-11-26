@@ -56,7 +56,7 @@ pnpm prd <command>
                               (pnpm prd check there, then pnpm prd land ${hotfix_prefix}<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
-                              (from inside a prd/ or plan/ worktree, by its own session: then ends it)
+                              (from inside a ${prd_prefix} or ${plan_prefix} worktree, by its own session: then ends it)
     gc [--list|--yes]         merged slice worktrees and stacks stopped over a day: list, ask, remove
     reclaim [--list|--yes]    disk: merged worktrees, dangling Docker volumes and images, check builds and
                               Vite caches, with sizes; frees them after a yes
