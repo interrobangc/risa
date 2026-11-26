@@ -7,7 +7,7 @@
 #   browser.sh --suite [--timeout S]           the lean end-to-end set (the manifest's e2e checks),
 #                                              one at a time, then a table
 #   browser.sh --changed [--base REF] [--list] only the checks the changed files need
-#                                              (scripts/loops/check-areas.d/), then a table
+#                                              (scripts/project/check-areas.d/), then a table
 #   browser.sh --dev …                         any of the above, against the dev server
 #   browser.sh --smoke …                       any of the above in smoke mode (SMOKE=1): each check
 #                                              runs only its core path (a spec's @smoke tests);

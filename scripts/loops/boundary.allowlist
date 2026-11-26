@@ -39,7 +39,6 @@ scripts/loops/bye.mjs project-env 9
 scripts/loops/bye.test.mjs project-env 10
 scripts/loops/captain.mjs project-env 2
 scripts/loops/captain.test.mjs project-env 2
-scripts/loops/check-areas.d/_global project-to-core 3
 scripts/loops/check-budget.mjs project-env 7
 scripts/loops/check-budget.test.mjs project-env 7
 scripts/loops/check-gate.test.mjs app-path 7
@@ -62,7 +61,6 @@ scripts/loops/codex-review.test.mjs project-name 2
 scripts/loops/context-settings.json project-env 14
 scripts/loops/context.mjs project-env 17
 scripts/loops/context.test.mjs project-env 11
-scripts/loops/disk.test.mjs core-to-project 1
 scripts/loops/disk.test.mjs project-env 28
 scripts/loops/dispatch-context.mjs project-env 2
 scripts/loops/dispatch-context.test.mjs project-env 21
@@ -176,6 +174,7 @@ scripts/loops/watch.test.mjs project-env 9
 scripts/loops/watchdog.mjs project-env 20
 scripts/loops/watchdog.test.mjs project-env 10
 scripts/loops/workers.test.mjs app-path 1
+scripts/project/check-areas.d/_global project-to-core 3 # the core's folders (scripts/loops, scripts/backlog, scripts/ci) map to no check, so the check-areas lint covers every tracked file: the rules go when the core moves out
 scripts/project/check-plan-rules.json project-to-core 2 # scripts/ci asks for the full suite (the rule and its reason): the folder holds core files until the move, then only Caretook's
 scripts/project/check-plan-rules.test.mjs project-to-core 26 # Caretook's rules through the core's engine, the table from before they were data: until the move; the removal commit drops the file
 scripts/project/doc-budget.config.mjs project-to-core 10 # the generic role docs' budget figures: Caretook's budget engine measures them until the move, then Risa's copy does
