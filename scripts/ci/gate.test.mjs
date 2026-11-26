@@ -64,7 +64,7 @@ describe("decideGate", () => {
     const out = decideGate({ verdict, tier: "unit", branch: "b", touched: [] });
     expect(out).toMatchObject({ land: false, code: 6, fileFlakes: false });
     expect(out.lines).toEqual([
-      "time: past an armed cutoff in unit; its tests passed. Trim the step, then: pnpm prd ci run unit --ref b --wait",
+      "time: past an armed cutoff in unit-1; its tests passed. Trim the step, then: pnpm prd ci run unit --ref b --wait",
     ]);
   });
 

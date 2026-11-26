@@ -109,23 +109,34 @@ describe("the tiers", () => {
 
   it("include the ones before, and full adds the build job", () => {
     expect(jobsFor("static")).toEqual({ jobs: ["static"], ranTier: "static" });
-    expect(jobsFor("unit").jobs).toEqual(["static", "unit"]);
+    expect(jobsFor("unit").jobs).toEqual(["static", "unit-1", "unit-2"]);
     expect(jobsFor("components").jobs).toEqual([
       "static",
-      "unit",
+      "unit-1",
+      "unit-2",
       "integration",
       "components-1",
       "components-2",
       "components-3",
     ]);
     expect(jobsFor("full")).toEqual({
-      jobs: ["static", "unit", "integration", "components-1", "components-2", "components-3", "build"],
+      jobs: [
+        "static",
+        "unit-1",
+        "unit-2",
+        "integration",
+        "components-1",
+        "components-2",
+        "components-3",
+        "build",
+      ],
       ranTier: "full",
     });
     expect(jobsFor("candidate")).toEqual({
       jobs: [
         "static",
-        "unit",
+        "unit-1",
+        "unit-2",
         "integration",
         "components-1",
         "components-2",
@@ -169,7 +180,7 @@ describe("a verdict file", () => {
     };
     const lines = verdictLines({ ...v, time: { ...v.time, breaches: [...v.time.breaches, warned] } });
     expect(lines[0]).toMatch(/^verdict: time · unit · /);
-    expect(lines).toContain("  time: unit (unit) 400 s, fail");
+    expect(lines).toContain("  time: unit-1 (unit) 400 s, fail");
     expect(lines).toContain("  time: components-2 (components) 330 s, warn, not armed");
     expect(exitFor("time")).toBe(6);
   });
@@ -394,7 +405,7 @@ describe("a narrowed run", () => {
   });
 
   it("starts only its files' jobs, the components in one", () => {
-    expect(narrowedJobs(["a.test.ts", "b.browser.test.tsx"])).toEqual(["unit", "components-1"]);
+    expect(narrowedJobs(["a.test.ts", "b.browser.test.tsx"])).toEqual(["unit-1", "components-1"]);
     expect(narrowedJobs(["scripts/loops/browser.test.mjs"])).toEqual(["integration"]);
   });
 

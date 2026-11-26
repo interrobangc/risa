@@ -5,7 +5,7 @@
 //
 // The measures, each with an aim, a cutoff and an armed switch (the gates' data,
 // `gates` in the tier data, read and checked by tier-data.mjs):
-//   unit        CI's unit job's test step
+//   unit        each unit shard's test step, on its own
 //   components  each component shard's test step, on its own
 //   quick       a local quick or slice check, its tooling step included (the
 //               local measure: its `modes` are the check modes it covers)
