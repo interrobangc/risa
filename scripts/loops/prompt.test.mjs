@@ -945,6 +945,9 @@ describe("hotfix", () => {
     expect(text).toContain('**"PR or local?"**');
     expect(text).toContain("`pnpm prd land hotfix/trim --pr` or `--local`");
     expect(text).toContain("`pnpm prd pr hotfix/trim`");
+    expect(text).toContain(
+      "`pnpm prd tier` proposes the tier and why; `pnpm prd ci run <tier> --wait` in the background runs it",
+    );
     expect(text).toContain("The fix: Trim the day summary");
     expect(text).not.toContain(RESUME);
   });

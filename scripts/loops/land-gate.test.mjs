@@ -146,13 +146,31 @@ describe("land.sh's CI gate", () => {
           PATH: `${join(root, "bin")}:${process.env.PATH}`,
           CARETOOK_PR_THROWAWAY: "1",
           GH_PR_BODY: body(),
+          GH_CI: join(root, "gh-ci.mjs"),
+          GH_CI_FIXTURE: join(root, "fixture.json"),
+          PR_HEAD: tip,
         },
       });
+    const fixture = (f) => writeFileSync(join(root, "fixture.json"), JSON.stringify({ byCommit: {}, ...f }));
 
-    it("puts the tier and the proposal in the PR body", () => {
+    it("puts the tier, the proposal and the tip's CI verdict in the PR body, not a local check", () => {
+      fixture(on(verdict("green")));
       const r = pr();
       expect(r.status, out(r)).toBe(0);
-      expect(readFileSync(body(), "utf8")).toContain("**Tier:** components (proposed components: app code");
+      const text = readFileSync(body(), "utf8");
+      expect(text).toContain("**Tier:** components (proposed components: app code");
+      expect(text).toContain(`**CI:** verdict: green · components · ${tip.slice(0, 8)}`);
+      expect(text).not.toContain("**Check:**");
+    });
+
+    it("says the landing will request a run when the tip has no verdict, and requests none", () => {
+      fixture({});
+      const r = pr();
+      expect(r.status, out(r)).toBe(0);
+      expect(readFileSync(body(), "utf8")).toContain(
+        `**CI:** no components verdict for ${tip.slice(0, 8)}: the landing will request one`,
+      );
+      expect(git("ls-remote", "origin", "refs/heads/ci/*")).toBe("");
     });
 
     it("refuses a tier below the proposal without --why, before anything is written", () => {
@@ -193,6 +211,7 @@ describe("land.sh's CI gate", () => {
       expect(r.status, out(r)).toBe(0);
       expect(r.stdout).toContain("Proposed tier: **components** (app code");
       expect(r.stdout).toContain(`CI: verdict: green · components · ${tip.slice(0, 8)}`);
+      expect(r.stdout).not.toContain("Check:");
     });
 
     it("says the landing will request a run, and requests none", () => {
