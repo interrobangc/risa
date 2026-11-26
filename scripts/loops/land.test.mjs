@@ -5,9 +5,9 @@
 // land-unsynced (an unsynced tip), land-force-resume (--force, --no-review and
 // --resume), split so Vitest's workers spread them.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 import { root, repo, git, commit, landWith, land, branch, useLandRepo } from "./land-fixture.mjs";
@@ -476,6 +476,128 @@ describe("land.sh posts a landing notice", () => {
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toContain("Landed prd/throwaway-x");
     expect(r.stderr).toContain("couldn't post the landing notice");
+  });
+});
+
+// B-432: a landing that changes dependencies runs the install in the main
+// checkout only when it is on dev, at the landed tip and clean of those files;
+// otherwise, or when the install fails, it posts a notice and installs nothing.
+// A stub pnpm logs where it ran.
+describe("land.sh brings the main checkout's install up to date", () => {
+  const installs = () => join(root, "installs.log");
+  const board = () => join(root, "notices");
+  const installed = () => (existsSync(installs()) ? readFileSync(installs(), "utf8") : "");
+  const installNotices = () =>
+    existsSync(board())
+      ? readdirSync(board())
+          .filter((f) => /^n\d+\.json$/.test(f))
+          .map((f) => JSON.parse(readFileSync(join(board(), f), "utf8")))
+          .filter((n) => n.text.includes("install"))
+      : [];
+  const env = (extra = {}) => ({
+    ...process.env,
+    PATH: `${join(root, "bin")}:${process.env.PATH}`,
+    CARETOOK_NOTICES_DIR: board(),
+    INSTALL_LOG: installs(),
+    ...extra,
+  });
+  const landPr = (extra) =>
+    spawnSync(
+      "bash",
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "-m",
+        "feat(throwaway-x): t",
+        "--force",
+        "--no-review",
+        "--by-user",
+      ],
+      { cwd: repo, encoding: "utf8", env: env({ PR_HEAD: git("rev-parse", "prd/throwaway-x"), ...extra }) },
+    );
+  beforeEach(() => {
+    writeFileSync(
+      join(root, "bin", "pnpm"),
+      '#!/usr/bin/env bash\necho "$PWD $*" >> "$INSTALL_LOG"\n[[ -z ${INSTALL_FAIL:-} ]] || { echo "lockfile out of date" >&2; exit 1; }\n',
+    );
+    chmodSync(join(root, "bin", "pnpm"), 0o755);
+  });
+
+  it("installs after a landing that changes the lockfile, on dev at the landed tip", () => {
+    branch({ "pnpm-lock.yaml": "lock\n" });
+    const r = landPr();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(installed()).toBe(`${repo} install --frozen-lockfile\n`);
+    expect(r.stdout).toContain("dependencies changed: installed them in the main checkout");
+    expect(installNotices()).toEqual([]);
+  });
+
+  it("installs after a local landing that changes a package.json, and not for other files", () => {
+    branch({ "apps/web/b.ts": "2" });
+    expect(landPr().status).toBe(0);
+    expect(installed()).toBe("");
+    git("checkout", "-qb", "hotfix/throwaway-y");
+    commit({ "apps/web/package.json": "{}\n" }, "a dependency");
+    git("checkout", "-q", "dev");
+    const r = spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "hotfix/throwaway-y", "--local", "--force", "--by-user", "-m", "fix(web): c"],
+      { cwd: repo, encoding: "utf8", env: env() },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(installed()).toBe(`${repo} install --frozen-lockfile\n`);
+  });
+
+  it("a checkout with uncommitted changes to a package.json gets a notice and no install", () => {
+    commit({ "apps/web/package.json": "{}\n" }, "a package");
+    git("push", "-q", "origin", "dev");
+    branch({ "pnpm-lock.yaml": "lock\n" });
+    writeFileSync(join(repo, "apps/web/package.json"), '{ "the user": "editing" }\n');
+    const r = landPr();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(installed()).toBe("");
+    expect(r.stdout).toContain(
+      "the main checkout's install didn't run: it has uncommitted changes to the lockfile or a package.json",
+    );
+    const [n, ...more] = installNotices();
+    expect(more).toEqual([]);
+    expect(n).toMatchObject({ session: "prd-throwaway-x", topic: "throwaway-x" });
+    expect(n.text).toContain("needs its install by hand: it has uncommitted changes");
+    expect(readFileSync(join(repo, "apps/web/package.json"), "utf8")).toContain("editing");
+  });
+
+  it("a checkout off dev, or behind the landed tip, gets a notice and no install", () => {
+    const mainInstall = (sha) =>
+      spawnSync(
+        "bash",
+        ["-c", 'source scripts/loops/lib.sh && main_install "$@"', "_", sha, "pnpm-lock.yaml", "prd-t", "t"],
+        { cwd: repo, encoding: "utf8", env: env() },
+      );
+    branch({ "pnpm-lock.yaml": "lock\n" });
+    let r = mainInstall(git("rev-parse", "prd/throwaway-x"));
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain(
+      `didn't run: it isn't at the landed tip ${git("rev-parse", "--short=7", "prd/throwaway-x")}`,
+    );
+    git("checkout", "-q", "feature");
+    r = mainInstall(git("rev-parse", "dev"));
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("didn't run: it isn't on dev");
+    expect(installed()).toBe("");
+    expect(installNotices().map((n) => n.text.replace(/.*by hand: /, ""))).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^it isn't at the landed tip/), "it isn't on dev"]),
+    );
+  });
+
+  it("a failed install gets a notice, once, and the landing still stands", () => {
+    branch({ "pnpm-lock.yaml": "lock\n" });
+    const r = landPr({ INSTALL_FAIL: "1" });
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(installed()).toBe(`${repo} install --frozen-lockfile\n`);
+    expect(r.stdout).toContain("lockfile out of date");
+    expect(r.stdout).toContain("didn't run: the install failed (its log: ");
+    expect(installNotices()).toHaveLength(1);
+    expect(installNotices()[0].text).toContain("by hand: the install failed");
   });
 });
 

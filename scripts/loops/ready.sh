@@ -116,7 +116,7 @@ git -C "$main" diff --shortstat "$trunk...$branch"
 changed=$(git -C "$main" diff --name-only "$trunk...$branch")
 notes=()
 while IFS= read -r n; do [[ -z $n ]] || notes+=("$n"); done < <(landing_hook notes <<< "$changed")
-grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && notes+=("changes **dependencies or scripts**: run \`pnpm install\` in the main checkout after landing")
+grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && notes+=("changes **dependencies or scripts**: land runs the install in the main checkout when it is on dev, at the landed tip and clean of those files, else posts a notice to run it by hand")
 if ((${#notes[@]})); then
   echo
   for n in "${notes[@]}"; do echo "- ⚠ $n"; done

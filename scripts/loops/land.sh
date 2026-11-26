@@ -68,6 +68,10 @@
 # files there. No file for a plan/ branch, a docs-only landing or a failed merge.
 # The same landings post a notice on the notice board (notice.mjs) for six
 # hours: "landed <branch> in dev as <sha>: sync at your next wave boundary".
+# A landing that changes pnpm-lock.yaml or a package.json runs the install in the
+# main checkout only when it is on dev, at the landed tip and clean of those
+# files; otherwise, or when the install fails, it says why and posts a notice
+# for the dev keeper (lib.sh, main_install).
 #
 # The landing journal (land-journal.mjs): from just before its first step that
 # changes anything (the PR path's push, the local merge), a landing records each
@@ -537,26 +541,33 @@ place_to_test() {
     { echo "couldn't write $to_test_file"; to_test_file=""; return 0; }
   echo "to-test file: $to_test_file"
 }
+# landed_sha → the landed commit: origin's trunk on the PR path, else the trunk.
+landed_sha() {
+  if [[ $path == pr ]]; then
+    git -C "$main" rev-parse "origin/$trunk" 2>/dev/null || git -C "$main" rev-parse "$trunk"
+  else
+    git -C "$main" rev-parse "$trunk"
+  fi
+}
+# landing_session → the session a landing's notices come from.
+landing_session() {
+  case $branch in
+    "$prd_prefix"*) echo "prd-$topic" ;;
+    "$plan_prefix"*) echo "plan-${topic//\//-}" ;;
+    "$hotfix_prefix"*) echo "hotfix-${topic//\//-}" ;;
+    *) echo "${branch%%/*}-${topic//\//-}" ;;
+  esac
+}
 # post_landed → after a code landing (the same test as the to-test file's: a
 # prd/ or hotfix/ branch whose diff isn't Markdown only), the notice board's
 # "landed, sync at your next wave boundary" line for six hours (notice.mjs),
 # from the topic's session. A failure to post only warns: it never fails the landing.
 post_landed() {
   [[ -n $want_to_test ]] || return 0
-  local sha session
-  if [[ $path == pr ]]; then
-    sha=$(git -C "$main" rev-parse --short "origin/$trunk" 2>/dev/null || git -C "$main" rev-parse --short "$trunk")
-  else
-    sha=$(git -C "$main" rev-parse --short "$trunk")
-  fi
-  case $branch in
-    "$prd_prefix"*) session=prd-$topic ;;
-    "$plan_prefix"*) session=plan-${topic//\//-} ;;
-    "$hotfix_prefix"*) session=hotfix-${topic//\//-} ;;
-    *) session=${branch%%/*}-${topic//\//-} ;;
-  esac
+  local sha
+  sha=$(git -C "$main" rev-parse --short "$(landed_sha)")
   CARETOOK_NOTICES_DIR=${CARETOOK_NOTICES_DIR:-$loops/.notices} node "$(dirname "$0")/notice.mjs" notice \
-    --session "$session" --topic "$topic" --for 360 \
+    --session "$(landing_session)" --topic "$topic" --for 360 \
     "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" >/dev/null 2>&1 &&
     echo "notice posted: $topic landed as $sha (six hours)" ||
     echo "warning: couldn't post the landing notice (ignored)" >&2
@@ -608,7 +619,6 @@ mark_topic_done() {
 next_steps() {
   # Already after the landing: the hook's notes (shared with ready.sh's report) drop their "after landing".
   landing_hook notes <<< "$changed" | sed 's/ after landing$//; s/^/  /'
-  grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
   if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
 }
@@ -650,6 +660,9 @@ finish_from() {
   done
   [[ -n $go ]] || die "no step $1 to finish from on the $path path"
   mark_topic_done
+  # A landing that changes dependencies brings the main checkout's install up to
+  # date when that's safe, else files a notice (lib.sh, main_install; B-432).
+  main_install "$(landed_sha)" "$changed" "$(landing_session)" "$topic"
   journal_drop
   next_steps
   exit "$filed"
