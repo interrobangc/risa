@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSummary, parseLog, prdOf, summarize } from "./check-times.mjs";
+import { failureKind, formatSummary, parseLog, prdOf, summarize } from "./check-times.mjs";
 
 const line = (start, branch, mode, secs, exit, run = "", all = "") =>
   [start, "wt", branch, mode, "why", secs, "10.0", "12.0", exit, run, all].join("\t");
@@ -7,7 +7,7 @@ const line = (start, branch, mode, secs, exit, run = "", all = "") =>
 describe("check log summary", () => {
   it("an empty log has no runs", () => {
     const s = summarize("");
-    expect(s).toMatchObject({ runs: 0, failures: 0, skipped: 0, byMode: {}, byPrd: {} });
+    expect(s).toMatchObject({ runs: 0, testFailures: 0, timeBreaches: 0, skipped: 0, byMode: {}, byPrd: {} });
     expect(formatSummary(s)).toBe("Checks: none recorded");
   });
 
@@ -21,12 +21,12 @@ describe("check log summary", () => {
   it("groups a mixed log by mode and by PRD", () => {
     const s = summarize(log);
     expect(s.runs).toBe(4);
-    expect(s.failures).toBe(1);
+    expect(s.testFailures).toBe(1);
     expect(s.totalMinutes).toBeCloseTo(27);
     expect(s.medianMinutes).toBeCloseTo(6); // median of 60, 120, 600, 840 s
-    expect(s.byMode.full).toMatchObject({ runs: 2, failures: 1 });
+    expect(s.byMode.full).toMatchObject({ runs: 2, testFailures: 1 });
     expect(s.byMode.full.medianMinutes).toBeCloseTo(12);
-    expect(s.byMode.quick).toMatchObject({ runs: 2, failures: 0 });
+    expect(s.byMode.quick).toMatchObject({ runs: 2, testFailures: 0 });
     expect(s.byPrd.alpha.runs).toBe(3);
     expect(s.byPrd.beta.runs).toBe(1);
     const out = formatSummary(s);
@@ -114,8 +114,66 @@ describe("check log summary", () => {
     expect(s.topFailedFiles[0]).toEqual({ file: "a.test.ts", failures: 2 });
     expect(s.topFailedFiles.map((x) => x.file)).not.toContain("ignored.test.ts");
     const out = formatSummary(s);
-    expect(out).toContain("Failures by step:");
+    expect(out).toContain("Test failures by step:");
     expect(out).toContain("Most-failed test files:");
+  });
+
+  // An eighteen-field line: the load waited, failed step and files, flaky, stopping limit, verdict, step times.
+  const full = (branch, mode, exit, { step = "", files = "", breach = "", verdict = "" } = {}) =>
+    [
+      ...line("2026-11-25T10:00:00Z", branch, mode, 60, exit).split("\t"),
+      "0",
+      step,
+      files,
+      "",
+      breach,
+      verdict,
+      "",
+    ].join("\t");
+
+  it("counts test failures, budget stops, silence stops and time breaches apart", () => {
+    const text = [
+      full("slice/x/1", "slice", 1, { step: "unit", files: "a.test.ts" }),
+      full("slice/x/2", "slice", 124, { step: "integration", breach: "budget" }),
+      full("prd/y", "quick", 124, { step: "lint", breach: "silence" }),
+      full("prd/y", "quick", 125, { verdict: "fail" }),
+      full("prd/y", "quick", 0, { verdict: "warn" }),
+    ].join("\n");
+    const s = summarize(text);
+    const one = { testFailures: 1, budgetStops: 1, silenceStops: 1, timeBreaches: 1 };
+    expect(s).toMatchObject({ runs: 5, ...one });
+    expect(s.byMode.slice).toMatchObject({
+      runs: 2,
+      testFailures: 1,
+      budgetStops: 1,
+      silenceStops: 0,
+      timeBreaches: 0,
+    });
+    expect(s.byMode.quick).toMatchObject({
+      runs: 3,
+      testFailures: 0,
+      budgetStops: 0,
+      silenceStops: 1,
+      timeBreaches: 1,
+    });
+    expect(s.byPrd.x).toMatchObject({ testFailures: 1, budgetStops: 1 });
+    expect(s.byPrd.y).toMatchObject({ silenceStops: 1, timeBreaches: 1 });
+    // The stops' and the breach's steps aren't test failures.
+    expect(s.failuresByStep).toEqual([{ step: "unit", failures: 1 }]);
+    expect(s.topFailedFiles).toEqual([{ file: "a.test.ts", failures: 1 }]);
+    const out = formatSummary(s).split("\n");
+    expect(out[1]).toMatch(/runs +median m +total m +tests +budget +silence +time$/);
+    expect(out[2]).toMatch(/^ {2}all +5 +[\d.]+ +[\d.]+ +1 +1 +1 +1$/);
+  });
+
+  it("names each run's kind of failure", () => {
+    const run = (exit, breach = "", verdict = "") =>
+      parseLog(full("prd/x", "quick", exit, { breach, verdict })).runs[0];
+    expect(failureKind(run(0, "", "warn"))).toBeNull();
+    expect(failureKind(run(1))).toBe("test");
+    expect(failureKind(run(124, "budget"))).toBe("budget");
+    expect(failureKind(run(124, "silence"))).toBe("silence");
+    expect(failureKind(run(125, "", "fail"))).toBe("time");
   });
 
   it("names a PRD from the branch, else the worktree", () => {

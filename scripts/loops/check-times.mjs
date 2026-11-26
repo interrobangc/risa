@@ -81,11 +81,36 @@ const median = (xs) => {
   const mid = s.length >> 1;
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
+
+/**
+ * Why a run didn't pass, one kind each: `budget` or `silence` (a limit stopped
+ * it), `time` (it passed its tests but its armed time gate failed), `test` (any
+ * other failure: a test, lint, a type error); null for a pass.
+ * @param {Run} run @returns {"test" | "budget" | "silence" | "time" | null}
+ */
+export function failureKind(run) {
+  if (run.exit === 0) return null;
+  if (run.breach === "budget" || run.breach === "silence") return run.breach;
+  if (run.verdict === "fail") return "time";
+  return "test";
+}
+
+/** The runs that didn't pass, counted by kind. */
+export function failureCounts(runs) {
+  const c = { testFailures: 0, budgetStops: 0, silenceStops: 0, timeBreaches: 0 };
+  const key = { test: "testFailures", budget: "budgetStops", silence: "silenceStops", time: "timeBreaches" };
+  for (const r of runs) {
+    const k = failureKind(r);
+    if (k) c[key[k]]++;
+  }
+  return c;
+}
+
 const group = (runs) => ({
   runs: runs.length,
   medianMinutes: runs.length ? median(runs.map((r) => r.seconds)) / 60 : 0,
   totalMinutes: runs.reduce((a, r) => a + r.seconds, 0) / 60,
-  failures: runs.filter((r) => r.exit !== 0).length,
+  ...failureCounts(runs),
 });
 const by = (runs, key) => {
   const m = new Map();
@@ -115,11 +140,11 @@ export function summarize(text, { since } = {}) {
   };
 }
 
-/** Failed runs per step, most first; a line from before the field counts as "(not recorded)". */
+/** Test-failed runs per step, most first (stops and time breaches apart); a line from before the field counts as "(not recorded)". */
 function failuresByStep(runs) {
   const counts = new Map();
   for (const r of runs) {
-    if (r.exit === 0) continue;
+    if (failureKind(r) !== "test") continue;
     const step = r.failedStep || "(not recorded)";
     counts.set(step, (counts.get(step) ?? 0) + 1);
   }
@@ -128,11 +153,11 @@ function failuresByStep(runs) {
     .map(([step, failures]) => ({ step, failures }));
 }
 
-/** The ten test files in the most failed runs. */
+/** The ten test files in the most test-failed runs. */
 function topFailedFiles(runs) {
   const counts = new Map();
   for (const r of runs) {
-    if (r.exit === 0) continue;
+    if (failureKind(r) !== "test") continue;
     for (const f of new Set(r.failedFiles)) counts.set(f, (counts.get(f) ?? 0) + 1);
   }
   return [...counts]
@@ -142,11 +167,20 @@ function topFailedFiles(runs) {
 }
 
 const fmtMin = (m) => `${m.toFixed(1)}`;
+/** The failure columns: test failures, budget stops, silence stops, time breaches. */
+export const FAILURE_COLUMNS = [
+  ["testFailures", "tests"],
+  ["budgetStops", "budget"],
+  ["silenceStops", "silence"],
+  ["timeBreaches", "time"],
+];
+const failureCells = (g) => FAILURE_COLUMNS.map(([k, h]) => String(g[k]).padStart(h.length + 1)).join("");
+const failureHead = FAILURE_COLUMNS.map(([, h]) => h.padStart(h.length + 1)).join("");
 const row = (name, g) =>
-  `  ${name.padEnd(24)} ${String(g.runs).padStart(4)} ${fmtMin(g.medianMinutes).padStart(8)} ${fmtMin(g.totalMinutes).padStart(8)} ${String(g.failures).padStart(9)}`;
+  `  ${name.padEnd(24)} ${String(g.runs).padStart(4)} ${fmtMin(g.medianMinutes).padStart(8)} ${fmtMin(g.totalMinutes).padStart(8)}${failureCells(g)}`;
 
 export function formatSummary(s, { since } = {}) {
-  const head = `  ${"".padEnd(24)} ${"runs".padStart(4)} ${"median m".padStart(8)} ${"total m".padStart(8)} ${"failures".padStart(9)}`;
+  const head = `  ${"".padEnd(24)} ${"runs".padStart(4)} ${"median m".padStart(8)} ${"total m".padStart(8)}${failureHead}`;
   const lines = [`Checks${since ? ` since ${since}` : ""}: none recorded`];
   if (s.runs) {
     lines.length = 0;
@@ -160,7 +194,10 @@ export function formatSummary(s, { since } = {}) {
       ...Object.entries(s.byPrd).map(([k, g]) => row(k, g)),
     );
     if (s.failuresByStep.length)
-      lines.push("Failures by step:", ...s.failuresByStep.map((x) => `  ${x.step.padEnd(24)} ${x.failures}`));
+      lines.push(
+        "Test failures by step:",
+        ...s.failuresByStep.map((x) => `  ${x.step.padEnd(24)} ${x.failures}`),
+      );
     if (s.topFailedFiles.length)
       lines.push(
         "Most-failed test files:",
