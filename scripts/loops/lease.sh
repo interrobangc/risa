@@ -55,6 +55,10 @@ declare -F env_get >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # Callers may set lease_worktree, lease_pid and lease_cmd before taking, and
 # lease_say to a function for chatter (browser.sh: vsay).
 lease_path="" lease_n="" lease_kind="" lease_started=""
+# Tests only: "<marker>" pauses a take between its mkdir and recording the lease
+# (lease_test_pause), "write:<marker>" before it writes the name file
+# (lease_test_write_pause).
+lease_test_hook=${CARETOOK_LEASE_TEST_PAUSE:-}
 
 lease_valid_kind() { [[ $1 =~ ^[a-z][a-z0-9-]*$ ]]; }
 
@@ -211,13 +215,45 @@ lease_holders() {
   done
 }
 
-# lease_write LABEL → (re)write our lease's name file atomically.
+# lease_write LABEL → (re)write our lease's name file atomically, each writer
+# through its own temp file (name.tmp.<pid>). The first write links it in as
+# `name`, which fails when another taker's name is already there; a rewrite
+# renames it over a name that records our pid, and only then. On CI two takers
+# once shared one slot (B-867): a takeover's rm -rf hit a lease made just after
+# the stale one went, a second taker made the slot again, and both wrote the
+# one name.tmp. So a writer that finds the slot gone or recorded as another's
+# drops it (lease_path cleared, the directory left to its holder) and returns 1,
+# and the taker carries on as if the slot were taken.
 lease_write() {
   [[ -n $lease_path ]] || return 0
-  printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
-    "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "${lease_pid:-$$}" "${lease_cmd-$(basename "$0")}" \
-    "${lease_started:-$(date +%s)}" > "$lease_path/name.tmp"
-  mv "$lease_path/name.tmp" "$lease_path/name"
+  local p=$lease_path me=${lease_pid:-$$} tmp ok=""
+  tmp=$p/name.tmp.${BASHPID:-$$}
+  [[ $lease_test_hook != write:* ]] || lease_test_write_pause "${lease_test_hook#write:}"
+  if printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
+    "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "$me" "${lease_cmd-$(basename "$0")}" \
+    "${lease_started:-$(date +%s)}" 2>/dev/null > "$tmp"; then
+    if [[ ! -f $p/name ]]; then
+      ln "$tmp" "$p/name" 2>/dev/null && ok=1
+    elif [[ $(lease_field "$p" pid) == "$me" ]]; then
+      mv -f "$tmp" "$p/name" 2>/dev/null && ok=1
+    fi
+  fi
+  rm -f "$tmp" 2>/dev/null
+  [[ -n $ok && $(lease_field "$p" pid 2>/dev/null) == "$me" ]] && return 0
+  ${lease_say:-:} "Lost $lease_kind lease $lease_n to another taker; trying again."
+  lease_path="" lease_n=""
+  return 1
+}
+
+# lease_test_write_pause MARKER → (tests only) touch MARKER, then wait before
+# writing the name file until MARKER.go exists (or 30 s pass).
+lease_test_write_pause() {
+  local i
+  : > "$1"
+  for ((i = 0; i < 300; i++)); do
+    [[ ! -e $1.go ]] || return 0
+    sleep 0.1
+  done
 }
 
 # lease_claim KIND DIR N → make lease DIR/N (mkdir is the atomic take) and
@@ -234,7 +270,7 @@ lease_claim() {
   trap 'lease_deferred=TERM' TERM
   trap 'lease_deferred=INT' INT
   if mkdir "$2/$3" 2>/dev/null; then
-    [[ -z ${CARETOOK_LEASE_TEST_PAUSE:-} ]] || lease_test_pause "$CARETOOK_LEASE_TEST_PAUSE"
+    [[ -z $lease_test_hook || $lease_test_hook == write:* ]] || lease_test_pause "$lease_test_hook"
     lease_kind=$1 lease_path=$2/$3 lease_n=$3 lease_started=$(date +%s)
     rc=0
   fi
@@ -264,7 +300,9 @@ lease_take_over() {
     (($(date +%s) - $(lease_mtime "$mutex") > 30)) && rmdir "$mutex" 2>/dev/null
     return 0
   fi
-  if [[ -d $d ]] && ! lease_alive "$d" "$1"; then
+  # The second test: a lease released while lease_alive read it is gone, not
+  # stale, and the directory there now may be a new taker's (B-867).
+  if [[ -d $d ]] && ! lease_alive "$d" "$1" && [[ -d $d ]]; then
     echo "Taking over stale $1 lease $2: $(lease_line "$d") isn't running." >&2
     rm -rf "$d"
   fi
@@ -282,8 +320,7 @@ lease_take_counted() {
   fi
   if (($(lease_held "$1") + $4 < $3)); then
     for n in $(seq 1 "$3"); do
-      if lease_claim "$1" "$dir" "$n"; then
-        lease_write "$2"
+      if lease_claim "$1" "$dir" "$n" && lease_write "$2"; then
         ${lease_say:-:} "Took $1 lease $n of $3 ($4 more under the old path)."
         rc=0
         break
@@ -383,8 +420,7 @@ lease_take() {
       fi
     fi
     ((old > 0)) || for n in $(seq 1 "$slots"); do # (with old holders, only the counted take)
-      if lease_claim "$kind" "$dir" "$n"; then
-        lease_write "$label"
+      if lease_claim "$kind" "$dir" "$n" && lease_write "$label"; then
         lease_waiting_clear
         if [[ -n $announced ]]; then
           echo "Took $kind lease $n of $slots after waiting $(fmt_secs "$waited")." >&2
