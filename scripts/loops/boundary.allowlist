@@ -19,6 +19,7 @@ scripts/ci/promote.test.mjs project-name 1
 scripts/ci/release-gate.test.mjs project-name 1
 scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (the browser harness test): residual until the move
 scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
+scripts/ci/verdict.test.mjs project-to-core 2 # ties the core's verdict fixtures and reader version to the writer, buildVerdict: the core keeps the fixtures at the move, this half goes with the writer
 scripts/deploy/workflows.test.mjs project-to-core 3
 scripts/loops/ask.mjs project-env 21
 scripts/loops/ask.mjs project-name 1
