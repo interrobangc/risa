@@ -143,6 +143,9 @@ export const SHAPE = [
   ["commands.toolingTests", "command?"],
   ["commands.log", "command?"],
   ["commands.docBudget", "command?"],
+  // Formats the files named after it in place; the slice prompt has a slice run it on its
+  // changed files before a check (none: no such line).
+  ["commands.format", "command?"],
   ["commands.datastoreStart", "command"],
   ["commands.datastoreReset", "command"],
   ["commands.datastoreSeed", "command"],

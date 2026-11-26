@@ -45,6 +45,10 @@ if [[ $stack == yes ]]; then
 else
   stack_line="- Your worktree has no Docker stack. \`$prd_cmd check\` (through the check lease; never a bare \`$check_cmd\`) still runs everything it needs: integration tests use your own database on the shared test Postgres (created on first use). The dev server and browser checks need a stack: \`$prd_cmd stack up\` adds one and \`$prd_cmd stack down\` removes it when you're done (tell your orchestrator)."
 fi
+# The formatter's line, after the check's, when the config names one.
+format_line=""
+[[ -z $format_cmd ]] ||
+  format_line=$'\n'"- **Before each check, format the files you changed and commit what it changes:** \`$format_cmd \$(git diff --name-only --diff-filter=d $prd_prefix$topic)\` (a format failure is the slice check's commonest miss)."
 cat <<EOF
 You are the agent for slice $n of the "$topic" PRD.
 
@@ -63,7 +67,7 @@ cat <<EOF
 - Read your handbook ($(role_doc loop) prints it) and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
 - **Batch your turns:** independent reads, greps, commands and edits go in one turn, and a file under about 400 lines is read whole, not in \`sed -n\` chunks (your handbook's _Reads and turns_).
 $stack_line Delete any scratch scripts before you commit.
-- Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. To wait on a check running in the background, run \`$prd_cmd wait check\` (it returns once this worktree's check is gone, and exits 75 at its \`--timeout\`); never \`pgrep -f\` (it matches its own shell and never exits).
+- Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. To wait on a check running in the background, run \`$prd_cmd wait check\` (it returns once this worktree's check is gone, and exits 75 at its \`--timeout\`); never \`pgrep -f\` (it matches its own shell and never exits).$format_line
 - **Past about 10 reads into unfamiliar code, hand the exploration to one Explore helper** (haiku for a plain search, sonnet for judgement) and take back only its conclusion; long check output goes to a haiku helper too (your handbook's _Loop rules_).
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.
 - You may update your backlog items' notes (\`$backlog_cmd note ${backlog_id_prefix}<n> "..."\`). Don't claim, land or reassign items; your orchestrator does that.
