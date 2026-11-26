@@ -24,11 +24,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { makeRepo } from "./sample-project/repo.mjs";
 
-const BROWSER = new URL("./browser.sh", import.meta.url).pathname;
+// The repo's own copy (makeRepo's), so it reads the sample's config.
+let BROWSER;
 
 // Fake checks: they print what a runner would and never open a browser. `pid`
-// files let a test see that a killed run's worker is gone. Each ends with GUARD:
-// it exits once FAKE_PARENT (this test process, unless a test names another) is
+// files let a test see that a killed run's worker is gone. Each starts with GUARD
+// (before any top-level await): it exits once FAKE_PARENT (this test process, unless a test names another) is
 // gone, so an interrupted run (Ctrl-C, a killed Vitest worker) can't leave a
 // fixture running for days, as B-704's silent one did.
 const GUARD = [
@@ -106,8 +107,9 @@ beforeAll(() => {
     ".nvmrc": `${process.versions.node.split(".")[0]}\n`,
   };
   for (const [name, src] of Object.entries(SPECS))
-    files[`tools/browser-checks/${name}.mjs`] = `${src}\n${GUARD}\n`;
+    files[`tools/browser-checks/${name}.mjs`] = `${GUARD}\n${src}\n`;
   makeRepo(repo, { files });
+  BROWSER = join(repo, "scripts/loops/browser.sh");
   mkdirSync(join(root, "state"));
   const { RISA_CONFIG: _, ...rest } = process.env;
   env = {
