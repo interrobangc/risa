@@ -137,6 +137,14 @@ describe("trimStatus on a fixes plan", () => {
     expect(nextSlice("# P\n\n## Status\n", r.history)).toBe(4);
   });
 
+  it("numbers the next slice past the plan's headings and the history's rows, alone", () => {
+    const plan = "# P\n\n## Wave 1\n\n### Slice 2: A\n\n#### Slice 5: B\n";
+    const history = "# H\n\n| Slice | What |\n| ----- | ---- |\n| 9 | old |\n| x | not a row |\n";
+    expect(nextSlice(plan)).toBe(6);
+    expect(nextSlice(plan, history)).toBe(10);
+    expect(nextSlice("# P\n", "")).toBe(1);
+  });
+
   it("puts a second trim's section above the first", () => {
     LANDED.add("cccc3333");
     try {

@@ -547,7 +547,8 @@ mark_landed() {
 }
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
-  landing_hook notes <<< "$changed" | sed 's/^/  /'
+  # Already after the landing: the hook's notes (shared with ready.sh's report) drop their "after landing".
+  landing_hook notes <<< "$changed" | sed 's/ after landing$//; s/^/  /'
   grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
   if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
