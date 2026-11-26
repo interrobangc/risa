@@ -220,6 +220,44 @@ describe("walkVerdicts", () => {
     expect(failed.result).toMatchObject({ verdict: null, carried: null, need: "components" });
   });
 
+  it("asks for a fresh run on the tip when the verdict behind a tooling commit failed, and says why", () => {
+    for (const kind of ["file", "brake", "infra", "time"]) {
+      const { result, asked } = walk([
+        { sha: "fix", change: "none" },
+        { ...wave, verdicts: { components: kind } },
+      ]);
+      expect(result).toMatchObject({ verdict: null, run: null, carried: null, need: "components" });
+      expect(result?.why).toContain(`the ${kind} verdict on wave is not carried`);
+      expect(asked).toEqual(["fix@components", "wave@components"]);
+    }
+    const own = walk(
+      [
+        { sha: "fix", change: "none" },
+        { ...wave, verdicts: { components: "flake" } },
+      ],
+      "components",
+      ["a.test.ts"],
+    );
+    expect(own.result).toMatchObject({ verdict: null, need: "components", why: expect.any(String) });
+  });
+
+  it("still carries a green or an untouched flake behind a tooling commit", () => {
+    for (const kind of ["green", "flake"]) {
+      const { result } = walk([
+        { sha: "fix", change: "none" },
+        { ...wave, verdicts: { components: kind } },
+      ]);
+      expect(result).toMatchObject({ verdict: { commit: "wave", kind }, carried: null, need: "components" });
+      expect(result?.why).toBeUndefined();
+    }
+  });
+
+  it("keeps a failing verdict on the tip itself for the gate to blame", () => {
+    const { result } = walk([{ sha: "tip", change: "none", verdicts: { components: "file" } }]);
+    expect(result).toMatchObject({ verdict: { commit: "tip", kind: "file" } });
+    expect(result?.why).toBeUndefined();
+  });
+
   it("stops at a commit no carry crosses", () => {
     const { result } = walk([{ sha: "sync", change: "unit" }, { sha: "code", change: null }, wave]);
     expect(result).toMatchObject({ verdict: null, carried: null, need: "components" });

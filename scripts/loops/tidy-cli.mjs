@@ -7,7 +7,8 @@
 //   --facts  the raw facts as JSON
 //   --yes    remove the safe ones (rm.sh, the testDb hook's drop-db, git fetch
 //            --prune, the stackLeftovers hook's remove, deleting tickets, logs and ended records,
-//            pnpm backlog archive for finished items), then
+//            pnpm backlog archive for finished items; a dead lease only through
+//            lease.sh's takeover, which keeps one retaken since), then
 //            file the ask list with `pnpm prd ask --report` (none when it's empty)
 //
 // Reading runs git, the hooks' read-only forms (stackEngine status, stackReady,
@@ -18,7 +19,7 @@
 // CARETOOK_ASKS_DIR, CARETOOK_LEASE_ROOT.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describeRun, isTopicRun, outstandingRuns } from "../ci/outstanding.mjs";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
@@ -348,6 +349,43 @@ export function collectTidyFacts({
   };
 }
 
+/**
+ * Removes the machine-wide lease at PATH (<root>/<kind>/<N>) only through
+ * lease.sh's takeover (lease_take_over): under the kind's `.takeover` mutex and
+ * after a fresh liveness check, so a lease taken again since tidy's snapshot
+ * stays. "removed" when it's gone, "kept" when it's still there (its holder is
+ * running, or another taker holds the mutex), "failed" when lease.sh failed.
+ */
+export function removeLease(/** @type {string} */ path, { env = process.env } = {}) {
+  const n = basename(path);
+  const kindDir = dirname(path);
+  const kind = basename(kindDir);
+  if (!/^\d+$/.test(n) || !/^[a-z][a-z0-9-]*$/.test(kind)) {
+    console.error(`tidy: ${path} isn't a lease (<root>/<kind>/<N>)`);
+    return "failed";
+  }
+  // lease_dir answers with this lease's own directory, wherever the kind's
+  // leases were moved to: the takeover acts on exactly the path tidy found.
+  const r = spawnSync(
+    "bash",
+    [
+      "-c",
+      'source "$1" && tidy_kind_dir=$4 && lease_dir() { echo "$tidy_kind_dir"; } && lease_take_over "$2" "$3"',
+      "tidy",
+      join(HERE, "lease.sh"),
+      kind,
+      n,
+      kindDir,
+    ],
+    { env, encoding: "utf8", stdio: ["ignore", "ignore", "pipe"] },
+  );
+  if (r.status !== 0) {
+    console.error(`tidy: lease.sh's takeover of ${path} failed${r.stderr ? `:\n${r.stderr.trim()}` : ""}`);
+    return "failed";
+  }
+  return existsSync(path) ? "kept" : "removed";
+}
+
 /** Removes the safe findings; returns how many failed. */
 function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {string} */ main) {
   let failed = 0;
@@ -437,10 +475,18 @@ function act(/** @type {ReturnType<typeof tidy>["safe"]} */ safe, /** @type {str
       case "volume":
         step(label, () => hook("stackLeftovers", ["remove", "volume", f.target]));
         break;
+      case "lease": {
+        // Through lease.sh's takeover, never from the snapshot: a lease retaken
+        // since it was read is live again and stays (B-442).
+        const r = removeLease(f.target);
+        if (r === "kept")
+          console.log(`kept ${label}: its holder is running again, or another taker is taking it over`);
+        else step(label, () => r === "removed");
+        break;
+      }
       case "record":
       case "hang-log":
       case "slot":
-      case "lease":
         step(label, () => {
           rmSync(f.path ?? f.target, { recursive: true, force: true });
           return true;

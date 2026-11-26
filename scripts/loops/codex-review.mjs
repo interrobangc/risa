@@ -29,8 +29,10 @@
 // review it was for. Findings are inline review threads opening with a
 // priority badge (`![P2 Badge](…)`). Only Codex's own threads count: a human's
 // comment never blocks. Codex doesn't resolve its threads when a fix lands
-// (they turn outdated), so every finding, fixed or declined (reply first), is
-// resolved before the verdict is clean; replies alone don't clear it.
+// (they turn outdated). An outdated thread stops counting once Codex's state
+// on the head says has_unresolved_findings: false (its summary is trusted for
+// the head); any other open thread, a declined or current one, is replied to
+// and resolved before the verdict is clean; replies alone don't clear it.
 //
 //   node codex-review.mjs [file] [--line|--text] [--repo=<dir> --trunk=<ref>]
 //     the PR's JSON on stdin when no file; prints the verdict as JSON (--line:
@@ -174,10 +176,29 @@ export function outOfCreditsAt(pr) {
   return other.some((t) => t > limit) ? null : limit;
 }
 
-/** Codex's unresolved threads, as findings. */
+/**
+ * Is Codex's state on the head clean: a completed review of headRefOid with
+ * has_unresolved_findings false?
+ */
+function headStateClean(pr) {
+  const s = summaryState(pr);
+  return (
+    s?.status === "completed" &&
+    Boolean(s.commit_sha) &&
+    s.commit_sha === pr.headRefOid &&
+    s.has_unresolved_findings === false
+  );
+}
+
+/**
+ * Codex's unresolved threads, as findings. An outdated one doesn't count when
+ * Codex's state on the head is clean (headStateClean).
+ */
 export function openFindings(pr) {
+  const trustHead = headStateClean(pr);
   return nodes(pr.reviewThreads)
     .filter((t) => !t.isResolved && isCodex(nodes(t.comments)[0]?.author?.login))
+    .filter((t) => !(trustHead && t.isOutdated))
     .map((t) => {
       const first = nodes(t.comments)[0];
       return {

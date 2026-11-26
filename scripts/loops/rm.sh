@@ -79,7 +79,7 @@ fi
 
 # Whether a finished PRD marks its topic done: decided now, while its plan (and
 # this script's own checkout, maybe the worktree) is still here.
-mark_done="" flags=""
+mark_done="" flags="" hot_rows="" rows_read=""
 if [[ -n $registry && $branch == "$prd_prefix"* ]]; then
   topic=${branch#"$prd_prefix"}
   if ! git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then
@@ -87,9 +87,10 @@ if [[ -n $registry && $branch == "$prd_prefix"* ]]; then
   elif left=$(node "$(dirname "$0")/rotate.mjs" slices-left "$dir/plans/$topic-plan.md"); then
     if [[ -n $left ]]; then
       echo "Not marking $topic done: slices $left are still to run (plans/$topic-plan.md)"
-    elif ! rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>&1); then
+    elif rows_read=1 && ! rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>&1); then
+      rows_read=failed
       echo "Not marking $topic done: ${rows##*$'\n'}"
-    elif flags=$(node "$(dirname "$0")/rotate.mjs" done-flags "$topic" <<<"$rows"); then
+    elif hot_rows=$rows && flags=$(node "$(dirname "$0")/rotate.mjs" done-flags "$topic" <<<"$rows"); then
       mark_done=$topic
     else
       echo "Not marking $topic done: $flags"
@@ -101,7 +102,12 @@ fi
 
 # A standing topic's wave set its row's hot files; with its worktree gone they go too.
 clear_hot=""
-if [[ -n $registry && $branch == "$prd_prefix"* ]] && hot_rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) &&
+# The registry read above is reused; it is read here only when that step didn't get to it.
+if [[ -z $rows_read && -n $registry && $branch == "$prd_prefix"* ]]; then
+  rows_read=1
+  hot_rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) || hot_rows=""
+fi
+if [[ -n $registry && $branch == "$prd_prefix"* && -n $hot_rows ]] &&
   node "$(dirname "$0")/rotate.mjs" clears-hot "${branch#"$prd_prefix"}" <<<"$hot_rows"; then
   clear_hot=${branch#"$prd_prefix"}
 fi

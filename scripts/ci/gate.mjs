@@ -59,7 +59,7 @@ export const carries = (v, touched) =>
 
 /**
  * @typedef {{ verdict: any, run: any }} Found
- * @typedef {{ verdict: any, run: any, carried: Found | null, need: string }} Walked
+ * @typedef {{ verdict: any, run: any, carried: Found | null, need: string, why?: string }} Walked
  */
 
 /**
@@ -70,6 +70,9 @@ export const carries = (v, touched) =>
  * blame, and the tip needs a recheck at the tier the syncs brought (syncTier),
  * found on a commit no newer sync follows. A sync that brought the tier or more asks
  * for the tier itself on the tip, as before.
+ * A verdict on an ancestor counts only when it carries (green, or a flake outside the
+ * branch's files): a failing one asks for a fresh run on the tip, with `why`, since the
+ * commits since may be its fix.
  * `need` is the tier to request when `verdict` is null.
  * @param {{ commits: string[], tier: string, touched: string[],
  *   verdictAt: (sha: string, tier: string) => Found | null,
@@ -94,12 +97,18 @@ export function walkVerdicts({ commits, tier, touched, verdictAt, changeOf }) {
     steps.push({ sha, rank: tierRank(change) });
   }
   if (!base) return none;
+  if (steps.length && !carries(base.verdict, touched))
+    return {
+      ...none,
+      why:
+        `the ${base.verdict.kind} verdict on ${String(base.verdict.commit).slice(0, 8)} is not carried ` +
+        `past the ${steps.length} commit${steps.length === 1 ? "" : "s"} since: a fresh run on the tip`,
+    };
   const demand = Math.max(0, ...steps.map((s) => s.rank));
   if (!demand) return { ...base, carried: null, need: tier };
   // Never above the declared tier: dev's own landing vouched for its files alone.
   if (demand >= tierRank(tier)) return none;
   const need = /** @type {string} */ (proposedTiers()[demand]);
-  if (!carries(base.verdict, touched)) return none;
   const newest = steps.findIndex((s) => s.rank > 0);
   for (const { sha } of steps.slice(0, newest + 1)) {
     const found = verdictAt(sha, need);

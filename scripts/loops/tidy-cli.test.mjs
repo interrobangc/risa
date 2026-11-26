@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { collectTidyFacts, processCwds } from "./tidy-cli.mjs";
+import { collectTidyFacts, processCwds, removeLease } from "./tidy-cli.mjs";
 import { tidy as sortFacts } from "./tidy.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
 
@@ -362,6 +362,46 @@ describe("tidy --yes", () => {
     expect(out).toMatch(/Nothing to ask about: no report filed\./);
     expect(filedAsks()).toEqual([]);
     expect(existsSync(join(loops, "t-2"))).toBe(true);
+  });
+});
+
+describe("tidy removes a dead lease only through lease.sh's takeover", () => {
+  const second = () => join(leases, "browser", "2");
+  const take = (pid) => {
+    mkdirSync(second(), { recursive: true });
+    writeFileSync(join(second(), "name"), `pid=${pid}\nworktree=t-3\ncheck=pnpm prd browser\n`);
+    old(second());
+  };
+  const listed = () =>
+    JSON.parse(ok(["--json"])).safe.some((/** @type {{ target: string }} */ f) => f.target === second());
+
+  it("keeps a lease that was dead at the snapshot but taken again before the delete", () => {
+    take(999999);
+    expect(listed()).toBe(true);
+    // Retaken in between, by a running process (this one, which has no cmd= to match).
+    take(process.pid);
+    expect(removeLease(second(), { env })).toBe("kept");
+    expect(readFileSync(join(second(), "name"), "utf8")).toMatch(`pid=${process.pid}`);
+  });
+
+  it("removes one still dead at the delete, and leaves no takeover mutex", () => {
+    take(999999);
+    expect(listed()).toBe(true);
+    expect(removeLease(second(), { env })).toBe("removed");
+    expect(existsSync(second())).toBe(false);
+    expect(existsSync(join(leases, "browser", ".takeover"))).toBe(false);
+  });
+
+  it("keeps a dead lease while another taker holds the takeover mutex", () => {
+    take(999999);
+    mkdirSync(join(leases, "browser", ".takeover"));
+    try {
+      expect(removeLease(second(), { env })).toBe("kept");
+      expect(existsSync(second())).toBe(true);
+    } finally {
+      rmSync(join(leases, "browser", ".takeover"), { recursive: true, force: true });
+      rmSync(second(), { recursive: true, force: true });
+    }
   });
 });
 
