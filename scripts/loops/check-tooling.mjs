@@ -72,6 +72,24 @@ export function slowestFiles(text, cwd, n = 10) {
 }
 
 /**
+ * Whether a Vitest run's output reports an unhandled error: only the runner's own
+ * report line (`Vitest caught N unhandled error(s) during the test run`, or a
+ * collection's `There were unhandled errors during test collection`), at a line's
+ * start, colours stripped, so a test's title that says "unhandled error" (a `✓`
+ * line, its file and describe first) never counts. The core's copy of the
+ * project's check-failed.mjs's.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function unhandledError(text) {
+  // eslint-disable-next-line no-control-regex -- the colour codes themselves
+  const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+  return /^(Vitest caught \d+ unhandled errors? during the test run|There were unhandled errors during test collection)/m.test(
+    plain,
+  );
+}
+
+/**
  * Runs a command in `cwd`, its output passed on as it comes and kept.
  * @param {string} cmd
  * @param {string[]} args
@@ -165,7 +183,7 @@ export async function toolingStep({ root, projects, state = "", rerunMax = 20, v
       console.log("tooling failed with no test file to rerun");
       return run.code;
     }
-    if (/Unhandled (Error|Rejection)|unhandled error/.test(run.out)) {
+    if (unhandledError(run.out)) {
       console.log("tooling: an unhandled error, so no rerun");
       record("failed", failed);
       return run.code;
