@@ -63,6 +63,7 @@ export async function gate(
   if (found === null) return unknown(io, "GitHub can't be reached");
   let { verdict, run } = found;
   const { carried, need } = found;
+  if (found.why) io.log(found.why);
   if (carried)
     io.log(
       `dev synced in since the ${carried.verdict.ranTier} verdict on ${String(carried.verdict.commit).slice(0, 8)}: ` +
