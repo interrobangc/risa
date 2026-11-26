@@ -1,8 +1,8 @@
-// The cleanup sorter behind `pnpm prd tidy`: the one place that decides what a
+// The cleanup sorter behind `prd tidy`: the one place that decides what a
 // leftover is and whether it may go without asking. Pure: a facts object in
 // (tidy-cli.mjs collects one), three lists out.
 //
-//   safe  removed by `pnpm prd tidy --yes`, each with how:
+//   safe  removed by `prd tidy --yes`, each with how:
 //         - a slice worktree merged into its prd/ branch, clean, with nothing
 //           running in it (rm.sh);
 //         - a plan/<topic> worktree landed in dev and level with it, clean, with
@@ -19,8 +19,8 @@
 //           (git push --delete, only while still at the same commit);
 //         - quarantine entries whose backlog item is done;
 //         - finished backlog items: dropped ones always, others once their
-//           topic has no prd/ worktree (pnpm backlog archive <ids>).
-//   ask   reported only (one `pnpm prd ask --report`):
+//           topic has no prd/ worktree (backlog archive <ids>).
+//   ask   reported only (one `prd ask --report`):
 //         - a live session whose worktree is gone or whose branch landed in dev
 //           (it looks finished: ask it, then the user closes it);
 //         - a local branch with no worktree: merged ones are named for
@@ -33,7 +33,7 @@
 // Never, whatever the facts: a dirty worktree, any build or Vite cache (unlike
 // `reclaim --yes`), the main checkout, an unmerged branch, a session itself.
 
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 /** Tickets younger than this are left alone: their holder may still be writing its pid. */
 export const TICKET_GRACE_SECS = 60;
@@ -41,7 +41,7 @@ export const TICKET_GRACE_SECS = 60;
 export const HANG_LOG_DAYS = 7;
 /** A ci/ ref with no run going may go once it's this old. */
 export const CI_REF_SECS = 86400;
-/** Item statuses `pnpm backlog archive` moves out. */
+/** Item statuses `backlog archive` moves out. */
 export const ARCHIVABLE = ["landed", "staging", "live", "dropped"];
 /** The long-lived branches tidy never lists: the trunk and the protected ones (dev, main, staging here). */
 export const protectedBranches = () => branchKinds().kept;
@@ -126,7 +126,7 @@ export function tidy(facts) {
     else if (slice && w.held) kept.push({ kind: "worktree", target: w.name, why: `${what}, but ${w.held}` });
     else if (plan && s)
       kept.push({ kind: "worktree", target: w.name, why: `${what}, but its session ${s.name} is live` });
-    else safe.push({ kind: "worktree", target: w.name, why: what, how: `pnpm prd rm ${w.name}` });
+    else safe.push({ kind: "worktree", target: w.name, why: what, how: `${toolCmd.prd} rm ${w.name}` });
   }
 
   for (const s of sessions) {
@@ -198,7 +198,7 @@ export function tidy(facts) {
       kind: "quarantine",
       target: `${q.file}: ${q.name}`,
       why: `its item ${q.item} is done`,
-      how: "pnpm backlog ci-file",
+      how: `${toolCmd.backlog} ci-file`,
     });
 
   for (const l of facts.locks ?? []) {
@@ -249,7 +249,7 @@ export function tidy(facts) {
       kind: "archive",
       target: countOf(archive),
       why: `finished, still in the backlog (${someOf(archive)})`,
-      how: "pnpm backlog archive",
+      how: `${toolCmd.backlog} archive`,
       ids: archive,
     });
   for (const [topic, ids] of held)
@@ -271,7 +271,7 @@ export function tidy(facts) {
     ask.push({
       kind: "registry",
       target: r.topic,
-      why: `${saysDone ? "its notes say done" : "planned, with no waiting items"}, but it isn't flagged done (pnpm backlog prd set ${r.topic} flags=${[...r.flags, "done"].join(",")})`,
+      why: `${saysDone ? "its notes say done" : "planned, with no waiting items"}, but it isn't flagged done (${toolCmd.backlog} prd set ${r.topic} flags=${[...r.flags, "done"].join(",")})`,
     });
   }
 
@@ -282,7 +282,7 @@ export function tidy(facts) {
 export function formatTidy(/** @type {ReturnType<typeof tidy>} */ { safe, ask, kept }) {
   const row = (/** @type {Finding} */ f) => `  ${f.kind.padEnd(9)} ${f.target} (${f.why})`;
   const out = [];
-  out.push(safe.length ? "Safe to remove (pnpm prd tidy --yes):" : "Safe to remove: nothing.");
+  out.push(safe.length ? `Safe to remove (${toolCmd.prd} tidy --yes):` : "Safe to remove: nothing.");
   out.push(...safe.map(row));
   out.push("");
   out.push(ask.length ? "To ask about (reported, never removed by tidy):" : "To ask about: nothing.");
@@ -294,7 +294,7 @@ export function formatTidy(/** @type {ReturnType<typeof tidy>} */ { safe, ask, k
 /** The ask list as one report's text. */
 export function reportText(/** @type {Finding[]} */ ask) {
   return [
-    `pnpm prd tidy: ${ask.length} thing${ask.length === 1 ? "" : "s"} to decide (nothing here was removed):`,
+    `${toolCmd.prd} tidy: ${ask.length} thing${ask.length === 1 ? "" : "s"} to decide (nothing here was removed):`,
     ...ask.map((f) => `- ${f.kind} ${f.target}: ${f.why}`),
   ].join("\n");
 }

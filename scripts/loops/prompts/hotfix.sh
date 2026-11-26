@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # prompts/hotfix.sh: prompt.sh hotfix <name> ["<the fix>"], a hotfix session in
-# .loops/hotfix-<name> (pnpm prd hotfix prints it). Sourced by prompt.sh after
+# .loops/hotfix-<name> (prd hotfix prints it). Sourced by prompt.sh after
 # shared.sh, with $topic set to the name; it exits.
 fix=${3:-}
 cat <<EOF

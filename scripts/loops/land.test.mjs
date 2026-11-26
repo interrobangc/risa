@@ -55,7 +55,10 @@ describe("docs_only", () => {
 });
 
 describe("CI's two lists on dev", () => {
-  const LISTS = ["scripts/ci/quarantine.txt", "scripts/ci/brake-list.txt"];
+  // CI's two lists, where the config the throwaway repo runs on keeps them.
+  const { paths } = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+  const QUARANTINE = paths.quarantine;
+  const LISTS = [QUARANTINE, paths.brakeList];
   const lib = (/** @type {string} */ body) =>
     spawnSync("bash", ["-c", `source scripts/loops/lib.sh && ${body}`], { cwd: repo, encoding: "utf8" });
 
@@ -70,10 +73,10 @@ describe("CI's two lists on dev", () => {
   it("names the lists dev changed and the branch didn't, for sync to take", () => {
     branch({ "apps/web/b.ts": "2" });
     expect(lib("trunk_lists prd/throwaway-x").stdout).toBe("");
-    commit({ "scripts/ci/quarantine.txt": "a line\n", "apps/web/a.ts": "changed" }, "dev work");
-    expect(lib("trunk_lists prd/throwaway-x").stdout.trim()).toBe("scripts/ci/quarantine.txt");
+    commit({ [QUARANTINE]: "a line\n", "apps/web/a.ts": "changed" }, "dev work");
+    expect(lib("trunk_lists prd/throwaway-x").stdout.trim()).toBe(QUARANTINE);
     git("checkout", "-q", "prd/throwaway-x");
-    commit({ "scripts/ci/quarantine.txt": "its own\n" }, "the branch's own list");
+    commit({ [QUARANTINE]: "its own\n" }, "the branch's own list");
     git("checkout", "-q", "dev");
     expect(lib("trunk_lists prd/throwaway-x").stdout).toBe("");
   });

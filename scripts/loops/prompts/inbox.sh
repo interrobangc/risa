@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# prompts/inbox.sh: prompt.sh inbox, the inbox agent (pnpm prd inbox), in its
+# prompts/inbox.sh: prompt.sh inbox, the inbox agent (prd inbox), in its
 # own directory outside the repository. Sourced by prompt.sh after shared.sh;
 # it exits.
 # Self-contained and short: the session opens outside the repository, so

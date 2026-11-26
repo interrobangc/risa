@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bring the PRD machinery back after a restart, a crash or a usage limit.
-# (pnpm prd recover)
+# (prd recover)
 #
 #   recover.sh                    take the single-instance lock (.loops/.recover.lock:
 #                                 a second recover exits 75 without acting), then
@@ -33,15 +33,15 @@
 #                                    (claude --remote-control recover, in the
 #                                    main checkout; prompt.sh recover): it tells
 #                                    live orchestrators and planners to carry on
-#                                    and reopens dead ones (pnpm prd open),
+#                                    and reopens dead ones (prd open),
 #                                    leaving managed ones to the dispatcher
 #   recover.sh --no-agent         steps 1-7 only: print the sessions instead
 #   recover.sh --unattended       for a job with no terminal (the watchdog):
 #                                 the recovery agent opens in a background tab,
-#                                 and a failure files one report (pnpm prd ask
+#                                 and a failure files one report (prd ask
 #                                 --report, topic recover; RISA_RECOVER_REPORT=off
 #                                 files none: the watchdog's later tries in one
-#                                 incident). A stay-down mark (pnpm prd down
+#                                 incident). A stay-down mark (prd down
 #                                 --stay) makes it do nothing
 #   recover.sh --at HH:MM         sleep until then (tomorrow's when it has
 #                                 passed), then recover: after a usage limit
@@ -135,7 +135,7 @@ on_exit() {
     what=$(printf '%s, ' ${failed[@]+"${failed[@]}"}); what=${what%, }
     what="didn't recover: ${what:-exit $code}"
   fi
-  report "pnpm prd recover --unattended stopped: ${what%.}. See pnpm prd recover --dry-run, fix it, then pnpm prd recover."
+  report "${prd_cmd} recover --unattended stopped: ${what%.}. See ${prd_cmd} recover --dry-run, fix it, then ${prd_cmd} recover."
 }
 
 now_secs() {
@@ -270,9 +270,9 @@ after_infrastructure() {
   done
   echo
   if ((${#failed[@]})); then
-    echo "Not opening the recovery agent until everything above recovers. Then: pnpm prd recover"
+    echo "Not opening the recovery agent until everything above recovers. Then: ${prd_cmd} recover"
   elif ((agent == 0)); then
-    echo "--no-agent: to message and reopen them, run pnpm prd recover again without it, or pnpm prd open <name> for each."
+    echo "--no-agent: to message and reopen them, run ${prd_cmd} recover again without it, or ${prd_cmd} open <name> for each."
   else
     local wrapper prompt
     wrapper=$(cd "$bin" && pwd)/session.sh
@@ -338,17 +338,17 @@ run_actions() {
 
   if ((${#landings[@]})); then
     echo
-    echo "Landings cut off midway (the recovery agent resumes them first: pnpm prd land --resume <branch>):"
+    echo "Landings cut off midway (the recovery agent resumes them first: ${prd_cmd} land --resume <branch>):"
     printf '  %s\n' "${landings[@]}"
   fi
   if ((${#gc[@]})); then
     echo
-    echo "Merged slices to clean up (pnpm prd gc; a dirty one is kept until its changes are committed or discarded):"
+    echo "Merged slices to clean up (${prd_cmd} gc; a dirty one is kept until its changes are committed or discarded):"
     printf '  %s\n' "${gc[@]}"
   fi
   if [[ -n $record ]]; then
     if ((${#failed[@]})); then
-      echo "Kept the down record ($record): rerun pnpm prd recover once the failures below are fixed."
+      echo "Kept the down record ($record): rerun ${prd_cmd} recover once the failures below are fixed."
     else
       rm -f "$record"
       echo "• used the down record, deleted it"
@@ -375,10 +375,10 @@ fi
 stay=$loops/.stay-down.json
 if [[ -f $stay ]]; then
   if ((unattended)); then
-    echo "recover: stay-down ($stay, pnpm prd down --stay): nothing done; pnpm prd recover by hand brings it back"
+    echo "recover: stay-down ($stay, ${prd_cmd} down --stay): nothing done; ${prd_cmd} recover by hand brings it back"
     exit 0
   fi
-  rm -f "$stay" && echo "• deleted the stay-down mark (pnpm prd down --stay): the watchdog may recover again"
+  rm -f "$stay" && echo "• deleted the stay-down mark (${prd_cmd} down --stay): the watchdog may recover again"
 fi
 trap on_exit EXIT
 take_lock

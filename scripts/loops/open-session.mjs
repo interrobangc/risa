@@ -52,7 +52,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { CAPTAIN_SESSION, pickCaptain } from "./captain.mjs";
 import { plannerModelFor } from "./planner-model.mjs";
 import { isLive, processOf, readRecord } from "./sessions.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 import {
   claudeChoiceFor,
   claudeEnv,
@@ -112,7 +112,7 @@ export function inboxUntrusted(
     config = claudeState(claudeEnvOf("inbox", ownMain())),
   } = {},
 ) {
-  const ask = "run `pnpm prd inbox` once by hand and accept the folder";
+  const ask = `run \`${toolCmd.prd} inbox\` once by hand and accept the folder`;
   let real;
   try {
     real = realpathSync(dir);
@@ -131,7 +131,7 @@ export function carryOnPrompt(kind, topic) {
   const head = "This session stopped on a usage limit, and the limit has now reset.";
   if (kind === "plan")
     return `${head} Check what you had written against git (git status, git log), then carry on with the plan for ${topic} where you left off.`;
-  return `${head} If \`pnpm prd land\` was cut off, run \`pnpm prd land --resume <branch>\` first. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of ${branchKinds().branch("prd", topic)}, merges already in), respawn any slice agents that stopped (\`pnpm prd prompt slice ${topic} <n> --continue\`), and carry on in your recorded landing mode.`;
+  return `${head} If \`${toolCmd.prd} land\` was cut off, run \`${toolCmd.prd} land --resume <branch>\` first. Reconcile your plan's _Status_ with git (slice worktrees, slice branches ahead of ${branchKinds().branch("prd", topic)}, merges already in), respawn any slice agents that stopped (\`${toolCmd.prd} prompt slice ${topic} <n> --continue\`), and carry on in your recorded landing mode.`;
 }
 
 /**

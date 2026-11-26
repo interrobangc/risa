@@ -3,7 +3,7 @@
 // drainDecision (pure) turns the usage reading (usage.mjs mergeReadings) into one of
 //   normal    nothing held;
 //   draining  a plan window (5-hour or weekly) at RISA_USAGE_DRAIN (95%) or more:
-//             no start, plan or reopen (`pnpm prd dispatch --resume` doesn't override it),
+//             no start, plan or reopen (`prd dispatch --resume` doesn't override it),
 //             and a new slice worktree is refused (new.sh slice runs `drain.mjs check`);
 //   limited   a plan window at RISA_USAGE_STOP (98%) or more, a reading showing overage
 //             (a plan window at 100%: extra usage, if it's on, is being spent), or a session
@@ -31,7 +31,7 @@ import { clock, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
 export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
-/** A session sent TERM this long ago and still live is sent KILL (as `pnpm prd end`). */
+/** A session sent TERM this long ago and still live is sent KILL (as `prd end`). */
 export const END_WAIT_MS = 10_000;
 /** The stall error the dispatcher's own stop writes. */
 export const LIMITED_ERROR = "limited";

@@ -156,6 +156,9 @@ export const SHAPE = [
   ["commands.hooksInstall", "command?"],
   // The env file a stack keeps the dev server's port in (WEB_PORT), which the slice prompt names.
   ["stack.portEnv", "path?"],
+  // A worktree's check build (a production build the browser checks run on), which
+  // reclaim frees when its server is down and git tracks none of it (none: reclaim skips builds).
+  ["stack.checkBuild", "path?"],
   // The test projects the tool's own test runner names.
   ["testProjects.tooling", "text[]?"],
   ["testProjects.browserHarness", "text?"],
@@ -493,15 +496,38 @@ function makeBranches(config) {
 }
 
 /**
- * What the tool's own commands are called in this repo (`pnpm prd` and `pnpm backlog`
- * here, `risa …` after the move): every prompt, hint and help line names them through
- * this (lib.sh's tool_command in bash).
+ * What the tool's own commands are called in this repo (`tool.prd` and `tool.backlog`
+ * in the config; `risa …` after the move): every prompt, hint and help line names them
+ * through this or toolCmd (lib.sh's tool_command, prd_cmd and backlog_cmd in bash).
  * @param {Record<string, any>} [config] a valid config (default: this repo's)
  * @returns {{ prd: string, backlog: string }}
  */
 export function toolCommands(config = loadConfig().config) {
   return { prd: config.tool.prd, backlog: config.tool.backlog };
 }
+
+/** toolCommands per config file, read on first use. */
+const toolCache = new Map();
+const toolNames = () => {
+  const path = configPath();
+  let names = toolCache.get(path);
+  if (!names) toolCache.set(path, (names = toolCommands(loadConfig({ path }).config)));
+  return names;
+};
+
+/**
+ * This repo's tool command names, read when first asked for (never at import), so a
+ * hint is `${toolCmd.prd} land`: the core's files never hold the literal names (the
+ * boundary lint's tool-command rule).
+ */
+export const toolCmd = {
+  get prd() {
+    return toolNames().prd;
+  },
+  get backlog() {
+    return toolNames().backlog;
+  },
+};
 
 /**
  * The names other worktrees, the watchdog and GitHub share, built from the project's
@@ -513,7 +539,7 @@ export function toolCommands(config = loadConfig().config) {
 export function sharedNames(config = loadConfig().config) {
   const name = config.name;
   return {
-    /** pnpm backlog's lock, in the main checkout's git dir */
+    /** the backlog command's lock, in the main checkout's git dir */
     backlogLock: `${name}-backlog.lock`,
     /** the commit a worktree's check passed on, in its git dir */
     checked: `${name}-checked`,

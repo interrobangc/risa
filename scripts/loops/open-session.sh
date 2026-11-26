@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reopen a recorded session in a new iTerm2 tab. (pnpm prd open)
+# Reopen a recorded session in a new iTerm2 tab. (prd open)
 #
 #   open-session.sh <name> [--print] [--background] [--carry-on]
 #                                      <name> is a .loops worktree
@@ -60,7 +60,7 @@ if [[ -n $command ]]; then
   [[ -z $name ]] || die "open: a worktree or --command, not both"
   session=${title:-session} how="its command" title=""
 else
-  [[ -n $name ]] || die "usage: pnpm prd open <name> [--print] [--background]"
+  [[ -n $name ]] || die "usage: ${prd_cmd} open <name> [--print] [--background]"
   dir=$loops/$name
   if [[ -d $dir ]]; then
     choice=$(node "$bin/open-session.mjs" "$dir" ${carry[@]+"${carry[@]}"}) || exit 1

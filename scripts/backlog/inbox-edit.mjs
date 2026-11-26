@@ -1,4 +1,4 @@
-// Pure edits of the inbox (plans/inbox.md here) for `pnpm backlog inbox add|move|edit|remove`: text in,
+// Pure edits of the inbox (plans/inbox.md here) for `backlog inbox add|move|edit|remove`: text in,
 // text out. The origin writer (origin.mjs) applies them to origin/dev's copy.
 //
 // A bullet goes at the end of the first "## " section whose heading has its

@@ -1,4 +1,4 @@
-// The dispatcher's pick: what `pnpm prd dispatch` does this tick, and why it
+// The dispatcher's pick: what `prd dispatch` does this tick, and why it
 // passed every other topic over. Pure: the facts in (the dispatcher gathers
 // them), one action and its reasons out. No hold: a topic whose plan just
 // landed is `planned` like any other and may start on the next tick.
@@ -31,7 +31,7 @@
 //      `planned`, not `standing`, not `hold`, not running) plus the planners
 //      running number fewer than the lane cap (caps.prds) + 1. A `hold` topic
 //      is never planned here (its state is `hold`, not `to-write`); planning
-//      one early stays possible by hand (`pnpm prd plan`).
+//      one early stays possible by hand (`prd plan`).
 //   7. Starts before plans; within each, row order. `hold`, `done` and `idle`
 //      rows are never picked.
 //   8. A landed topic (facts.landed, landed.mjs's landedTopics: its last
@@ -47,7 +47,7 @@
 // `scripts/loops/session.sh`); a topic with no hot files collides with nothing.
 
 import { awaitsAnswer } from "./asks.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 import { WORK_VAR } from "./machine.mjs";
 
 /** A managed session that died is reopened this many times; the next death is an ask. */
@@ -66,7 +66,7 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
 /**
  * @typedef {{ topic: string, flags?: string[], after?: string[], hot?: string[],
  *   state: string, waiting?: number }} PickRow
- *   a `pnpm backlog prd list --json` row: state worked out, waiting items counted
+ *   a `backlog prd list --json` row: state worked out, waiting items counted
  * @typedef {{ name: string, branch: string }} PickWorktree
  *   a worktree in .loops: only prd/<topic> and plan/<topic> branches count
  * @typedef {{ name: string, live: boolean, managed?: boolean, rotating?: boolean,
@@ -176,7 +176,7 @@ export function pick(facts) {
     if (finished && w.kind === "plan") continue;
     const landed = w.kind === "prd" ? landedWhy(w.topic) : null;
     if (finished) why = "done; its worktree is left over";
-    else if (landed && !s?.live) why = `${landed}: not reopened (pnpm prd rm ${w.name} marks it done)`;
+    else if (landed && !s?.live) why = `${landed}: not reopened (${toolCmd.prd} rm ${w.name} marks it done)`;
     // The user's brake (or the answer "hold the topic"): a dead session stays down.
     else if (flags(row).includes("hold") && !s?.live) why = `on hold; ${what} isn't live (not reopened)`;
     else if (!s?.managed)
@@ -277,7 +277,7 @@ export function pick(facts) {
     if (!plannerFree)
       return `a planner is running (${activePlanners.map((w) => w.session).join(", ") || planners.map((w) => w.session).join(", ")})`;
     if (ahead >= lookahead)
-      return `the lookahead is full: ${waitingPlans.length} planned waiting${planners.length ? ` and ${planners.length} being planned` : ""}, lane cap ${caps.prds} + 1 (plan it by hand: pnpm prd plan)`;
+      return `the lookahead is full: ${waitingPlans.length} planned waiting${planners.length ? ` and ${planners.length} being planned` : ""}, lane cap ${caps.prds} + 1 (plan it by hand: ${toolCmd.prd} plan)`;
     return null;
   };
   const toWrite = rows.filter((r) => r.state === "to-write");
@@ -304,7 +304,7 @@ export function pick(facts) {
     else if (r.state === "done") continue;
     else if (r.state === "hold") why = "on hold";
     else if (r.state === "planned" && landedWhy(r.topic))
-      why = `${landedWhy(r.topic)}: never started again (mark it done: pnpm backlog prd set ${r.topic} flags=done)`;
+      why = `${landedWhy(r.topic)}: never started again (mark it done: ${toolCmd.backlog} prd set ${r.topic} flags=done)`;
     else if (r.state === "idle") why = "no waiting items";
     else if (workOff && (r.state === "planned" || r.state === "to-write")) why = workOff;
     else if (r.state === "planned") {

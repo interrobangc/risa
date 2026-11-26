@@ -4,11 +4,11 @@
 // RISA_LOAD_GATE=off is never busy, and a load that can't be read isn't
 // busy either. A check (check-run.sh, inside its lease) and a slice worktree's
 // creation (new.sh) wait while it's busy, for at most RISA_LOAD_WAIT
-// seconds (load_gate_wait in lib.sh); `pnpm prd start` only warns; the
-// dispatcher starts nothing new; `pnpm prd status` prints it.
+// seconds (load_gate_wait in lib.sh); `prd start` only warns; the
+// dispatcher starts nothing new; `prd status` prints it.
 //
 //   node load-gate.mjs          one line for scripts: "<busy|ok|off|unread> <load or -> <threshold> <cores>"
-//   node load-gate.mjs --say    one line for people (pnpm prd status)
+//   node load-gate.mjs --say    one line for people (prd status)
 //   node load-gate.mjs --json   the whole result
 //
 // RISA_LOAD_FILE stands in for the reading (tests): the file's numbers are

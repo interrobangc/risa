@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd skeptic | prompt skeptic: the skeptic's command line (the store, the
+// prd skeptic | prompt skeptic: the skeptic's command line (the store, the
 // checker and the brief are skeptics.mjs).
 //
 //   record --kind ask|land|plan|stall --verdict <v> --why "<one line>"
@@ -9,11 +9,12 @@
 //          [--slice <n> --defaults|--waits]                 stall (--waits: a never-list step, only ask)
 //          [--topic <t>] [--session <s>]                    prints the id
 //   [list] [--topic <t>] [--json]                           the verdicts, oldest first
-//   brief ask|land|plan|stall --evidence <file>                   (pnpm prd prompt skeptic …)
+//   brief ask|land|plan|stall --evidence <file>                   (prd prompt skeptic …)
 //
 // The directory is RISA_SKEPTIC_DIR (prd.sh sets the main checkout's
 // .loops/.skeptic). The topic and session default to what prd.sh passes as
 // --here-topic and --here-session.
+import { toolCmd } from "./config.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -28,12 +29,12 @@ import {
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const fail = (msg) => {
-  console.error(`pnpm prd: ${msg}`);
+  console.error(`${toolCmd.prd}: ${msg}`);
   process.exit(1);
 };
 
 const dirOf = () =>
-  process.env.RISA_SKEPTIC_DIR || fail("RISA_SKEPTIC_DIR isn't set (run this through pnpm prd)");
+  process.env.RISA_SKEPTIC_DIR || fail(`RISA_SKEPTIC_DIR isn't set (run this through ${toolCmd.prd})`);
 
 function parse(argv, valued, flags = []) {
   const opts = { offer: [] };
@@ -102,7 +103,7 @@ function list(argv) {
 
 function brief(argv) {
   const { opts, rest } = parse(argv, ["evidence"]);
-  if (rest.length !== 1) fail("usage: pnpm prd prompt skeptic ask|land|plan|stall --evidence <file>");
+  if (rest.length !== 1) fail(`usage: ${toolCmd.prd} prompt skeptic ask|land|plan|stall --evidence <file>`);
   if (!opts.evidence) fail("the skeptic's brief needs --evidence <file>");
   let evidence;
   try {

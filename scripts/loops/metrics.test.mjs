@@ -319,7 +319,7 @@ describe("usualTime", () => {
       "other",
     ]);
     expect(
-      ["roundtrip.mjs", "roundtrip.spec.mjs", "scripts/browser-checks/roundtrip.spec.mjs", "roundtrip"].map(
+      ["roundtrip.mjs", "roundtrip.spec.mjs", "checks/browser/roundtrip.spec.mjs", "roundtrip"].map(
         checkName,
       ),
     ).toEqual(["roundtrip", "roundtrip", "roundtrip", "roundtrip"]);

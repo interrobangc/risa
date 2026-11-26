@@ -1,5 +1,5 @@
-// ci-status.mjs: part of `pnpm prd ci` (ci.mjs has the map). `ci status`: each
-// branch's latest whole-tier verdict for `pnpm prd status`, through the status
+// ci-status.mjs: part of `prd ci` (ci.mjs has the map). `ci status`: each
+// branch's latest whole-tier verdict for `prd status`, through the status
 // cache, short when GitHub is away.
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME } from "./ci-io.mjs";
 import { readVerdict } from "./ci-runs.mjs";
@@ -11,7 +11,7 @@ import { ciTiers } from "./tier-data.mjs";
  * @typedef {import("./ci-io.mjs").Cache} Cache
  */
 
-/** `pnpm prd status` redraws every 5 s: GitHub is asked at most this often, and never for longer. */
+/** `prd status` redraws every 5 s: GitHub is asked at most this often, and never for longer. */
 const STATUS_TTL_MS = 30_000;
 const STATUS_TIMEOUT_MS = 10_000;
 

@@ -1,4 +1,4 @@
-// ci-blame.mjs: part of `pnpm prd ci` (ci.mjs has the map). `ci blame`: a file or
+// ci-blame.mjs: part of `prd ci` (ci.mjs has the map). `ci blame`: a file or
 // brake verdict split against a run on dev's tip, dev's failures filed and their
 // brake notices posted or withdrawn (the pure rules are blame.mjs). The gate
 // shares splitAgainstDev.

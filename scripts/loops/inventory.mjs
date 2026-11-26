@@ -1,5 +1,5 @@
 // The recovery inventory: the one place that decides what each .loops worktree
-// is and what `pnpm prd recover` does about it. Pure: a facts object in
+// is and what `prd recover` does about it. Pure: a facts object in
 // (inventory-facts.mjs collects one), a classification and an ordered action
 // list out. `down`, `recover`, `reclaim` and the recovery agent read this; they
 // don't re-derive it.
@@ -34,7 +34,7 @@
 //   resume-landing <branch>  a landing cut off midway (its journal in
 //                         .loops/.landing/, land-journal.mjs): recover only lists
 //                         it; the recovery agent and a resumed orchestrator run
-//                         `pnpm prd land --resume <branch>` before anything else
+//                         `prd land --resume <branch>` before anything else
 //   offer-gc <name>       merged slices (a dirty one is offered, and gc keeps it)
 //   open-session <name>   every prd and plan worktree (the recovery agent skips
 //                         the ones with a live session, and managed ones while
@@ -44,11 +44,11 @@
 // Every step is skipped when it's already true (a stack up, a server running),
 // so a second `recover` only has sessions and gc offers left.
 //
-// The down record (.loops/.down.json, written by `pnpm prd down`):
+// The down record (.loops/.down.json, written by `prd down`):
 //   { "at": "<ISO time>", "stacks": ["<name>", …], "servers": ["<name>", …], "testDb": true,
 //     "dispatcher": true }
 // Names that no longer have a worktree are skipped, with a warning.
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 export const CLASSES = ["prd", "plan", "active", "merged", "stackless"];
 export const STEPS = [
@@ -179,7 +179,7 @@ export function inventory(facts) {
   const disk = { freeGb, minGb, low: freeGb != null && freeGb < minGb };
   if (disk.low)
     warnings.push(
-      `free disk is ${freeGb} GB, under ${minGb} GB: new stacks may be refused (pnpm prd reclaim)`,
+      `free disk is ${freeGb} GB, under ${minGb} GB: new stacks may be refused (${toolCmd.prd} reclaim)`,
     );
   if (facts.downRecordError) warnings.push(`can't read the down record: ${facts.downRecordError} (ignored)`);
   for (const l of takenOver)
@@ -276,7 +276,7 @@ export function inventory(facts) {
     add({
       step: "resume-landing",
       target: l.branch,
-      why: `its landing was cut off at the ${l.step ?? "unknown"} step${l.at ? ` (${l.at})` : ""}: pnpm prd land --resume ${l.branch}, first`,
+      why: `its landing was cut off at the ${l.step ?? "unknown"} step${l.at ? ` (${l.at})` : ""}: ${toolCmd.prd} land --resume ${l.branch}, first`,
     });
   const managed = new Set(facts.managed ?? []);
   for (const w of worktrees.filter((w) => w.class === "merged"))
@@ -387,7 +387,7 @@ export function formatInventory(inv) {
   if (inv.landings.length)
     out.push(
       "",
-      "cut-off landings (pnpm prd land --resume <branch>, first):",
+      `cut-off landings (${toolCmd.prd} land --resume <branch>, first):`,
       ...inv.landings.map(
         (l) => `  ${l.branch}: at ${l.step ?? "an unknown step"}${l.path ? ` (${l.path})` : ""}`,
       ),

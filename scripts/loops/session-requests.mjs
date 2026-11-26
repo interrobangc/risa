@@ -2,8 +2,8 @@
 // Named backlog sessions on request. A session can't open a tab from its own
 // shell, so it files a request and the dispatcher's next tick opens it.
 //
-//   pnpm prd session request backlog <name> [--brief <file>] [--model <m>]
-//   pnpm prd session requests [--json]     pending ones, then those settled in the last day
+//   prd session request backlog <name> [--brief <file>] [--model <m>]
+//   prd session requests [--json]     pending ones, then those settled in the last day
 //
 // One JSON file per request in the main checkout's .loops/.requests
 // (RISA_REQUESTS_DIR): { id, kind, name, session (backlog-<name>), remote
@@ -20,6 +20,7 @@
 // (RISA_MAX_BACKLOG_SESSIONS, 4) counts every live backlog-kind session:
 // recorded, rotating within the grace, opened by hand (a claude process under a
 // backlog Remote Control name), or just opened and not up yet.
+import { toolCmd } from "./config.mjs";
 import {
   copyFileSync,
   linkSync,
@@ -317,12 +318,12 @@ export function requestNotice(
   return text(parts.map((p) => clip(p, cap)));
 }
 
-/** `pnpm prd status`'s part: the pending requests under a heading, or "". */
+/** `prd status`'s part: the pending requests under a heading, or "". */
 export function pendingPart(/** @type {string} */ dir) {
   const pending = readRequests(dir).filter((r) => r.state === "pending");
   if (!pending.length) return "";
   return [
-    `SESSION REQUESTS: ${pending.length} pending (pnpm prd session requests)`,
+    `SESSION REQUESTS: ${pending.length} pending (${toolCmd.prd} session requests)`,
     ...pending.map((r) => `${r.id}  ${r.remote}  from ${r.from ?? "-"}, ${r.requestedAt}`),
     "",
   ].join("\n");
@@ -347,12 +348,11 @@ function callerName(/** @type {string | undefined} */ sessionsDir) {
   }
 }
 
-const USAGE =
-  "usage: pnpm prd session request backlog <name> [--brief <file>] [--model <m>] | pnpm prd session requests [--json]";
+const USAGE = `usage: ${toolCmd.prd} session request backlog <name> [--brief <file>] [--model <m>] | ${toolCmd.prd} session requests [--json]`;
 
 async function cli(/** @type {string[]} */ argv) {
   const dir = process.env.RISA_REQUESTS_DIR;
-  if (!dir) throw new RequestError("RISA_REQUESTS_DIR isn't set (run this through pnpm prd)");
+  if (!dir) throw new RequestError(`RISA_REQUESTS_DIR isn't set (run this through ${toolCmd.prd})`);
   const [cmd, ...rest] = argv;
   if (cmd === "requests") {
     if (rest.length > 1 || (rest[0] && rest[0] !== "--json")) throw new RequestError(USAGE);
@@ -388,13 +388,13 @@ async function cli(/** @type {string[]} */ argv) {
   const r = createRequest(dir, { name, brief, model, from: callerName(process.env.RISA_SESSIONS_DIR) });
   console.log(r.id);
   console.error(
-    `Requested \`${r.remote}\`: the dispatcher's next tick opens it and posts the outcome (pnpm prd notices).`,
+    `Requested \`${r.remote}\`: the dispatcher's next tick opens it and posts the outcome (${toolCmd.prd} notices).`,
   );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   cli(process.argv.slice(2)).catch((e) => {
-    console.error(`pnpm prd: ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`${toolCmd.prd}: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(e instanceof RequestError ? 2 : 1);
   });
 }

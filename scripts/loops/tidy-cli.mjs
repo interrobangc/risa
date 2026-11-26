@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd tidy [--yes] [--json]: collects the facts tidy.mjs sorts, prints the
+// prd tidy [--yes] [--json]: collects the facts tidy.mjs sorts, prints the
 // safe and ask lists, and with --yes removes the safe ones and files the ask
 // list as one report in the asks queue.
 //
@@ -7,9 +7,9 @@
 //   --facts  the raw facts as JSON
 //   --yes    remove the safe ones (rm.sh, the testDb hook's drop-db, git fetch
 //            --prune, the stackLeftovers hook's remove, deleting tickets, logs and ended records,
-//            pnpm backlog archive for finished items; a dead lease only through
+//            backlog archive for finished items; a dead lease only through
 //            lease.sh's takeover, which keeps one retaken since), then
-//            file the ask list with `pnpm prd ask --report` (none when it's empty)
+//            file the ask list with `prd ask --report` (none when it's empty)
 //
 // Reading runs git, the hooks' read-only forms (stackEngine status, stackReady,
 // testDb facts and orphans, stackLeftovers), `lsof` (processes' working
@@ -26,7 +26,7 @@ import { collectFacts, parentOf } from "./inventory-facts.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, tidy } from "./tidy.mjs";
 import { factList, runHook } from "./hooks.mjs";
-import { branchKinds, loadConfig } from "./config.mjs";
+import { branchKinds, loadConfig, toolCmd } from "./config.mjs";
 import { gh as hostGh } from "./host.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -512,7 +512,9 @@ function main() {
     else if (a === "--json") mode = "json";
     else if (a === "--facts") mode = "facts";
     else if (a === "-h" || a === "--help") {
-      console.log("pnpm prd tidy [--yes] [--json]: list leftovers (safe, ask); --yes removes the safe ones");
+      console.log(
+        `${toolCmd.prd} tidy [--yes] [--json]: list leftovers (safe, ask); --yes removes the safe ones`,
+      );
       return;
     } else {
       console.error(`tidy: unknown argument ${a} (--yes, --json)`);
@@ -532,7 +534,7 @@ function main() {
   if (mode === "json") return console.log(JSON.stringify(lists, null, 2));
   console.log(formatTidy(lists));
   if (!yes) {
-    if (lists.safe.length) console.log("\nNothing changed. pnpm prd tidy --yes removes the safe ones.");
+    if (lists.safe.length) console.log(`\nNothing changed. ${toolCmd.prd} tidy --yes removes the safe ones.`);
     return;
   }
   console.log("");
@@ -560,7 +562,7 @@ function main() {
       },
     );
     if (r.status !== 0) {
-      console.error("tidy: couldn't file the report (pnpm prd ask --report)");
+      console.error(`tidy: couldn't file the report (${toolCmd.prd} ask --report)`);
       process.exit(1);
     }
   } else console.log("Nothing to ask about: no report filed.");

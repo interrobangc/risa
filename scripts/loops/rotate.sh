@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Replace an orchestrator's session with a fresh one. (pnpm prd rotate)
+# Replace an orchestrator's session with a fresh one. (prd rotate)
 #
 #   rotate.sh [<topic>] [--mid-wave] [--reason <text>]
 #

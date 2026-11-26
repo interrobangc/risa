@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd status-trim: keep a plan's _Status_ short by moving finished-wave
+// prd status-trim: keep a plan's _Status_ short by moving finished-wave
 // history into plans/<topic>-history.md (B-598). An orchestrator runs it after
 // each landing, once the docs are folded, and commits both files.
 //
@@ -32,6 +32,7 @@
 // Pure parts (trimStatus, nextSlice, statusBytes) take text; the CLI reads and
 // writes the files and asks git. `pnpm docs:budget` (doc-budget.mjs) warns
 // when a running topic's _Status_ passes STATUS_WARN_BYTES.
+import { toolCmd } from "./config.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -258,7 +259,7 @@ export function trimStatus(planText, { topic, historyText = "", isLanded = () =>
   }
   groups.sort((a, b) => (newer(a.r, b.r) ? -1 : newer(b.r, a.r) ? 1 : 0));
 
-  const pointer = `**History:** earlier hand-offs and landed waves' rows are in [\`plans/${topic}-history.md\`](${topic}-history.md) (\`pnpm prd status-trim\`).`;
+  const pointer = `**History:** earlier hand-offs and landed waves' rows are in [\`plans/${topic}-history.md\`](${topic}-history.md) (\`${toolCmd.prd} status-trim\`).`;
   const kept = blocks.filter((_, i) => !moved.has(i));
   if (!kept.some((b) => b.includes(`${topic}-history.md`))) {
     const mode = kept.findIndex((b) => isLandingMode(leadOf(b)) || /^\*\*Landing mode/i.test(b));
@@ -273,7 +274,7 @@ export function trimStatus(planText, { topic, historyText = "", isLanded = () =>
   }
   const intro =
     `# History: ${topic}\n\n` +
-    `Finished-wave history moved out of [the plan](${topic}-plan.md)'s _Status_ by \`pnpm prd status-trim ${topic}\`, the newest trim first.`;
+    `Finished-wave history moved out of [the plan](${topic}-plan.md)'s _Status_ by \`${toolCmd.prd} status-trim ${topic}\`, the newest trim first.`;
   const base = historyText.trim() ? historyText : `${intro}\n`;
   const first = /^## /m.exec(base);
   const history = first
@@ -341,7 +342,7 @@ export async function main(/** @type {string[]} */ argv, { out = console.log, er
   const next = flag("--next");
   const [topic, ...rest] = args;
   if (!topic || rest.length || !/^[a-z0-9][a-z0-9-]*$/.test(topic)) {
-    err("usage: pnpm prd status-trim <topic> [--dry-run] [--base <ref>] [--next]");
+    err(`usage: ${toolCmd.prd} status-trim <topic> [--dry-run] [--base <ref>] [--next]`);
     return 2;
   }
   if (!repo) {

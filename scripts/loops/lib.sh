@@ -2,7 +2,7 @@
 # Shared by the scripts in scripts/loops/. Source it; don't run it.
 
 # loops_lib_dir → this file's folder, absolute, resolved once as it is sourced:
-# `pnpm prd` runs it by a relative path, and a later `cd` (new.sh's into a new
+# `prd` runs it by a relative path, and a later `cd` (new.sh's into a new
 # worktree) would point a relative one at another checkout. With CDPATH set, a
 # relative `cd` prints the folder it found, so $(cd … && pwd) would read it
 # twice: every script sources this first, so it goes here.
@@ -111,8 +111,12 @@ backlog_id_normalize() {
 }
 
 # tool_command NAME → what the tool's own command NAME (prd, backlog) is called
-# in this repo: `pnpm prd` here (config.mjs's toolCommands in Node).
+# in this repo: the config's tool.NAME (config.mjs's toolCommands and toolCmd in Node).
 tool_command() { config_get "tool.$1"; }
+# prd_cmd, backlog_cmd → the two, as every printed hint, prompt and usage line names
+# them (the boundary lint refuses the literal names in a core file).
+prd_cmd=$(tool_command prd)
+backlog_cmd=$(tool_command backlog)
 
 # project_command NAME → the project's command NAME (commands.NAME in the config:
 # install, check, typecheck, typegen, datastoreStart…); fails when it isn't set.
@@ -169,17 +173,17 @@ landing_hook() {
 not_files() {
   if (($#)); then grep -vxF -f <(printf '%s\n' "$@") || true; else cat; fi
 }
-# The PRD cap (lanes): `pnpm prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
+# The PRD cap (lanes): `prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
 # wins over RISA_MAX_PRDS; the default is 4. max_prds_from says which one set it.
 prd_cap_file=$loops/.prd-cap
 max_prds=${RISA_MAX_PRDS:-4} max_prds_from=${RISA_MAX_PRDS:+RISA_MAX_PRDS}
 max_prds_from=${max_prds_from:-default}
 if [[ -r $prd_cap_file ]] && _cap=$(<"$prd_cap_file") && [[ $_cap =~ ^[1-9][0-9]?$ ]]; then
-  max_prds=$_cap max_prds_from="pnpm prd dispatch --cap"
+  max_prds=$_cap max_prds_from="${prd_cmd} dispatch --cap"
 fi
 unset _cap
 
-# dispatch_pid → the running dispatcher's pid (pnpm prd dispatch: its lock,
+# dispatch_pid → the running dispatcher's pid (prd dispatch: its lock,
 # .loops/.dispatch.lock), or nothing and false when none runs.
 dispatch_pid() {
   local p
@@ -241,7 +245,7 @@ prd_count() {
 die() { echo "$*" >&2; exit 1; }
 
 # end_pid PID LABEL [SECS] → end a session's process: TERM, then KILL after SECS
-# seconds (default 10). For pnpm prd end and rm.sh, which ends its caller's own
+# seconds (default 10). For prd end and rm.sh, which ends its caller's own
 # session; say what it ends first, since ending the caller's session may take
 # the output with it.
 end_pid() {
@@ -293,7 +297,7 @@ web_port() { fact web_port "$(stack_hook stackStatus "$1" 2>/dev/null || true)";
 # server_pids PORT → pids listening on PORT.
 server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 
-# checked_file DIR → where `pnpm prd check` records the commit it passed on
+# checked_file DIR → where `prd check` records the commit it passed on
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/$project_name-checked"; }
 
@@ -320,7 +324,7 @@ check_base() {
 }
 
 # The record is one line: `<sha> full`, or `<sha> quick <base> <why>` for a
-# `pnpm prd check --quick` (typecheck, lint, format and the tests related to
+# `prd check --quick` (typecheck, lint, format and the tests related to
 # the diff since <base>). A bare `<sha>` (older records) reads as full.
 
 # exempt_re → the paths that need no check: docs, the tool's own folders while
@@ -424,8 +428,8 @@ node_is() {
 }
 
 # trunk_drift BRANCH [REF] → the files dev (or REF) changed since BRANCH last
-# merged it, other than the backlog files and CI's two lists (pnpm backlog and
-# pnpm prd ci commit those onto dev, and they never affect a branch's code).
+# merged it, other than the backlog files and CI's two lists (backlog and
+# prd ci commit those onto dev, and they never affect a branch's code).
 # Empty means BRANCH is up to date with dev.
 trunk_drift() {
   git -C "$main" diff --name-only "$1...${2:-$trunk}" | not_files "${backlog_files[@]}" ${ci_lists[@]+"${ci_lists[@]}"}
@@ -445,7 +449,7 @@ trunk_lists() {
   done
 }
 
-# Machine-wide leases (browser checks, pnpm prd check) live in lease.sh.
+# Machine-wide leases (browser checks, prd check) live in lease.sh.
 
 # fmt_secs N → 1m05s.
 fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
@@ -536,7 +540,7 @@ require_disk() {
   [[ $free =~ ^[0-9]+$ ]] || return 0
   ((free >= min)) && return 0
   die "Refusing $1: only $free GB free on the disk holding $main, under the $min GB line (RISA_MIN_FREE_GB).
-See what can go, and free it: pnpm prd reclaim"
+See what can go, and free it: ${prd_cmd} reclaim"
 }
 
 # disk_line → "disk: N GB free (line M GB)", flagged LOW under the line.
@@ -544,7 +548,7 @@ disk_line() {
   local free min
   free=$(free_gb) min=$(min_free_gb)
   if [[ ! $free =~ ^[0-9]+$ ]]; then echo "disk: free space unknown (df failed)"; return 0; fi
-  echo "disk: $free GB free (line $min GB)$( ((free < min)) && echo " · LOW: new stacks and check builds are refused: pnpm prd reclaim")"
+  echo "disk: $free GB free (line $min GB)$( ((free < min)) && echo " · LOW: new stacks and check builds are refused: ${prd_cmd} reclaim")"
 }
 
 # GitHub pull requests (review.sh; land and ready reuse these). Every call goes
@@ -625,7 +629,7 @@ pr_seam() {
   echo "RISA_PR_THROWAWAY: $trunk is never pushed; $1 is measured against $drift_ref"
 }
 
-# with_backlog_lock CMD… → run CMD in a subshell under pnpm backlog's lock (the
+# with_backlog_lock CMD… → run CMD in a subshell under backlog's lock (the
 # same directory, taken over after 30 s as backlog.mjs does), so no backlog
 # write moves or amends dev meanwhile. CMD's failures (die) end the subshell
 # and the lock is still dropped.
@@ -665,7 +669,7 @@ land_push_trunk() {
   after=$(git -C "$main" rev-parse "refs/heads/$trunk")
   [[ $before != "$after" ]] || return 0
   moved=$(git -C "$main" diff --name-only "$before" "$after" | not_files "${backlog_files[@]}" ${ci_lists[@]+"${ci_lists[@]}"})
-  [[ -z $moved ]] || die "origin/$trunk brought changes this landing's checks didn't see (${moved%%$'\n'*}…): nothing landed; run \`pnpm prd sync\`, then land again"
+  [[ -z $moved ]] || die "origin/$trunk brought changes this landing's checks didn't see (${moved%%$'\n'*}…): nothing landed; run \`${prd_cmd} sync\`, then land again"
 }
 _push_trunk() {
   local here there
@@ -673,12 +677,12 @@ _push_trunk() {
   there=$(git -C "$main" rev-parse --verify --quiet "refs/remotes/origin/$trunk" || true)
   if [[ $here == "$there" ]]; then echo "origin/$trunk is up to date"; return 0; fi
   [[ -z $there ]] || git -C "$main" merge-base --is-ancestor "$there" "$here" ||
-    die "origin/$trunk has diverged from the main checkout's $trunk (it has commits $trunk lacks): bring them in (pnpm prd dev-sync), then rerun"
+    die "origin/$trunk has diverged from the main checkout's $trunk (it has commits $trunk lacks): bring them in (${prd_cmd} dev-sync), then rerun"
   git -C "$main" push --quiet origin "refs/heads/$trunk:refs/heads/$trunk" || die "couldn't push $trunk to origin"
   echo "pushed $trunk to origin (${there:0:7}..${here:0:7})"
 }
 
-# backlog_commit SHA → true when SHA is a pnpm backlog commit: one parent, the
+# backlog_commit SHA → true when SHA is a backlog commit: one parent, the
 # Backlog-Tool: trailer, and only the backlog files changed.
 backlog_commit() {
   local files
@@ -812,7 +816,7 @@ _move_trunk() {
   fi
   if ! git -C "$main" read-tree -m -u "$old" "$target"; then
     [[ -z $tmp ]] || rm -rf "$tmp"
-    die "dev-sync: uncommitted changes in $main touch files the update changes: commit or stash them, then: pnpm prd dev-sync"
+    die "dev-sync: uncommitted changes in $main touch files the update changes: commit or stash them, then: ${prd_cmd} dev-sync"
   fi
   if [[ -n $tmp ]]; then
     gd=$(git -C "$main" rev-parse --absolute-git-dir)
@@ -824,5 +828,5 @@ _move_trunk() {
     echo "dev-sync: kept your uncommitted lines in $inbox_path"
   fi
   git -C "$main" update-ref -m "dev-sync: $why" "refs/heads/$trunk" "$new" "$old" ||
-    die "dev-sync: $trunk moved meanwhile; rerun pnpm prd dev-sync"
+    die "dev-sync: $trunk moved meanwhile; rerun ${prd_cmd} dev-sync"
 }

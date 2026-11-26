@@ -23,7 +23,7 @@ lease_free_slot() {
   slot=""
   if [[ -n $want ]]; then
     [[ $want =~ ^[0-9]+$ ]] && ((want >= 1 && want <= 19)) || die "slot must be 1-19"
-    slot_busy "$want" && die "slot $want is taken (pnpm prd status)"
+    slot_busy "$want" && die "slot $want is taken (${prd_cmd} status)"
     lease_slot "$want" "$1" || die "slot $want was just taken"
     slot=$want
   else

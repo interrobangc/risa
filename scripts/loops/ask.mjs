@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd ask | asks | answer: the asks queue's command line (the store is asks.mjs).
+// prd ask | asks | answer: the asks queue's command line (the store is asks.mjs).
 //
 //   ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]
 //                                     file a question; one with a recommendation says whether it
@@ -56,14 +56,14 @@ import {
   span,
   validateAsk,
 } from "./asks.mjs";
-import { loadConfig } from "./config.mjs";
+import { loadConfig, toolCmd } from "./config.mjs";
 import { notify, runBounded } from "./host.mjs";
 import { SkepticError, questionHash, useRecord } from "./skeptics.mjs";
 
 const TIMED_OUT = 75;
 
 const fail = (msg, code = 1) => {
-  console.error(`pnpm prd: ${msg}`);
+  console.error(`${toolCmd.prd}: ${msg}`);
   process.exit(code);
 };
 
@@ -77,7 +77,8 @@ const nowOf = () => {
   return Date.now();
 };
 
-const dirOf = () => process.env.RISA_ASKS_DIR || fail("RISA_ASKS_DIR isn't set (run this through pnpm prd)");
+const dirOf = () =>
+  process.env.RISA_ASKS_DIR || fail(`RISA_ASKS_DIR isn't set (run this through ${toolCmd.prd})`);
 
 // Each option takes one value; --option repeats.
 function parse(argv, valued, flags = []) {
@@ -191,7 +192,7 @@ async function ask(argv) {
       ? ` (takes "${shorten(record.recommended, 40)}" at ${clock(record.defaultAt)} unless answered)`
       : "";
     console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}${when}`);
-    console.log(`Then wait in the background: pnpm prd ask --wait ${record.id}`);
+    console.log(`Then wait in the background: ${toolCmd.prd} ask --wait ${record.id}`);
   } else console.log("Filed. No PushNotification for a report: only questions are pushed.");
   await tell(record);
 }
@@ -205,10 +206,11 @@ function spendVerdict(opts, input, chose) {
   if (opts.skeptic == null) {
     if (DISPATCHER_SESSIONS.includes(opts.session)) return null;
     fail(
-      `a question goes to a skeptic first. Nothing was filed. Write the question, options, recommendation and evidence to a file; run a fresh agent on Opus with the brief from pnpm prd prompt skeptic ask --evidence <file>; record its answer with pnpm prd skeptic record --kind ask --verdict decide|ask --why "<its line>" --question "<text>" --offer "<a>"… --defaults|--waits [--option "<chosen>"]. On ask, file this again with --skeptic <id>; on decide, file it with pnpm prd ask --decided --skeptic <id> --chose "<a>"`,
+      `a question goes to a skeptic first. Nothing was filed. Write the question, options, recommendation and evidence to a file; run a fresh agent on Opus with the brief from ${toolCmd.prd} prompt skeptic ask --evidence <file>; record its answer with ${toolCmd.prd} skeptic record --kind ask --verdict decide|ask --why "<its line>" --question "<text>" --offer "<a>"… --defaults|--waits [--option "<chosen>"]. On ask, file this again with --skeptic <id>; on decide, file it with ${toolCmd.prd} ask --decided --skeptic <id> --chose "<a>"`,
     );
   }
-  const dir = process.env.RISA_SKEPTIC_DIR || fail("RISA_SKEPTIC_DIR isn't set (run this through pnpm prd)");
+  const dir =
+    process.env.RISA_SKEPTIC_DIR || fail(`RISA_SKEPTIC_DIR isn't set (run this through ${toolCmd.prd})`);
   const hash = questionHash(input.text, input.options);
   const wanted = opts.decided
     ? {
@@ -279,7 +281,7 @@ function asks(argv) {
 
 function answer(argv) {
   const [id, ...words] = argv;
-  if (!id || !words.length) fail("usage: pnpm prd answer <id> <option number or text>");
+  if (!id || !words.length) fail(`usage: ${toolCmd.prd} answer <id> <option number or text>`);
   const a = answerAsk(dirOf(), id, words.join(" "));
   console.log(`${a.id} answered: ${a.answer}`);
 }

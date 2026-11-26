@@ -3,23 +3,23 @@
 #
 #   prompt.sh orchestrator <topic>     paste into a new session in .loops/<topic>:
 #     cd .loops/<topic> && claude --remote-control prd-<topic> "$(scripts/loops/prompt.sh orchestrator <topic>)"
-#     (pnpm prd start <topic> prints this)
+#     (prd start <topic> prints this)
 #   prompt.sh orchestrator <topic> --auto   the same, landing every wave without asking (the dispatcher uses it)
 #   prompt.sh orchestrator <topic> --resume [--auto]   take over after an interruption: reconcile
 #     the plan's _Status_ with git, respawn in-flight slices with --continue
-#   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (pnpm prd plan <topic> --open)
+#   prompt.sh plan <topic> [B-n …]     a planning session in .loops/plan-<topic> (prd plan <topic> --open)
 #   prompt.sh plan <topic> --auto [B-n …]   the same, unattended (the dispatcher's): questions and
-#     the report through pnpm prd ask, never AskUserQuestion
+#     the report through prd ask, never AskUserQuestion
 #   prompt.sh slice <topic> <n>        the prompt an orchestrator gives a slice agent
 #   prompt.sh slice <topic> <n> --continue   the same, for an agent picking up an interrupted slice
-#   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (pnpm prd hotfix prints it)
-#   prompt.sh backlog [--brief <file> | --no-brief | --guide]   a backlog and inbox planning session in the main checkout (pnpm prd plan);
+#   prompt.sh hotfix <name> ["<the fix>"]   a hotfix session in .loops/hotfix-<name> (prd hotfix prints it)
+#   prompt.sh backlog [--brief <file> | --no-brief | --guide]   a backlog and inbox planning session in the main checkout (prd plan);
 #     it reads whether the dispatcher runs: then deciding what runs next is moving and holding rows.
 #     --brief puts the file's text at the top, under "Brief from the session before";
 #     --no-brief says at the top that the context watch rotated the last session with none
 #   prompt.sh inbox                    the inbox agent, in its own directory outside the repository
-#     (pnpm prd inbox): self-contained, so it reads no doc; it adds, rewords, moves and removes unfiled inbox lines, nothing else
-#   prompt.sh recover                  the recovery agent, in the main checkout (pnpm prd recover opens it)
+#     (prd inbox): self-contained, so it reads no doc; it adds, rewords, moves and removes unfiled inbox lines, nothing else
+#   prompt.sh recover                  the recovery agent, in the main checkout (prd recover opens it)
 #   prompt.sh tidy                     the cleanup brief for a cheap session (haiku), in the main checkout
 #   prompt.sh skeptic ask|land|plan|stall --evidence <file>   the brief for a fresh skeptic (skeptic.mjs)
 #

@@ -13,13 +13,13 @@
 //   - each claim then: dropped when its worktree, managed record or topic is gone, or the session
 //     came back meanwhile (a record started after the stall); left alone while paused, draining,
 //     on hold, being rotated, with a landing marker (a journal for its branch, or a landing
-//     under it) or, while live, running a `pnpm prd` command; a live one is ended (TERM, KILL
+//     under it) or, while live, running a `prd` command; a live one is ended (TERM, KILL
 //     END_WAIT_MS later), then resumed on a later tick; a dead one is resumed, the oldest claim
 //     first, one per tick.
 import { END_WAIT_MS } from "./drain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { stallHolds, timeOf } from "./usage.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 /**
  * @typedef {{ session: string, stalled: { at?: string | number | null, error?: string,
@@ -52,7 +52,7 @@ export const sessionOfBranch = (/** @type {string} */ branch) => {
  *   drain: { state: "normal" | "draining" | "limited", why: string }, paused?: boolean, now: number,
  *   endWaitMs?: number }} facts
  *   landing: sessions with a landing marker or a landing under them; commands: live sessions
- *   running a `pnpm prd` command (null: the process table couldn't be read)
+ *   running a `prd` command (null: the process table couldn't be read)
  * @returns {ResumeDecision}
  */
 export function resumeDecision({
@@ -106,7 +106,7 @@ export function resumeDecision({
   if (hand.length)
     out.report = {
       sessions: hand,
-      text: `${hand.join(", ")} stopped on a usage limit that has now reset. The dispatcher resumes only the sessions it started, never one opened by hand: carry on in ${hand.length === 1 ? "it" : "them"} (pnpm prd open <name> if ${hand.length === 1 ? "it has" : "they have"} ended).`,
+      text: `${hand.join(", ")} stopped on a usage limit that has now reset. The dispatcher resumes only the sessions it started, never one opened by hand: carry on in ${hand.length === 1 ? "it" : "them"} (${toolCmd.prd} open <name> if ${hand.length === 1 ? "it has" : "they have"} ended).`,
     };
 
   // ---- each claim ----
@@ -130,7 +130,7 @@ export function resumeDecision({
     else if (rec.live) {
       const pid = Number(rec.pid);
       if (commands === null) out.waits.push({ session, why: "the process table can't be read" });
-      else if (commands.has(session)) out.waits.push({ session, why: "it runs a pnpm prd command" });
+      else if (commands.has(session)) out.waits.push({ session, why: `it runs a ${toolCmd.prd} command` });
       else if (c.termPid === pid && c.termAt != null && now - c.termAt >= endWaitMs)
         out.acts.push({ type: "kill", session, pid });
       else if (c.termPid === pid) out.waits.push({ session, why: "sent TERM; waiting for it to end" });

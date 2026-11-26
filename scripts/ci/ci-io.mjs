@@ -1,4 +1,4 @@
-// ci-io.mjs: part of `pnpm prd ci` (ci.mjs has the map). The exit codes, the
+// ci-io.mjs: part of `prd ci` (ci.mjs has the map). The exit codes, the
 // shared types (Io, Run, Board, Cache) and the real Io: git and gh, the notice
 // board, the status cache, the backlog's locked write and the terminal. Tests
 // pass their own Io, so nothing else here touches the machine.
@@ -99,7 +99,7 @@ function noticeBoard() {
   };
 }
 
-/** The backlog's locked write (`pnpm backlog ci-file`). */
+/** The backlog's locked write (`backlog ci-file`). */
 function fileFindings(/** @type {any[]} */ findings, /** @type {boolean} */ push) {
   const cli = join(dirname(fileURLToPath(import.meta.url)), "..", "backlog", "backlog.mjs");
   const r = spawnSync(process.execPath, [cli, "ci-file", ...(push ? ["--push"] : [])], {

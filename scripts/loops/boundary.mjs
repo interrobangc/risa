@@ -15,6 +15,11 @@
 //                    (its config folder, CLAUDE_CONFIG_DIR, .claude.json, the
 //                    session settings files) or reading its hook and status line
 //                    input's fields (transcript_path, rate_limits, …) in code
+//   tool-command     the tool's own commands by this repo's names (pnpm, then prd or
+//                    backlog) anywhere in a core file but a test or fixture: a hint,
+//                    prompt or usage line names them through config.mjs's toolCmd or
+//                    lib.sh's prd_cmd and backlog_cmd, and a generic doc through
+//                    `{{prd}}` and `{{backlog}}`, which the doc command fills in
 // The two reach rules see every form, and a finding names its form:
 //   import    a JS import, dynamic import or require; a shell `source` or `.`
 //   --import  a path handed to Node's --import
@@ -34,7 +39,7 @@
 // edits only the lines of the files it changes.
 //
 // How it reads a file:
-// - The two names rules read every character of a core file, comments too.
+// - The two names rules and tool-command read every character of a core file, comments too.
 // - The path rules (app-path and the reach rules) read code and strings, not
 //   comments. In a regular expression `\/` and `\.` read as `/` and `.`.
 // - A path is resolved from the repo's root, from the file's own folder
@@ -69,6 +74,7 @@ export const RULES = [
   "project-env",
   "project-name",
   "project-to-core",
+  "tool-command",
 ];
 export const FORMS = ["import", "--import", "spawn", "path"];
 
@@ -95,6 +101,9 @@ const CLAUDE_FILES = new RegExp(
 );
 const callsHost = (/** @type {string} */ path) =>
   path !== HOST && path !== SELF && !/(\.test\.[a-z]+|-fixture\.mjs)$/.test(path);
+/** The tool's own commands by this repo's names, which a core file never spells out. */
+const TOOL_COMMAND = /(?<![\w.-])pnpm (?:prd|backlog)(?![\w-])/g;
+const isTest = (/** @type {string} */ path) => /(\.test\.[a-z]+|-fixture\.mjs)$|\.fixtures\//.test(path);
 
 const inRoots = (path) => ROOTS.some((root) => path.startsWith(`${root}/`));
 const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -510,6 +519,7 @@ export function findings({ files, owners, project, data = [] }) {
             return " ".repeat(m.length);
           });
         if (nameRe) for (const m of rest.matchAll(nameRe)) add("project-name", null, m[0]);
+        if (!isTest(file)) for (const m of raw[i].matchAll(TOOL_COMMAND)) add("tool-command", null, m[0]);
       }
       if (!paths) continue;
       const line = (code[i] ?? "").replace(/\\([/.-])/g, "$1");

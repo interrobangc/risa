@@ -23,14 +23,14 @@
 //     (its flags plus done, less hold), or why they write none: no row, a
 //     standing topic, or already done. (rotate.mjs re-exports both.)
 //   - itemsLeft(items): the ids of a topic's items that aren't finished (landed,
-//     staging, live or dropped), from `pnpm backlog list --all --prd <t> --json`.
+//     staging, live or dropped), from `backlog list --all --prd <t> --json`.
 //
 // CLI:
 //   node landed.mjs tail <repo> <branch> <trunk> <topic>
 //       → one line: <kind> <landing sha or -> <commits past it>
 //   node landed.mjs slices-left <plan file>   the slices left, one line, space-
 //       separated (empty: none); exit 2 when there is no table to read
-//   node landed.mjs done-flags <topic>        stdin: `pnpm backlog prd list
+//   node landed.mjs done-flags <topic>        stdin: `backlog prd list
 //       --json`; prints the flags to set (exit 0), or why not (exit 1)
 //   node landed.mjs items-left        stdin: the items' JSON; prints the ids
 //                                      left (exit 1), or nothing (exit 0)

@@ -1,4 +1,4 @@
-// Whose failure it is: pure, so `pnpm prd ci blame` and `ci file` (ci.mjs) and the
+// Whose failure it is: pure, so `prd ci blame` and `ci file` (ci.mjs) and the
 // tests share it.
 //
 // A branch's failures are compared with a run on dev's tip. Failing there too is

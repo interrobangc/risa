@@ -17,7 +17,7 @@
 //     prints one field's value only (stack: yes or no)
 // A slice's body is also read for line-number anchors (`file.mjs ~158`,
 // `:231`), which go stale on hot files: `lineAnchors` finds them, and
-// `pnpm prd anchors` (anchors.mjs) warns on each.
+// `prd anchors` (anchors.mjs) warns on each.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 

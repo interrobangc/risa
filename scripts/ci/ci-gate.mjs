@@ -1,6 +1,7 @@
-// ci-gate.mjs: part of `pnpm prd ci` (ci.mjs has the map). `ci gate`, the landing
+// ci-gate.mjs: part of `prd ci` (ci.mjs has the map). `ci gate`, the landing
 // gate: the verdict that still vouches for the tip, a run requested when there is
 // none, blame when it's needed, then the decision (the pure rules are gate.mjs).
+import { toolCmd } from "../loops/config.mjs";
 import { writeFileSync } from "node:fs";
 
 import { keepsVerdict, syncTier } from "../loops/check-plan.mjs";
@@ -89,7 +90,7 @@ export async function gate(
       io,
     );
     if (!verdict) {
-      io.log(`no verdict came back. Retry: pnpm prd ci run ${need} --ref ${branch} --wait`);
+      io.log(`no verdict came back. Retry: ${toolCmd.prd} ci run ${need} --ref ${branch} --wait`);
       return code || EXIT.unknown;
     }
   }

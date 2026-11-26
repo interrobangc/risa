@@ -10,6 +10,7 @@
 // A verdict only ever speaks for its own commit: one for another commit, a narrowed run
 // or a proof run writes nothing. Second-zone failures are filed and never change the
 // status. No command here edits a ruleset, or opens or merges a PR. Exit 6 is a refusal.
+import { toolCmd } from "../loops/config.mjs";
 import { REFUSED, Refusal, isAncestor, refuse, short } from "./candidate.mjs";
 import { releasePasses } from "./gate.mjs";
 
@@ -24,8 +25,7 @@ const MAX_NOTICE = 200;
 const STAGING = "refs/remotes/origin/staging";
 const OPEN_PR = "gh pr create --base main --head staging --title 'chore(release): staging to main'";
 const MAIN = "refs/remotes/origin/main";
-const USAGE =
-  'usage: pnpm prd ci release [--wait <min>] [--rerun] | ci override <commit> --reason "…" | ci release-test <commit>';
+const USAGE = `usage: ${toolCmd.prd} ci release [--wait <min>] [--rerun] | ci override <commit> --reason "…" | ci release-test <commit>`;
 /** The proof's status: `error`, so a test commit that later reached a PR could never pass on it. */
 export const TEST_STATUS = { state: "error", description: "test of the status write, not a verdict" };
 
@@ -162,21 +162,21 @@ async function release(
       io,
     );
     if (!speaksFor(verdict, sha)) {
-      io.log(`no verdict for ${short(sha)}: ${GATE_CONTEXT} is unchanged. Retry: pnpm prd ci release`);
+      io.log(`no verdict for ${short(sha)}: ${GATE_CONTEXT} is unchanged. Retry: ${toolCmd.prd} ci release`);
       return code || UNKNOWN;
     }
   }
 
   const status = gateStatus(verdict, sha);
   if (!writeGateStatus(io, sha, status, run?.url)) {
-    io.log(`could not write ${GATE_CONTEXT} on ${short(sha)}. Retry: pnpm prd ci release`);
+    io.log(`could not write ${GATE_CONTEXT} on ${short(sha)}. Retry: ${toolCmd.prd} ci release`);
     return UNKNOWN;
   }
   io.log(`${GATE_CONTEXT}: ${status.state} on ${short(sha)} (${status.description})`);
 
   if (deps.fileZoneVerdict(verdict, run, io) !== 0)
     io.log(
-      `warning: the second-zone failures aren't all filed. Retry: pnpm prd ci zone-file origin/staging --run ${verdict.runId}`,
+      `warning: the second-zone failures aren't all filed. Retry: ${toolCmd.prd} ci zone-file origin/staging --run ${verdict.runId}`,
     );
 
   const now = openReleasePr(io);

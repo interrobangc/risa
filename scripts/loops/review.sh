@@ -25,7 +25,7 @@
 #
 # With --json, stdout carries only the verdict; progress lines go to stderr.
 # A topic means prd/<topic>; prd/, hotfix/ and other branches are taken as given.
-# Each answer on a head goes to the run log once (run-log.mjs), for pnpm prd metrics.
+# Each answer on a head goes to the run log once (run-log.mjs), for prd metrics.
 # Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
 # answered with its usage-limit comment), 75 when --wait times out, 3 for
 # anything else (no open PR, gh failing, a bad argument).
@@ -55,11 +55,11 @@ while (($#)); do
   shift
 done
 [[ -n $what ]] || what=$(topic_of "$(here_name)")
-[[ -n $what ]] || fail "which branch? (pnpm prd review <topic|branch>)"
+[[ -n $what ]] || fail "which branch? (${prd_cmd} review <topic|branch>)"
 branch=$(pr_branch "$what")
 
 number=$(pr_for "$branch") || fail "gh couldn't list $branch's PRs (gh auth status?)"
-[[ -n $number ]] || fail "no open PR from $branch into $trunk (pnpm prd pr ${branch#"$prd_prefix"})"
+[[ -n $number ]] || fail "no open PR from $branch into $trunk (${prd_cmd} pr ${branch#"$prd_prefix"})"
 
 for id in ${resolve[@]+"${resolve[@]}"}; do
   # shellcheck disable=SC2016

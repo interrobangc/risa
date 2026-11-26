@@ -12,12 +12,12 @@
 # A PRD worktree whose branch is merged into dev (or landed there, with only
 # docs past its last landing: landed.mjs), whose plan's _Status_ has no slice
 # left to run and whose items are all landed marks its topic done in the PRD
-# registry (pnpm backlog prd set <topic> flags=…,done), except a standing
+# registry (backlog prd set <topic> flags=…,done), except a standing
 # topic; with the old prose table, or when _Status_ can't be read, it marks
 # nothing and says so. Such a docs tail is landed in dev (a local merge), or
 # dropped with the branch when it changes only the topic's own plan.
 # A standing topic's PRD worktree (a fixes wave) clears its row's hot files
-# instead (pnpm backlog prd set <topic> hot=—), merged or not; its flags stay.
+# instead (backlog prd set <topic> hot=—), merged or not; its flags stay.
 # --no-registry does neither: the dispatcher's undo of a start it couldn't
 # finish (a fresh prd/ branch from dev counts as merged) leaves the row alone.
 #
@@ -54,8 +54,8 @@ fi
 # a deleted directory, where the harness runs no more commands (B-812). Its own
 # orchestrator or planner (the live session record this worktree's name gives,
 # held by the calling shell's claude) is on its last step: rm ends that session
-# itself once it's done, as pnpm prd end would. Any other caller is refused,
-# with the line to run from the main checkout instead (and pnpm prd end with
+# itself once it's done, as prd end would. Any other caller is refused,
+# with the line to run from the main checkout instead (and prd end with
 # it for a prd/ or plan/ worktree's caller under a claude with no record).
 case $branch in
   "$prd_prefix"*) record=prd-${branch#"$prd_prefix"} ;;
@@ -146,10 +146,10 @@ git -C "$main" worktree remove ${force:+--force} "$dir"
 # The caller was inside it (its own session, above): keep a cwd that exists.
 [[ -z $end_self ]] || cd "$main"
 release_slot "$name"
-# The run log (run-log.mjs): a slice's end, for pnpm prd metrics. Never fails.
+# The run log (run-log.mjs): a slice's end, for prd metrics. Never fails.
 [[ $branch != "$slice_prefix"* ]] || run_log slice-end "name=$name" "branch=$branch" "merged:=$slice_merged"
 # Its session record (session.sh), if it had one: the session itself isn't
-# touched (a planner removes its worktree, then ends with pnpm prd end).
+# touched (a planner removes its worktree, then ends with prd end).
 case $branch in
   "$prd_prefix"*) rm -f "$loops/.sessions/prd-${branch#"$prd_prefix"}.json" ;;
   "$plan_prefix"*) rm -f "$loops/.sessions/plan-${branch#"$plan_prefix"}.json" ;;
@@ -183,7 +183,7 @@ if [[ -n $mark_done ]]; then
   if (cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd set "$mark_done" "flags=$flags" >/dev/null); then
     echo "Marked $mark_done done in the PRD registry (flags $flags)"
   else
-    echo "couldn't mark $mark_done done (pnpm backlog prd set $mark_done flags=$flags)" >&2
+    echo "couldn't mark $mark_done done (${backlog_cmd} prd set $mark_done flags=$flags)" >&2
   fi
 fi
 
@@ -191,7 +191,7 @@ if [[ -n $clear_hot ]]; then
   if (cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd set "$clear_hot" "hot=—" >/dev/null); then
     echo "Cleared $clear_hot's hot files in the PRD registry (its wave is over)"
   else
-    echo "couldn't clear $clear_hot's hot files (pnpm backlog prd set $clear_hot hot=—)" >&2
+    echo "couldn't clear $clear_hot's hot files (${backlog_cmd} prd set $clear_hot hot=—)" >&2
   fi
 fi
 
@@ -220,7 +220,7 @@ else
 fi
 
 # Its own orchestrator or planner called this from inside the worktree (above):
-# this was its last step, so end it, as pnpm prd end would.
+# this was its last step, so end it, as prd end would.
 if [[ -n $end_self ]]; then
   echo "Ending $record (pid $end_self): its worktree is gone, so this was its last step."
   end_pid "$end_self" "$record"

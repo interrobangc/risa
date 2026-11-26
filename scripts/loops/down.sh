@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop everything before a planned restart, and record what was running so
-# `pnpm prd recover` brings back exactly that. (pnpm prd down)
+# `prd recover` brings back exactly that. (prd down)
 #
 #   down.sh   1. write the down record (.loops/.down.json: the stacks and dev
 #                servers that are up, whether the shared test Postgres is, and
@@ -43,13 +43,13 @@ record=$loops/.down.json
 mkdir -p "$loops"
 if ((stay)); then
   node -e 'const [f, why] = process.argv.slice(1); const fs = require("node:fs");
-    fs.writeFileSync(f + ".tmp", JSON.stringify({ at: new Date().toISOString(), why: why || "pnpm prd down --stay" }, null, 2) + "\n");
+    fs.writeFileSync(f + ".tmp", JSON.stringify({ at: new Date().toISOString(), why: why || "'"${prd_cmd}"' down --stay" }, null, 2) + "\n");
     fs.renameSync(f + ".tmp", f);' "$loops/.stay-down.json" "$why"
-  echo "Stay-down: nothing comes back by itself (the watchdog leaves it) until pnpm prd recover by hand."
+  echo "Stay-down: nothing comes back by itself (the watchdog leaves it) until ${prd_cmd} recover by hand."
 fi
 inv=$(node "$bin/inventory-facts.mjs" --main "$main" --json)
 up=$(node "$bin/recover-lib.mjs" record "$record" <<<"$inv")
-echo "Recorded what's up in $record (pnpm prd recover brings it back)."
+echo "Recorded what's up in $record (${prd_cmd} recover brings it back)."
 
 servers=() stacks=() testdb=0 dispatcher=""
 while IFS=$'\t' read -r kind name; do
@@ -67,7 +67,7 @@ if [[ -n $dispatcher ]]; then
     echo "  stopped the dispatcher (pid $dispatcher)"
   else
     echo "  couldn't stop the dispatcher (pid $dispatcher): $out" >&2
-    die "down: stopped nothing else while the dispatcher runs (it may be starting something); the record stays in $record. Retry once it's gone: pnpm prd dispatch --stop (or kill $dispatcher), then pnpm prd down"
+    die "down: stopped nothing else while the dispatcher runs (it may be starting something); the record stays in $record. Retry once it's gone: ${prd_cmd} dispatch --stop (or kill $dispatcher), then ${prd_cmd} down"
   fi
 fi
 for n in ${servers[@]+"${servers[@]}"}; do
@@ -88,5 +88,5 @@ if ((testdb)); then
 fi
 ((${#servers[@]} + ${#stacks[@]} + testdb)) || [[ -n $dispatcher ]] || echo "  nothing was running"
 ((failed == 0)) || die "down: some things didn't stop (above); the record still lists them"
-if ((stay)); then echo "Down, and staying down. To bring it back: pnpm prd recover"
-else echo "Down. After the restart: pnpm prd recover"; fi
+if ((stay)); then echo "Down, and staying down. To bring it back: ${prd_cmd} recover"
+else echo "Down. After the restart: ${prd_cmd} recover"; fi

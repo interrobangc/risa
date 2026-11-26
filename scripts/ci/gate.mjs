@@ -1,6 +1,7 @@
 // The landing gate's decision: what a verdict means for this branch at this tier.
 // Pure: `ci gate` (ci.mjs) finds the verdict, runs blame when it's needed, and
 // acts on what this returns. The code is the verdict kind's exit code, 0 to land.
+import { toolCmd } from "../loops/config.mjs";
 import { label } from "./blame.mjs";
 import { proposedTiers, tierRank } from "../loops/check-plan.mjs";
 import { ciTiers } from "./tier-data.mjs";
@@ -148,7 +149,7 @@ export function branchBrake(v, f) {
  * @returns {{ land: boolean, code: number, lines: string[], fileFlakes: boolean }}
  */
 export function decideGate({ verdict, tier, branch, touched, blamed = null, fixes = [] }) {
-  const retry = `pnpm prd ci run ${tier} --ref ${branch} --wait`;
+  const retry = `${toolCmd.prd} ci run ${tier} --ref ${branch} --wait`;
   const refuse = (/** @type {number} */ code, /** @type {string[]} */ lines) => ({
     land: false,
     code,

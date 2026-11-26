@@ -10,7 +10,7 @@
 //   - a watch action unhandled: a slice's pending action in the watch's state.json
 //     (`actions[n].since`) older than the limit, with no mark for that slice since.
 // Nothing running: no unfinished call of its own (an Agent call aside: its agent's
-// heartbeat speaks for it) and no `pnpm prd` or `pnpm backlog` command under its
+// heartbeat speaks for it) and no `prd` or `backlog` command under its
 // pid, `watch --wait` and `ask --wait` aside (they wait for days). And no open
 // question of its topic (anyone's, the context question too).
 //
@@ -63,10 +63,10 @@ export function stuckAnswer(/** @type {string | null | undefined} */ answer) {
 
 const WAIT = /(?:\bprd(?:\.sh)?\s+watch\b[^;&|]*\s--wait\b|\bprd(?:\.sh)?\s+ask\s+--wait\b)/;
 
-/** Whether a command only waits (`pnpm prd watch … --wait`, `pnpm prd ask --wait`). */
+/** Whether a command only waits (`prd watch … --wait`, `prd ask --wait`). */
 export const onlyWaits = (/** @type {string | null | undefined} */ command) => WAIT.test(command ?? "");
 
-/** Whether a process command line is a `pnpm prd`/`pnpm backlog` command that isn't only a wait. */
+/** Whether a process command line is a `prd`/`backlog` command that isn't only a wait. */
 export const busyCommand = (/** @type {string} */ args) => runsPrdCommand(args) && !onlyWaits(args);
 
 /**

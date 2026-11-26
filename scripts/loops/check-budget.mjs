@@ -1,4 +1,4 @@
-// The check budget: how long a `pnpm prd check` may run, and how long it may go
+// The check budget: how long a `prd check` may run, and how long it may go
 // without printing, before check-run.sh stops it. Pure functions over the
 // check log's runs (check-times.mjs parses them), plus a small CLI that
 // check-run.sh calls.

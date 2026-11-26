@@ -1,5 +1,5 @@
 // A three-way merge of the inbox (plans/inbox.md here), entry by entry. Pure and total: it never
-// fails and never writes conflict markers. `pnpm prd dev-sync` (scripts/loops/
+// fails and never writes conflict markers. `prd dev-sync` (scripts/loops/
 // lib.sh) runs it as a command:
 //
 //   node scripts/backlog/inbox-merge.mjs <base-file> <ours-file> <theirs-file>

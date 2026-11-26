@@ -16,8 +16,8 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
-import { DocError, roleDoc, sectionOf } from "./doc.mjs";
-import { makeRepo } from "./sample-project/repo.mjs";
+import { DocError, GENERIC_DIR, fillNames, roleDoc, sectionOf } from "./doc.mjs";
+import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "doc-")));
@@ -61,6 +61,30 @@ const fails = (/** @type {string[]} */ ...args) => {
 };
 
 describe("prd doc on the sample project", () => {
+  it("fills the generic docs' command placeholders with the config's names: risa, never pnpm", () => {
+    const sample = { ...JSON.parse(readFileSync(SAMPLE_CONFIG, "utf8")), roles: {} };
+    const roles = readdirSync(GENERIC_DIR)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.slice(0, -3));
+    expect(roles.length).toBeGreaterThan(5);
+    let named = 0;
+    for (const role of roles) {
+      const raw = readFileSync(join(GENERIC_DIR, `${role}.md`), "utf8");
+      const text = roleDoc(role, { config: sample, root: repo });
+      expect(raw, role).not.toMatch(/\bpnpm (prd|backlog)\b/);
+      expect(text, role).not.toMatch(/\bpnpm\b|\{\{/);
+      named += (text.match(/`risa /g) ?? []).length;
+    }
+    expect(named).toBeGreaterThan(20);
+  });
+
+  it("leaves a placeholder a config has no name for", () => {
+    expect(fillNames("`{{prd}} land` and `{{backlog}} add`", { tool: { prd: "x", backlog: "x b" } })).toBe(
+      "`x land` and `x b add`",
+    );
+    expect(fillNames("`{{prd}} land`", {})).toBe("`{{prd}} land`");
+  });
+
   it("prints a generic doc alone when the config names nothing for the role", () => {
     expect(ok("machinery")).toBe(MACHINERY);
   });
@@ -167,7 +191,9 @@ describe("this repo's roles", () => {
   it.each(split)("%s prints the core's generic doc, then the project's additions", (role, entry) => {
     const generic = readFileSync(join(HERE, "docs", `${role}.md`), "utf8");
     const additions = readFileSync(join(root, entry.additions), "utf8");
-    expect(roleDoc(role, { config, root })).toBe(`${generic}\n${additions.replace(/^<!--.*-->\n\n/, "")}`);
+    expect(roleDoc(role, { config, root })).toBe(
+      `${fillNames(generic, config)}\n${additions.replace(/^<!--.*-->\n\n/, "")}`,
+    );
   });
 
   it("the project's loop additions open with a pointer to the doc command, left out of the merged text", () => {

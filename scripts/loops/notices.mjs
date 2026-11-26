@@ -1,7 +1,7 @@
 // The notice board's store: one-way, advisory lines sessions post for each
 // other ("landed X: sync at your next wave boundary"), one JSON file per notice
 // in a directory (`.loops/.notices/<id>.json` in the main checkout; machine
-// local, untracked). `notice.mjs` is its command line (`pnpm prd notice`,
+// local, untracked). `notice.mjs` is its command line (`prd notice`,
 // `notices`); this module only reads and writes the files it is handed.
 //
 // A notice: { id, session, topic, text, postedAt, expiresAt }. Ids are n1, n2,
@@ -13,6 +13,7 @@
 // Every write and every list deletes the expired files first. Withdrawing a
 // notice deletes its file. Nothing blocks on a notice: the claim and the leases
 // do the blocking.
+import { toolCmd } from "./config.mjs";
 import { linkSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { age } from "./asks.mjs";
@@ -179,7 +180,7 @@ export function withdrawNotice(dir, id, { now } = {}) {
   const m = /^n(\d+)$/.exec(String(id ?? ""));
   const live = prune(dir, now ?? Date.now());
   const notice = m ? live.find((x) => x.id === id) : null;
-  if (!notice) throw new NoticeError(`no live notice ${id} (pnpm prd notices lists them)`);
+  if (!notice) throw new NoticeError(`no live notice ${id} (${toolCmd.prd} notices lists them)`);
   gone(join(dir, `${id}.json`));
   return notice;
 }
@@ -192,7 +193,7 @@ export function formatNotice(n, now = Date.now()) {
   return `${n.id}  ${n.session ?? "-"}  ${n.topic ?? "-"}  ${age(n.postedAt, now)} ago, ${left(n.expiresAt, now)} left: ${n.text}`;
 }
 
-/** The `pnpm prd notices` listing. */
+/** The `prd notices` listing. */
 export function formatNotices(notices, now = Date.now()) {
   if (!notices.length) return "No live notices.";
   return notices.map((n) => formatNotice(n, now)).join("\n");
@@ -211,11 +212,11 @@ export function gateLines(notices, self, { now = Date.now(), max = 5 } = {}) {
     `notice ${n.id} from ${n.session ?? "-"} (${n.topic ?? "-"}, ${age(n.postedAt, now)} ago): ${n.text}`;
   if (others.length <= max) return others.map(line);
   const shown = others.slice(0, max - 1).map(line);
-  return [...shown, `… and ${others.length - shown.length} more: pnpm prd notices`];
+  return [...shown, `… and ${others.length - shown.length} more: ${toolCmd.prd} notices`];
 }
 
-/** `pnpm prd status`'s part: the live notices' count, or "" when there are none. */
+/** `prd status`'s part: the live notices' count, or "" when there are none. */
 export function statusPart(notices) {
   if (!notices.length) return "";
-  return `NOTICES: ${notices.length} (pnpm prd notices)\n`;
+  return `NOTICES: ${notices.length} (${toolCmd.prd} notices)\n`;
 }

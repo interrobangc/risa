@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Replace an orchestrator's session with a fresh one: the command `pnpm prd
+# Replace an orchestrator's session with a fresh one: the command `prd
 # rotate` opens in a background tab (never run inside the session it ends).
 #
 #   rotate-into.sh prd-<topic> <old pid> [--reason <text>]
@@ -101,7 +101,7 @@ if alive "$old"; then
   kill -KILL "$old" 2>/dev/null || true
   echo "pid $old ignored TERM for ${wait_secs}s: killed it."
   for ((i = 0; i < 50; i++)); do alive "$old" || break; sleep 0.2; done
-  alive "$old" && die "rotate-into: pid $old is still running; $name is left marked rotating (pnpm prd open ${topic:-$name} starts it fresh)"
+  alive "$old" && die "rotate-into: pid $old is still running; $name is left marked rotating (${prd_cmd} open ${topic:-$name} starts it fresh)"
 fi
 if [[ -n $wrapped ]]; then
   for ((i = 0; i < 50; i++)); do

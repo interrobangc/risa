@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Free disk: list what can go, with sizes, then free it after a yes.
-# (pnpm prd reclaim)
+# (prd reclaim)
 #
 #   reclaim.sh            list, ask, then free
 #   reclaim.sh --list     list only
@@ -12,8 +12,8 @@
 #   - the stack's leftovers (the stackLeftovers hook, --all: here dangling Docker
 #     volumes, anonymous ones and those of a stack no worktree has any more, and
 #     dangling images), removed through the hook's `leftovers remove`;
-#   - check builds (apps/web/build) and Vite caches (node_modules/.vite, also
-#     under apps/* and packages/*) in .loops worktrees.
+#   - check builds (the config's stack.checkBuild) and Vite caches (node_modules/.vite,
+#     also two folders down: a workspace package's) in .loops worktrees.
 #
 # What it never touches: the main checkout; the data of any stack a worktree's
 # stack status names (the hook keeps the main checkout's and the shared test
@@ -51,6 +51,8 @@ human() {
 kinds=() targets=() sizes=() whys=() kept=""
 add() { kinds+=("$1") targets+=("$2") sizes+=("$3") whys+=("$4"); }
 keep() { kept+="  $1"$'\n'; }
+# A worktree's check build (stack.checkBuild), or none.
+check_build=$(config_get stack.checkBuild 2>/dev/null) || check_build=""
 
 # Worktrees: merged ones go whole; the rest give up their caches.
 # A failed stack status hook would leave a project out of the ones in use and
@@ -68,7 +70,7 @@ for dir in "$loops"/*/; do
   dirty=$([[ -n $(git -C "$dir" status --porcelain 2>/dev/null) ]] && echo 1 || true)
   if slice_merged "$dir"; then
     if [[ -n $dirty ]]; then
-      keep "$name: merged, but has uncommitted changes (commit or discard them, then pnpm prd reclaim)"
+      keep "$name: merged, but has uncommitted changes (commit or discard them, then ${prd_cmd} reclaim)"
     elif held=$(slice_held "$dir"); then
       keep "$name: merged, but $held"
     else
@@ -78,15 +80,15 @@ for dir in "$loops"/*/; do
   fi
   port=$(web_port "$dir")
   if [[ -n $port && -n $(server_pids "$port") ]]; then
-    for p in apps/web/build node_modules/.vite; do
-      if [[ -d $dir/$p ]]; then keep "$name: its server is running, so its caches stay (pnpm prd serve $name --stop)"; break; fi
+    for p in ${check_build:+"$check_build"} node_modules/.vite; do
+      if [[ -d $dir/$p ]]; then keep "$name: its server is running, so its caches stay (${prd_cmd} serve $name --stop)"; break; fi
     done
     continue
   fi
-  if [[ -d $dir/apps/web/build && -z $(git -C "$dir" ls-files apps/web/build 2>/dev/null | head -1) ]]; then
-    add build "$dir/apps/web/build" "$(du_kb "$dir/apps/web/build")" "$name's check build"
+  if [[ -n $check_build && -d $dir/$check_build && -z $(git -C "$dir" ls-files "$check_build" 2>/dev/null | head -1) ]]; then
+    add build "$dir/$check_build" "$(du_kb "$dir/$check_build")" "$name's check build"
   fi
-  for p in "$dir"/node_modules/.vite "$dir"/apps/*/node_modules/.vite "$dir"/packages/*/node_modules/.vite; do
+  for p in "$dir"/node_modules/.vite "$dir"/*/*/node_modules/.vite; do
     if [[ -d $p ]]; then add vite "$p" "$(du_kb "$p")" "$name's Vite cache"; fi
   done
 done
@@ -133,7 +135,7 @@ for i in "${!kinds[@]}"; do
   case ${kinds[$i]} in
     worktree) "$bin/rm.sh" "$t" || ok="" ;;
     volume | image) stack_hook stackLeftovers remove "${kinds[$i]}" "$t" >/dev/null || ok="" ;;
-    build) rm -rf "$t" && rm -f "${t%/apps/web/build}/.serve-built" || ok="" ;;
+    build) rm -rf "$t" && rm -f "${t%/"$check_build"}/.serve-built" || ok="" ;;
     vite) rm -rf "$t" || ok="" ;;
   esac
   if [[ -n $ok ]]; then

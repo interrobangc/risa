@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd notice | notices: the notice board's command line (the store is notices.mjs).
+// prd notice | notices: the notice board's command line (the store is notices.mjs).
 //
 //   notice "<text>" [--for <minutes>] [--topic <t>]   post one; prints its id (60 minutes, 24 hours at most)
 //   notices [--json]                                 the live ones, oldest first
@@ -14,6 +14,7 @@
 // --here-topic. `gate` and `status` never fail: whatever goes wrong (an
 // unreadable directory, a broken file), they print nothing and exit 0, so they
 // can't change the exit code of the command they decorate.
+import { toolCmd } from "./config.mjs";
 import { pathToFileURL } from "node:url";
 import {
   NoticeError,
@@ -26,12 +27,12 @@ import {
 } from "./notices.mjs";
 
 const fail = (msg, code = 1) => {
-  console.error(`pnpm prd: ${msg}`);
+  console.error(`${toolCmd.prd}: ${msg}`);
   process.exit(code);
 };
 
 const dirOf = () =>
-  process.env.RISA_NOTICES_DIR || fail("RISA_NOTICES_DIR isn't set (run this through pnpm prd)");
+  process.env.RISA_NOTICES_DIR || fail(`RISA_NOTICES_DIR isn't set (run this through ${toolCmd.prd})`);
 
 function parse(argv, valued, flags = []) {
   const opts = {};
@@ -53,7 +54,7 @@ function parse(argv, valued, flags = []) {
 function notice(argv) {
   const { opts, rest } = parse(argv, ["for", "topic", "session", "here-topic", "here-session"]);
   if (rest.length !== 1)
-    fail('usage: pnpm prd notice "<text>" [--for <minutes>] [--topic <t>] (quote the text)');
+    fail(`usage: ${toolCmd.prd} notice "<text>" [--for <minutes>] [--topic <t>] (quote the text)`);
   if (opts.for != null && !/^\d+(\.\d+)?$/.test(opts.for)) fail("--for takes a number of minutes");
   const n = createNotice(dirOf(), {
     text: rest[0],

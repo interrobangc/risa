@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pnpm prd browser: run browser checks from the current worktree, at most four
+# prd browser: run browser checks from the current worktree, at most four
 # at once machine-wide, so loops don't pile Chrome, Vite and PowerSync on top of
 # each other.
 #
@@ -42,7 +42,7 @@
 # drop below that. A pass on the retry is FLAKY: it counts as passing, and is
 # recorded in $main/.loops/.browser-flakes.log so flaky steps can be fixed.
 # Every check's result also goes to the run log (run-log.mjs, RISA_RUN_LOG)
-# for pnpm prd metrics.
+# for prd metrics.
 #
 # Each run holds a browser lease (lease.sh), the directory $main/.loops/.lease/browser/<N>.
 # When every lease is taken it waits, polling every 5 s, and gives up after
@@ -128,7 +128,7 @@ while (($#)); do
     --timeout) timeout=${2:?--timeout needs seconds}; shift 2 ;;
     --timeout=*) timeout=${1#*=}; shift ;;
     -h | --help) usage; exit 0 ;;
-    -*) die "unknown option $1 (pnpm prd browser --help)" ;;
+    -*) die "unknown option $1 (${prd_cmd} browser --help)" ;;
     *) check=$1; shift; args=("$@"); break ;;
   esac
 done
@@ -137,7 +137,7 @@ done
 [[ -z $suite_cap || $suite_cap =~ ^[0-9]+$ ]] || die "RISA_BROWSER_SUITE_CAP takes whole seconds"
 [[ $mode != one || -n $check ]] || { usage >&2; exit 1; }
 
-top=$(git rev-parse --show-toplevel 2>/dev/null) || die "run pnpm prd browser inside the repo or a .loops worktree"
+top=$(git rev-parse --show-toplevel 2>/dev/null) || die "run ${prd_cmd} browser inside the repo or a .loops worktree"
 here=$(basename "$top"); [[ $top == "$main" ]] && here=main
 logdir=$(git -C "$top" rev-parse --absolute-git-dir)/$project_name-browser
 mkdir -p "$logdir"
@@ -145,7 +145,7 @@ mkdir -p "$logdir"
 # The manifest, the config's paths.checksManifest in this tree.
 manifest_rel=$(config_get paths.checksManifest) || die "the config names no browser-check manifest (paths.checksManifest)"
 manifest=$top/$manifest_rel
-[[ -f $manifest ]] || die "no browser-check manifest ($manifest_rel): pnpm prd sync --force"
+[[ -f $manifest ]] || die "no browser-check manifest ($manifest_rel): ${prd_cmd} sync --force"
 
 # The checks this tree has, from the browser hook: "<check><TAB><file>" a line.
 config_get hooks.browser >/dev/null || die "the config names no browser runner (hooks.browser)"
@@ -283,7 +283,7 @@ fi
 export SMOKE=$([[ -n $smoke ]] && echo 1 || echo 0)
 
 # ensure_server → the server the checks run against, in a .loops worktree with
-# a stack: a check build (pnpm prd serve --built), started if nothing runs,
+# a stack: a check build (prd serve --built), started if nothing runs,
 # swapped in for a dev server, and rebuilt when the source (or the env baked
 # into it) is newer than the build, so checks never run against stale code.
 # With --dev, the dev server instead. The main checkout's server is the user's:
@@ -297,7 +297,7 @@ ensure_server() {
     return
   fi
   require_disk "a check build"
-  echo "Checks run against a check build (pnpm prd browser --dev for the dev server)."
+  echo "Checks run against a check build (${prd_cmd} browser --dev for the dev server)."
   # --fresh: the hook rebuilds a running check build that's older than its source.
   serve "$here" --built --fresh
 }

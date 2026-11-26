@@ -1,8 +1,8 @@
-// pnpm prd metrics [--since <date>] [--json]: how runs are going, from three logs
+// prd metrics [--since <date>] [--json]: how runs are going, from three logs
 // in the main checkout's .loops/:
 //   the run log      .run-log.jsonl (run-log.mjs): slices, landings, browser
 //                    results, Codex verdicts
-//   the check log    .check-times.log (check-times.mjs): every pnpm prd check
+//   the check log    .check-times.log (check-times.mjs): every prd check
 //   the flake log    .browser-flakes.log (browser.sh): each browser check that
 //                    passed only on its retry, "<time>\t<worktree>\t<check>\t<why>\t<log>";
 //                    older lines name a check <name>.mjs, newer <name>.spec.mjs
@@ -288,7 +288,7 @@ export function summarize(data, { since } = {}) {
 
 /**
  * The usual time for a kind of work, over its last `last` passing samples:
- *   check    pnpm prd check runs that passed, by mode (quick, slice, full) and
+ *   check    prd check runs that passed, by mode (quick, slice, full) and
  *            branch kind (slice, prd, plan, hotfix, other)
  *   slice    finished slices (worktree created to removed)
  *   landing  landings that merged, by mode (pr, local) and branch kind

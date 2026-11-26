@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd doc <role> [section]: a role's doc as a session reads it.
+// prd doc <role> [section]: a role's doc as a session reads it.
 //
 // Each role (loop, orchestrator, planner, …) has one generic doc, the core's, in
 // docs/<role>.md beside this file. A project changes it through its config's
@@ -9,7 +9,8 @@
 // that opens with an HTML comment (`<!-- … -->`, a pointer for someone reading the
 // file itself) has it left out. With a section, only that heading's text: the
 // heading line through the line before the next heading of its level or higher,
-// from the merged doc.
+// from the merged doc. The tool's own commands are `{{prd}}` and `{{backlog}}` in the
+// generic docs, filled from the config's tool names (the additions may use them too).
 //
 // Exit 2 on an unknown role or section, a named file that is missing, or a role
 // that names both. Every prompt and core file names a role's doc through this
@@ -93,6 +94,18 @@ export function sectionOf(markdown, heading) {
     .replace(/\n*$/, "\n");
 }
 
+/** The generic docs' placeholders for the tool's own commands: `{{prd}}` and `{{backlog}}`. */
+export const NAME_PLACEHOLDER = /\{\{(prd|backlog)\}\}/g;
+
+/**
+ * A doc with the config's command names (tool.prd, tool.backlog) in place of its placeholders;
+ * a config without them leaves the placeholders.
+ * @param {string} text
+ * @param {Record<string, any>} config
+ */
+export const fillNames = (text, config) =>
+  text.replace(NAME_PLACEHOLDER, (m, name) => config.tool?.[name] ?? m);
+
 /**
  * A role's doc: the generic one, then the additions; or the replacement alone.
  * @param {string} role
@@ -118,6 +131,7 @@ export function roleDoc(role, { config, root, section, genericDir = GENERIC_DIR 
       text = `${text.replace(/\n*$/, "\n")}\n${additions.replace(LEADING_COMMENT, "")}`;
     }
   }
+  text = fillNames(text, config);
   if (!section) return text;
   const part = sectionOf(text, section);
   if (part === undefined) throw new DocError(`the ${role} doc has no section "${section}"`);

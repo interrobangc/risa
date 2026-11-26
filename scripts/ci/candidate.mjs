@@ -1,4 +1,4 @@
-// `pnpm prd ci candidate`: a release candidate, a fixed dev commit on an rc/ branch
+// `prd ci candidate`: a release candidate, a fixed dev commit on an rc/ branch
 // with its PR into staging.
 //
 //   candidate cut [<commit>] [--wait [min]]   dev's tip by default
@@ -9,6 +9,7 @@
 // rc/*. Any other PR into staging (a held dev PR, a fork's rc/ branch) isn't one, and
 // these commands never close or edit a PR. Everything runs on plumbing or a temporary
 // worktree, so the caller's checkout stays as it is. Exit 6 is a refusal.
+import { toolCmd } from "../loops/config.mjs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,8 +17,7 @@ import { join } from "node:path";
 import { verdictMeets } from "./gate.mjs";
 
 export const REFUSED = 6;
-const USAGE =
-  "usage: pnpm prd ci candidate cut [<commit>] [--wait [min]] | fix <commit> [--wait [min]] | status";
+const USAGE = `usage: ${toolCmd.prd} ci candidate cut [<commit>] [--wait [min]] | fix <commit> [--wait [min]] | status`;
 const DEV = "refs/remotes/origin/dev";
 export const STAGING = "refs/remotes/origin/staging";
 const DEFAULT_WAIT_MIN = 30;
@@ -132,7 +132,7 @@ function candidateBase(/** @type {Io} */ io, /** @type {string} */ tip) {
 }
 
 const retryLine = (/** @type {string} */ branch) =>
-  `no run came back. Retry: pnpm prd ci run candidate --ref origin/${branch} --wait`;
+  `no run came back. Retry: ${toolCmd.prd} ci run candidate --ref origin/${branch} --wait`;
 
 async function requestCandidateRun(
   /** @type {{ branch: string, sha: string, waitMin: number | null }} */ { branch, sha, waitMin },
@@ -239,7 +239,7 @@ async function fix(
 ) {
   fetchRefs(io);
   const open = currentCandidate(io);
-  if (!open) return refuse("no open candidate: pnpm prd ci candidate cut");
+  if (!open) return refuse(`no open candidate: ${toolCmd.prd} ci candidate cut`);
   const { branch, tip } = open;
 
   const sha = resolveCommit(io, commit);

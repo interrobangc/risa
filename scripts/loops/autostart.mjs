@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// pnpm prd autostart install|remove|status: the one per-user LaunchAgent that
-// runs the watchdog (`pnpm prd watchdog`, watchdog.mjs) at login and every five
+// prd autostart install|remove|status: the one per-user LaunchAgent that
+// runs the watchdog (`prd watchdog`, watchdog.mjs) at login and every five
 // minutes, from the main checkout. Nothing else installs it: only the user's
-// own `pnpm prd autostart install`.
+// own `prd autostart install`.
 //
 //   node autostart.mjs install --main DIR   write the plist and load it (a job
 //       already loaded is unloaded first, so a second install changes nothing
@@ -36,7 +36,7 @@ import {
 } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sharedNames } from "./config.mjs";
+import { sharedNames, toolCmd } from "./config.mjs";
 import { CLAUDE, GH, HOST_TOOLS, launchd, nvmNode } from "./host.mjs";
 
 /** The watchdog's launchd job, from the project's name (config.mjs's sharedNames). */
@@ -161,9 +161,11 @@ function install(/** @type {string} */ main, env = process.env) {
   const missing = found.filter(([, p]) => !p).map(([t]) => t);
   if (missing.length)
     console.log(
-      `Not found on this PATH, so not on the job's: ${missing.join(", ")} (pnpm prd autostart status)`,
+      `Not found on this PATH, so not on the job's: ${missing.join(", ")} (${toolCmd.prd} autostart status)`,
     );
-  console.log("pnpm prd down --stay keeps everything down; pnpm prd autostart remove uninstalls it.");
+  console.log(
+    `${toolCmd.prd} down --stay keeps everything down; ${toolCmd.prd} autostart remove uninstalls it.`,
+  );
 }
 
 function remove(env = process.env) {
@@ -191,19 +193,19 @@ async function status(/** @type {string} */ main, env = process.env) {
   const w = where(env);
   let ok = true;
   if (!existsSync(w.file)) {
-    console.log(`autostart: not installed (${w.file}); pnpm prd autostart install`);
+    console.log(`autostart: not installed (${w.file}); ${toolCmd.prd} autostart install`);
     return false;
   }
   const isLoaded = w.loaded(LABEL);
   ok &&= isLoaded;
   console.log(
-    `autostart: installed (${w.file}), ${isLoaded ? "loaded" : "NOT loaded: pnpm prd autostart install"}`,
+    `autostart: installed (${w.file}), ${isLoaded ? "loaded" : `NOT loaded: ${toolCmd.prd} autostart install`}`,
   );
   const text = readFileSync(w.file, "utf8");
   const path = pathOf(text) ?? "";
   if (!text.includes(`<string>${xml(join(main, "scripts/loops/prd.sh"))}</string>`)) {
     ok = false;
-    console.log(`  it runs another checkout's watchdog, not ${main}'s: pnpm prd autostart install`);
+    console.log(`  it runs another checkout's watchdog, not ${main}'s: ${toolCmd.prd} autostart install`);
   }
   const node = which("node", path);
   const version = node ? spawnSync(node, ["-v"], { encoding: "utf8" }).stdout.trim() : "";
@@ -217,14 +219,14 @@ async function status(/** @type {string} */ main, env = process.env) {
     const p = which(t, path);
     if (!p) ok = false;
     console.log(
-      `  ${t}: ${p ?? "doesn't resolve on the job's PATH (install it, then pnpm prd autostart install)"}`,
+      `  ${t}: ${p ?? `doesn't resolve on the job's PATH (install it, then ${toolCmd.prd} autostart install)`}`,
     );
   }
   const loops = join(main, ".loops");
   const stay = readObject(join(loops, ".stay-down.json"));
   if (stay)
     console.log(
-      `  stay-down since ${stay.at ?? "?"}${stay.why ? ` (${stay.why})` : ""}: nothing comes back until pnpm prd recover`,
+      `  stay-down since ${stay.at ?? "?"}${stay.why ? ` (${stay.why})` : ""}: nothing comes back until ${toolCmd.prd} recover`,
     );
   const st = readObject(join(loops, ".watchdog.json"));
   if (st?.lastLine) console.log(`  last decision: ${st.lastLine}`);
@@ -252,12 +254,12 @@ async function main() {
     if (argv[i] === "--main") mainDir = argv[++i] ?? "";
     else throw new Error(`autostart: unknown argument ${argv[i]}`);
   }
-  if (!mainDir) throw new Error("autostart: --main DIR (pnpm prd autostart passes it)");
+  if (!mainDir) throw new Error(`autostart: --main DIR (${toolCmd.prd} autostart passes it)`);
   if (cmd === "install") install(mainDir);
   else if (cmd === "remove") remove();
   else if (cmd === "status") process.exit((await status(mainDir)) ? 0 : 1);
   else {
-    console.error("usage: pnpm prd autostart install|remove|status");
+    console.error(`usage: ${toolCmd.prd} autostart install|remove|status`);
     process.exit(2);
   }
 }

@@ -15,7 +15,7 @@ For a planning agent: writing a PRD and its plan on `plan/<topic>` in `.loops/pl
 
 **Don't load the `write-a-prd`, `prd-to-plan` or `grill-me` skills.** They tell you to interview the user and wait for approval, which this handbook forbids; what they were used for is written here.
 
-`pnpm prd plan <topic> --open [B-<n> …]` does steps 1 to 5 in one session: it makes the worktree and starts an agent there (`prompt.sh plan`), on opus, or on Fable for a row flagged `design` (`--model` overrides).
+`{{prd}} plan <topic> --open [B-<n> …]` does steps 1 to 5 in one session: it makes the worktree and starts an agent there (`prompt.sh plan`), on opus, or on Fable for a row flagged `design` (`--model` overrides).
 
 ## The Decisions table
 
@@ -36,7 +36,7 @@ After the _Decisions_ table: **Problem** and **Solution** (both from the user's 
 
 ## The skeptic pass
 
-Before landing, `pnpm prd prompt skeptic plan --evidence <file>` prints the brief for one fresh agent on Opus (`model: "opus"`). It reads the PRD, the plan and the items cold and returns **go** or **send-back** with a short list: an `assumed` decision that _What to ask_ says to ask; an item's need left uncovered; a slice too big for one agent or missing a `Blocked by`; a broken rule across PRDs (`prd doc orchestrator "Rules across PRDs"`) or test budget. It never moves a UX or UI detail to "ask". Record it: `pnpm prd skeptic record --kind plan --verdict go|send-back --why "…"`.
+Before landing, `{{prd}} prompt skeptic plan --evidence <file>` prints the brief for one fresh agent on Opus (`model: "opus"`). It reads the PRD, the plan and the items cold and returns **go** or **send-back** with a short list: an `assumed` decision that _What to ask_ says to ask; an item's need left uncovered; a slice too big for one agent or missing a `Blocked by`; a broken rule across PRDs (`prd doc orchestrator "Rules across PRDs"`) or test budget. It never moves a UX or UI detail to "ask". Record it: `{{prd}} skeptic record --kind plan --verdict go|send-back --why "…"`.
 
 - **Go:** fix what's right, note what you declined and why under the table, and ask the user only the decisions it rightly moved to "ask".
 - **Send-back:** rework, then run a fresh skeptic once more (one retry).

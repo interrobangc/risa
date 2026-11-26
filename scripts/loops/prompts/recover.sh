@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # prompts/recover.sh: prompt.sh recover, the recovery agent in the main
-# checkout (pnpm prd recover opens it). Sourced by prompt.sh after shared.sh;
+# checkout (prd recover opens it). Sourced by prompt.sh after shared.sh;
 # it exits.
 cat <<EOF
 You are the recovery agent. The machine has just come back (a restart, a crash or a usage limit), and \`$prd_cmd recover\` has already brought back Docker, the stacks, the dev servers and the shared test Postgres. Your job is the sessions: every PRD orchestrator and planner should be running again.

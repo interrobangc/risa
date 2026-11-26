@@ -1,4 +1,4 @@
-// `pnpm prd bye`: the hand-over check a session runs when the user says just
+// `prd bye`: the hand-over check a session runs when the user says just
 // "bye". It works out the calling session's role, gathers what that role may
 // leave open, and either closes the session or lists each open thing.
 //
@@ -43,7 +43,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { awaitsAnswer, listAsks } from "./asks.mjs";
 import { listNotices } from "./notices.mjs";
 import { ancestorClaude, claudeName, isLive, processOf, processTable, readRecords } from "./sessions.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, loadConfig, toolCmd } from "./config.mjs";
 
 /** Exit code when something is open. */
 export const OPEN = 3;
@@ -84,13 +84,18 @@ export function byeVerdict(f) {
       open.push({
         what: "unpushed commits",
         detail: `${count(w.unpushed, "commit")} on ${w.branch} on no remote and not in the trunk`,
-        clear: "push or land them (pnpm prd pr / land), or hand them off",
+        clear: `push or land them (${toolCmd.prd} pr / land), or hand them off`,
       });
-    if (w.stack) open.push({ what: "a stack still up", detail: w.path, clear: "pnpm prd stack down" });
-    if (w.server) open.push({ what: "a dev server running", detail: w.path, clear: "pnpm prd serve --stop" });
+    if (w.stack) open.push({ what: "a stack still up", detail: w.path, clear: `${toolCmd.prd} stack down` });
+    if (w.server)
+      open.push({ what: "a dev server running", detail: w.path, clear: `${toolCmd.prd} serve --stop` });
   }
   for (const t of f.left.worktrees)
-    open.push({ what: "a worktree still out", detail: t, clear: "finish and land it, then pnpm prd rm" });
+    open.push({
+      what: "a worktree still out",
+      detail: t,
+      clear: `finish and land it, then ${toolCmd.prd} rm`,
+    });
   for (const b of f.left.branches)
     open.push({ what: "a branch not merged into the trunk", detail: b, clear: "land it, or hand it off" });
   const release = [];
@@ -99,7 +104,7 @@ export function byeVerdict(f) {
       open.push({
         what: `a ${l.kind} lease held`,
         detail: `${l.worktree}: ${l.check || "?"} (pid ${l.pid})`,
-        clear: `let it finish (pnpm prd wait ${l.kind}) or stop it`,
+        clear: `let it finish (${toolCmd.prd} wait ${l.kind}) or stop it`,
       });
     else release.push(l);
   }
@@ -113,7 +118,7 @@ export function byeVerdict(f) {
     open.push({
       what: "an open question it filed",
       detail: `${a.id}: ${short(a.text)}`,
-      clear: `wait for the answer, or dismiss it (pnpm prd asks --done ${a.id})`,
+      clear: `wait for the answer, or dismiss it (${toolCmd.prd} asks --done ${a.id})`,
     });
   const read = f.notices.map((n) => `${n.id}${n.session ? ` (${n.session})` : ""}: ${short(n.text)}`);
   return { clean: open.length === 0, open, release, read };
@@ -135,7 +140,7 @@ export function byeLines(
     lines.push(`bye: ${who} has ${count(v.open.length, "open thing")}; nothing was closed:`);
     v.open.forEach((o, i) => lines.push(`  ${i + 1}. ${o.what}: ${o.detail} (${o.clear})`));
     lines.push(
-      "Ask the user about each, one at a time: finish it, hand it off or drop it (only on their word). Then run pnpm prd bye again.",
+      `Ask the user about each, one at a time: finish it, hand it off or drop it (only on their word). Then run ${toolCmd.prd} bye again.`,
     );
     return lines;
   }
@@ -300,7 +305,8 @@ export function gather({ cwd = process.cwd(), env = process.env } = {}) {
       role === "slice"
         ? 0
         : Number(git(own, "rev-list", "--count", "HEAD", "--not", "--remotes", trunk) ?? 0);
-    const port = envFile(join(own, "apps/web/.env")).WEB_PORT;
+    const portEnv = loadConfig().config.stack?.portEnv;
+    const port = portEnv ? envFile(join(own, portEnv)).WEB_PORT : undefined;
     const server = Boolean(port && run("lsof", ["-nP", `-tiTCP:${port}`, "-sTCP:LISTEN"]));
     const stack =
       (role === "slice" || role === "hotfix") && /^\d+$/.test(envFile(join(own, ".env.loop")).SLOT ?? "");

@@ -1,4 +1,4 @@
-// ci-commits.mjs: part of `pnpm prd ci` (ci.mjs has the map). The throwaway
+// ci-commits.mjs: part of `prd ci` (ci.mjs has the map). The throwaway
 // commits a run can be asked for: a narrowed run (`ci run --files`) and a proof
 // run (`ci run candidate --force-flake`). Plumbing only, so the worktree, the
 // index and the branch stay as they are.

@@ -1,7 +1,7 @@
 // The boundary lint (boundary.mjs): each rule and form on a sample project, the
 // manifest and the allowlist, and this repo itself, which must pass.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -49,6 +49,25 @@ const lint = (file, text) =>
   );
 
 describe("a core file", () => {
+  it("names the tool's own commands through the config, never as this repo's literal names, but in a test", () => {
+    const text = 'echo "run pnpm prd land, then pnpm backlog done"\n# pnpm prd sync\necho "$prd_cmd land"\n';
+    expect(lint(CORE, text)).toEqual([
+      "1 tool-command - pnpm prd",
+      "1 tool-command - pnpm backlog",
+      "2 tool-command - pnpm prd",
+    ]);
+    const doc = "scripts/loops/docs/loop.md";
+    const docFound = findings({
+      files: new Map([[doc, "Run `pnpm prd check`, or `{{prd}} check`.\n"]]),
+      owners: new Map([...OWNERS, [doc, "core"]]),
+      project,
+    });
+    expect(docFound.map((f) => `${f.line} ${f.rule} ${f.text}`)).toEqual(["1 tool-command pnpm prd"]);
+    expect(lint(CORE_JS, "const hint = `${toolCmd.prd} land`; // pnpm prdx, pnpm prd-y\n")).toEqual([]);
+    expect(lint("scripts/loops/tool.test.mjs", 'expect(out).toContain("pnpm prd land");\n')).toEqual([]);
+    expect(lint("scripts/project/up.sh", 'echo "pnpm prd land"\n')).toEqual([]);
+  });
+
   it("may not hold a project variable or the project's name, in code or in a comment", () => {
     expect(lint(CORE, 'x=${ACME_SLOTS:-2}\n# the acme stack\necho "$ACME_HOME/.acme/inbox Acme"\n')).toEqual([
       "1 project-env - ACME_SLOTS",
@@ -436,6 +455,12 @@ describe("this repo", () => {
 
   it("crosses the line only where the allowlist says", () => {
     expect(result.failures).toEqual([]);
+  });
+
+  it("allows only the residual list: each line says why it waits for the move, and none is a tool-command", () => {
+    const { allowed } = parseAllowlist(readFileSync(join(ROOT, ALLOWLIST), "utf8"));
+    expect([...allowed].filter(([, { why }]) => !why).map(([key]) => key)).toEqual([]);
+    expect([...allowed.keys()].filter((key) => key.endsWith(" tool-command"))).toEqual([]);
   });
 
   it("ignores a CI test step's output written while it runs (B-753's progress file)", () => {

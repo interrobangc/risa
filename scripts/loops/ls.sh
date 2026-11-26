@@ -2,12 +2,12 @@
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
 # it merges into, dirty state, its containers and its dev server link. Then the
 # machine's load averages, any stale slot lease, the shared test Postgres,
-# leftovers for `pnpm prd gc` (merged slice worktrees and stacks stopped for over
-# a day), and who holds the machine-wide leases (browser checks and pnpm prd
+# leftovers for `prd gc` (merged slice worktrees and stacks stopped for over
+# a day), and who holds the machine-wide leases (browser checks and prd
 # check: lease.sh holders), and after the worktree table the dispatcher (running,
 # paused and why, or stopped; its last log entry), the recorded sessions (managed
-# or by hand), the open asks, the workers (status-extra.mjs: every lease, pnpm prd
-# command and slice agent with its age, usual time and state), the usage limits (usage.mjs) and the live notices. (pnpm prd status, and pnpm prd status-watch)
+# or by hand), the open asks, the workers (status-extra.mjs: every lease, prd
+# command and slice agent with its age, usual time and state), the usage limits (usage.mjs) and the live notices. (prd status, and prd status-watch)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -38,9 +38,9 @@ for dir in "$loops"/*/; do
     if ((up == 0)); then
       secs=$(fact stopped_secs "$facts")
       [[ -n $secs ]] && ((secs >= limit)) &&
-        leftovers+="stopped stack: $name ($proj stopped $(fmt_age "$secs") ago): pnpm prd gc"$'\n'
+        leftovers+="stopped stack: $name ($proj stopped $(fmt_age "$secs") ago): ${prd_cmd} gc"$'\n'
     fi
-    web="http://localhost:$port $([[ -n $(server_pids "$port") ]] && echo "(running)" || echo "(stopped: pnpm prd serve $name)")"
+    web="http://localhost:$port $([[ -n $(server_pids "$port") ]] && echo "(running)" || echo "(stopped: ${prd_cmd} serve $name)")"
   else
     slot=- stack=none web=-
   fi
@@ -50,13 +50,13 @@ for dir in "$loops"/*/; do
     slice_dirs+=("$dir")
     # Only what gc would take: a slice stays until its wave has landed.
     if slice_merged "$dir" && git -C "$dir" merge-base --is-ancestor HEAD "$trunk" 2>/dev/null; then
-      leftovers+="merged: $name ($branch is merged into $parent): pnpm prd gc"$'\n'
+      leftovers+="merged: $name ($branch is merged into $parent): ${prd_cmd} gc"$'\n'
     fi
   fi
   # shellcheck disable=SC2059
   printf "$fmt" "$name" "$slot" "$branch" "+$ahead $parent" "$dirty" "$stack" "$web"
 done
-[[ -n $found ]] || echo "(no worktrees: pnpm prd start <topic>)"
+[[ -n $found ]] || echo "(no worktrees: ${prd_cmd} start <topic>)"
 echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)}"
 
 # The dispatcher, recorded sessions and open asks (status-extra.mjs): sessions and asks print nothing,

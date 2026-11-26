@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Clean up leftover worktrees and stacks, after a yes. (pnpm prd gc)
+# Clean up leftover worktrees and stacks, after a yes. (prd gc)
 #
 #   gc.sh            list them, ask, then clean up
 #   gc.sh --list     list them only
 #   gc.sh --yes      clean up without asking
 #
-# Two kinds (pnpm prd status flags the same ones):
+# Two kinds (prd status flags the same ones):
 #   - a slice worktree whose branch is merged into its PRD branch: removed with
 #     rm.sh (worktree, stack, test database, branch). One with uncommitted
 #     changes is refused and kept, and so is one its wave still needs (not

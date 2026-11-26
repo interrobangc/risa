@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// pnpm prd watchdog: decide whether the machine needs `pnpm prd recover`, and
-// run it unattended when it does. The LaunchAgent (`pnpm prd autostart
+// prd watchdog: decide whether the machine needs `prd recover`, and
+// run it unattended when it does. The LaunchAgent (`prd autostart
 // install`) runs it at login and every five minutes from the main checkout.
 //
 //   node watchdog.mjs [--main DIR]            decide; on `recover`, run
@@ -13,12 +13,12 @@
 // dispatcher intent, a running recover, the usage reading, the last attempts)
 // in, `recover` or `nothing` and a reason out. It acts only on evidence of a
 // crash or a reboot:
-//   - a down record older than the last boot (pnpm prd down, then a restart);
+//   - a down record older than the last boot (prd down, then a restart);
 //   - the dispatcher's lock with its pid gone, or its kept intent to reopen;
 //   - a hand-opened orchestrator or planner record with no end and its pid gone,
 //     started after the last good recover (an older one is history the last
 //     recover already saw; a managed one is the dispatcher's to reopen).
-// A deliberate stop wins: `pnpm prd down --stay` (.loops/.stay-down.json), a
+// A deliberate stop wins: `prd down --stay` (.loops/.stay-down.json), a
 // paused dispatcher, a down record with no reboot since, or a clean
 // `dispatch --stop` (its lock gone) leave everything alone. So does a usage
 // reading that says limited (a recover would open sessions that spend): the
@@ -37,6 +37,7 @@
 // RISA_BOOT_TIME (tests: the last boot, epoch seconds), RISA_CLOCK_FILE
 // (tests: the current epoch second), RISA_RECOVER_BIN (tests: recover.sh),
 // RISA_SESSIONS_DIR, RISA_USAGE_DIR.
+import { toolCmd } from "./config.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -93,7 +94,7 @@ export function decide(f) {
   if (f.stayDown)
     return {
       action: "nothing",
-      reason: `stay-down: pnpm prd down --stay${f.stayDown.why ? ` (${f.stayDown.why})` : ""}; pnpm prd recover by hand brings it back`,
+      reason: `stay-down: ${toolCmd.prd} down --stay${f.stayDown.why ? ` (${f.stayDown.why})` : ""}; ${toolCmd.prd} recover by hand brings it back`,
     };
   if (f.recover.running) return { action: "nothing", reason: `a recover is running (pid ${f.recover.pid})` };
   if (f.dispatcher.paused)
@@ -107,13 +108,13 @@ export function decide(f) {
   if (f.downRecord && !rebootedSinceDown)
     return {
       action: "nothing",
-      reason: `pnpm prd down at ${downAt ? hhmm(downAt) : "?"} and no reboot since: left down`,
+      reason: `${toolCmd.prd} down at ${downAt ? hhmm(downAt) : "?"} and no reboot since: left down`,
     };
   if (f.usage.limited) return { action: "nothing", reason: `limited: ${f.usage.why}` };
 
   /** @type {string[]} */
   const evidence = [];
-  if (rebootedSinceDown) evidence.push("a reboot since pnpm prd down");
+  if (rebootedSinceDown) evidence.push(`a reboot since ${toolCmd.prd} down`);
   if (f.dispatcher.lock === "stale") evidence.push(`the dispatcher's pid ${f.dispatcher.pid ?? "?"} is gone`);
   else if (f.intent && f.dispatcher.lock !== "live") evidence.push("the dispatcher's kept intent to reopen");
   const baseline = Math.max(s.since ?? f.now, s.lastSuccess ?? 0);
@@ -268,7 +269,7 @@ async function main() {
     else if (a === "--json") json = true;
     else if (a === "-h" || a === "--help") {
       console.log(
-        "pnpm prd watchdog [--dry-run [--json]]: recover after a reboot or crash (autostart runs it)",
+        `${toolCmd.prd} watchdog [--dry-run [--json]]: recover after a reboot or crash (autostart runs it)`,
       );
       return;
     } else {

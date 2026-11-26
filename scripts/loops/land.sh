@@ -9,7 +9,7 @@
 #
 # Two paths:
 #   the PR path    prd/ branches, and hotfix/ ones with --pr: the branch's open
-#                  PR into dev (pnpm prd pr) is merged on GitHub (a merge commit
+#                  PR into dev (prd pr) is merged on GitHub (a merge commit
 #                  with the -m subject, pinned to the checked tip with
 #                  --match-head-commit, the remote branch deleted), after dev is
 #                  pushed to origin (fast-forward only; a pickup of anything but
@@ -21,7 +21,7 @@
 # A hotfix must say which (ask the user "PR or local?"); a prd/ branch takes
 # --local only as the fallback when the PR path fails, on the user's word.
 #
-# It refuses unless the branch already contains dev's work (`pnpm prd sync`;
+# It refuses unless the branch already contains dev's work (`prd sync`;
 # backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
 # a CI verdict for its tier (scripts/ci/ci.mjs gate, gate.mjs).
 # The unsynced landing: when dev's commits since the last sync share no file with
@@ -54,7 +54,7 @@
 # it also refuses (the config's docBudget hook) when the branch grows a doc that
 # is already over its budget, for every kind of branch (a plan branch lands docs).
 # The PR path also refuses unless the PR is open, its head is the branch's
-# local tip, and Codex's verdict on it is clean (pnpm prd review): a clean
+# local tip, and Codex's verdict on it is clean (prd review): a clean
 # verdict on an older head carries over plain dev merges that leave the PR's
 # diff alone (codex-review.mjs), and the merge is still pinned to the tip.
 # --no-review skips only the verdict. A prd/ branch
@@ -139,7 +139,7 @@ while (($#)); do
     *) what=$1; shift ;;
   esac
 done
-[[ -n $what ]] || die "which PRD? (pnpm prd land <topic>)"
+[[ -n $what ]] || die "which PRD? (${prd_cmd} land <topic>)"
 [[ -z $resume || -z $msg$force$path$noreview$tier$why$fixes$skeptics$byuser ]] ||
   die "--resume takes only the branch: the journal holds the rest"
 case $what in
@@ -203,7 +203,7 @@ trap land_log_end EXIT
 # A resume skips every refusal: what it may do is the journal's (resume_landing).
 if [[ -z $resume ]]; then
   [[ ! -e $journal ]] ||
-    die "a landing of $branch was cut off midway (its journal: $journal): \`pnpm prd land --resume $branch\` finishes or undoes it first"
+    die "a landing of $branch was cut off midway (its journal: $journal): \`${prd_cmd} land --resume $branch\` finishes or undoes it first"
   git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
   [[ $(git -C "$main" branch --show-current) == "$trunk" ]] || die "the main checkout isn't on $trunk"
   [[ ! -e $(git -C "$main" rev-parse --absolute-git-dir)/MERGE_HEAD ]] || die "the main checkout is in the middle of a merge"
@@ -218,7 +218,7 @@ if [[ -z $resume ]]; then
       return 0
     fi
     [[ -n $skeptics ]] ||
-      die "--$action needs a skeptic's go (--skeptic <id>: \`pnpm prd prompt skeptic land --evidence <file>\`, then \`pnpm prd skeptic record --kind land --action $action --tip $tip …\`) or the user's word (--by-user)"
+      die "--$action needs a skeptic's go (--skeptic <id>: \`${prd_cmd} prompt skeptic land --evidence <file>\`, then \`${prd_cmd} skeptic record --kind land --action $action --tip $tip …\`) or the user's word (--by-user)"
     for id in $skeptics; do args+=(--id "$id"); done
     out=$(node "$(dirname "$0")/land-skeptic.mjs" check --dir "$skeptic_dir" --topic "$topic" --tip "$tip" --action "$action" "${args[@]}") ||
       die "--$action refused: $out"
@@ -254,7 +254,7 @@ if [[ -z $resume ]]; then
   fi
   # drift_refusal [WHY] → today's refusal, with why it couldn't land unsynced.
   drift_refusal() {
-    die "$drift_ref has moved since $branch last synced${1:+ ($1)}: run \`pnpm prd sync --force\` and \`pnpm prd check\` in $dir first"
+    die "$drift_ref has moved since $branch last synced${1:+ ($1)}: run \`${prd_cmd} sync --force\` and \`${prd_cmd} check\` in $dir first"
   }
   # judge_unsynced → the refusals that need no CI: sets unsynced, or refuses.
   judge_unsynced() {
@@ -404,7 +404,7 @@ flake_retry() {
   [[ $gate_flakes == 1 ]] || return 0
   local args=()
   while read -r line; do args+=("$line"); done < <(flake_args)
-  echo "pnpm prd ci ${args[*]}"
+  echo "${prd_cmd} ci ${args[*]}"
 }
 # file_flakes → file the verdict's flakes, after the merge. It can't undo the
 # landing: a failure is reported, added to the to-test file, and returned as 5.
@@ -435,8 +435,7 @@ checkline=${checkline:-}
 try_lines() {
   if [[ -n $changed ]] && ! grep -qEv "$exempt_re" <<< "$changed"; then
     local prd backlog tests
-    prd=$(config_get tool.prd 2>/dev/null) || prd="pnpm prd"
-    backlog=$(config_get tool.backlog 2>/dev/null) || backlog="pnpm backlog"
+    prd=$prd_cmd backlog=$backlog_cmd
     tests=$(config_get commands.toolingTests 2>/dev/null) || tests=""
     echo "Only docs and tooling changed: no app screen to open. Try the commands the commits above name, in $main."
     ! grep -q '^scripts/loops/' <<< "$changed" || echo "The PRD tooling: \`$prd help\` lists its commands."
@@ -566,7 +565,7 @@ post_landed() {
   [[ -n $want_to_test ]] || return 0
   local sha
   sha=$(git -C "$main" rev-parse --short "$(landed_sha)")
-  post_notice "landed $branch in $trunk as $sha: sync at your next wave boundary (pnpm prd sync), not mid-wave" &&
+  post_notice "landed $branch in $trunk as $sha: sync at your next wave boundary (${prd_cmd} sync), not mid-wave" &&
     echo "notice posted: $topic landed as $sha (six hours)" ||
     echo "warning: couldn't post the landing notice (ignored)" >&2
   return 0
@@ -632,7 +631,7 @@ next_steps() {
   # Already after the landing: the hook's notes (shared with ready.sh's report) drop their "after landing".
   landing_hook notes <<< "$changed" | sed 's/ after landing$//; s/^/  /'
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
-  if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi
+  if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: ${prd_cmd} rm $name"; else echo "  then: ${prd_cmd} rm $name"; fi
 }
 
 # journal_start STEP → the to-test body, then the journal's first record: STEP
@@ -665,7 +664,7 @@ finish_from() {
       dev-sync)
         retry=$(flake_retry)
         (dev_sync "$branch") ||
-          die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`pnpm prd land --resume $branch\` (it syncs dev${retry:+, then files the flakes: \`$retry\`})"
+          die "PR #$number is merged on GitHub, but dev-sync stopped: fix what it says, then \`${prd_cmd} land --resume $branch\` (it syncs dev${retry:+, then files the flakes: \`$retry\`})"
         ;;
       flakes) file_flakes || filed=$? ;;
     esac
@@ -730,7 +729,7 @@ resume_landing() {
         echo "aborted the cut-off merge of ${tip:0:7} in $main"
       fi
       journal_drop
-      echo "undone: nothing of $branch landed. Land it again with \`pnpm prd land\`: every refusal and gate runs again."
+      echo "undone: nothing of $branch landed. Land it again with \`${prd_cmd} land\`: every refusal and gate runs again."
       exit 0
       ;;
     finish)
@@ -752,7 +751,7 @@ if [[ $path == local ]]; then
   skeptic_report
   journal_start merge
   git -C "$main" merge --no-ff -m "$msg" ${unsynced_line:+-m "$unsynced_line"} "$branch" ||
-    die "the merge of $branch stopped: \`pnpm prd land --resume $branch\` undoes it"
+    die "the merge of $branch stopped: \`${prd_cmd} land --resume $branch\` undoes it"
   landed=true
   echo
   echo "Landed $branch in $trunk as $(git -C "$main" rev-parse --short HEAD): $msg"
@@ -762,20 +761,20 @@ fi
 
 # The PR path.
 number=$(pr_for "$branch") || die "gh couldn't list $branch's PRs (gh auth status?)"
-[[ -n $number ]] || die "no open PR from $branch into $trunk: open it with \`pnpm prd pr $what\`"
+[[ -n $number ]] || die "no open PR from $branch into $trunk: open it with \`${prd_cmd} pr $what\`"
 tip=$(git -C "$main" rev-parse "$branch")
 raw=$(pr_state "$number") || die "gh couldn't read PR #$number"
 v=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" <<< "$raw")
 field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
 head=$(field headSha) state=$(field state) url=$(field url)
 [[ $head == "$tip" ]] ||
-  die "PR #$number's head is ${head:0:7}, not $branch's local tip ${tip:0:7}: push it (\`pnpm prd pr $what\`), let Codex review it (\`pnpm prd review $what --wait\`), then land"
+  die "PR #$number's head is ${head:0:7}, not $branch's local tip ${tip:0:7}: push it (\`${prd_cmd} pr $what\`), let Codex review it (\`${prd_cmd} review $what --wait\`), then land"
 line=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" --line <<< "$raw")
 if [[ $state != clean && $branch == "$prd_prefix"* ]] && docs_only "$drift_ref" "$branch"; then
   echo "$line: no Codex verdict needed, the diff against $drift_ref is Markdown only (PR #$number is open with the local tip as its head)"
 elif [[ $state != clean ]]; then
   [[ -n $noreview ]] ||
-    die "Codex's verdict on PR #$number isn't clean ($line): \`pnpm prd review $what\`; --no-review needs a skeptic's go (--skeptic <id>) or --by-user"
+    die "Codex's verdict on PR #$number isn't clean ($line): \`${prd_cmd} review $what\`; --no-review needs a skeptic's go (--skeptic <id>) or --by-user"
   if [[ $state == out-of-credits ]]; then
     verdict_lines+="- \`--no-review\`: Codex is out of credits, so no skeptic was needed"$'\n'
   else
@@ -801,7 +800,7 @@ journal_start push
 land_push_trunk
 journal_step merge
 "${merge[@]}" ||
-  die "gh couldn't merge PR #$number ($url): see the PR, then \`pnpm prd land --resume $branch\` (it finishes the landing if the merge went in, else undoes it)"
+  die "gh couldn't merge PR #$number ($url): see the PR, then \`${prd_cmd} land --resume $branch\` (it finishes the landing if the merge went in, else undoes it)"
 landed=true
 echo
 echo "Landed $branch in $trunk through PR #$number ($url): $msg"

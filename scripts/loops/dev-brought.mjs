@@ -10,7 +10,7 @@
 import { execFileSync } from "node:child_process";
 import { checkPlan } from "./check-plan.mjs";
 
-/** pnpm backlog commits these onto dev; two branches sharing them means nothing. */
+/** backlog commits these onto dev; two branches sharing them means nothing. */
 const BACKLOG = new Set(["plans/backlog.md", "plans/inbox.md", "plans/backlog-archive.md"]);
 
 /** @param {string[]} items */

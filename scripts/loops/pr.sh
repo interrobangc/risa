@@ -18,7 +18,7 @@
 #      read only: the landing requests the run), and that plans
 #      and the backlog are written outside review. Rerun it after every push.
 # It prints the PR's URL. Codex reviews each push by itself: then
-# `pnpm prd review <topic> --wait`.
+# `prd review <topic> --wait`.
 #
 # Test seam: RISA_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) never pushes dev and measures the sync against origin/dev instead, so a
@@ -41,11 +41,11 @@ while (($#)); do
   esac
 done
 [[ -n $what ]] || what=$(topic_of "$(here_name)")
-[[ -n $what ]] || die "which branch? (pnpm prd pr <topic|$hotfix_prefix<name>>)"
+[[ -n $what ]] || die "which branch? (${prd_cmd} pr <topic|$hotfix_prefix<name>>)"
 branch=$(pr_branch "$what")
 case $branch in
   "$prd_prefix"* | "$hotfix_prefix"*) ;;
-  "$plan_prefix"*) die "$branch lands locally (pnpm prd land $branch): plans and docs skip review" ;;
+  "$plan_prefix"*) die "$branch lands locally (${prd_cmd} land $branch): plans and docs skip review" ;;
   *) die "$branch: pr takes a $prd_prefix or $hotfix_prefix branch" ;;
 esac
 topic=$(branch_name "$branch")
@@ -55,7 +55,7 @@ pr_seam "$branch"
 git -C "$main" rev-parse --verify --quiet "$branch" >/dev/null || die "no branch $branch"
 (($(git -C "$main" rev-list --count "$drift_ref..$branch") > 0)) || die "nothing to review: $branch has no commits that $drift_ref lacks"
 [[ -z $(trunk_drift "$branch" "$drift_ref") ]] || unsynced_safe "$branch" "$drift_ref" ||
-  die "$drift_ref has moved since $branch last synced: run \`pnpm prd sync\` (and the check) in $dir first"
+  die "$drift_ref has moved since $branch last synced: run \`${prd_cmd} sync\` (and the check) in $dir first"
 [[ ! -d $dir || -z $(git -C "$dir" status --porcelain) ]] ||
   echo "note: $dir has uncommitted changes; only the commits go up"
 
@@ -93,7 +93,7 @@ $items
 
 Plans, PRDs and the backlog are written outside review (committed straight onto \`$trunk\`), so review the code here, not \`plans/\` or docs prose.
 
-Opened by \`pnpm prd pr\`; it merges with \`pnpm prd land\` on the dev keeper's word once Codex's review is clean.
+Opened by \`${prd_cmd} pr\`; it merges with \`${prd_cmd} land\` on the dev keeper's word once Codex's review is clean.
 BODY
 )
 
@@ -107,4 +107,4 @@ else
     die "couldn't open a PR from $branch into $trunk"
   echo "opened $url"
 fi
-echo "Codex reviews each push by itself (a clean verdict carries over a plain dev merge); then: pnpm prd review ${branch#"$prd_prefix"} --wait (in the background)"
+echo "Codex reviews each push by itself (a clean verdict carries over a plain dev merge); then: ${prd_cmd} review ${branch#"$prd_prefix"} --wait (in the background)"

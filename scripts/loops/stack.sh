@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Add, remove or read a worktree's dev stack, through the project's stack hooks
 # (the config's hooks.stackUp, stackDown, stackStatus, stackReady).
-# (pnpm prd stack up|down|status|ready [name])
+# (prd stack up|down|status|ready [name])
 #
 #   stack.sh up [name]       lease a slot and bring the stack up (the hook writes
 #                            its env files, starts it, migrates and seeds); on a

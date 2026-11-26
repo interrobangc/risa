@@ -1,5 +1,5 @@
 // The origin writer: an edit of plans/inbox.md as a commit built on
-// origin/dev's tip and pushed there (`pnpm backlog inbox add|move|edit|remove`). It reads
+// origin/dev's tip and pushed there (`backlog inbox add|move|edit|remove`). It reads
 // and writes no working tree, index or HEAD: blobs, a tree from a temporary
 // index, commit-tree, a push without force, and the remote-tracking ref.
 //
@@ -15,7 +15,7 @@
 //      push is fetched and rebuilt on the new tip, TRIES times in all; then it
 //      fails and nothing was written.
 //
-// The pickup (`pnpm prd dev-sync`) is the caller's, after this returns.
+// The pickup (`prd dev-sync`) is the caller's, after this returns.
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join } from "node:path";

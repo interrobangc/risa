@@ -30,8 +30,9 @@
 //
 //   node usage.mjs statusline     (stdin) write this session's reading; print a short line
 //   node usage.mjs stop-failure   (stdin) on a rate_limit, mark this session stalled
-//   node usage.mjs [--json]       pnpm prd usage: the merged reading
-//   node usage.mjs status         the line pnpm prd status prints
+//   node usage.mjs [--json]       prd usage: the merged reading
+//   node usage.mjs status         the line prd status prints
+import { toolCmd } from "./config.mjs";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -304,7 +305,7 @@ function stalledNote(
 }
 
 /**
- * `pnpm prd status`'s line: each window's use and reset, or unknown. Pure.
+ * `prd status`'s line: each window's use and reset, or unknown. Pure.
  * @param {ReturnType<typeof mergeReadings>} u
  * @param {{ now: number, staleMs: number, timeZone?: string }} opts
  */
@@ -320,11 +321,11 @@ export function statusLine(u, { now, staleMs, timeZone }) {
   if (u.overage) line += "; over the plan limit (extra usage)";
   const stalled = stalledNote(u, now, timeZone);
   if (stalled) line += `; ${stalled}`;
-  return `${line} (pnpm prd usage)`;
+  return `${line} (${toolCmd.prd} usage)`;
 }
 
 /**
- * `pnpm prd usage`: the merged reading in lines. Pure.
+ * `prd usage`: the merged reading in lines. Pure.
  * @param {ReturnType<typeof mergeReadings>} u
  * @param {{ now: number, staleMs: number, timeZone?: string }} opts
  */
@@ -524,7 +525,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   else if (cmd === "") process.stdout.write(report(u, { now, staleMs }));
   else {
     console.error(
-      "usage: pnpm prd usage [--json]   (usage.mjs statusline|stop-failure|status: the hooks' and status's)",
+      `usage: ${toolCmd.prd} usage [--json]   (usage.mjs statusline|stop-failure|status: the hooks' and status's)`,
     );
     process.exit(2);
   }

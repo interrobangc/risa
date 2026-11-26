@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# End a recorded session. (pnpm prd end)
+# End a recorded session. (prd end)
 #
 #   end-session.sh [<name>]
 #
 # With a name (prd-<topic>, plan-<topic>, hotfix-<name>, backlog, recover): the live session its record names.
 # With none, the calling shell's own session: the record of the worktree it is
 # in when that is live, else the shell's ancestor claude process (a session
-# started before session.sh, or one whose worktree `pnpm prd rm` has removed).
+# started before session.sh, or one whose worktree `prd rm` has removed).
 # Refuses when it finds neither. A finished session runs it as its last step;
 # its tab closes when the session ends (a tab the opener made execs it).
 #
@@ -24,7 +24,7 @@ bin=$(cd "$(dirname "$0")" && pwd)
 export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
 wait_secs=${RISA_END_WAIT:-10}
 
-(($# <= 1)) || die "usage: pnpm prd end [<name>]"
+(($# <= 1)) || die "usage: ${prd_cmd} end [<name>]"
 
 # checked NAME → "<pid> <how>" for NAME's record, once its pid checks out (exit 4: it has ended).
 checked() {

@@ -1,10 +1,10 @@
-// The parts `pnpm prd status` prints after the worktree table: the dispatcher
+// The parts `prd status` prints after the worktree table: the dispatcher
 // (running, its code current or stale, paused and why, or stopped, and its log's last entry), the recorded
 // sessions (.loops/.sessions: name, kind, live or ended, age, run-through or not,
 // managed by the dispatcher or opened by hand) and the open asks (the count,
 // split into questions awaiting an answer, reports and those decided for you;
 // the oldest awaiting one, else the oldest, and its age), and the workers: every lease
-// holder (and waiter), every `pnpm prd` command under a live session and every slice
+// holder (and waiter), every `prd` command under a live session and every slice
 // agent, each with its age, its usual time (metrics.mjs) and its state. The sessions,
 // asks and workers parts print nothing, heading included, when they have nothing to
 // show; the dispatcher's always prints.
@@ -26,7 +26,7 @@ import { branchKind, readData, usualTime } from "./metrics.mjs";
 import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { ancestorsOf, processCwds, readLeases, workerFacts } from "./workers.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** How much of the dispatcher's log's end is read for its last entry. */
@@ -62,7 +62,7 @@ export function lastEntry(/** @type {string} */ file) {
  */
 export function codePart(code, pid, current) {
   if (!code || code.pid !== pid)
-    return ", code unknown (it predates the code check: pnpm prd dispatch --stop, then pnpm prd dispatch)";
+    return `, code unknown (it predates the code check: ${toolCmd.prd} dispatch --stop, then ${toolCmd.prd} dispatch)`;
   if (!current) return "";
   return staleCode(code.hash, current)
     ? `, code stale (${code.hash}; the main checkout has ${current}: it re-execs before its next tick)`
@@ -85,8 +85,8 @@ export function dispatcherPart(
   const since = paused?.at && !Number.isNaN(Date.parse(paused.at)) ? `, ${age(paused.at, now)} ago` : "";
   const why = paused ? `paused${since}: ${paused.why || "by hand"}` : "";
   const state = pid
-    ? `running (pid ${pid})${codePart(st.code, pid, current())}${paused ? `, ${why} (pnpm prd dispatch --resume)` : ""}`
-    : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with pnpm prd dispatch`;
+    ? `running (pid ${pid})${codePart(st.code, pid, current())}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
+    : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
   const last = lastEntry(files.log);
   return [`DISPATCHER: ${state}`, ...(last ? [`last: ${shorten(last, 120)}`] : []), ""].join("\n") + "\n";
 }
@@ -147,7 +147,7 @@ export function statusParts(sessionsDir, asksDir, { now = Date.now(), live } = {
       [defaulted.length, "decided for you"],
     ].flatMap(([n, what]) => (n ? [`${n} ${what}`] : []));
     const o = awaiting[0] ?? asks[0];
-    out.push(`OPEN ASKS: ${asks.length} (pnpm prd asks): ${counts.join(", ")}`);
+    out.push(`OPEN ASKS: ${asks.length} (${toolCmd.prd} asks): ${counts.join(", ")}`);
     out.push(`oldest: ${o.id} ${o.kind} ${o.topic}, ${age(o.askedAt, now)} ago: ${shorten(o.text, 80)}`);
     out.push("");
   }
@@ -159,7 +159,7 @@ const QUIET_MS = 10 * 60_000;
 /** How recent a slice worktree's progress or process must be to show its agent as unknown. */
 const UNKNOWN_RECENT_MS = 30 * 60_000;
 
-/** A `pnpm prd` command line's arguments ("check --quick …"), or null for any other process. */
+/** A `prd` command line's arguments ("check --quick …"), or null for any other process. */
 export function prdArgs(/** @type {string} */ command) {
   const m =
     /^(?:\S*node\s+)?\S*\bpnpm(?:\.c?js)?\s+(?:(?:-s|--silent|-C\s+\S+|--dir\s+\S+)\s+)*prd(?:\s+(.*))?$/.exec(
@@ -169,7 +169,7 @@ export function prdArgs(/** @type {string} */ command) {
 }
 
 /**
- * Every `pnpm prd` command under a live session: the outermost of each (pnpm, then the
+ * Every `prd` command under a live session: the outermost of each (pnpm, then the
  * prd.sh it runs, count once). Pure.
  * @param {{ pid: number, ppid: number, ageSeconds: number | null, command: string }[]} table
  * @param {Map<number, string>} sessions a live session's pid to its name
@@ -184,7 +184,7 @@ export function prdCommands(table, sessions) {
     const up = ancestorsOf(p.ppid, table);
     const session = up.find((pid) => sessions.has(pid));
     if (session === undefined) continue;
-    // A pnpm prd above this one, below the session: this is its prd.sh.
+    // A prd above this one, below the session: this is its prd.sh.
     const below = up.slice(0, up.indexOf(session));
     if (below.some((pid) => prdArgs(byPid.get(pid)?.command ?? "") !== null)) continue;
     out.push({ session: sessions.get(session) ?? "?", pid: p.pid, args, ageSeconds: p.ageSeconds });
@@ -205,7 +205,7 @@ export function againstUsual(
   return seconds > u.slowestSeconds ? "slow" : "";
 }
 
-/** A call or process "Bash: pnpm prd check --quick" for an agent's state. */
+/** A call or process "Bash: prd check --quick" for an agent's state. */
 const callNote = (/** @type {any} */ c) =>
   shorten(
     c.command ? `${c.source === "process" ? `pid ${c.pid}` : c.tool}: ${c.command}` : (c.tool ?? "?"),
@@ -267,7 +267,7 @@ export function workersPart({ facts, leases, commands, usual, now }) {
     const verb = c.args.split(/\s+/)[0];
     const u =
       verb === "check" ? usual({ kind: "check" }) : verb === "land" ? usual({ kind: "landing" }) : null;
-    row("command", c.session, `pnpm prd ${c.args}`, c.ageSeconds, u, "running");
+    row("command", c.session, `${toolCmd.prd} ${c.args}`, c.ageSeconds, u, "running");
   }
 
   for (const f of facts) {

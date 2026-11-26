@@ -31,19 +31,19 @@
 // subject lists every id, its body keeps each write's lines, and the ref
 // update still compares against the HEAD it read (scripts/backlog/amend.mjs).
 //
-//   pnpm backlog ingest                      file new inbox bullets (status inbox), tag them (B-n);
-//                                            runs the pickup (pnpm prd dev-sync) first, outside the lock
-//   pnpm backlog inbox                       show inbox bullets not filed yet (origin/dev's copy
+//   backlog ingest                      file new inbox bullets (status inbox), tag them (B-n);
+//                                            runs the pickup (prd dev-sync) first, outside the lock
+//   backlog inbox                       show inbox bullets not filed yet (origin/dev's copy
 //                                            merged with the working copy)
-//   pnpm backlog inbox add <type> <text…> [--details TEXT] [--anyway]
+//   backlog inbox add <type> <text…> [--details TEXT] [--anyway]
 //                                            a bullet at the end of the type's section, on origin/dev;
 //                                            a look-alike (items, unfiled lines) stops it (exit 3)
-//   pnpm backlog inbox move <words…> <type>  an unfiled bullet (its words must find one) to another
+//   backlog inbox move <words…> <type>  an unfiled bullet (its words must find one) to another
 //                                            heading, on origin/dev; a filed one names its `set` line
-//   pnpm backlog inbox edit <words…> --to TEXT [--details TEXT]
+//   backlog inbox edit <words…> --to TEXT [--details TEXT]
 //                                            reword an unfiled bullet in place (--details replaces its
 //                                            detail lines, "" drops them); a filed one is refused
-//   pnpm backlog inbox remove <words…>       an unfiled bullet and its details out, on origin/dev;
+//   backlog inbox remove <words…>       an unfiled bullet and its details out, on origin/dev;
 //                                            a filed one is refused
 //
 // The inbox commands write through the origin writer (scripts/backlog/origin.mjs):
@@ -52,33 +52,33 @@
 // HEAD; unpushed backlog commits of local dev go first. Then the pickup, best
 // effort: a busy main checkout only prints why it skipped. BACKLOG_PICKUP=off
 // skips the pickup (tests).
-//   pnpm backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
-//   pnpm backlog show B-n                    finds archived items too (list --all lists them)
-//   pnpm backlog similar <text…>             open and archived items that look like it (read only)
-//   pnpm backlog add <type> <title…> [--prd P] [--status S] [--note TEXT] [--anyway]
+//   backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
+//   backlog show B-n                    finds archived items too (list --all lists them)
+//   backlog similar <text…>             open and archived items that look like it (read only)
+//   backlog add <type> <title…> [--prd P] [--status S] [--note TEXT] [--anyway]
 //                                            a look-alike prints it and files nothing (exit 3)
 //                                            unless --anyway; ingest always files, and notes them
-//   pnpm backlog set B-n… key=value… [--archived]   keys: status type title prd owner commit
-//   pnpm backlog note B-n [B-n…] <text…> [--archived]   ids after the first need the B- prefix
+//   backlog set B-n… key=value… [--archived]   keys: status type title prd owner commit
+//   backlog note B-n [B-n…] <text…> [--archived]   ids after the first need the B- prefix
 //                                            --archived: change archived items in place (they stay archived)
-//   pnpm backlog claim B-n… [--as OWNER] [--force]   owner defaults to your branch
-//   pnpm backlog release B-n…
-//   pnpm backlog done B-n… [--commit SHA]    work merged into its PRD branch (default: your HEAD)
-//   pnpm backlog refresh [--no-fetch]        write the derived statuses (landed, staging, live)
-//   pnpm backlog commit [message]            commit hand edits of the files (backlog.md normalised)
-//   pnpm backlog doctor [--fix]              check the backlog; exit 1 on findings; --fix the safe ones
-//   pnpm backlog archive [B-n…]              move landed, staging, live and dropped items to the archive
+//   backlog claim B-n… [--as OWNER] [--force]   owner defaults to your branch
+//   backlog release B-n…
+//   backlog done B-n… [--commit SHA]    work merged into its PRD branch (default: your HEAD)
+//   backlog refresh [--no-fetch]        write the derived statuses (landed, staging, live)
+//   backlog commit [message]            commit hand edits of the files (backlog.md normalised)
+//   backlog doctor [--fix]              check the backlog; exit 1 on findings; --fix the safe ones
+//   backlog archive [B-n…]              move landed, staging, live and dropped items to the archive
 //                                            (with ids only those; one that isn't finished refuses all)
-//   pnpm backlog path
-//   pnpm backlog ci-file [--push]            pnpm prd ci's filing: JSON findings on stdin, one
+//   backlog path
+//   backlog ci-file [--push]            prd ci's filing: JSON findings on stdin, one
 //                                            commit with scripts/ci/quarantine.txt (scripts/ci/filing.mjs)
 //
 // The PRD registry (the "## PRDs" table; row order is the priority; scripts/backlog/registry.mjs):
-//   pnpm backlog prd list [--json]           each topic with its worked-out state
-//   pnpm backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
-//   pnpm backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
-//   pnpm backlog prd set <topic> flags+=hold | flags-=hold   adds or removes flags, keeping the others
-//   pnpm backlog prd move <topic> --first|--last|--before T|--after T
+//   backlog prd list [--json]           each topic with its worked-out state
+//   backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
+//   backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
+//   backlog prd set <topic> flags+=hold | flags-=hold   adds or removes flags, keeping the others
+//   backlog prd move <topic> --first|--last|--before T|--after T
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
 // BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
@@ -92,7 +92,7 @@ import * as edits from "./inbox-edit.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
-import { loadConfigOrExit } from "../loops/config.mjs";
+import { loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 
 const { config } = loadConfigOrExit("backlog");
 const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
@@ -505,7 +505,7 @@ function ingest(b, inbox) {
 // ---- the inbox on origin/dev ----------------------------------------------
 
 /**
- * The pickup: `pnpm prd dev-sync` (scripts/loops/lib.sh), best effort. Its
+ * The pickup: `prd dev-sync` (scripts/loops/lib.sh), best effort. Its
  * output goes to stderr; a refusal (the checkout off dev, mid-merge, other
  * edits in the way) prints why it skipped, and the command carries on. It
  * runs only when this script's lib.sh belongs to the same main checkout, so
@@ -671,7 +671,7 @@ function inboxMove(args) {
     edit: (t, localText) => {
       moved = null;
       const e = findUnfiled(t, localText, words, (x, id) =>
-        filedAs(x, id, `change the item instead: pnpm backlog set ${id} type=${type}`),
+        filedAs(x, id, `change the item instead: ${toolCmd.backlog} set ${id} type=${type}`),
       );
       if (e.type === type) return t;
       moved = { text: e.text, from: e.type };
@@ -903,7 +903,7 @@ function archiveFinished(b, ctx, wanted = []) {
   const archive = ctx.archive();
   for (const it of done) {
     if (archive.items.some((a) => a.id === it.id))
-      throw new fmt.BacklogError(`${it.id} is already in ${ARCHIVE_REL} (run pnpm backlog doctor)`);
+      throw new fmt.BacklogError(`${it.id} is already in ${ARCHIVE_REL} (run ${toolCmd.backlog} doctor)`);
     archive.items.push(it);
   }
   b.items = b.items.filter((i) => !done.includes(i));
@@ -1180,11 +1180,13 @@ function main() {
       const pending = merged === null ? [] : fmt.newInboxEntries(merged);
       for (const e of pending) console.log(`${e.type.padEnd(8)}  ${e.text}`);
       return console.log(
-        pending.length ? `${pending.length} not filed yet (pnpm backlog ingest)` : "nothing new in the inbox",
+        pending.length
+          ? `${pending.length} not filed yet (${toolCmd.backlog} ingest)`
+          : "nothing new in the inbox",
       );
     }
     case "ingest": {
-      pickup("pnpm backlog ingest"); // before the lock: dev-sync takes it too
+      pickup(`${toolCmd.backlog} ingest`); // before the lock: dev-sync takes it too
       const filed = write(
         "ingest",
         (items) => {
@@ -1390,7 +1392,7 @@ try {
     console.error("backlog: this looks like what's already filed or in the inbox; nothing was added:");
     for (const m of e.matches) console.error(`  ${lookAlikeLine(m)}`);
     console.error(
-      `Note the existing item (pnpm backlog note ${fmt.IDS.prefix}<n> …), or rerun with --anyway.`,
+      `Note the existing item (${toolCmd.backlog} note ${fmt.IDS.prefix}<n> …), or rerun with --anyway.`,
     );
     process.exit(3);
   }

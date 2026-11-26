@@ -1,4 +1,4 @@
-// What rotation and `pnpm prd rm` decide from a plan and the registry. Pure;
+// What rotation and `prd rm` decide from a plan and the registry. Pure;
 // rotate-into.sh and rm.sh hand it the facts.
 //
 //   - slicesLeft and doneFlags: landed.mjs's, re-exported.
@@ -12,7 +12,7 @@
 //     a 166k mid-wave rotation ended five slices waiting on their hand-off checks).
 //
 // CLI:
-//   node rotate.mjs clears-hot <topic>        stdin: `pnpm backlog prd list
+//   node rotate.mjs clears-hot <topic>        stdin: `backlog prd list
 //                                             --json`; exit 0 when
 //                                             rm.sh clears the row's hot files
 //   node rotate.mjs run-through <plan file>   exit 0 when _Status_ records the

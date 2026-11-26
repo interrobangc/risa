@@ -1,4 +1,4 @@
-// ci-args.mjs: part of `pnpm prd ci` (ci.mjs has the map). The commands'
+// ci-args.mjs: part of `prd ci` (ci.mjs has the map). The commands'
 // arguments (run, blame and file, gate) and the branch and commit a request
 // means.
 import { backlogIds } from "../loops/config.mjs";

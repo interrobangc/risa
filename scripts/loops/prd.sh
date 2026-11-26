@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pnpm prd <command>: one front door for running PRDs in parallel worktrees.
+# prd <command>: one front door for running PRDs in parallel worktrees.
 # Run it from any worktree. Each command is a thin wrapper; the scripts beside
 # this one document the details.
 set -euo pipefail
@@ -15,13 +15,13 @@ use_node || true
 
 usage() {
   cat <<USAGE
-pnpm prd <command>
+${prd_cmd} <command>
 
   See what's going on
     status                    every worktree: branch, changes, dev server link; sessions (managed or by hand);
                               the dispatcher (running, paused and why, stopped; its last line) and its code (current or
                               stale); lease holders; the load;
-                              the workers (each lease, pnpm prd command and slice agent: age, usual time, state)
+                              the workers (each lease, ${prd_cmd} command and slice agent: age, usual time, state)
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     watch [topic] [--json] [--wait [--timeout <s>]]   each slice agent's state (ok, slow, quiet, no-progress,
                               stopped, unknown) and the next action (none, nudge, restart, skeptic); --wait
@@ -41,7 +41,7 @@ pnpm prd <command>
     dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
     dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's)
     queue <topic>             put the topic first in the PRD registry and return: the dispatcher takes it next
-                              (or, with none running, says to start one or pnpm prd start <topic>)
+                              (or, with none running, says to start one or ${prd_cmd} start <topic>)
     plan <topic> [--open] [${backlog_id_prefix}n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
@@ -58,7 +58,7 @@ pnpm prd <command>
                               outside any PRD (reused if it exists); --open starts its session here
                               (on opus; --model <m> for another model)
                               (prompt hotfix <name> ["<the fix>"] is that session's first prompt)
-                              (pnpm prd check there, then pnpm prd land ${hotfix_prefix}<name> on your word)
+                              (${prd_cmd} check there, then ${prd_cmd} land ${hotfix_prefix}<name> on your word)
     stack up|down [name]      add or remove a worktree's dev stack (slot, env files, Compose, seed)
     rm <name> [--force]       remove a worktree, its stack, its test database and, if merged, its branch
                               (from inside a ${prd_prefix} or ${plan_prefix} worktree, by its own session: then ends it)
@@ -84,7 +84,7 @@ pnpm prd <command>
     down                      before a planned restart: record what's up (the dispatcher too), stop the
                               dispatcher, servers, stacks, the test Postgres
     down --stay [<why>]       the same, and stay down: nothing brings it back by itself (the watchdog,
-                              recover --unattended) until pnpm prd recover by hand
+                              recover --unattended) until ${prd_cmd} recover by hand
     autostart install|remove|status   the LaunchAgent (yours to install) that runs the watchdog at login and
                               every 5 minutes from the main checkout; status: loaded, each tool on its PATH
     watchdog [--dry-run [--json]]   recover --unattended only on a reboot or crash (a down record older than
@@ -95,7 +95,7 @@ pnpm prd <command>
                               backlog and recovery sessions (main checkout) always open fresh
                               (--background: iTerm2 stays where it is and the selected tab stays selected)
     end [<name>]              end a recorded session, or with no name the calling shell's own (a finished
-                              session; pnpm prd rm ends a finished orchestrator or planner itself); its tab closes
+                              session; ${prd_cmd} rm ends a finished orchestrator or planner itself); its tab closes
     bye [--dry-run] [--json]  a session's hand-over check, when the user says just "bye": clean (no uncommitted or
                               unpushed work, worktree, branch, stack, server, running lease, background job or open
                               question of its own left), it prints the hand-off line, releases its leases and ends the
@@ -222,7 +222,7 @@ pnpm prd <command>
                               it): fast-forward, replay unshared backlog commits, or merge; never stops on the inbox
 
   prompt orchestrator|plan|slice <topic> [n|--auto]   the first prompt for a session (prompt backlog: no topic)
-                     recover: the recovery agent (pnpm prd recover opens it)
+                     recover: the recovery agent (${prd_cmd} recover opens it)
                      tidy: the cleanup brief for a cheap session (haiku), repeated with /loop
                      skeptic ask|land|plan|stall --evidence <file>: the brief for a fresh skeptic
                      orchestrator <topic> --resume [--auto]: take over after an interruption
@@ -256,7 +256,7 @@ case $cmd in
     while :; do
       # Collect first, then redraw, so the screen never sits empty while ls.sh
       # runs. A failed poll shows its error and the watch carries on.
-      out=$("$bin/ls.sh" 2>&1) || out+=$'\n'"(pnpm prd status failed; retrying)"
+      out=$("$bin/ls.sh" 2>&1) || out+=$'\n'"(${prd_cmd} status failed; retrying)"
       [[ -t 1 ]] && printf '\033[H\033[2J\033[3J'
       printf '%s\n\n%s  ·  every %ss  ·  Ctrl-C to stop\n' "$out" "$(date '+%H:%M:%S')" "$every"
       sleep "$every"
@@ -325,8 +325,8 @@ case $cmd in
     tbase=$trunk
     while (($#)); do
       case $1 in
-        --base) tbase=${2:?"usage: pnpm prd tier [--base <ref>]"}; shift 2 ;;
-        *) die "usage: pnpm prd tier [--base <ref>]" ;;
+        --base) tbase=${2:?"usage: ${prd_cmd} tier [--base <ref>]"}; shift 2 ;;
+        *) die "usage: ${prd_cmd} tier [--base <ref>]" ;;
       esac
     done
     tip=$(git rev-parse HEAD) || die "not in a git worktree"
@@ -423,7 +423,7 @@ case $cmd in
     ;;
   slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
   hotfix)
-    name=${1:?"usage: pnpm prd hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
+    name=${1:?"usage: ${prd_cmd} hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
     while (($#)); do
       case $1 in
         --open) open=1 ;;
@@ -470,7 +470,7 @@ case $cmd in
       done
       exec node "$bin/check-times.mjs" --log "${RISA_CHECK_LOG:-$loops/.check-times.log}" ${since:+--since "$since"}
     fi
-    name=$(here_name); [[ -n $name ]] || die "run pnpm prd check inside a .loops worktree"
+    name=$(here_name); [[ -n $name ]] || die "run ${prd_cmd} check inside a .loops worktree"
     dir=$loops/$name; quick=0 why=""
     while (($#)); do
       case $1 in
@@ -520,7 +520,7 @@ case $cmd in
     fi
     ;;
   sync)
-    name=$(here_name); [[ -n $name ]] || die "run pnpm prd sync inside a PRD's worktree"
+    name=$(here_name); [[ -n $name ]] || die "run ${prd_cmd} sync inside a PRD's worktree"
     dir=$loops/$name; branch=$(git -C "$dir" branch --show-current)
     [[ $branch == "$prd_prefix"* || $branch == "$plan_prefix"* || $branch == "$hotfix_prefix"* ]] ||
       die "$branch isn't a $prd_prefix, $plan_prefix or $hotfix_prefix branch"
@@ -549,10 +549,10 @@ case $cmd in
         git -C "$dir" commit -q -m "chore(${branch#*/}): take $trunk's CI lists" -- $lists
         echo "Took $trunk's CI lists ($(echo $lists | tr ' ' ',')) into $branch"
       fi
-      echo "$branch needs no merge: $trunk's changes share no file with it and bring nothing risky. No recheck needed (pnpm prd sync --force merges anyway, when you need that code)"
+      echo "$branch needs no merge: $trunk's changes share no file with it and bring nothing risky. No recheck needed (${prd_cmd} sync --force merges anyway, when you need that code)"
     else
       git -C "$dir" merge --no-ff -m "chore(${branch#*/}): merge $trunk into $branch" "$trunk"
-      echo "Merged $trunk into $branch. If seeds or migrations changed: $(project_command datastoreReset). Then: pnpm prd check"
+      echo "Merged $trunk into $branch. If seeds or migrations changed: $(project_command datastoreReset). Then: ${prd_cmd} check"
     fi
     ;;
   ask | asks | answer)

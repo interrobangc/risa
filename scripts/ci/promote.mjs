@@ -1,4 +1,4 @@
-// `pnpm prd ci promote`: the staging gate. Merges the open candidate's PR only when
+// `prd ci promote`: the staging gate. Merges the open candidate's PR only when
 // the newest candidate verdict on its exact tip passes, pinned to that commit with a
 // merge commit, then deletes its rc/ branch and its ci/candidate/ ref.
 //
@@ -7,6 +7,7 @@
 // by hand on GitHub is the override; agents never merge a candidate any other way.
 // Exit 6 is a refusal, with nothing changed. Exit 5 means the merge can't be confirmed
 // and the refs are kept.
+import { toolCmd } from "../loops/config.mjs";
 import {
   REFUSED,
   Refusal,
@@ -62,13 +63,13 @@ function deleteCiRef(/** @type {Io} */ io, /** @type {Deps} */ deps, /** @type {
   const at = deps.remoteSha(io, ref);
   if (at === "") return;
   if (at && deps.deleteRef(io, ref, at)) io.log(`deleted ${ref}`);
-  else io.log(`warning: could not delete ${ref}; pnpm prd tidy lists it`);
+  else io.log(`warning: could not delete ${ref}; ${toolCmd.prd} tidy lists it`);
 }
 
 function promote(/** @type {Io} */ io, /** @type {Deps} */ deps) {
   fetchRefs(io);
   const open = currentCandidate(io);
-  if (!open) return refuse("no open candidate: pnpm prd ci candidate cut");
+  if (!open) return refuse(`no open candidate: ${toolCmd.prd} ci candidate cut`);
   const { pr, branch, tip } = open;
   if (pr.headRefOid !== tip)
     refuse(
@@ -84,7 +85,7 @@ function promote(/** @type {Io} */ io, /** @type {Deps} */ deps) {
     refuse(`a run is still going on ${short(tip)}: ${found.going.url ?? found.going.databaseId}`);
   if (!found.verdict)
     refuse(
-      `no readable ${TIER} verdict for ${short(tip)} (none ran, or its 7-day artifact expired). Run: pnpm prd ci run ${TIER} --ref origin/${branch} --wait`,
+      `no readable ${TIER} verdict for ${short(tip)} (none ran, or its 7-day artifact expired). Run: ${toolCmd.prd} ci run ${TIER} --ref origin/${branch} --wait`,
     );
   for (const line of deps.verdictLines(found.verdict)) io.log(line);
   const decision = releasePasses(found.verdict, TIER, tip);
@@ -124,7 +125,7 @@ function promote(/** @type {Io} */ io, /** @type {Deps} */ deps) {
  * @param {Deps} deps
  */
 export function runPromote(argv, io, deps) {
-  if (argv.length) throw new Error("usage: pnpm prd ci promote");
+  if (argv.length) throw new Error(`usage: ${toolCmd.prd} ci promote`);
   try {
     return promote(io, deps);
   } catch (e) {

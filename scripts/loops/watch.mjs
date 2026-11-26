@@ -1,4 +1,4 @@
-// pnpm prd watch [<topic>] [--json] [--wait [--timeout <s>]] [--mark <slice> nudged|replied|restarted|left|asked]
+// prd watch [<topic>] [--json] [--wait [--timeout <s>]] [--mark <slice> nudged|replied|restarted|left|asked]
 // The watch: each slice agent of a topic, its state and the orchestrator's next
 // action, from the worker reader's facts (workers.mjs).
 //
@@ -48,7 +48,7 @@ import { awaitsAnswer, getAsk, listAsks, shorten, span } from "./asks.mjs";
 import { readData, usualTime } from "./metrics.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { workerFacts } from "./workers.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 export const MARKS = ["nudged", "replied", "restarted", "left", "asked"];
 export const STATES = ["ok", "slow", "quiet", "no-progress", "stopped", "unknown"];
@@ -534,8 +534,8 @@ export function formatReading(/** @type {ReturnType<typeof reading>} */ r) {
 
 function usage(/** @type {string} */ why) {
   console.error(`watch: ${why}
-usage: pnpm prd watch [<topic>] [--json] [--wait [--timeout <s>]]
-       pnpm prd watch [<topic>] --mark <slice> nudged|replied|restarted|left|asked [--until <ISO|+30m>] [--ask <id>] [--note <text>]`);
+usage: ${toolCmd.prd} watch [<topic>] [--json] [--wait [--timeout <s>]]
+       ${toolCmd.prd} watch [<topic>] --mark <slice> nudged|replied|restarted|left|asked [--until <ISO|+30m>] [--ask <id>] [--note <text>]`);
   process.exit(2);
 }
 

@@ -22,7 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_MIN_FREE_GB, formatInventory, inventory } from "./inventory.mjs";
 import { listRecords } from "./land-journal.mjs";
-import { branchKinds, sharedNames } from "./config.mjs";
+import { branchKinds, sharedNames, toolCmd } from "./config.mjs";
 import { fact, runHook } from "./hooks.mjs";
 
 /** The backlog lock is stale after this long (backlog.mjs takes it over then too). */
@@ -238,7 +238,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     locks.push({
       kind: "dispatch",
       path: dispatchLock,
-      holder: "pnpm prd dispatch",
+      holder: `${toolCmd.prd} dispatch`,
       pid,
       alive,
       why: alive ? `the dispatcher, pid ${pid}, is running` : `the dispatcher's pid ${pid ?? "?"} is gone`,
@@ -271,7 +271,7 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
       locks.push({
         kind: "backlog",
         path: lock,
-        holder: "pnpm backlog",
+        holder: `${toolCmd.backlog}`,
         pid: null,
         alive,
         why: `${Math.round(age / 1000)}s old${alive ? "" : `, over ${BACKLOG_LOCK_STALE_MS / 1000}s`}`,

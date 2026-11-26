@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// pnpm prd dispatch: the dispatcher. Started once in a terminal tab of its own
+// prd dispatch: the dispatcher. Started once in a terminal tab of its own
 // and left there; every tick it gathers the facts, asks the pick
 // (dispatch-pick.mjs) for one action and does it, then logs the action and
 // why it passed every other topic over.
 //
-//   pnpm prd dispatch [--every <seconds>]   tick every SECONDS (default 60) until stopped
-//   pnpm prd dispatch --once                one tick, then exit
-//   pnpm prd dispatch --dry-run             one tick's pick, printed: writes and opens nothing
-//   pnpm prd dispatch --pause [<why>]       the running dispatcher (and any later one) does nothing
-//   pnpm prd dispatch --resume              undo --pause
-//   pnpm prd dispatch --stop                end the running dispatcher (TERM; waits
+//   prd dispatch [--every <seconds>]   tick every SECONDS (default 60) until stopped
+//   prd dispatch --once                one tick, then exit
+//   prd dispatch --dry-run             one tick's pick, printed: writes and opens nothing
+//   prd dispatch --pause [<why>]       the running dispatcher (and any later one) does nothing
+//   prd dispatch --resume              undo --pause
+//   prd dispatch --stop                end the running dispatcher (TERM; waits
 //                                           RISA_DISPATCH_STOP_SECS, 10, for it to go)
-//   pnpm prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
+//   prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
 //   - start: `new.sh prd <topic>`, then a managed, run-through orchestrator
@@ -29,9 +29,9 @@
 //   - session requests (session-requests.mjs), after the keep-alive and before
 //     starts: the oldest pending one opens backlog-<name>, or is refused, with a
 //     notice either way. RISA_MAX_BACKLOG_SESSIONS (4);
-//   - ask: a reopen question filed with `pnpm prd ask` (session "dispatch"),
+//   - ask: a reopen question filed with `prd ask` (session "dispatch"),
 //     then a one-shot helper session (haiku, Remote Control, in a background
-//     tab) whose prompt is "send this PushNotification, then pnpm prd end"; a
+//     tab) whose prompt is "send this PushNotification, then prd end"; a
 //     helper that can't start is ignored (the ask's own macOS notification and
 //     RISA_ASK_NOTIFY still fire). Its answer is acted on in a later tick:
 //     "reopen again" resets the count, "hold the topic" flags the row `hold`.
@@ -51,12 +51,12 @@
 // rotation, or "leave it"). RISA_STUCK_MIN (30); RISA_STUCK_WATCH=off stops it.
 //
 // Every RISA_PICKUP_EVERY seconds (300; `off` never), on a tick that isn't
-// paused, it runs the pickup (`pnpm prd dev-sync`), so lines pushed to
+// paused, it runs the pickup (`prd dev-sync`), so lines pushed to
 // origin/dev reach the main checkout; a failed or refused one logs one line and
 // the tick carries on.
 //
 // Every TIDY_EVERY_MS (six hours), on a tick that does nothing else (and isn't
-// paused), it runs `pnpm prd tidy --yes`. Without iTerm2 it refuses to run (it
+// paused), it runs `prd tidy --yes`. Without iTerm2 it refuses to run (it
 // couldn't open sessions); --dry-run works anywhere.
 //
 // Each tick first takes the drain decision (drain.mjs) from the usage readings
@@ -74,7 +74,7 @@
 // pick never counts it as a death; a live one is ended (TERM, KILL a tick later), and a
 // dead one reopened through the opener with --continue and the carry-on prompt
 // (open-session.sh --carry-on), one per tick, taking the tick's action, never counted
-// toward the reopen limit. Never while paused, draining or limited, during a pnpm prd
+// toward the reopen limit. Never while paused, draining or limited, during a prd
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
 // Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
@@ -82,7 +82,7 @@
 // with the main checkout's; when a landing or the pickup changed it, it logs one
 // line and re-execs itself (process.execve: the same pid, tab and lock) on the main
 // checkout's dispatch.mjs, so it never runs old code past one tick (B-809). Its
-// start writes the hash into .dispatch.json (`code`), and `pnpm prd status` says
+// start writes the hash into .dispatch.json (`code`), and `prd status` says
 // whether the running one's code is current or stale.
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
@@ -148,13 +148,13 @@ import {
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 import { resumeDecision, resumingOf, sessionOfBranch } from "./resume.mjs";
 import { clearStalled, markStalled, readReadings, readUsage, staleMsOf } from "./usage.mjs";
-import { branchKinds } from "./config.mjs";
+import { branchKinds, toolCmd } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** How often an idle tick runs `pnpm prd tidy --yes`. */
+/** How often an idle tick runs `prd tidy --yes`. */
 export const TIDY_EVERY_MS = 6 * 3600_000;
-/** How often the pickup (`pnpm prd dev-sync`) runs by default, in seconds (RISA_PICKUP_EVERY). */
+/** How often the pickup (`prd dev-sync`) runs by default, in seconds (RISA_PICKUP_EVERY). */
 export const PICKUP_EVERY_S = 300;
 /** The longest a pickup may take before the tick gives up on it (a hung fetch). */
 export const PICKUP_TIMEOUT_MS = 120_000;
@@ -221,7 +221,7 @@ export function sessionLine(
 export const helperPrompt = (/** @type {string} */ line) =>
   `You are a one-shot helper for the dispatcher. Do exactly two things and nothing else: ` +
   `call the PushNotification tool once with this text: ${JSON.stringify(line)}. ` +
-  `Then run \`pnpm prd end\` in Bash (it ends this session and closes its tab).`;
+  `Then run \`${toolCmd.prd} end\` in Bash (it ends this session and closes its tab).`;
 
 /**
  * The helper's claude: claudeBin, after the Claude config folder it gets for MAIN's
@@ -347,7 +347,7 @@ export function storedCap(/** @type {string} */ file) {
 /** The PRD cap and what set it: the stored --cap, else RISA_MAX_PRDS, else 4. */
 export function prdCapOf(/** @type {string} */ file, env = process.env) {
   const stored = storedCap(file);
-  if (stored !== null) return { cap: stored, from: "pnpm prd dispatch --cap" };
+  if (stored !== null) return { cap: stored, from: `${toolCmd.prd} dispatch --cap` };
   const fromEnv = positive(env.RISA_MAX_PRDS, 0);
   return fromEnv ? { cap: fromEnv, from: "RISA_MAX_PRDS" } : { cap: 4, from: "default" };
 }
@@ -520,7 +520,7 @@ const positive = (/** @type {string | undefined} */ s, /** @type {number} */ d) 
 /** Everything the pick needs, and the records for the bookkeeping. */
 export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = process.env) {
   const listed = backlog(p.main, ["prd", "list", "--json"]);
-  if (!listed.ok) throw new Error(`pnpm backlog prd list failed: ${listed.err || listed.out}`);
+  if (!listed.ok) throw new Error(`${toolCmd.backlog} prd list failed: ${listed.err || listed.out}`);
   const rows = JSON.parse(listed.out);
   const records = readRecords(p.sessions).map(({ name, record }) => {
     // When it went rotating: the record's own time if it has one, else the file's mtime (the
@@ -666,7 +666,9 @@ function contextStep(
   let acted = false;
   for (const a of actions) {
     if (a.type === "hold") {
-      out(`context: ${a.session} waits to rotate: a pnpm prd or pnpm backlog command is running under it`);
+      out(
+        `context: ${a.session} waits to rotate: a ${toolCmd.prd} or ${toolCmd.backlog} command is running under it`,
+      );
       continue;
     }
     if (dryRun) {
@@ -1092,7 +1094,7 @@ function requestStep(
       now,
     });
   } catch (e) {
-    // The requester reads it in `pnpm prd session requests`.
+    // The requester reads it in `prd session requests`.
     const noticeFailed = e instanceof Error ? e.message : String(e);
     out(`  its notice failed: ${noticeFailed}`);
     try {
@@ -1157,7 +1159,7 @@ function drainStep(
     if (dryRun) out("usage: would report an unknown reading");
     else if (
       report(
-        `The usage reading is unknown (${drain.why}) while sessions are live: the dispatcher can't drain before a limit. Check the sessions' status lines (pnpm prd usage).`,
+        `The usage reading is unknown (${drain.why}) while sessions are live: the dispatcher can't drain before a limit. Check the sessions' status lines (${toolCmd.prd} usage).`,
       )
     ) {
       unknownReported = true;
@@ -1554,7 +1556,7 @@ export function tick(
   // pick, never in its way: a failure is one line.
   const everyMs = pickupEvery(env.RISA_PICKUP_EVERY);
   if (pickupDue(g.state, now, { paused: facts.paused, everyMs })) {
-    if (dryRun) out("pickup: would run pnpm prd dev-sync");
+    if (dryRun) out(`pickup: would run ${toolCmd.prd} dev-sync`);
     else {
       updateState(p.state, (s) => void (s.lastPickup = now));
       const r = run("bash", [join(HERE, "prd.sh"), "dev-sync", "the dispatcher's pickup"], {
@@ -1894,7 +1896,7 @@ async function main() {
   try {
     o = parse(process.argv.slice(2));
   } catch (e) {
-    console.error(`pnpm prd: ${e instanceof Error ? e.message : e}`);
+    console.error(`${toolCmd.prd}: ${e instanceof Error ? e.message : e}`);
     process.exit(2);
   }
   if (o.help) {
@@ -1985,13 +1987,13 @@ async function main() {
 
   if (!canOpenTabs()) {
     console.error(
-      `pnpm prd: dispatch needs iTerm2 (${itermApp()}) to open sessions; --dry-run shows what it would do`,
+      `${toolCmd.prd}: dispatch needs iTerm2 (${itermApp()}) to open sessions; --dry-run shows what it would do`,
     );
     process.exit(1);
   }
   const lock = takeLock(p.lock);
   if (!lock.ok) {
-    console.error(`pnpm prd: a dispatcher is already running (pid ${lock.pid}); --stop ends it`);
+    console.error(`${toolCmd.prd}: a dispatcher is already running (pid ${lock.pid}); --stop ends it`);
     process.exit(1);
   }
   let stopping = false;
@@ -2059,7 +2061,7 @@ async function main() {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main().catch((e) => {
-    console.error(`pnpm prd: ${e instanceof Error ? e.message : String(e)}`);
+    console.error(`${toolCmd.prd}: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(1);
   });
 }

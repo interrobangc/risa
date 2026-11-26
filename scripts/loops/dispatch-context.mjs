@@ -11,8 +11,8 @@
 //      orchestrator's or the inbox session's defaults to "rotate it now"; a backlog session's to "leave
 //      it" (its limit is soft: no answer means keep going). A nudge never
 //      delivered (the session is inside one long command) never gets this far;
-//   3. on "rotate it now", the rotation at the first tick with no `pnpm prd` or
-//      `pnpm backlog` command under the session (a backlog write commits in the
+//   3. on "rotate it now", the rotation at the first tick with no `prd` or
+//      `backlog` command under the session (a backlog write commits in the
 //      main checkout). `ask --wait` doesn't count: it can wait for days, and the
 //      fresh session finds the answer in the asks queue. An orchestrator rotates
 //      mid-wave; a backlog session into a fresh one, with its brief only when it
@@ -73,7 +73,7 @@ export const contextQuestion = (
 const PRD_COMMAND =
   /(?:\bpnpm(?:\.c?js)?\s+(?:run\s+)?(?:prd|backlog)|scripts\/loops\/prd\.sh|scripts\/backlog\/backlog\.mjs)\b((?:\s+[^\s;&|]+){0,2})/g;
 
-/** Whether a command line runs a `pnpm prd` or `pnpm backlog` command that a rotation must not cut. */
+/** Whether a command line runs a `prd` or `backlog` command that a rotation must not cut. */
 export function runsPrdCommand(/** @type {string} */ args) {
   return [...(args ?? "").matchAll(PRD_COMMAND)].some((m) => !/^\s+ask\s+--wait\b/.test(m[1]));
 }

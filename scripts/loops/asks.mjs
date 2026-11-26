@@ -1,6 +1,6 @@
 // The asks store: questions and reports for the dev keeper, one JSON file per
 // ask in a directory (`.loops/.asks/<id>.json` in the main checkout; machine
-// local, untracked). `ask.mjs` is its command line (`pnpm prd ask`, `asks`,
+// local, untracked). `ask.mjs` is its command line (`prd ask`, `asks`,
 // `answer`); this module only reads and writes the files it is handed.
 //
 // An ask: { id, kind: "question" | "report", session, topic, text, options,
@@ -27,6 +27,7 @@
 // One the skeptic decided is filed already settled (`chose`): its answer is the
 // option, `defaulted` is true so it lists and dismisses with the defaulted ones
 // under "decided for you", and it is never pushed.
+import { toolCmd } from "./config.mjs";
 import {
   closeSync,
   fstatSync,
@@ -351,11 +352,11 @@ export function answerAsk(dir, id, reply, { now, lockWaitMs } = {}) {
         throw new AskError(`${id} is a report: it can't be answered (dismiss it with --done)`);
       if (ask.defaulted && ask.skeptic?.verdict === "decide")
         throw new AskError(
-          `${id} was decided by a skeptic: it took "${ask.answer}" (${ask.skeptic.why}), and its session has acted on it, so it can't be answered now. Tell that session if you disagree; dismiss it with pnpm prd asks --done ${id}`,
+          `${id} was decided by a skeptic: it took "${ask.answer}" (${ask.skeptic.why}), and its session has acted on it, so it can't be answered now. Tell that session if you disagree; dismiss it with ${toolCmd.prd} asks --done ${id}`,
         );
       if (ask.defaulted)
         throw new AskError(
-          `${id} was decided for you: it took "${ask.answer}" at ${clock(ask.answeredAt)} after no answer, and its session has acted on it, so it can't be answered now. Tell that session if you disagree; dismiss it with pnpm prd asks --done ${id}`,
+          `${id} was decided for you: it took "${ask.answer}" at ${clock(ask.answeredAt)} after no answer, and its session has acted on it, so it can't be answered now. Tell that session if you disagree; dismiss it with ${toolCmd.prd} asks --done ${id}`,
         );
       if (ask.answeredAt) throw new AskError(`${id} is already answered: ${ask.answer}`);
       if (ask.doneAt) throw new AskError(`${id} was dismissed`);
@@ -473,7 +474,7 @@ export function countdown(ask, now = Date.now()) {
     : `takes "${ask.recommended}": due (still answerable)`;
 }
 
-/** One line on what waits on the user (`pnpm prd asks --short`): open questions oldest first, then counts. */
+/** One line on what waits on the user (`prd asks --short`): open questions oldest first, then counts. */
 export function formatAsksShort(asks, now = Date.now()) {
   if (!asks.length) return "No open asks.";
   const decided = asks.filter((a) => a.defaulted).length;
@@ -488,7 +489,7 @@ export function formatAsksShort(asks, now = Date.now()) {
   return `${open}, ${reports} report${reports === 1 ? "" : "s"}, ${decided} decided for you.`;
 }
 
-/** The `pnpm prd asks` listing of asks (as listAsks returns them): open ones, then the defaulted. */
+/** The `prd asks` listing of asks (as listAsks returns them): open ones, then the defaulted. */
 export function formatAsks(asks, now = Date.now()) {
   if (!asks.length) return "No open asks.";
   const one = (a) => {
@@ -517,7 +518,7 @@ export function formatAsks(asks, now = Date.now()) {
       ? "by a skeptic, or no answer came"
       : "no answer came";
     parts.push(
-      [`DECIDED FOR YOU (${how}; dismiss each once read: pnpm prd asks --done <id>)`, ...decided].join(
+      [`DECIDED FOR YOU (${how}; dismiss each once read: ${toolCmd.prd} asks --done <id>)`, ...decided].join(
         "\n\n",
       ),
     );

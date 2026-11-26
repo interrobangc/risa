@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pnpm prd anchors: a plan's file and symbol anchors, checked against the base
+// prd anchors: a plan's file and symbol anchors, checked against the base
 // before the first slice starts (B-874). A plan written ahead of its PRD names
 // files and functions that may have moved since; the orchestrator runs this at
 // PRD start and fixes the plan's misses (`prd doc orchestrator`).

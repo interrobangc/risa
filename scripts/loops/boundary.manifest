@@ -336,6 +336,7 @@ scripts/project/package-diff.mjs project
 scripts/project/prompt-golden.txt project
 scripts/project/quick-guards.test.mjs project
 scripts/project/risa.mjs project
+scripts/project/risa.test.mjs project
 scripts/project/serve.sh project
 scripts/project/stack-facts.sh project
 scripts/project/stack.sh project

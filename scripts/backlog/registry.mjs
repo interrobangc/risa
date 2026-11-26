@@ -15,7 +15,7 @@
 // "old": it is recognised and refused, never read as rows (it was converted
 // once, by hand-run tooling since removed).
 
-import { commandName, loadConfigOrExit } from "../loops/config.mjs";
+import { commandName, loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 import { BacklogError } from "./format.mjs";
 
 // A broken config: one line named for the command that imported this, and exit 2.
@@ -192,7 +192,7 @@ export function checkTopic(t) {
 
 const indexOf = (rows, topic) => {
   const i = rows.findIndex((r) => r.topic === topic);
-  if (i < 0) throw new BacklogError(`no PRD row "${topic}" (pnpm backlog prd list)`);
+  if (i < 0) throw new BacklogError(`no PRD row "${topic}" (${toolCmd.backlog} prd list)`);
   return i;
 };
 
