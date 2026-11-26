@@ -14,17 +14,16 @@ Your final message:
 
 ## Reads and turns
 
-Every turn costs its whole context, so take fewer turns:
+Every turn costs its whole context:
 
-- **Batch:** send independent reads, greps and commands together in one turn (parallel tool calls, or one shell command that prints several files).
-- **Read a file whole** (the Read tool, or `cat`) when it is under about 400 lines, not in `sed -n` chunks; a longer one (`dispatch.mjs` is about 1,950): grep for what you need, then read that range.
-- **Search once** with a pattern that covers every name you need (`grep -n 'a\|b\|c'`), not one grep per name.
-- **Edits too:** several replacements go in one script, or as parallel Edit calls in one turn, not one per turn.
+- **Batch** independent reads, greps, commands and edits in one turn.
+- **Read a file whole** when under about 400 lines; a longer one (`dispatch.mjs`, about 1,950): grep, then read that range.
+- **Search once** with one pattern for every name (`grep -n 'a\|b'`).
 
 ## Loop rules
 
 - Your prompt ends with your slice's section, wave intro and cited PRD parts; open the plan for gaps. Read docs its `Reads` names (`prd doc planner "Slice fields"`).
-- **Long exploration goes to a helper.** Past about 10 reads into unfamiliar code, hand the rest to one Explore helper (the Agent tool, `model: "haiku"` for a plain search, `"sonnet"` when it needs judgement) with a tight brief (the question, where to look, the answer's shape), and take back only its conclusion. Long check output (the failures, ■ lines, the table) goes to a haiku helper too: give it the log's path (`prd doc orchestrator Models`).
+- **Long exploration goes to a helper.** Past about 10 reads in unfamiliar code, give the rest to one Explore helper (`model: "haiku"` for a plain search, `"sonnet"` for judgement) with a tight brief, and take back only its conclusion. Long check output goes to a haiku helper with the log's path (`prd doc orchestrator Models`).
 - **Past 175k context** a hook asks you to judge (the watch: `prd doc machinery "The context watch"`): continue or hand off, and say which in the hand-off. **Past 300k** hand off now: commit, start no check, name any unfinished fix.
 - **Your hand-off releases your stack** (`pnpm prd stack down`); then wait: the orchestrator may send back a failure from the wave's CI run.
 - **Bye** (a message of just 'bye'): your hand-off ready, your stack down, then `pnpm prd bye` (it only reports); send your orchestrator what it lists.
