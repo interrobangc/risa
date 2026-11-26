@@ -14,6 +14,8 @@
     "preferences": "handbook/taste.md",
     "tierData": "tools/tiers.json",
     "checkPlanRules": "tools/check-plan-rules.json",
+    "checksManifest": "tools/checks",
+    "checkAreas": "tools/check-areas",
     "tooling": ["tools"]
   },
   "roles": {
@@ -58,6 +60,8 @@
     "browserHarness": "tools:browser"
   },
   "hooks": {
-    "check": "tools/check.sh"
+    "check": "tools/check.sh",
+    "browser": "bash tools/browser-hook.sh",
+    "checkAreas": "bash tools/check-areas.sh"
   }
 }

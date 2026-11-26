@@ -9,7 +9,9 @@
 //                         its state in $SAMPLE_STACK_STATE), and returns its path, for
 //                         RISA_CONFIG. With copy, the stub goes into DIR too (at
 //                         tools/stack-hook.sh) and the hooks name it by that relative
-//                         path, as a project's do. The core's tests run no project script.
+//                         path, as a project's do. Its browser hook is the sample's
+//                         (sample-project/tools/browser-hook.sh). The core's tests run no
+//                         project script.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +24,9 @@ process.env.RISA_CONFIG ??= FIXTURE_CONFIG;
 
 /** The sample project's stub for every stack hook. */
 export const STUB_HOOK = fileURLToPath(new URL("./sample-project/tools/stack-hook.sh", import.meta.url));
+
+/** The sample project's browser hook: a plain runner with no browser behind it. */
+export const BROWSER_HOOK = fileURLToPath(new URL("./sample-project/tools/browser-hook.sh", import.meta.url));
 
 const STUB_VERBS = {
   stackUp: "stack up",
@@ -54,6 +59,7 @@ export function stubHookConfig(dir, { base = FIXTURE_CONFIG, copy = false } = {}
     hook = STUB_HOOK_COPY;
   }
   for (const [name, verb] of Object.entries(STUB_VERBS)) raw.hooks[name] = `bash ${hook} ${verb}`;
+  raw.hooks.browser = `bash '${BROWSER_HOOK}'`;
   const path = join(dir, CONFIG_NAME);
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`);
   return path;

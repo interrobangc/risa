@@ -6,8 +6,8 @@
 //
 //   makeRepo(main, { config, files })   a git repo at `main`: the tool's scripts
 //     (scripts/loops, without its tests and goldens), the config as its risa.json, the data files it names that sit
-//     beside it (the tier data, the check plan's rules: tools/ here), the script its
-//     check hook runs when it sits beside it (tools/check.sh), the files given
+//     beside it (the tier data, the check plan's rules: tools/ here), the scripts its
+//     hooks run when they sit beside it (tools/check.sh, tools/browser-hook.sh…), the files given
 //     (path → text), one commit on the config's trunk. The scripts find the config at its root, so
 //     a test runs them with RISA_CONFIG unset.
 import { execFileSync } from "node:child_process";
@@ -35,8 +35,12 @@ export function makeRepo(main, { config = SAMPLE_CONFIG, files = {} } = {}) {
     filter: (src) => !src.endsWith(".test.mjs") && !src.endsWith("golden.txt"),
   });
   copyFileSync(config, join(main, CONFIG_NAME));
-  const hookScript = parsed.hooks?.check?.split(" ")[0];
-  for (const rel of [parsed.paths.tierData, parsed.paths.checkPlanRules, hookScript]) {
+  // A hook's script: its command's first word, or the one after bash or node.
+  const hookScripts = Object.values(parsed.hooks ?? {}).map((/** @type {string} */ c) => {
+    const words = c.split(" ");
+    return ["bash", "node"].includes(words[0] ?? "") ? words[1] : words[0];
+  });
+  for (const rel of [parsed.paths.tierData, parsed.paths.checkPlanRules, ...hookScripts]) {
     const from = rel && join(dirname(config), rel);
     if (!from || !existsSync(from)) continue;
     mkdirSync(dirname(join(main, rel)), { recursive: true });

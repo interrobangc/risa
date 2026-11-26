@@ -268,6 +268,8 @@ scripts/loops/run-log.test.mjs core
 scripts/loops/sample-project/prompt-golden.txt core
 scripts/loops/sample-project/repo.mjs core
 scripts/loops/sample-project/risa.json core
+scripts/loops/sample-project/tools/browser-hook.sh core
+scripts/loops/sample-project/tools/check-areas.sh core
 scripts/loops/sample-project/tools/check-plan-rules.json core
 scripts/loops/sample-project/tools/check.sh core
 scripts/loops/sample-project/tools/stack-hook.sh core
@@ -309,6 +311,8 @@ scripts/loops/watchdog.test.mjs core
 scripts/loops/workers.mjs core
 scripts/loops/workers.test.mjs core
 scripts/loops/workspace-config.test.mjs project
+scripts/project/browser-run.sh project
+scripts/project/browser-run.test.mjs project
 scripts/project/check-areas.mjs project
 scripts/project/check-areas.test.mjs project
 scripts/project/check-body.sh project

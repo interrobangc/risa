@@ -45,7 +45,7 @@ import { TierDataError, tierData } from "../ci/tier-data.mjs";
 /** The core's own folders, tooling while they sit in the repo (lib.sh's exempt_re too). */
 const CORE_TOOLING = ["scripts/loops", "scripts/backlog"];
 
-/** What the browser harness test (the core's browser.test.mjs) exercises of the core. */
+/** What the browser harness test (the core's browser.test.mjs, the gate's) exercises of the core. */
 const CORE_HARNESS = [
   "scripts/loops/browser.sh",
   "scripts/loops/browser.test.mjs",

@@ -7,7 +7,6 @@ package.json project-to-core 4
 risa.json project-to-core 1 # hooks.lease is the core's lease.sh hold, which the app's browser lease helper runs: its path changes at the move
 scripts/ci/blame.test.mjs app-path 1
 scripts/ci/blame.test.mjs project-name 1
-scripts/ci/browser-job.mjs project-to-core 1
 scripts/ci/candidate.mjs project-name 1
 scripts/ci/candidate.test.mjs project-name 1
 scripts/ci/ci-io.mjs project-env 3
@@ -33,12 +32,7 @@ scripts/loops/autostart.test.mjs project-env 7
 scripts/loops/autostart.test.mjs project-name 2
 scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
 scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
-scripts/loops/browser.sh app-path 9
-scripts/loops/browser.sh core-to-project 4
 scripts/loops/browser.sh project-env 32
-scripts/loops/browser.sh project-name 1
-scripts/loops/browser.test.mjs app-path 15
-scripts/loops/browser.test.mjs core-to-project 13
 scripts/loops/browser.test.mjs project-env 28
 scripts/loops/bye.mjs app-path 1
 scripts/loops/bye.mjs project-env 9
@@ -68,7 +62,7 @@ scripts/loops/codex-review.test.mjs project-name 2
 scripts/loops/context-settings.json project-env 14
 scripts/loops/context.mjs project-env 17
 scripts/loops/context.test.mjs project-env 11
-scripts/loops/disk.test.mjs core-to-project 4
+scripts/loops/disk.test.mjs core-to-project 1
 scripts/loops/disk.test.mjs project-env 28
 scripts/loops/dispatch-context.mjs project-env 2
 scripts/loops/dispatch-context.test.mjs project-env 21
