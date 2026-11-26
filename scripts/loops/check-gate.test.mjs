@@ -22,11 +22,7 @@ const commit = (files, msg) => {
 };
 const record = (line) =>
   writeFileSync(join(git("rev-parse", "--absolute-git-dir"), "caretook-checked"), `${line}\n`);
-const lib = (fn) =>
-  spawnSync("bash", ["-c", `source scripts/loops/lib.sh && ${fn} "$PWD" feature`], {
-    cwd: repo,
-    encoding: "utf8",
-  });
+
 beforeEach(() => {
   repo = realpathSync(mkdtempSync(join(tmpdir(), "check-gate-")));
   git("init", "-q", "-b", "dev");
