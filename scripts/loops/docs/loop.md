@@ -14,18 +14,18 @@ Your final message:
 
 ## Reads and turns
 
-Every turn costs its whole context:
+Each turn costs its whole context:
 
 - **Batch** independent reads, greps, commands and edits in one turn.
-- **Read a file whole** when under about 400 lines; a longer one (`dispatch.mjs`, about 1,950): grep, then read that range.
-- **Search once** with one pattern for every name (`grep -n 'a\|b'`).
+- **Read a file whole** when under about 400 lines; a longer one: grep, then read that range.
+- **Search once** with one pattern for every name.
 
 ## Loop rules
 
 - Your prompt ends with your slice's section, wave intro and cited PRD parts; open the plan for gaps. Read docs its `Reads` names (`prd doc planner "Slice fields"`).
-- **Long exploration goes to a helper.** Past about 10 reads in unfamiliar code, give the rest to one Explore helper (`model: "haiku"` for a plain search, `"sonnet"` for judgement) with a tight brief, and take back only its conclusion. Long check output goes to a haiku helper with the log's path (`prd doc orchestrator Models`).
-- **Past 175k context** a hook asks you to judge (the watch: `prd doc machinery "The context watch"`): continue or hand off, and say which in the hand-off. **Past 300k** hand off now: commit, start no check, name any unfinished fix.
-- **Format before each check:** run the project's formatter (your prompt names it) on the files you changed, and commit what it changes.
+- **Long exploration goes to a helper.** Past about 10 reads in unfamiliar code, give the rest to one Explore helper (`model: "haiku"` for a plain search, `"sonnet"` for judgement) with a tight brief; take back only its conclusion. Long check output goes to a haiku helper with the log's path.
+- **Past 175k context** a hook asks you to judge (the watch: `prd doc machinery "The context watch"`): continue or hand off, and say which in the hand-off. **Past 300k** hand off now: commit, start no check, name an unfinished fix.
+- **Format** your changed files before each check (your prompt's command), and commit.
 - **Your hand-off releases your stack** (`pnpm prd stack down`); then wait: the orchestrator may send back a failure from the wave's CI run.
 - **Bye** (a message of just 'bye'): your hand-off ready, your stack down, then `pnpm prd bye` (it only reports); send your orchestrator what it lists.
 - **A fix request is only:** `pnpm prd stack up` if the slice uses one; `git merge --no-ff -m "chore(<topic>): merge prd/<topic> for a fix" prd/<topic>`; a new commit; `pnpm prd check --quick "slice fix"`; `stack down`; a new hand-off line.
