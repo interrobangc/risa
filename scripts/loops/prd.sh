@@ -40,7 +40,7 @@ pnpm prd <command>
     plan <topic> [--open] [${backlog_id_prefix}n …]   a docs-only worktree for writing a PRD and plan; --open starts its
                               planning session here (it decides, writes both, lands them; few questions)
     plan                      no topic: a backlog and inbox planning session in the main checkout, here
-                              (on opus, a `design` row's planner on Fable; --model <m> runs that one session on model m)
+                              (on opus, a \`design\` row's planner on Fable; --model <m> runs that one session on model m)
                               (it reads the backlog and helps you decide what's next; its Remote Control
                               name and tab title are a captain's, a new one each session; its record stays backlog)
     inbox [--model <m>]       the inbox agent: you tell it ideas in plain words (here or from the phone) and it

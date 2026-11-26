@@ -112,6 +112,20 @@ describe("the bash scripts, on the sample project's prefixes", () => {
     expect(out).not.toMatch(/(?<![\w-])(prd|slice|plan|hotfix)\/ (branch|worktree)/);
   });
 
+  it("prd's help prints its backticked words verbatim, with nothing on stderr (B-766)", () => {
+    const r = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "help"], {
+      cwd: main,
+      encoding: "utf8",
+      env,
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toContain("a `design` row's planner");
+    expect(r.stdout).toContain("never `pgrep -f`");
+    expect(r.stdout).toContain("($CARETOOK_INBOX_DIR,");
+    expect(r.stdout).not.toContain("${");
+  });
+
   it("rotate finds a PRD worktree, and refuses a slice's shell, by their prefixes", () => {
     expect(sh(main, "rotate.sh", "y").out).toContain("rotate: no PRD worktree for y");
     expect(sh(main, "rotate.sh", "y").out).toContain("on topic/y)");
