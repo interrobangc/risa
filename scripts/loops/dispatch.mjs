@@ -127,6 +127,7 @@ import {
 } from "./dispatch-stuck.mjs";
 import { LIMITED_ERROR, drainDecision, drainSettings, landingUnder, limitActions } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
+import { workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
 import { landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
@@ -566,6 +567,8 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
         fixesMin: positive(env.CARETOOK_FIXES_MIN, 3),
       },
       now: nowOf(env),
+      // The work switch (machine.mjs): off, nothing starts or is planned here.
+      work: workSwitch({ main: p.main, env }),
     },
   };
 }

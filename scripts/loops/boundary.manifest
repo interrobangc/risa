@@ -193,6 +193,8 @@ scripts/loops/lint-heap.test.mjs project
 scripts/loops/load-gate.mjs core
 scripts/loops/load-gate.test.mjs core
 scripts/loops/ls.sh core
+scripts/loops/machine.mjs core
+scripts/loops/machine.test.mjs core
 scripts/loops/metrics.mjs core
 scripts/loops/metrics.test.mjs core
 scripts/loops/new.sh core

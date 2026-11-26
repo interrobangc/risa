@@ -39,6 +39,8 @@
 //      plan) is never started or reopened, whatever its row says: the guard
 //      beside the `done` flag (B-431: planner-3 landed with its row still
 //      planned, and was started nine times). A standing topic is never one.
+//   9. The work switch off (machine.mjs; facts.work): no start and no plan,
+//      each planned and to-write row's reason naming it (reopens still happen).
 //
 // Hot files collide when a prefix of one topic starts with a prefix of the
 // other, as plain text (`scripts/loops/session` and
@@ -46,6 +48,7 @@
 
 import { awaitsAnswer } from "./asks.mjs";
 import { branchKinds } from "./config.mjs";
+import { WORK_VAR } from "./machine.mjs";
 
 /** A managed session that died is reopened this many times; the next death is an ask. */
 export const MAX_REOPENS = 2;
@@ -77,7 +80,7 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
  *   asks?: PickAsk[], reopens?: Record<string, number>, busy?: boolean, paused?: boolean,
  *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number,
  *   drain?: { state: "normal" | "draining" | "limited", why: string },
- *   landed?: Record<string, { sha: string }> }} PickFacts
+ *   landed?: Record<string, { sha: string }>, work?: { on: boolean, why: string } }} PickFacts
  * @typedef {{ topic?: string, why: string }} Reason
  * @typedef {{ action: "start" | "plan" | "reopen" | "ask" | "resume" | "none", topic?: string,
  *   session?: string, worktree?: string, why?: string, text?: string, options?: string[],
@@ -128,6 +131,11 @@ export function pick(facts) {
   // Near or past a usage limit: nothing new opens (drain.mjs).
   const held = facts.drain && facts.drain.state !== "normal" ? facts.drain : null;
   const heldWhy = held ? `usage is ${held.state}: ${held.why}` : "";
+  // The work switch (rule 9): off, nothing new starts or is planned in this repo.
+  const workOff =
+    facts.work && !facts.work.on
+      ? `the work switch is off (${facts.work.why}; ${WORK_VAR}=1 turns it on for one process)`
+      : null;
 
   // An open question is one that awaits an answer: a defaulted one has its answer.
   const asks = (facts.asks ?? []).filter((a) => awaitsAnswer(a) && a.session !== KEEP_SESSION);
@@ -277,7 +285,7 @@ export function pick(facts) {
 
   const chosen = reopen
     ? null
-    : held || facts.busy
+    : workOff || held || facts.busy
       ? null
       : startPick
         ? { action: /** @type {const} */ ("start"), row: startPick }
@@ -298,6 +306,7 @@ export function pick(facts) {
     else if (r.state === "planned" && landedWhy(r.topic))
       why = `${landedWhy(r.topic)}: never started again (mark it done: pnpm backlog prd set ${r.topic} flags=done)`;
     else if (r.state === "idle") why = "no waiting items";
+    else if (workOff && (r.state === "planned" || r.state === "to-write")) why = workOff;
     else if (r.state === "planned") {
       why = startBlock(r);
       if (!why && held) why = `no start while ${heldWhy}`;
@@ -333,7 +342,7 @@ export function pick(facts) {
   }
   return {
     action: "none",
-    why: held ? heldWhy : facts.busy ? "the machine is busy" : "nothing to do",
+    why: workOff ?? (held ? heldWhy : facts.busy ? "the machine is busy" : "nothing to do"),
     reasons,
   };
 }

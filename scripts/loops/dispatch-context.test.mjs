@@ -450,6 +450,7 @@ describe("the tick", () => {
       "host.mjs",
       "planner-model.mjs",
       "config.mjs",
+      "machine.mjs",
       "drain.mjs",
       "usage.mjs",
       "land-journal.mjs",

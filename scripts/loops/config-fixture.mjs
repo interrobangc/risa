@@ -21,6 +21,8 @@ import { CONFIG_NAME } from "./config.mjs";
 export const FIXTURE_CONFIG = fileURLToPath(new URL(`../../${CONFIG_NAME}`, import.meta.url));
 
 process.env.RISA_CONFIG ??= FIXTURE_CONFIG;
+// No machine config (machine.mjs) unless a test names one: never the machine's own ~/.risa.
+process.env.RISA_MACHINE_CONFIG ??= "";
 
 /** The sample project's stub for every stack hook. */
 export const STUB_HOOK = fileURLToPath(new URL("./sample-project/tools/stack-hook.sh", import.meta.url));

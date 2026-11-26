@@ -291,7 +291,7 @@ case $cmd in
   test-db | testdb) stack_hook testDb "$@"; exit $? ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   doc) exec node "$bin/doc.mjs" "$@" ;;
-  queue) exec node "$bin/queue.mjs" "$@" ;;
+  queue) work_switch queue; exec node "$bin/queue.mjs" "$@" ;;
   status-trim)
     t=""
     [[ ${1:-} == "" || ${1:-} == -* ]] || { t=$1; shift; }
@@ -363,6 +363,7 @@ case $cmd in
       cd "$main" && exec "$wrapper" backlog --kind backlog -- \
         ${model_args[@]+"${model_args[@]}"} --remote-control "$captain" "$(CARETOOK_CAPTAIN=$captain "$bin/prompt.sh" backlog)"
     fi
+    work_switch plan
     topic=$1; shift; open=0 items=()
     for a in "$@"; do
       case $a in
@@ -420,7 +421,7 @@ case $cmd in
     prompt_text=$("$bin/prompt.sh" inbox)
     cd "$dir" && exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
-  slice) exec "$bin/new.sh" slice "$@" ;;
+  slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
   hotfix)
     name=${1:?"usage: pnpm prd hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
     while (($#)); do
@@ -446,6 +447,7 @@ case $cmd in
     ;;
   start)
     topic=${1:?topic}
+    work_switch start
     if [[ -d $loops/$topic ]]; then
       echo "Worktree $topic already exists at $loops/$topic."
       echo

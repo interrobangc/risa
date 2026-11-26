@@ -70,6 +70,7 @@ const TYPES = {
     ok: (v) => typeof v === "string" && ID_PREFIX.test(v),
     want: "an id prefix (capitals: B, RISA)",
   },
+  flag: { ok: (v) => typeof v === "boolean", want: "true or false" },
   version: {
     ok: (v) => typeof v === "string" && /^\d+\.\d+\.\d+([-+][\w.-]+)?$/.test(v),
     want: "a version (1.2.3)",
@@ -90,6 +91,8 @@ export const SHAPE = [
   // What the tool's own commands are called here.
   ["tool.prd", "command"],
   ["tool.backlog", "command"],
+  // True only in the tool's own repo: its work switch is off by default (machine.mjs).
+  ["tool.self", "flag?"],
   // Paths, from the repo's root.
   ["paths.backlog", "path"],
   ["paths.inbox", "path"],

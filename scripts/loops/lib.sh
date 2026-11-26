@@ -9,17 +9,45 @@
 unset CDPATH
 loops_lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+# machine_file → the machine config (machine.mjs, its loader, says what it holds):
+# RISA_MACHINE_CONFIG (empty: none), else ~/.risa/machine.json. Read here only to
+# see whether it is there, so a machine without one never starts Node for it.
+machine_file=${RISA_MACHINE_CONFIG-$HOME/.risa/machine.json}
+
 # find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
 # which stays on the trunk), and loops, $main/.loops (every other worktree, and
-# the tool's state), for the repo DIR is in: by default the one this file is in.
-# The one place a command finds its repo; risa's machine config will answer here.
-# False, main empty, outside a repo.
+# the tool's state), for the repo DIR is in. With no DIR: the repo the current
+# directory is in when the machine config lists it (and RISA_CONFIG, unless set,
+# to that repo's risa.json), else the one this file is in, as with no machine
+# config. The one place a command finds its repo. False, main empty, outside a
+# repo; a machine config that doesn't load stops the command with its loader's line.
 find_repo() {
-  main=$(git -C "${1:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
+  local from=${1:-} listed="" rc=0 listed_config=""
+  if [[ -z $from && -n $machine_file && -f $machine_file ]]; then
+    listed=$(node "$loops_lib_dir/machine.mjs" repo --cwd "$PWD") || rc=$?
+    case $rc in
+      0) { read -r from; read -r listed_config; } <<< "$listed" ;;
+      1) ;;
+      *) exit 2 ;;
+    esac
+  fi
+  main=$(git -C "${from:-$loops_lib_dir}" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
   loops=$main/.loops
+  if [[ -n $listed_config && -z ${RISA_CONFIG:-} && -f $listed_config ]]; then export RISA_CONFIG=$listed_config; fi
   [[ -n $main ]]
 }
 find_repo || true
+
+# work_switch WHO → returns when the machine config lets work start in $main (the
+# work switch, machine.mjs); off, it prints one line naming the switch and
+# RISA_WORK_SELF and exits 3. Only commands that start work ask it (start, queue,
+# plan, slice); reads never do. No machine config, or RISA_WORK_SELF=1: on.
+work_switch() {
+  [[ ${RISA_WORK_SELF:-} != 1 && -n $machine_file && -f $machine_file ]] || return 0
+  local rc=0
+  node "$loops_lib_dir/machine.mjs" work --main "$main" --who "$1" || rc=$?
+  ((rc == 0)) || exit "$rc"
+}
 leases=$loops/.slots
 
 # The project config (risa.json; config.mjs is its loader and the only code that

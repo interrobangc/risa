@@ -71,7 +71,7 @@ describe("the loader", () => {
     expect(new Set(keys).size).toBe(keys.length);
     for (const [key, type] of SHAPE)
       expect(type, key).toMatch(
-        /^(slug|text|command|path|branch|prefix|heading|item|idPrefix|version)(\[\])?\??$/,
+        /^(slug|text|command|path|branch|prefix|heading|item|idPrefix|flag|version)(\[\])?\??$/,
       );
   });
 
@@ -82,6 +82,7 @@ describe("the loader", () => {
     ["tool.prd", (c) => delete c.tool.prd, "tool.prd: missing"],
     ["tool.prd", (c) => (c.tool.prd = ""), "tool.prd: must be a command"],
     ["tool.backlog", (c) => (c.tool.backlog = "a\nb"), "tool.backlog: must be a command"],
+    ["tool.self", (c) => (c.tool.self = "yes"), "tool.self: must be true or false"],
     ["paths.backlog", (c) => delete c.paths.backlog, "paths.backlog: missing"],
     ["paths.inbox", (c) => (c.paths.inbox = "/abs/inbox.md"), "paths.inbox: must be a path"],
     ["paths.archive", (c) => (c.paths.archive = "../archive.md"), "paths.archive: must be a path"],

@@ -338,6 +338,7 @@ beforeAll(() => {
     "host.mjs",
     "planner-model.mjs",
     "config.mjs",
+    "machine.mjs",
     "drain.mjs",
     "usage.mjs",
     "land-journal.mjs",
@@ -584,6 +585,32 @@ describe("one tick per action", () => {
     setRows([{ topic: "a", state: "running" }]);
     expect(ok()).toContain("a: opened by hand, its orchestrator isn't live (left alone)");
     expect(openCalls()).toEqual([]);
+  });
+
+  it("the work switch off starts and plans nothing; RISA_WORK_SELF=1 lifts it for that process", () => {
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "p", state: "to-write", waiting: 2 },
+    ]);
+    const machine = join(root, "machine.json");
+    writeFileSync(machine, JSON.stringify({ repos: [{ path: main, work: false }] }));
+    const off = ok(["--dry-run"], { RISA_MACHINE_CONFIG: machine });
+    expect(off).toMatch(
+      /^nothing: the work switch is off \("work": false for .* in .*machine\.json; RISA_WORK_SELF=1/,
+    );
+    expect(off).toMatch(/\n {2}a: the work switch is off \(/);
+    expect(off).toMatch(/\n {2}p: the work switch is off \(/);
+    ok(["--once"], { RISA_MACHINE_CONFIG: machine });
+    expect(calls("new")).toEqual([]);
+    expect(openCalls()).toEqual([]);
+    expect(ok(["--dry-run"], { RISA_MACHINE_CONFIG: machine, RISA_WORK_SELF: "1" })).toContain(
+      "start a: planned, and nothing stops it",
+    );
+    // A bad machine config: the loader's line, nothing started.
+    writeFileSync(machine, JSON.stringify({ repos: [{ path: "repo", work: "no" }] }));
+    expect(ok(["--dry-run"], { RISA_MACHINE_CONFIG: machine })).toContain(
+      "repos.0.path: must be an absolute path",
+    );
   });
 
   it("--dry-run prints the pick and writes and opens nothing", () => {
