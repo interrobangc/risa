@@ -294,7 +294,7 @@ describe("land.sh writes a to-test file", () => {
   });
 
   it("lists the landed items after a local landing: read before the merge makes them landed", () => {
-    branch({ "apps/web/b.ts": "2" });
+    branch({ "lib/b.ts": "2" });
     const r = spawnSync(
       "bash",
       [
@@ -330,8 +330,8 @@ describe("land.sh writes a to-test file", () => {
     expect(tryPart).not.toContain("example.com");
   });
 
-  it("an app file among the tooling still gets the app's URL", () => {
-    branch({ "scripts/loops/x.sh": "echo x", "apps/web/b.ts": "2" });
+  it("a code file among the tooling still gets the app's URL", () => {
+    branch({ "scripts/loops/x.sh": "echo x", "lib/b.ts": "2" });
     expect(landFor().status).toBe(0);
     const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
     expect(text).toContain("http://localhost:5173");
