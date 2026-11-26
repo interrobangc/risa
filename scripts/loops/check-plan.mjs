@@ -360,8 +360,10 @@ export const checkPlan = () => (ours ??= checkPlanFor(loadConfig()));
 
 // This repo's plan, function by function: what the scripts and the CLI call.
 
-/** The tiers a landing can declare, lowest first: read when first asked for, not at import. */
-export const proposedTiers = () => ["none", ...tierData().TIERS];
+/** @type {string[] | undefined} */
+let proposed;
+/** The tiers a landing can declare, lowest first: read when first asked for, not at import, and kept. */
+export const proposedTiers = () => (proposed ??= ["none", ...tierData().TIERS]);
 
 export const tierRank = (/** @type {string} */ tier) => proposedTiers().indexOf(tier);
 

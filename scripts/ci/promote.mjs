@@ -18,9 +18,7 @@ import {
   short,
 } from "./candidate.mjs";
 import { releasePasses } from "./gate.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { ciRefName } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 const TIER = "candidate";
 const UNCONFIRMED = 5;
@@ -60,7 +58,7 @@ function deleteBranch(
 
 /** Delete the candidate's CI ref, wherever it points: it belongs to this candidate alone. */
 function deleteCiRef(/** @type {Io} */ io, /** @type {Deps} */ deps, /** @type {string} */ branch) {
-  const ref = ciRefName(TIER, branch);
+  const ref = ciTiers().ciRefName(TIER, branch);
   const at = deps.remoteSha(io, ref);
   if (at === "") return;
   if (at && deps.deleteRef(io, ref, at)) io.log(`deleted ${ref}`);

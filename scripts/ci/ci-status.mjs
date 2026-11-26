@@ -3,9 +3,7 @@
 // cache, short when GitHub is away.
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME } from "./ci-io.mjs";
 import { readVerdict } from "./ci-runs.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { parseCiRef } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 /**
  * @typedef {import("./ci-io.mjs").Io} Io
@@ -51,7 +49,7 @@ export function ciStatus(branches, io) {
   for (const branch of new Set(branches)) {
     const name = branch.replaceAll("/", "-");
     const ours = /** @type {Run[]} */ (runs)
-      .filter((x) => parseCiRef(x.headBranch ?? "")?.name === name)
+      .filter((x) => ciTiers().parseCiRef(x.headBranch ?? "")?.name === name)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const done = ours.find((x) => x.status === "completed" && x.conclusion !== "cancelled");
     const going = ours.some((x) => x.status !== "completed") ? " (a run is going)" : "";

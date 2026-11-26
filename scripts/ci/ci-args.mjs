@@ -3,9 +3,8 @@
 // means.
 import { backlogIds } from "../loops/config.mjs";
 import { DEFAULT_WAIT_MIN } from "./ci-io.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
+import { ciTiers } from "./tier-data.mjs";
 
-const { TIERS, isTier } = tierDataOrExit("ci");
 const IDS = backlogIds();
 const ID = new RegExp(`^${IDS.lookupPattern}$`);
 
@@ -17,7 +16,7 @@ const ID = new RegExp(`^${IDS.lookupPattern}$`);
  */
 export function parseRunArgs(args) {
   const [tier, ...rest] = args;
-  if (!tier || !isTier(tier)) throw new Error(`ci run needs a tier: ${TIERS.join(", ")}`);
+  if (!tier || !ciTiers().isTier(tier)) throw new Error(`ci run needs a tier: ${ciTiers().TIERS.join(", ")}`);
   /** @type {string | null} */ let ref = null;
   /** @type {number | null} */ let waitMin = null;
   /** @type {string[]} */ const files = [];
@@ -82,7 +81,7 @@ export function parseGateArgs(/** @type {string[]} */ args) {
     else if (!a.startsWith("-") && !ref) ref = a;
     else throw new Error(`ci gate: unknown argument ${a}`);
   }
-  if (!isTier(tier)) throw new Error(`ci gate: --tier needs one of ${TIERS.join(", ")}`);
+  if (!ciTiers().isTier(tier)) throw new Error(`ci gate: --tier needs one of ${ciTiers().TIERS.join(", ")}`);
   if (!base || base.startsWith("-")) throw new Error("ci gate: --base needs a commit");
   if (fixes.some((f) => !ID.test(f))) throw new Error(`ci gate: --fixes takes ${IDS.prefix}n,${IDS.prefix}m`);
   return { ref, tier, base, fixes: fixes.map(IDS.normalize), out, peek };

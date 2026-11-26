@@ -549,3 +549,33 @@ describe("parseArgs", () => {
     expect(r.ok ? "" : r.error).toContain(error);
   });
 });
+
+describe("proposedTiers and tierRank", () => {
+  it("read the config and tier data once, however often they are asked", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-plan-tiers-"));
+    try {
+      const raw = JSON.parse(readFileSync(SAMPLE_CONFIG, "utf8"));
+      const config = join(dir, CONFIG_NAME);
+      writeFileSync(config, JSON.stringify(raw));
+      mkdirSync(dirname(join(dir, raw.paths.tierData)), { recursive: true });
+      copyFileSync(join(SAMPLE.root, raw.paths.tierData), join(dir, raw.paths.tierData));
+      // The second ask comes after both files are gone: only a kept answer gives it.
+      const code = `const m = await import(${JSON.stringify(CLI)});
+        const first = [m.proposedTiers(), m.tierRank(m.proposedTiers().at(-1))];
+        const fs = await import("node:fs");
+        fs.rmSync(${JSON.stringify(dir)}, { recursive: true, force: true });
+        console.log(JSON.stringify([first, [m.proposedTiers(), m.tierRank(m.proposedTiers().at(-1))]]));`;
+      const r = spawnSync("node", ["--input-type=module", "-e", code], {
+        encoding: "utf8",
+        env: { ...process.env, RISA_CONFIG: config },
+      });
+      expect(r.stderr).toBe("");
+      const [first, second] = JSON.parse(r.stdout);
+      expect(first[0][0]).toBe("none");
+      expect(first[1]).toBeGreaterThan(0);
+      expect(second).toEqual(first);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
