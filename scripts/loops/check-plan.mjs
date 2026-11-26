@@ -179,8 +179,10 @@ const compile = (list = []) =>
  * The check plan for one project: its rules file and tier data, from its config.
  * Throws a CheckPlanRulesError naming every problem with the rules.
  * @param {{ config: Record<string, any>, root: string }} project a loaded config
+ * @param {{ repo?: string }} [where] the checkout whose tooling paths are statted to tell
+ *   a folder from a file (default: the config's root; the CLI passes --repo)
  */
-export function checkPlanFor(project) {
+export function checkPlanFor(project, { repo = project.root } = {}) {
   const rel = project.config.paths?.checkPlanRules;
   if (!rel)
     throw new CheckPlanRulesError([
@@ -211,7 +213,7 @@ export function checkPlanFor(project) {
   /** @param {string} p */
   const isFolder = (p) => {
     try {
-      return statSync(join(project.root, p)).isDirectory();
+      return statSync(join(repo, p)).isDirectory();
     } catch {
       return false;
     }
@@ -416,6 +418,8 @@ export function parseArgs(argv) {
 /** The CLI, after its arguments are checked. @param {{ propose: boolean, opts: Record<string, string> }} args */
 async function cli({ propose, opts }) {
   const repo = opts.repo || ".";
+  // Which tooling paths are folders is read in the repo the check runs on.
+  if (opts.repo) ours = checkPlanFor(loadConfig(), { repo });
   const declared = opts.declared;
   if (declared && tierRank(declared) < 0) {
     console.error(`unknown tier ${declared} (${proposedTiers().join(", ")})`);

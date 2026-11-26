@@ -579,3 +579,22 @@ describe("proposedTiers and tierRank", () => {
     }
   });
 });
+
+describe("checkPlanFor's repo", () => {
+  it("tells a tooling folder from a file in the repo it is given, not the config's root", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-plan-repo-"));
+    try {
+      mkdirSync(join(dir, "extra-tools"));
+      const project = {
+        config: { ...SAMPLE.config, paths: { ...SAMPLE.config.paths, tooling: ["extra-tools"] } },
+        root: SAMPLE.root,
+      };
+      // A change named as the folder itself (a gitlink) is tooling only when the path isn't a folder there.
+      const file = "extra-tools";
+      expect(checkPlanFor(project, { repo: dir }).planCheck([file], "full").tooling).toBe(false);
+      expect(checkPlanFor(project).planCheck([file], "full").tooling).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
