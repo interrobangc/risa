@@ -12,7 +12,8 @@
 #   --json             print the verdict as JSON instead
 #   --again            comment "@codex review" on the PR first (Codex reviews a
 #                      push by itself; this asks again on the same head); with
-#                      --wait, it first waits (up to 5 min) for Codex to take it up
+#                      --wait, it first waits (up to 5 min, CARETOOK_REVIEW_TAKE_UP
+#                      seconds) for Codex to take it up, and exits 75 if it never does
 #   --resolve <id>     resolve a thread first: a fixed finding (Codex leaves its
 #                      threads open, outdated) or a declined one (reply on the
 #                      thread with the reason first); repeatable
@@ -22,6 +23,7 @@
 #                      waiting, and out of credits ends it at once (no review is
 #                      coming). Run it in the background.
 #
+# With --json, stdout carries only the verdict; progress lines go to stderr.
 # A topic means prd/<topic>; prd/, hotfix/ and other branches are taken as given.
 # Each answer on a head goes to the run log once (run-log.mjs), for pnpm prd metrics.
 # Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
@@ -33,6 +35,8 @@ source "$(dirname "$0")/lib.sh"
 use_node || true
 
 fail() { echo "$*" >&2; exit 3; }
+# say LINE… → a progress line: stdout, or stderr with --json (stdout is the verdict).
+say() { if ((json)); then echo "$*" >&2; else echo "$*"; fi; }
 
 what="" json=0 wait="" again=0 resolve=()
 while (($#)); do
@@ -59,8 +63,9 @@ number=$(pr_for "$branch") || fail "gh couldn't list $branch's PRs (gh auth stat
 
 for id in ${resolve[@]+"${resolve[@]}"}; do
   # shellcheck disable=SC2016
-  gh api graphql -f id="$id" -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }' \
-    -q '.data.resolveReviewThread.thread | "resolved \(.id)"' || fail "couldn't resolve thread $id"
+  out=$(gh api graphql -f id="$id" -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { id isResolved } } }' \
+    -q '.data.resolveReviewThread.thread | "resolved \(.id)"') || fail "couldn't resolve thread $id"
+  say "$out"
 done
 # field NAME → a field of the verdict's JSON ($v), or nothing.
 field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
@@ -82,12 +87,20 @@ verdict() {
 if ((again)); then
   [[ -n $wait ]] && { verdict; before=$(field summaryAt); }
   gh pr comment -R "$(gh_repo)" "$number" --body "@codex review" >/dev/null || fail "couldn't comment on PR #$number"
-  echo "asked Codex to review PR #$number again"
+  say "asked Codex to review PR #$number again"
   if [[ -n $wait ]]; then
     # Until Codex takes it up, the last verdict still stands: wait for its
-    # summary to change (it turns "running" within seconds).
-    taken=$(($(date +%s) + 300))
-    while verdict && [[ $(field summaryAt) == "$before" ]] && (($(date +%s) < taken)); do sleep 10; done
+    # summary to change (it turns "running" within seconds). If it never does,
+    # the old verdict isn't an answer: time out.
+    take_up=${CARETOOK_REVIEW_TAKE_UP:-300}
+    taken=$(($(date +%s) + take_up))
+    while verdict && [[ $(field summaryAt) == "$before" ]]; do
+      if (($(date +%s) >= taken)); then
+        echo "Codex didn't take up the re-review of PR #$number within ${take_up}s (its summary never changed)" >&2
+        exit 75
+      fi
+      sleep 10
+    done
   fi
 fi
 
