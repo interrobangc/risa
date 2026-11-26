@@ -130,6 +130,7 @@ import {
 import { LIMITED_ERROR, drainDecision, drainSettings, landingUnder, limitActions } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
+import { landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
@@ -527,13 +528,28 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
   });
   const state = readState(p.state);
   const gate = readLoadGate(env);
+  const worktrees = worktreesOf(p.main);
+  // The landed guard's candidates (dispatch-pick.mjs, rule 8): a planned row, or a prd/ worktree's topic.
+  const candidates = new Set([
+    ...rows
+      .filter(
+        (/** @type {{ state: string, flags?: string[] }} */ r) =>
+          r.state === "planned" && !r.flags?.includes("standing"),
+      )
+      .map((/** @type {{ topic: string }} */ r) => r.topic),
+    ...worktrees.flatMap((w) => {
+      const t = branchKinds().nameOf(w.branch, "prd");
+      return t && !t.includes("/") ? [t] : [];
+    }),
+  ]);
   return {
     state,
     records,
     gate,
     facts: {
       rows,
-      worktrees: worktreesOf(p.main),
+      worktrees,
+      landed: landedTopics(p.main, [...candidates]),
       sessions: records.map((r) => ({
         name: r.name,
         live: r.live,

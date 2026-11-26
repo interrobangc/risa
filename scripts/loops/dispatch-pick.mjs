@@ -34,6 +34,11 @@
 //      one early stays possible by hand (`pnpm prd plan`).
 //   7. Starts before plans; within each, row order. `hold`, `done` and `idle`
 //      rows are never picked.
+//   8. A landed topic (facts.landed, landed.mjs's landedTopics: its last
+//      landing is in dev with only docs past it and no slice left in its
+//      plan) is never started or reopened, whatever its row says: the guard
+//      beside the `done` flag (B-431: planner-3 landed with its row still
+//      planned, and was started nine times). A standing topic is never one.
 //
 // Hot files collide when a prefix of one topic starts with a prefix of the
 // other, as plain text (`scripts/loops/session` and
@@ -71,7 +76,8 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
  * @typedef {{ rows: PickRow[], worktrees?: PickWorktree[], sessions?: PickSession[],
  *   asks?: PickAsk[], reopens?: Record<string, number>, busy?: boolean, paused?: boolean,
  *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number,
- *   drain?: { state: "normal" | "draining" | "limited", why: string } }} PickFacts
+ *   drain?: { state: "normal" | "draining" | "limited", why: string },
+ *   landed?: Record<string, { sha: string }> }} PickFacts
  * @typedef {{ topic?: string, why: string }} Reason
  * @typedef {{ action: "start" | "plan" | "reopen" | "ask" | "resume" | "none", topic?: string,
  *   session?: string, worktree?: string, why?: string, text?: string, options?: string[],
@@ -113,6 +119,12 @@ export function pick(facts) {
   const sessions = new Map((facts.sessions ?? []).map((s) => [s.name, s]));
   const reopens = facts.reopens ?? {};
   const flags = (/** @type {PickRow | undefined} */ r) => r?.flags ?? [];
+  /** Why a landed topic stays down (rule 8), or null; never a standing one. @param {string} topic */
+  const landedWhy = (topic) => {
+    const l = facts.landed?.[topic];
+    if (!l || flags(byTopic.get(topic)).includes("standing")) return null;
+    return `landed in dev as ${l.sha.slice(0, 7)} with no slice left`;
+  };
   // Near or past a usage limit: nothing new opens (drain.mjs).
   const held = facts.drain && facts.drain.state !== "normal" ? facts.drain : null;
   const heldWhy = held ? `usage is ${held.state}: ${held.why}` : "";
@@ -154,7 +166,9 @@ export function pick(facts) {
     let why;
     // A landed planner's worktree is tidy's; the topic speaks for itself.
     if (finished && w.kind === "plan") continue;
+    const landed = w.kind === "prd" ? landedWhy(w.topic) : null;
     if (finished) why = "done; its worktree is left over";
+    else if (landed && !s?.live) why = `${landed}: not reopened (pnpm prd rm ${w.name} marks it done)`;
     // The user's brake (or the answer "hold the topic"): a dead session stays down.
     else if (flags(row).includes("hold") && !s?.live) why = `on hold; ${what} isn't live (not reopened)`;
     else if (!s?.managed)
@@ -226,7 +240,7 @@ export function pick(facts) {
     return null;
   };
 
-  const planned = rows.filter((r) => r.state === "planned" && !running.has(r.topic));
+  const planned = rows.filter((r) => r.state === "planned" && !running.has(r.topic) && !landedWhy(r.topic));
   const mayStart = planned.filter((r) => !startBlock(r));
   const short = (/** @type {PickRow} */ r) =>
     flags(r).includes("standing") && (r.waiting ?? 0) < caps.fixesMin;
@@ -281,6 +295,8 @@ export function pick(facts) {
     else if (running.has(r.topic)) why = "running";
     else if (r.state === "done") continue;
     else if (r.state === "hold") why = "on hold";
+    else if (r.state === "planned" && landedWhy(r.topic))
+      why = `${landedWhy(r.topic)}: never started again (mark it done: pnpm backlog prd set ${r.topic} flags=done)`;
     else if (r.state === "idle") why = "no waiting items";
     else if (r.state === "planned") {
       why = startBlock(r);

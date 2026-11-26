@@ -580,6 +580,30 @@ mark_landed() {
   node "$(dirname "$0")/land-skeptic.mjs" landed --dir "$skeptic_dir" --topic "$topic" 2>/dev/null ||
     echo "warning: couldn't mark the landing in the skeptic store (ignored)" >&2
 }
+# mark_topic_done → after a prd/ landing, the topic's done flag when this was its
+# last landing (B-431): its plan (the landed tip's) has no slice left, its row
+# isn't standing or done already, and every one of its items is landed. So a
+# 'landed' commit written after the land can't leave the row planned for the
+# dispatcher to start again. Never fails the landing; a resume runs it again.
+mark_topic_done() {
+  [[ $branch == "$prd_prefix"* ]] || return 0
+  local plan left rows flags items
+  plan=$(git -C "$main" show "${tip:-$branch}:plans/$topic-plan.md" 2>/dev/null) || return 0
+  left=$(node "$(dirname "$0")/landed.mjs" slices-left /dev/stdin <<< "$plan") || return 0
+  [[ -z $left ]] || return 0
+  rows=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd list --json 2>/dev/null) || return 0
+  flags=$(node "$(dirname "$0")/landed.mjs" done-flags "$topic" <<< "$rows") || return 0
+  if ! items=$(cd "$main" && node "$main/scripts/backlog/backlog.mjs" list --all --prd "$topic" --json 2>/dev/null |
+    node "$(dirname "$0")/landed.mjs" items-left 2>/dev/null); then
+    echo "Not marking $topic done: no slice is left, but ${items:-its items (unreadable)} aren't landed"
+    return 0
+  fi
+  if (cd "$main" && node "$main/scripts/backlog/backlog.mjs" prd set "$topic" "flags=$flags" >/dev/null); then
+    echo "Marked $topic done in the PRD registry (its last landing: no slice left, every item landed)"
+  else
+    echo "warning: couldn't mark $topic done ($(tool_command backlog) prd set $topic flags=$flags)" >&2
+  fi
+}
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
   # Already after the landing: the hook's notes (shared with ready.sh's report) drop their "after landing".
@@ -625,6 +649,7 @@ finish_from() {
     esac
   done
   [[ -n $go ]] || die "no step $1 to finish from on the $path path"
+  mark_topic_done
   journal_drop
   next_steps
   exit "$filed"

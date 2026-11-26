@@ -340,6 +340,7 @@ beforeAll(() => {
     "drain.mjs",
     "usage.mjs",
     "land-journal.mjs",
+    "landed.mjs",
     "resume.mjs",
   ])
     copyFileSync(join(HERE, f), scripts(f));

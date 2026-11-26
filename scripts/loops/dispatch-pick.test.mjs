@@ -653,3 +653,52 @@ describe("the keep-alive's question", () => {
     expect(p).toMatchObject({ action: "start", topic: "a" });
   });
 });
+
+// B-431: planner-3 landed with its row still planned and was started nine times.
+describe("rule 8: a landed topic is never started or reopened", () => {
+  const landed = { a: { sha: "8c1fa06aabbccdd" } };
+
+  it("skips a planned topic whose last landing is in dev with no slice left, and starts the next", () => {
+    const p = go({ rows: [row("a", "planned"), row("b", "planned")], landed });
+    expect(p).toMatchObject({ action: "start", topic: "b" });
+    expect(whyOf(p, "a")).toBe(
+      "landed in dev as 8c1fa06 with no slice left: never started again (mark it done: pnpm backlog prd set a flags=done)",
+    );
+    expect(go({ rows: [row("a", "planned")], landed }).action).toBe("none");
+  });
+
+  it("never reopens its worktree's dead orchestrator, and says how to finish it", () => {
+    const p = go({
+      rows: [row("a", "planned")],
+      worktrees: [prdWt("a")],
+      sessions: [session("prd-a", { live: false })],
+      landed,
+    });
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "a")).toBe(
+      "landed in dev as 8c1fa06 with no slice left: not reopened (pnpm prd rm a marks it done)",
+    );
+  });
+
+  it("leaves a live orchestrator be: it is finishing the topic", () => {
+    const p = go({ rows: [row("a", "running")], ...runningFacts(["a"]), landed });
+    expect(whyOf(p, "a")).toBe("running");
+  });
+
+  it("a standing topic stays: its next wave starts as before", () => {
+    const p = go({
+      rows: [row("fixes-a", "planned", { flags: ["standing"], waiting: 3 })],
+      landed: { "fixes-a": landed.a },
+    });
+    expect(p).toMatchObject({ action: "start", topic: "fixes-a" });
+  });
+
+  it("doesn't fill the lookahead", () => {
+    const p = go({
+      rows: [row("a", "planned"), row("w", "to-write", { waiting: 2 })],
+      caps: { prds: 0 },
+      landed,
+    });
+    expect(p).toMatchObject({ action: "plan", topic: "w" });
+  });
+});
