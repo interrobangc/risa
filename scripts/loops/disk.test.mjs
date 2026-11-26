@@ -101,7 +101,10 @@ beforeAll(() => {
   // The stack hooks (serve among them, which browser.sh calls to start and build
   // the check server) on the sample project's stub, logging to FAKE_LOG.
   env.RISA_CONFIG = stubHookConfig(main);
-  writeFileSync(join(main, "scripts/loops/checks"), "# check cap never-exits e2e\nclean 20 no yes\n");
+  // The manifest, where the config puts it (paths.checksManifest).
+  const manifest = join(main, JSON.parse(readFileSync(env.RISA_CONFIG, "utf8")).paths.checksManifest);
+  mkdirSync(dirname(manifest), { recursive: true });
+  writeFileSync(manifest, "# check cap never-exits e2e\nclean 20 no yes\n");
   // The check, for the sample's browser hook (stubHookConfig points it there).
   mkdirSync(join(main, "tools/browser-checks"), { recursive: true });
   writeFileSync(
