@@ -113,7 +113,7 @@ describe("review.sh's output and waits", () => {
   });
 
   it("--again --wait exits 75 when Codex's summary never changes, not with the old verdict", () => {
-    const r = reviewWith({ CARETOOK_REVIEW_TAKE_UP: "0" }, "clean", "--again", "--wait", "1");
+    const r = reviewWith({ REVIEW_TAKE_UP: "0" }, "clean", "--again", "--wait", "1");
     expect(r.status).toBe(75);
     expect(r.stderr).toContain("didn't take up the re-review of PR #7");
     expect(r.stdout).not.toContain("clean");

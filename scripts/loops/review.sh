@@ -12,7 +12,7 @@
 #   --json             print the verdict as JSON instead
 #   --again            comment "@codex review" on the PR first (Codex reviews a
 #                      push by itself; this asks again on the same head); with
-#                      --wait, it first waits (up to 5 min, CARETOOK_REVIEW_TAKE_UP
+#                      --wait, it first waits (up to 5 min, REVIEW_TAKE_UP
 #                      seconds) for Codex to take it up, and exits 75 if it never does
 #   --resolve <id>     resolve a thread first: a fixed finding (Codex leaves its
 #                      threads open, outdated) or a declined one (reply on the
@@ -92,7 +92,7 @@ if ((again)); then
     # Until Codex takes it up, the last verdict still stands: wait for its
     # summary to change (it turns "running" within seconds). If it never does,
     # the old verdict isn't an answer: time out.
-    take_up=${CARETOOK_REVIEW_TAKE_UP:-300}
+    take_up=${REVIEW_TAKE_UP:-300}
     taken=$(($(date +%s) + take_up))
     while verdict && [[ $(field summaryAt) == "$before" ]]; do
       if (($(date +%s) >= taken)); then
