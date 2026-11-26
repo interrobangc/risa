@@ -76,6 +76,14 @@
 // toward the reopen limit. Never while paused, draining or limited, during a pnpm prd
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
+// Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
+// non-test .mjs files of scripts/loops/ and scripts/backlog/, hashed at its start)
+// with the main checkout's; when a landing or the pickup changed it, it logs one
+// line and re-execs itself (process.execve: the same pid, tab and lock) on the main
+// checkout's dispatch.mjs, so it never runs old code past one tick (B-809). Its
+// start writes the hash into .dispatch.json (`code`), and `pnpm prd status` says
+// whether the running one's code is current or stale.
+//
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
 // state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
@@ -88,6 +96,7 @@
 // CARETOOK_CLAUDE_BIN (the helper's claude); CARETOOK_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   accessSync,
   appendFileSync,
@@ -95,6 +104,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmdirSync,
   statSync,
@@ -224,6 +234,68 @@ export function mainCheckout(/** @type {string} */ from = HERE) {
     .replace(/^worktree /, "");
 }
 
+/** The code files whose hash says which dispatcher runs: non-test, non-fixture .mjs files. */
+const CODE_DIRS = ["scripts/loops", "scripts/backlog"];
+
+/**
+ * The hash of the dispatcher's code under ROOT (a checkout): every non-test .mjs
+ * file in CODE_DIRS, by name and content; null when it can't be read.
+ */
+export function codeHash(/** @type {string} */ root) {
+  try {
+    const h = createHash("sha256");
+    for (const d of CODE_DIRS) {
+      const names = readdirSync(join(root, d))
+        .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs") && !f.endsWith("-fixture.mjs"))
+        .sort();
+      for (const f of names)
+        h.update(`${d}/${f}\0`)
+          .update(readFileSync(join(root, d, f)))
+          .update("\0");
+    }
+    return h.digest("hex").slice(0, 12);
+  } catch {
+    return null;
+  }
+}
+
+/** The hash this dispatcher's code had when it started (read now, before any landing). */
+const CODE_AT_START = codeHash(join(HERE, "../.."));
+
+/** Stale: both hashes known and different (an unreadable one is never stale). */
+export const staleCode = (
+  /** @type {string | null | undefined} */ started,
+  /** @type {string | null} */ now,
+) => Boolean(started && now && started !== now);
+
+/**
+ * The dispatcher's loop: STEP (one tick), then a sleep of EVERY seconds, until
+ * stopped. Before each tick but the first, CURRENT (the main checkout's code
+ * hash) is compared with STARTED: changed, it returns { stale: true } without
+ * ticking, so the caller re-execs between ticks. --once ticks once.
+ */
+export async function runLoop(
+  /** @type {{ every: number, once?: boolean, step: () => void, started: string | null,
+   *   current: () => string | null, sleep?: (ms: number) => Promise<unknown> }} */ {
+    every,
+    once = false,
+    step,
+    started,
+    current,
+    sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  },
+) {
+  for (let n = 0; ; n++) {
+    if (n > 0) {
+      const now = current();
+      if (staleCode(started, now)) return { stale: true, from: started, to: now };
+    }
+    step();
+    if (once) return { stale: false };
+    await sleep(every * 1000);
+  }
+}
+
 export function pathsOf(/** @type {string} */ main, env = process.env) {
   const loops = join(main, ".loops");
   return {
@@ -275,7 +347,8 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *     sessions?: Record<string, import("./dispatch-stuck.mjs").StuckEntry>, reported?: string[] },
  *   keepAlive?: import("./keep-alive.mjs").KeepState,
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
- *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> } }} DispatchState */
+ *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
+ *   code?: { hash: string | null, pid: number, at: string } }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -1770,6 +1843,7 @@ function parse(/** @type {string[]} */ argv) {
     resume: false,
     stop: false,
     cap: /** @type {string | null} */ (null),
+    reexec: /** @type {string | null} */ (null),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -1786,7 +1860,9 @@ function parse(/** @type {string[]} */ argv) {
       if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
         throw new Error(`--cap takes a number from 1 to ${MAX_CAP}, or default`);
       o.cap = v;
-    } else if (a === "-h" || a === "--help") o.help = true;
+    } else if (a === "--reexec") o.reexec = argv[++i] ?? "";
+    // (internal: the old code's hash, passed by the re-exec)
+    else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
         `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --cap <n>|default)`,
@@ -1912,29 +1988,53 @@ async function main() {
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("exit", () => releaseLock(p.lock));
 
+  const reexeced = o.reexec;
   if (!o.once) {
-    // A start begins again after "stop keeping it alive".
+    // A start begins again after "stop keeping it alive" (a re-exec is no start).
     updateState(p.state, (s) => {
-      if (s.keepAlive) s.keepAlive = clearKeepStops(s.keepAlive);
+      if (s.keepAlive && !reexeced) s.keepAlive = clearKeepStops(s.keepAlive);
+      s.code = { hash: CODE_AT_START, pid: process.pid, at: stamp(nowOf()) };
     });
-    log([`started (pid ${process.pid}, every ${o.every}s)`], nowOf());
+    const what = reexeced ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; ` : "started (";
+    log([`${what}pid ${process.pid}, every ${o.every}s)`], nowOf());
     console.log(
-      `Dispatcher running (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
+      `Dispatcher ${reexeced ? `re-exec'd on new code ${CODE_AT_START}` : "running"} (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
     );
   }
   let last = "";
-  for (;;) {
-    const now = nowOf();
-    const quiet = [];
-    const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
-    const text = t.lines.join("\n");
-    if (o.once || t.acted || text !== last) {
-      log(t.lines, now);
-      console.log(`${stamp(now)} ${quiet.join("\n")}`);
-    }
-    last = text;
-    if (o.once) break;
-    await new Promise((r) => setTimeout(r, o.every * 1000));
+  const end = await runLoop({
+    every: o.every,
+    once: o.once,
+    started: CODE_AT_START,
+    current: () => codeHash(p.main),
+    step: () => {
+      const now = nowOf();
+      const quiet = [];
+      const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
+      const text = t.lines.join("\n");
+      if (o.once || t.acted || text !== last) {
+        log(t.lines, now);
+        console.log(`${stamp(now)} ${quiet.join("\n")}`);
+      }
+      last = text;
+    },
+  });
+  if (end.stale) {
+    log(
+      [`re-exec: the main checkout's code changed (${end.from} -> ${end.to}); restarting between ticks`],
+      nowOf(),
+    );
+    console.log(`${stamp(nowOf())} re-exec: new code ${end.to} on the main checkout (was ${end.from})`);
+    const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
+    const script = join(p.main, "scripts/loops/dispatch.mjs");
+    const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
+    const env = process.env;
+    // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.
+    if (typeof process.execve === "function")
+      process.execve(process.execPath, [process.execPath, ...args], env);
+    releaseLock(p.lock);
+    const r = spawnSync(process.execPath, args, { stdio: "inherit", env });
+    process.exit(r.status ?? 1);
   }
   releaseLock(p.lock);
 }

@@ -1,5 +1,5 @@
 // The parts `pnpm prd status` prints after the worktree table: the dispatcher
-// (running, paused and why, or stopped, and its log's last entry), the recorded
+// (running, its code current or stale, paused and why, or stopped, and its log's last entry), the recorded
 // sessions (.loops/.sessions: name, kind, live or ended, age, run-through or not,
 // managed by the dispatcher or opened by hand) and the open asks (the count,
 // split into questions awaiting an answer, reports and those decided for you;
@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten, span } from "./asks.mjs";
 import { contextDirOf, hardLimitFor, limitOf, sizeNote, sizeRecord } from "./context.mjs";
-import { lockHolder, mainCheckout, pathsOf, readState } from "./dispatch.mjs";
+import { codeHash, lockHolder, mainCheckout, pathsOf, readState, staleCode } from "./dispatch.mjs";
 import { branchKind, readData, usualTime } from "./metrics.mjs";
 import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
@@ -54,18 +54,38 @@ export function lastEntry(/** @type {string} */ file) {
 }
 
 /**
- * The dispatcher's part: its state from its lock (a live pid: running) and its
- * state file (paused and why), and its log's last entry.
- * @param {{ lock: string, state: string, log: string }} files
- * @param {{ now?: number, holder?: (lock: string) => number | null }} [opts]
+ * The dispatcher's code against the main checkout's (CURRENT: its hash, null
+ * unreadable): "" when unknown, else ", code current" or ", code stale …". A
+ * running dispatcher with no code record of its pid started before the check (B-809).
+ * @param {import("./dispatch.mjs").DispatchState["code"]} code
+ * @param {number} pid @param {string | null} current
  */
-export function dispatcherPart(files, { now = Date.now(), holder = lockHolder } = {}) {
+export function codePart(code, pid, current) {
+  if (!code || code.pid !== pid)
+    return ", code unknown (it predates the code check: pnpm prd dispatch --stop, then pnpm prd dispatch)";
+  if (!current) return "";
+  return staleCode(code.hash, current)
+    ? `, code stale (${code.hash}; the main checkout has ${current}: it re-execs before its next tick)`
+    : ", code current";
+}
+
+/**
+ * The dispatcher's part: its state from its lock (a live pid: running), its
+ * code (current or stale) and its state file (paused and why), and its log's last entry.
+ * @param {{ main?: string, lock: string, state: string, log: string }} files
+ * @param {{ now?: number, holder?: (lock: string) => number | null, current?: () => string | null }} [opts]
+ */
+export function dispatcherPart(
+  files,
+  { now = Date.now(), holder = lockHolder, current = () => (files.main ? codeHash(files.main) : null) } = {},
+) {
   const pid = holder(files.lock);
-  const paused = readState(files.state).paused;
+  const st = readState(files.state);
+  const paused = st.paused;
   const since = paused?.at && !Number.isNaN(Date.parse(paused.at)) ? `, ${age(paused.at, now)} ago` : "";
   const why = paused ? `paused${since}: ${paused.why || "by hand"}` : "";
   const state = pid
-    ? `running (pid ${pid})${paused ? `, ${why} (pnpm prd dispatch --resume)` : ""}`
+    ? `running (pid ${pid})${codePart(st.code, pid, current())}${paused ? `, ${why} (pnpm prd dispatch --resume)` : ""}`
     : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with pnpm prd dispatch`;
   const last = lastEntry(files.log);
   return [`DISPATCHER: ${state}`, ...(last ? [`last: ${shorten(last, 120)}`] : []), ""].join("\n") + "\n";
