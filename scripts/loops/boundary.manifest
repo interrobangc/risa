@@ -332,3 +332,4 @@ scripts/project/test-db.sh project
 scripts/project/test-db.test.mjs project
 scripts/project/test-projects.mjs project
 scripts/project/test-projects.test.mjs project
+scripts/project/unit-workers.test.mjs project
