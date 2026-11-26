@@ -19,7 +19,7 @@ pnpm prd <command>
 
   See what's going on
     status                    every worktree: branch, changes, dev server link; sessions (managed or by hand);
-                              the dispatcher (running, paused and why, stopped; its last line); lease holders; the load;
+                              the dispatcher (running, its code current or stale, paused and why, stopped; its last line); lease holders; the load;
                               the workers (each lease, pnpm prd command and slice agent: age, usual time, state)
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     watch [topic] [--json] [--wait [--timeout <s>]]   each slice agent's state (ok, slow, quiet, no-progress,
@@ -35,7 +35,8 @@ pnpm prd <command>
                               backticked path in an unmerged slice exists there and every symbol named
                               beside a path is in that file; only warns (exit 0): the misses, line numbers
     dispatch [--every <s>]    the dispatcher, left in a tab of its own: every minute it plans, starts and
-                              reopens PRDs by itself, one action a tick, in the registry's row order
+                              reopens PRDs by itself, one action a tick, in the registry's row order; new code
+                              on the main checkout re-execs it between ticks
     dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
     dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's)
     queue <topic>             put the topic first in the PRD registry and return: the dispatcher takes it next

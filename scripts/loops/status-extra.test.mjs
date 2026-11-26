@@ -202,16 +202,48 @@ describe("the dispatcher's part", () => {
     writeFileSync(files().lock, "999999\n");
     expect(cli()).toMatch(/^DISPATCHER: stopped:/);
     writeFileSync(files().lock, `${process.pid}\n`);
+    writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: process.pid, at: ago(H) } }));
     expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
-    writeFileSync(files().state, JSON.stringify({ paused: { at: ago(2 * H), why: "usage limit" } }));
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        paused: { at: ago(2 * H), why: "usage limit" },
+        code: { hash: "abc", pid: process.pid, at: ago(H) },
+      }),
+    );
     expect(dispatcherPart(files(), { now: NOW })).toBe(
       `DISPATCHER: running (pid ${process.pid}), paused, 2h ago: usage limit (pnpm prd dispatch --resume)\n\n`,
     );
     expect(dispatcherPart(files(), { now: NOW, holder: () => null })).toBe(
       "DISPATCHER: stopped (and paused, 2h ago: usage limit): start it in a tab of its own with pnpm prd dispatch\n\n",
     );
-    writeFileSync(files().state, JSON.stringify({ paused: null }));
+    writeFileSync(
+      files().state,
+      JSON.stringify({ paused: null, code: { hash: "abc", pid: process.pid, at: ago(H) } }),
+    );
     expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
+  });
+
+  it("says whether the running dispatcher's code is current or stale (B-809)", () => {
+    writeFileSync(files().lock, `${process.pid}\n`);
+    writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: process.pid, at: ago(H) } }));
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toBe(
+      `DISPATCHER: running (pid ${process.pid}), code current\n\n`,
+    );
+    expect(dispatcherPart(files(), { now: NOW, current: () => "def" })).toBe(
+      `DISPATCHER: running (pid ${process.pid}), code stale (abc; the main checkout has def: it re-execs before its next tick)\n\n`,
+    );
+    // A record of another pid, or none: a dispatcher from before the code check.
+    writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: 4, at: ago(H) } }));
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(
+      ", code unknown (it predates the code check: pnpm prd dispatch --stop, then pnpm prd dispatch)",
+    );
+    writeFileSync(files().state, "{}");
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(", code unknown");
+    // Stopped: no code line.
+    expect(dispatcherPart(files(), { now: NOW, holder: () => null, current: () => "def" })).not.toContain(
+      "code",
+    );
   });
 
   it("adds its log's last entry, without the entry's indented reasons", () => {
