@@ -776,7 +776,7 @@ describe("down when the dispatcher won't stop", () => {
     spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "down"], {
       cwd: main,
       encoding: "utf8",
-      env: { ...env, CARETOOK_DISPATCH_STOP_SECS: "0.5" },
+      env: { ...env, RISA_DISPATCH_STOP_SECS: "0.5" },
     });
   const allUp = () => {
     put("running", "sample-loop1\nsample-loop2\nsample-loop3\n");

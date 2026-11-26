@@ -10,7 +10,7 @@
 //   pnpm prd dispatch --pause [<why>]       the running dispatcher (and any later one) does nothing
 //   pnpm prd dispatch --resume              undo --pause
 //   pnpm prd dispatch --stop                end the running dispatcher (TERM; waits
-//                                           CARETOOK_DISPATCH_STOP_SECS, 10, for it to go)
+//                                           RISA_DISPATCH_STOP_SECS, 10, for it to go)
 //   pnpm prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
@@ -1876,7 +1876,7 @@ async function main() {
     process.kill(holder, "SIGTERM");
     // It releases the lock on its way out (a zombie still answers kill 0).
     const held = () => lockHolder(p.lock) === holder;
-    const waits = Math.max(1, Math.round(Number(process.env.CARETOOK_DISPATCH_STOP_SECS || 10) * 10));
+    const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
     for (let i = 0; i < waits && held(); i++) await new Promise((r) => setTimeout(r, 100));
     console.log(
       held()
