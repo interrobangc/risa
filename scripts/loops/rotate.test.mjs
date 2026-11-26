@@ -942,6 +942,27 @@ Intro.
     expect(rowOf("busy").hot).toEqual(["apps/web/"]);
   });
 
+  it("reads the registry once per rm (B-545)", () => {
+    commitOnDev({ "plans/backlog.md": REGISTRY, "plans/fin-plan.md": plan(MERGED) });
+    for (const b of ["prd/fin"]) if (git(main, "branch", "--list", b)) git(main, "branch", "-D", b);
+    prdWorktree("fin");
+    const file = join(main, "scripts/backlog/backlog.mjs");
+    const original = readFileSync(file, "utf8");
+    const log = join(root, "registry-reads");
+    rmSync(log, { force: true });
+    // A counting stub: the real tool, with a line appended per `prd list` call.
+    const counter = `import { appendFileSync as __a } from "node:fs";\nif (process.argv.slice(2, 4).join(" ") === "prd list") __a(${JSON.stringify(log)}, "x\\n");\n`;
+    writeFileSync(file, counter + original.replace(/^#!.*\n/, ""));
+    try {
+      const r = run("rm.sh", ["fin"]);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("Marked fin done");
+      expect(readFileSync(log, "utf8").trim().split("\n")).toHaveLength(1);
+    } finally {
+      writeFileSync(file, original);
+    }
+  });
+
   it("--no-registry marks nothing done and clears no hot files (the dispatcher's undo, B-452)", () => {
     commitOnDev({ "plans/backlog.md": REGISTRY, "plans/fin-plan.md": plan(MERGED) });
     // The earlier tests' kept branches go: these two start fresh from dev, as new.sh's do.
