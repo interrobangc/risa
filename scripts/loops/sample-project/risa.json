@@ -45,6 +45,7 @@
     "typegen": "make typegen",
     "toolingTests": "make test-tools",
     "log": "make log",
+    "format": "tools/format.sh",
     "datastoreStart": "make db-start",
     "datastoreReset": "make db-reset",
     "datastoreSeed": "make db-seed"

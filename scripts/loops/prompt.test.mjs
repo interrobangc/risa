@@ -490,6 +490,14 @@ describe("sending failures back", () => {
     expect(out).toContain('`pnpm prd check --quick "slice fix"`');
   });
 
+  it("the slice's prompt formats the changed files before each check, with the config's formatter (B-608)", () => {
+    for (const out of [ok("slice", "T", "1"), ok("slice", "T", "2"), ok("slice", "T", "1", "--continue")]) {
+      expect(out).toContain(
+        "- **Before each check, format the files you changed and commit what it changes:** `pnpm exec prettier --write --ignore-unknown $(git diff --name-only --diff-filter=d prd/T)`",
+      );
+    }
+  });
+
   it("the slice's prompt points to the handbook's rule on batching reads and edits (B-873)", () => {
     for (const out of [ok("slice", "T", "1"), ok("slice", "T", "1", "--continue")]) {
       expect(out).toContain(

@@ -13,10 +13,12 @@ prd_cmd=$(tool_command prd)
 backlog_cmd=$(tool_command backlog)
 check_cmd=$(project_command check)
 # The project's commands a prompt only mentions: the tooling tests (else its check),
-# its log (else git's) and the docs' size budget (else none, and the hint goes).
+# its log (else git's), the docs' size budget (else none, and the hint goes) and the
+# formatter a slice runs on its changed files (else none, and that line goes).
 tooling_tests_cmd=$(project_command toolingTests 2>/dev/null || echo "$check_cmd")
 log_cmd=$(project_command log 2>/dev/null || echo "git log")
 doc_budget_cmd=$(project_command docBudget 2>/dev/null || true)
+format_cmd=$(project_command format 2>/dev/null || true)
 agents_doc=$(config_get paths.agentsDoc)
 plans_dir=$(config_get paths.plans)
 docs_dir=$(config_get paths.docs)
