@@ -7,9 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { EXIT, RUN_FIELDS, WORKFLOW_NAME, exitFor } from "./ci-io.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { TIERS, ciRefName, parseCiRef } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 /**
  * @typedef {import("./ci-io.mjs").Io} Io
@@ -206,7 +204,7 @@ async function awaitRun(
  * @param {Io} io
  */
 export async function requestRun({ tier, branch, sha, waitMin, onVerdict }, io) {
-  const ref = ciRefName(tier, branch);
+  const ref = ciTiers().ciRefName(tier, branch);
   const at = remoteSha(io, ref);
   if (at === null) return unknown(io, "GitHub can't be reached");
   const before = listRuns(io, ["--branch", ref]);
@@ -265,7 +263,7 @@ export function findVerdict({ sha, accept = () => true }, io) {
   const runs = listRuns(io, ["--commit", sha]);
   if (runs === null) return null;
   const ours = runs
-    .filter((r) => r.headSha === sha && parseCiRef(r.headBranch ?? ""))
+    .filter((r) => r.headSha === sha && ciTiers().parseCiRef(r.headBranch ?? ""))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const going = ours.find((r) => r.status !== "completed");
   if (going) io.log(`a run is going: ${going.url ?? going.databaseId} (${going.headBranch})`);
@@ -291,11 +289,11 @@ export function findVerdict({ sha, accept = () => true }, io) {
 export function findTipVerdict({ sha, tier }, io) {
   const runs = listRuns(io, ["--commit", sha]);
   if (runs === null) return null;
-  const needed = TIERS.indexOf(/** @type {any} */ (tier));
+  const needed = ciTiers().TIERS.indexOf(/** @type {any} */ (tier));
   const ours = runs
     .filter((r) => {
-      const ref = parseCiRef(r.headBranch ?? "");
-      return r.headSha === sha && !!ref && TIERS.indexOf(/** @type {any} */ (ref.tier)) >= needed;
+      const ref = ciTiers().parseCiRef(r.headBranch ?? "");
+      return r.headSha === sha && !!ref && ciTiers().TIERS.indexOf(/** @type {any} */ (ref.tier)) >= needed;
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const going = ours.find((r) => r.status !== "completed") ?? null;

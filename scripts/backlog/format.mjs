@@ -14,10 +14,11 @@
 //      - commit: 1a2b3c4
 //
 //      Free notes (any Markdown) until the next item.
-import { backlogIds, loadConfigOrExit } from "../loops/config.mjs";
+import { backlogIds, commandName, loadConfigOrExit } from "../loops/config.mjs";
 
-// A broken config is one `backlog:` line and exit 2 (this loads first, before any command).
-const { config } = loadConfigOrExit("backlog");
+// A broken config is one line, named for the command that imported this (`backlog:` for the
+// CLI), and exit 2 (this loads first, before any command).
+const { config } = loadConfigOrExit(commandName("backlog"));
 /** The id form (prefix and pattern), from the project config. */
 export const IDS = backlogIds(config);
 
@@ -304,7 +305,8 @@ const HEADING_TYPES = [
   [/feature|idea|request/i, "feature"],
 ];
 const BULLET = /^[-*+] +(.*\S)\s*$/;
-const TAG = new RegExp(`\\s\\((${IDS.pattern})\\)\\s*$`);
+/** A line's tag: its id, a former one too (read as its own: normalize). */
+const TAG = new RegExp(`\\s\\((${IDS.lookupPattern})\\)\\s*$`);
 const TITLE_MAX = 100;
 
 /** @param {string} heading */
@@ -342,7 +344,7 @@ export function parseInbox(text) {
         type,
         text: tag ? b[1].slice(0, tag.index).trim() : b[1],
         details: "",
-        id: tag?.[1] ?? null,
+        id: tag?.[1] ? IDS.normalize(tag[1]) : null,
       };
       entries.push(cur);
       return;

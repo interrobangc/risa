@@ -17,7 +17,7 @@ const HEADING_FOR = {
   question: "Questions",
   chore: "Chores",
 };
-const TAG_AT_END = new RegExp(`\\(${IDS.pattern}\\)\\s*$`);
+const TAG_AT_END = new RegExp(`\\(${IDS.lookupPattern}\\)\\s*$`);
 
 const fold = (/** @type {string} */ s) => s.replace(/\s+/g, " ").trim();
 const key = (/** @type {string} */ s) => fold(s).toLowerCase();

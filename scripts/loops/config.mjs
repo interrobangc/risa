@@ -333,6 +333,18 @@ export function loadConfigOrExit(who, opts) {
 }
 
 /**
+ * The command Node was started on, by its file's name (open-session for
+ * open-session.mjs), else FALLBACK: a module that loads the config at import
+ * names its importer, not itself, on a broken config.
+ * @param {string} fallback
+ */
+export const commandName = (fallback) =>
+  (process.argv[1] ?? "")
+    .split("/")
+    .pop()
+    ?.replace(/\.[cm]?js$/, "") || fallback;
+
+/**
  * Every set value as `key=value` lines' pairs: a list gives key.0, key.1, ….
  * @param {Record<string, any>} config a valid config
  * @returns {[string, string][]}

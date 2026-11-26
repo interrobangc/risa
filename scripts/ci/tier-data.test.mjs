@@ -146,18 +146,22 @@ describe("tierDataProblems", () => {
 });
 
 describe("tierDataOrExit", () => {
-  it("gives a command one line and exit 2 for a broken tier file, never a stack", () => {
+  it("gives a command one line and exit 2 for a broken tier file when it first reads it, never a stack", () => {
     const root = mkdtempSync(join(tmpdir(), "tier-data-exit-"));
     try {
       writeFileSync(join(root, "broken.json"), JSON.stringify({ ...SAMPLE, tiers: [] }));
       const config = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
       config.paths = { ...config.paths, tierData: "broken.json" };
       writeFileSync(join(root, CONFIG_NAME), JSON.stringify(config));
-      const r = spawnSync(
-        "node",
-        ["--input-type=module", "-e", `import(${JSON.stringify(HERE + "ci-args.mjs")})`],
-        { encoding: "utf8", env: { ...process.env, RISA_CONFIG: join(root, CONFIG_NAME) } },
-      );
+      const node = (/** @type {string} */ code) =>
+        spawnSync("node", ["--input-type=module", "-e", code], {
+          encoding: "utf8",
+          env: { ...process.env, RISA_CONFIG: join(root, CONFIG_NAME) },
+        });
+      const at = JSON.stringify(HERE + "ci-args.mjs");
+      // The CI modules read the tier data when first used, not at import.
+      expect(node(`await import(${at})`)).toMatchObject({ status: 0, stderr: "" });
+      const r = node(`const m = await import(${at}); m.parseRunArgs(["unit"]);`);
       expect(r.status).toBe(2);
       expect(r.stderr).toMatch(/^ci: .*broken\.json: tiers: must be a list/);
       expect(r.stderr).not.toMatch(/\n\s+at /);

@@ -112,8 +112,11 @@ while (($#)); do
       shift 2 ;;
     --fixes)
       fixes=${2:-}
-      [[ $fixes =~ ^$backlog_id_prefix[0-9]+(,$backlog_id_prefix[0-9]+)*$ ]] ||
+      [[ $fixes =~ ^$backlog_id_re(,$backlog_id_re)*$ ]] ||
         die "--fixes takes backlog ids: --fixes ${backlog_id_prefix}1,${backlog_id_prefix}2"
+      _f="" && IFS=, read -ra _ids <<< "$fixes"
+      for _i in "${_ids[@]}"; do _f+="${_f:+,}$(backlog_id_normalize "$_i")"; done
+      fixes=$_f && unset _f _i _ids
       shift 2 ;;
     --recheck) die "--recheck is gone: land waits for the CI tier itself (--tier <t>)" ;;
     --pr) path=pr; shift ;;
@@ -544,7 +547,8 @@ mark_landed() {
 }
 # next_steps → what the main checkout needs after the landing.
 next_steps() {
-  landing_hook notes <<< "$changed" | sed 's/^/  /'
+  # Already after the landing: the hook's notes (shared with ready.sh's report) drop their "after landing".
+  landing_hook notes <<< "$changed" | sed 's/ after landing$//; s/^/  /'
   grep -qE '(^|/)package\.json$|^pnpm-lock\.yaml$' <<< "$changed" && echo "  dependencies changed: run \`pnpm install\` in $main"
   [[ $path == local ]] && echo "  publish it with: git -C $main push origin $trunk"
   if [[ $branch == "$prd_prefix"* ]]; then echo "  when the whole PRD is done: pnpm prd rm $name"; else echo "  then: pnpm prd rm $name"; fi

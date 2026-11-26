@@ -9,9 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { branchKinds } from "../loops/config.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { parseCiRef } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 /**
  * @typedef {{ ok: boolean, out: string }} Result
@@ -33,7 +31,7 @@ export function outstandingRuns(io) {
   for (const line of listed.out.split("\n").filter(Boolean)) {
     const [sha = "", full = ""] = line.split(/\s+/);
     const ref = full.replace(/^refs\/heads\//, "");
-    const parsed = parseCiRef(ref);
+    const parsed = ciTiers().parseCiRef(ref);
     if (!parsed) continue;
     const r = io.gh([
       "run",

@@ -443,6 +443,41 @@ describe("config get", () => {
     );
   });
 
+  it("names a branch after its kind's prefix, and reads ids of a former prefix, in bash", () => {
+    const sample = join(tmp, "branch-name.json");
+    writeFileSync(
+      sample,
+      JSON.stringify(
+        changed((c) => {
+          c.branches.prefixes = { prd: "topic/", slice: "part/", plan: "draft/", hotfix: "quick/" };
+          Object.assign(c.backlog, { idPrefix: "RISA", formerIdPrefix: "B", zoneOverflowItem: "RISA-750" });
+        }),
+      ),
+    );
+    const r = bash(
+      [
+        "for b in topic/x part/x/2 draft/y quick/topic/z other/w; do branch_name $b; done",
+        "for i in B-7 RISA-8 C-9 B-x; do backlog_id_normalize $i; done",
+        'for i in B-7 RISA-8 C-9; do [[ $i =~ ^$backlog_id_re$ ]] && echo "id $i"; done',
+        'grep -qE "^$(re_escape "a.b+(c)/[d]|e")$" <<< "a.b+(c)/[d]|e" && echo "escaped"',
+        'grep -qE "^$(re_escape "a.b")$" <<< "axb" || echo "only itself"',
+      ].join("; "),
+      { RISA_CONFIG: sample },
+    );
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toBe(
+      [
+        ...["x", "x/2", "y", "topic/z", "other/w"],
+        ...["RISA-7", "RISA-8", "C-9", "B-x", "id B-7", "id RISA-8"],
+        ...["escaped", "only itself", ""],
+      ].join("\n"),
+    );
+    // With no former prefix, only the current one is an id, and nothing is rewritten.
+    expect(bash('backlog_id_normalize B-7; [[ A-7 =~ ^$backlog_id_re$ ]] || echo "not A-7"').stdout).toBe(
+      "B-7\nnot A-7\n",
+    );
+  });
+
   it("stops a script that sources lib.sh when the config doesn't load", () => {
     const r = bash("echo reached", { RISA_CONFIG: join(tmp, "none.json") });
     expect(r.status).not.toBe(0);

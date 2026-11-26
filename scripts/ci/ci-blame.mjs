@@ -44,8 +44,14 @@ function fileDevFailures(
 ) {
   /** @type {Map<string, string>} */ const ids = new Map();
   if (split.dev.length) {
-    const out = io.fileFindings?.(devFindings(split.dev, from), false) ?? null;
-    if (!out) io.log("warning: could not file dev's failures in the backlog");
+    let findings = null;
+    try {
+      findings = devFindings(split.dev, from);
+    } catch (e) {
+      io.log(`warning: dev's failures are not filed: ${e instanceof Error ? e.message : e}`);
+    }
+    const out = findings && (io.fileFindings?.(findings, false) ?? null);
+    if (findings && !out) io.log("warning: could not file dev's failures in the backlog");
     for (const f of out?.filed ?? []) ids.set(f.key, f.id);
   }
   const board = io.board?.();

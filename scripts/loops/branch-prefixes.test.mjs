@@ -102,6 +102,16 @@ describe("the bash scripts, on the sample project's prefixes", () => {
     expect(sh(main, "pr.sh", "prd/x").out).toContain("prd/x: pr takes a topic/ or quick/ branch");
   });
 
+  it("prd's help names the branches by their prefixes", () => {
+    const { status, out } = sh(main, "prd.sh", "help");
+    expect(status).toBe(0);
+    expect(out).toContain("land quick/<name> --pr|--local");
+    expect(out).toContain("land draft/<topic>");
+    expect(out).toContain("On a part/ branch that is all");
+    expect(out).not.toMatch(/(?<![\w-])(prd|slice|plan|hotfix)\/</);
+    expect(out).not.toMatch(/(?<![\w-])(prd|slice|plan|hotfix)\/ (branch|worktree)/);
+  });
+
   it("rotate finds a PRD worktree, and refuses a slice's shell, by their prefixes", () => {
     expect(sh(main, "rotate.sh", "y").out).toContain("rotate: no PRD worktree for y");
     expect(sh(main, "rotate.sh", "y").out).toContain("on topic/y)");
@@ -161,5 +171,25 @@ describe("the bash scripts, on the sample project's prefixes", () => {
     } finally {
       writeFileSync(tiers, good);
     }
+  });
+
+  it("the check tells a git diff that fails from a check plan that fails", () => {
+    const bin = join(root, "fake-bin");
+    mkdirSync(bin, { recursive: true });
+    const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+    // git fails only on the check's own diff of the changed names.
+    writeFileSync(
+      join(bin, "git"),
+      `#!/bin/sh\ncase " $* " in *" diff --name-only "*) echo "fatal: a broken diff" >&2; exit 128 ;; esac\nexec '${real}' "$@"\n`,
+      { mode: 0o755 },
+    );
+    const r = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "check", "--quick", "t"], {
+      cwd: join(main, ".loops/x-1"),
+      encoding: "utf8",
+      env: { ...env, PATH: `${bin}:${env.PATH}` },
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("check: git couldn't list the changes since");
+    expect(r.stderr).not.toContain("the check plan (check-plan.mjs) failed");
   });
 });

@@ -2,9 +2,7 @@
 // commits a run can be asked for: a narrowed run (`ci run --files`) and a proof
 // run (`ci run candidate --force-flake`). Plumbing only, so the worktree, the
 // index and the branch stay as they are.
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { FORCED_FLAKE_FILE, NARROWED_FILE, TIERS, browserCheckFile, fileTier } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 /** @typedef {import("./ci-io.mjs").Io} Io */
 
@@ -17,15 +15,17 @@ const { FORCED_FLAKE_FILE, NARROWED_FILE, TIERS, browserCheckFile, fileTier } = 
 export function narrowedCommit({ tier, sha, files }, io) {
   for (const file of files) {
     if (!/\.test\.(ts|tsx|mjs)$/.test(file)) throw new Error(`--files takes test files: ${file}`);
-    if (TIERS.indexOf(fileTier(file)) > TIERS.indexOf(/** @type {(typeof TIERS)[number]} */ (tier)))
-      throw new Error(`${file} needs the ${fileTier(file)} tier`);
+    if (
+      ciTiers().TIERS.indexOf(ciTiers().fileTier(file)) > ciTiers().TIERS.indexOf(/** @type {any} */ (tier))
+    )
+      throw new Error(`${file} needs the ${ciTiers().fileTier(file)} tier`);
     if (!io.git(["cat-file", "-e", `${sha}:${file}`]).ok)
       throw new Error(`${file} is not in ${sha.slice(0, 8)}`);
   }
   return throwawayCommit(
     io,
     sha,
-    NARROWED_FILE,
+    ciTiers().NARROWED_FILE,
     { target: sha, files },
     `chore(ci): narrowed run of ${sha.slice(0, 8)}`,
   );
@@ -73,12 +73,15 @@ function throwawayCommit(
  * @param {Io} io
  */
 export function forcedFlakeCommit({ sha, check }, io) {
-  if (!/^[a-z0-9-]+$/.test(check) || !io.git(["cat-file", "-e", `${sha}:${browserCheckFile(check)}`]).ok)
+  if (
+    !/^[a-z0-9-]+$/.test(check) ||
+    !io.git(["cat-file", "-e", `${sha}:${ciTiers().browserCheckFile(check)}`]).ok
+  )
     throw new Error(`--force-flake: no browser check ${check} in ${sha.slice(0, 8)}`);
   return throwawayCommit(
     io,
     sha,
-    FORCED_FLAKE_FILE,
+    ciTiers().FORCED_FLAKE_FILE,
     { check },
     `chore(ci): proof run forcing ${check} to fail once on ${sha.slice(0, 8)}`,
   );

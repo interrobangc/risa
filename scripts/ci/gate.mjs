@@ -3,9 +3,7 @@
 // acts on what this returns. The code is the verdict kind's exit code, 0 to land.
 import { label } from "./blame.mjs";
 import { proposedTiers, tierRank } from "../loops/check-plan.mjs";
-import { tierDataOrExit } from "./tier-data.mjs";
-
-const { TIERS } = tierDataOrExit("ci");
+import { ciTiers } from "./tier-data.mjs";
 
 const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
 
@@ -17,8 +15,8 @@ const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
  */
 export function verdictMeets(v, tier) {
   if (!v || v.narrowed || v.forcedFlake || typeof v.ranTier !== "string") return false;
-  const ran = TIERS.indexOf(v.ranTier);
-  const needed = TIERS.indexOf(/** @type {any} */ (tier));
+  const ran = ciTiers().TIERS.indexOf(v.ranTier);
+  const needed = ciTiers().TIERS.indexOf(/** @type {any} */ (tier));
   return ran >= 0 && needed >= 0 && ran >= needed;
 }
 

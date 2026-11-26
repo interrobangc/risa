@@ -236,3 +236,14 @@ export function tierDataOrExit(who) {
     process.exit(2);
   }
 }
+
+/** @type {Tiers | undefined} */
+let ciLoaded;
+
+/**
+ * The CI commands' tiers (`pnpm prd ci` and the modules it runs): tierDataOrExit("ci"),
+ * read when a module first uses them and kept, never at import, so a module that
+ * only imports another reads no tier data.
+ * @returns {Tiers}
+ */
+export const ciTiers = () => (ciLoaded ??= tierDataOrExit("ci"));

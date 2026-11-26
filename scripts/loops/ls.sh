@@ -82,7 +82,7 @@ if ((${#slice_dirs[@]})); then
   for dir in "${slice_dirs[@]}"; do
     b=$(git -C "$dir" branch --show-current); t=${b#"$slice_prefix"}; t=${t%%/*}
     going=0
-    grep -qE "^  $prd_prefix$t: (running|.*\(a run is going\))" <<<"$ci" && going=1
+    grep -qE "^  $(re_escape "$prd_prefix$t"): (running|.*\(a run is going\))" <<<"$ci" && going=1
     echo "  $(basename "$dir"): $(slice_state "$dir" "$going")"
   done
 fi

@@ -504,6 +504,23 @@ describe("plan and backlog", () => {
     expect(ok("backlog")).toContain("You are the new backlog/inbox planning agent.");
   });
 
+  it("plan reads a former id prefix's ids as the current prefix's", () => {
+    const config = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+    Object.assign(config.backlog, { idPrefix: "RISA", formerIdPrefix: "B", zoneOverflowItem: "RISA-750" });
+    const file = join(root, "former-prefix.json");
+    writeFileSync(file, JSON.stringify(config));
+    const run = (/** @type {string[]} */ ...ids) =>
+      spawnSync("bash", [join(main, "scripts/loops/prompt.sh"), "plan", "T", ...ids], {
+        cwd: main,
+        encoding: "utf8",
+        env: { ...process.env, RISA_CONFIG: file },
+      });
+    const r = run("B-1", "RISA-2");
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toContain("(RISA-1 RISA-2)");
+    expect(run("C-1").stderr).toContain("plan takes --auto and RISA-<n> ids, not C-1");
+  });
+
   it("backlog without a dispatcher: as before, it prints start commands for the user", () => {
     const text = ok("backlog", "--guide");
     expect(text).not.toContain(".queue");

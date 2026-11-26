@@ -46,7 +46,8 @@ describe("second-zone filing", () => {
     expect(findings.map((f) => f.prd)).toEqual(["fixes-bug", "fixes-bug"]);
     expect(zoneFindings(withFiles(1), { topic: "fixes-ci" }).map((f) => f.prd)).toEqual(["fixes-ci"]);
     expect(ciFailureTopic({ backlog: { ciFailureTopic: "fixes-ci" } })).toBe("fixes-ci");
-    expect(ciFailureTopic({ backlog: {} })).toBe("");
+    // No topic set: CI refuses to file, and a verdict with nothing to file still reads.
+    expect(() => ciFailureTopic({ backlog: {} })).toThrow(/sets no backlog\.ciFailureTopic/);
     expect(new Set(findings.map((f) => f.key)).size).toBe(2);
   });
 

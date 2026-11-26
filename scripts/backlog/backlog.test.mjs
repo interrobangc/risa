@@ -785,6 +785,19 @@ describe("backlog CLI: a former id prefix", () => {
     expect(text).toContain("### RISA-773 · bug · Fresh one");
     expect(text).not.toMatch(/^### B-/m);
   });
+
+  it("ingests an inbox whose line is tagged with a former id as filed", () => {
+    writeFileSync(join(m5, "plans/inbox.md"), "# Inbox\n\n## Chores\n\n- Moved over (B-772)\n- Brand new\n");
+    git(m5, "add", ".");
+    git(m5, "commit", "-q", "-m", "inbox");
+    const out = run5("ingest");
+    expect(out).toMatch(/RISA-774 +feature|RISA-774 +chore/);
+    expect(out).not.toMatch(/Moved over/);
+    const inbox = readFileSync(join(m5, "plans/inbox.md"), "utf8");
+    expect(inbox).toContain("- Moved over (B-772)");
+    expect(inbox).toContain("- Brand new (RISA-774)");
+    expect(run5("doctor")).not.toMatch(/772/);
+  });
 });
 
 describe("backlog CLI: a broken project config", () => {
@@ -815,5 +828,23 @@ describe("backlog CLI: a broken project config", () => {
       fails(JSON.stringify({ ...loadConfig().config, backlog: { prdsHeading: "## PRDs", idPrefix: "b" } }))
         .stderr,
     ).toMatch(/^backlog: .*backlog\.idPrefix: must be an id prefix/);
+  });
+
+  it("names the command that imported the backlog's modules, not backlog", () => {
+    const cfg = join(dir, "risa.json");
+    writeFileSync(cfg, "{ not json");
+    for (const [script, who] of [
+      ["../loops/planner-model.mjs", "planner-model"],
+      ["../loops/open-session.mjs", "open-session"],
+    ]) {
+      const r = spawnSync("node", [new URL(script, import.meta.url).pathname, "x", dir], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...env, RISA_CONFIG: cfg },
+      });
+      expect(r.status, script).toBe(2);
+      expect(r.stderr).toMatch(new RegExp(`^${who}: \\S.*not JSON.*\\n$`));
+      expect(r.stderr).not.toMatch(/\n\s+at /);
+    }
   });
 });

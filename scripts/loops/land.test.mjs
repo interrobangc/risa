@@ -1059,6 +1059,10 @@ exit 0
     expect(r.status).not.toBe(0);
     expect(r.stderr).toContain("--fixes takes backlog ids: --fixes RISA-1,RISA-2");
     expect(go(conf, "--fixes", "RISA-9,RISA-10").stderr).not.toContain("--fixes takes");
+    // With a former prefix, its ids are read too.
+    const former = sample((c) => Object.assign(c.backlog, { idPrefix: "RISA", formerIdPrefix: "B" }));
+    expect(go(former, "--fixes", "B-9,RISA-10").stderr).not.toContain("--fixes takes");
+    expect(go(former, "--fixes", "C-9").stderr).toContain("--fixes takes backlog ids: --fixes RISA-1,RISA-2");
   });
 
   it("counts only the commits that are drift", () => {

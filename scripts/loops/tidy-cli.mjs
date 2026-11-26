@@ -217,7 +217,7 @@ export function collectTidyFacts({
   const merged = worktrees.filter((w) => w.merged && branchKinds().sliceOf(w.branch));
   const runs = merged.length ? outstanding() : [];
   for (const w of merged) {
-    const topic = w.branch.split("/")[1] ?? "";
+    const topic = branchKinds().sliceOf(w.branch)?.topic ?? "";
     const out = runs?.filter((r) => isTopicRun(r.name, topic)) ?? [];
     const held =
       runs === null
