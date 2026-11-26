@@ -122,7 +122,7 @@ describe("the bash scripts, on the sample project's prefixes", () => {
     expect(r.stderr).toBe("");
     expect(r.stdout).toContain("a `design` row's planner");
     expect(r.stdout).toContain("never `pgrep -f`");
-    expect(r.stdout).toContain("($CARETOOK_INBOX_DIR,");
+    expect(r.stdout).toMatch(/\(\$[A-Z]+_INBOX_DIR,/); // the variable printed, not expanded
     expect(r.stdout).not.toContain("${");
   });
 
