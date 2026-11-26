@@ -172,7 +172,7 @@ scripts/loops/watchdog.test.mjs project-env 10
 scripts/loops/workers.test.mjs app-path 1
 scripts/project/check-plan-rules.json project-to-core 2 # scripts/ci asks for the full suite (the rule and its reason): the folder holds core files until the move, then only Caretook's
 scripts/project/check-plan-rules.test.mjs project-to-core 26 # Caretook's rules through the core's engine, the table from before they were data: until the move; the removal commit drops the file
-scripts/project/doc-budget.config.mjs project-to-core 7 # the generic role docs' budget figures: Caretook's budget engine measures them until the move, then Risa's copy does
+scripts/project/doc-budget.config.mjs project-to-core 10 # the generic role docs' budget figures: Caretook's budget engine measures them until the move, then Risa's copy does
 scripts/project/doc-budget.test.mjs project-to-core 4 # the generic role docs' figures and their measuring, until the move
 scripts/project/test-projects.test.mjs project-to-core 1 # owners from the core's manifest until the move; the removal commit drops that check
 vitest.config.ts project-to-core 9
