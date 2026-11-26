@@ -229,19 +229,28 @@ reopen_dispatcher() {
 
 # stack_up NAME → start its stack again (the stackStart hook: it waits for the
 # stack's database and migrates, retried once, never seeding). The migrate
-# marker (.loops/.migrate/NAME, when it started) stands while it runs and stays
-# when it fails, so a crash or a failed start leaves it for the next recover to
-# report and rerun.
+# marker (.loops/.migrate/NAME, when it started) stands while it runs, so a crash
+# leaves it for the next recover to report and rerun. A failed start keeps it
+# only when the hook got to its migrate (its migrating=yes fact) or a cut-off
+# one was already marked: a failure before that (the stack's start, its
+# database's wait, no stack at all) is no migrate cut off.
 stack_up() {
-  local dir=$loops/$1 marker=$loops/.migrate/$1 facts err rc=0
+  local dir=$loops/$1 marker=$loops/.migrate/$1 facts err rc=0 had=""
   echo "• stack $1"
-  [[ ! -f $marker ]] || echo "  a migrate here was cut off (started $(cat "$marker" 2>/dev/null)): rerunning it"
-  mkdir -p "$loops/.migrate" && date -u +%Y-%m-%dT%H:%M:%SZ >"$marker" || echo "  couldn't write the migrate marker" >&2
+  if [[ -f $marker ]]; then
+    had=1
+    echo "  a migrate here was cut off (started $(cat "$marker" 2>/dev/null)): rerunning it"
+  else
+    mkdir -p "$loops/.migrate" && date -u +%Y-%m-%dT%H:%M:%SZ >"$marker" || echo "  couldn't write the migrate marker" >&2
+  fi
   err=$(mktemp)
   facts=$(stack_hook stackStart "$dir" </dev/null 2>"$err") || rc=$?
   [[ ! -s $err ]] || sed 's/^/  /' "$err"
   rm -f "$err"
-  ((rc == 0)) || return 1
+  if ((rc != 0)); then
+    [[ -n $had || $(fact migrating "$facts") == yes ]] || rm -f "$marker"
+    return 1
+  fi
   rm -f "$marker"
   echo "  up and migrated ($(fact project "$facts"))"
 }

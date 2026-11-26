@@ -12,6 +12,8 @@
 #                                        (exit 1 unless yes); stopped: stopped_secs=
 #                                        (DIR/.sample-stopped-secs, else 60)
 #   stack stop DIR | start DIR           stops or starts it, data kept; its facts
+#                                        (start: migrating=yes first; "migrate:<name>"
+#                                        in $SAMPLE_STACK_FAIL fails it after that)
 #   stack engine [status|start]          running=yes|no, name=Sample engine
 #   stack leftovers [--all] [PROJECT…]   the lines of leftovers (volume=…) but a PROJECT's
 #                                        (named PROJECT or PROJECT_…); engine down: a kept= line
@@ -111,6 +113,8 @@ if [[ $kind == stack ]]; then
     start)
       [[ -n $proj ]] || die "start: $name has no stack"
       [[ ! -f $st/engine-down ]] || die "start: the engine isn't running"
+      echo "migrating=yes"
+      fails "migrate:$name" && die "start: the migrate failed for $name"
       set_running "$proj" yes; cat "$file"
       ;;
     engine)
