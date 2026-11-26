@@ -424,6 +424,24 @@ if [[ -z $resume ]]; then
   commits=$(git -C "$main" log --first-parent --format='- %s (`%h`)' "$drift_ref..$branch" | grep -vE "\): merge (origin/)?$trunk( |\$)" | head -30 || true)
 fi
 checkline=${checkline:-}
+# try_lines → the to-test file's "What to try" bullets (no "- "). A diff that is
+# only docs and tooling (exempt_re: what needs no check) has no screen to open:
+# the commands to try, from the main checkout. Anything else: the project's
+# landing hook (its dev URL and sign-ins).
+try_lines() {
+  if [[ -n $changed ]] && ! grep -qEv "$exempt_re" <<< "$changed"; then
+    local prd backlog tests
+    prd=$(config_get tool.prd 2>/dev/null) || prd="pnpm prd"
+    backlog=$(config_get tool.backlog 2>/dev/null) || backlog="pnpm backlog"
+    tests=$(config_get commands.toolingTests 2>/dev/null) || tests=""
+    echo "Only docs and tooling changed: no app screen to open. Try the commands the commits above name, in $main."
+    ! grep -q '^scripts/loops/' <<< "$changed" || echo "The PRD tooling: \`$prd help\` lists its commands."
+    ! grep -q '^scripts/backlog/' <<< "$changed" || echo "The backlog: \`$backlog\` lists it; its commands are at the top of scripts/backlog/backlog.mjs."
+    [[ -z $tests ]] || echo "Its tests: \`$tests\`."
+    return 0
+  fi
+  landing_hook try "$main"
+}
 # render_to_test PR_URL → before the merge, the to-test file's body into the
 # journal ($journal_body), with @@LANDED_AS@@ for the commit the merge makes,
 # and its name (to-test/<date>-<time>-<topic>.md in the main checkout) in
@@ -472,15 +490,18 @@ render_to_test() {
     echo
     echo "## What to try, and where"
     echo
-    landing_hook try "$main" | sed 's/^/- /'
+    try_lines | sed 's/^/- /'
     echo "- Changed files, to find the screen or tool:"
     sed 's/^/  - /' <<< "$(head -20 <<< "$changed")"
     echo
     echo "## What wasn't checked"
     echo
-    [[ -z $checkline ]] || echo "- The check that ran: $checkline."
-    [[ -z $tierline ]] || echo "- The landing's $tierline."
-    printf -- '- %s\n' "${unchecked[@]}"
+    {
+      # "none needed" is said once, as the check that didn't run.
+      [[ -z $checkline || $checkline == "none needed"* ]] || echo "- The check that ran: $checkline."
+      [[ -z $tierline ]] || echo "- The landing's $tierline."
+      printf -- '- %s\n' "${unchecked[@]}"
+    } | awk '!seen[$0]++'
     echo
     if [[ -n $verdict_lines ]]; then
       echo "## What the skeptic said"

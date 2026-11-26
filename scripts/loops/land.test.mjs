@@ -293,6 +293,67 @@ describe("land.sh writes a to-test file", () => {
     expect(text).toContain("- fix it (`");
   });
 
+  it("lists the landed items after a local landing: read before the merge makes them landed", () => {
+    branch({ "apps/web/b.ts": "2" });
+    const r = spawnSync(
+      "bash",
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "--local",
+        "--force",
+        "--by-user",
+        "-m",
+        "feat(throwaway-x): t (B-1)",
+      ],
+      { cwd: repo, encoding: "utf8" },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    // The stub backlog now reads B-1 as landed: dev holds its commit.
+    expect(git("merge-base", "--is-ancestor", "prd/throwaway-x", "dev")).toBe("");
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    expect(text).toMatch(/## What landed\n\n- B-1 A throwaway feature\n/);
+    expect(text).not.toContain("(none marked done)");
+  });
+
+  it("gives a tooling-only landing the commands to try, not the app's URL and sign-ins", () => {
+    branch({ "scripts/loops/x.sh": "echo x", "scripts/backlog/y.mjs": "1", "docs/x.md": "d" });
+    const r = landFor();
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    const tryPart = text.slice(text.indexOf("## What to try"), text.indexOf("## What wasn't checked"));
+    expect(tryPart).toContain("Only docs and tooling changed");
+    expect(tryPart).toContain("`pnpm prd help`");
+    expect(tryPart).toContain("`pnpm backlog`");
+    expect(tryPart).toContain("scripts/loops/x.sh");
+    expect(tryPart).not.toContain("localhost");
+    expect(tryPart).not.toContain("example.com");
+  });
+
+  it("an app file among the tooling still gets the app's URL", () => {
+    branch({ "scripts/loops/x.sh": "echo x", "apps/web/b.ts": "2" });
+    expect(landFor().status).toBe(0);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    expect(text).toContain("http://localhost:5173");
+    expect(text).not.toContain("Only docs and tooling changed");
+  });
+
+  it("says each line of 'What wasn't checked' once", () => {
+    branch({ "scripts/loops/x.sh": "echo x" });
+    const r = spawnSync(
+      "bash",
+      ["scripts/loops/land.sh", "throwaway-x", "--local", "--tier", "none", "-m", "fix(throwaway-x): t"],
+      { cwd: repo, encoding: "utf8" },
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    const text = readFileSync(join(repo, "to-test", files()[0]), "utf8");
+    const part = text.slice(text.indexOf("## What wasn't checked"), text.indexOf("## Follow-ups"));
+    const lines = part.split("\n").filter((l) => l.startsWith("- "));
+    expect(lines.length).toBeGreaterThan(1);
+    expect(new Set(lines).size).toBe(lines.length);
+    expect(part.match(/none needed/g)).toHaveLength(1);
+  });
+
   it("writes none when the merge fails", () => {
     branch({ "apps/web/b.ts": "2" });
     const r = landFor(true);
