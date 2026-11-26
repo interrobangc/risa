@@ -7,7 +7,10 @@
 #                whether the dispatcher runs), first, so a down cut off halfway
 #                still recovers
 #             2. stop the dispatcher (dispatch.mjs --stop), so it opens nothing
-#                while the rest goes down; recover reopens it in a tab
+#                while the rest goes down; recover reopens it in a tab. One that
+#                won't stop in time (mid new.sh) ends the down there: nothing
+#                else is stopped (a start would race the shutdown), the record
+#                stays, and down says how to retry
 #             3. stop every dev server (the serve hook: serve N --stop)
 #             4. stop each stack (the stackStop hook: its data stays)
 #             5. stop the shared test database (the testDb hook: down; the
@@ -30,7 +33,7 @@ stay=0 why=""
 while (($#)); do
   case $1 in
     --stay) stay=1; [[ ${2:-} == "" || ${2:-} == -* ]] || { why=$2; shift; } ;;
-    -h | --help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "down: unknown option $1 (--stay [<why>])" ;;
   esac
   shift
@@ -62,7 +65,10 @@ failed=0
 if [[ -n $dispatcher ]]; then
   if out=$(node "$bin/dispatch.mjs" --stop </dev/null 2>&1) && [[ $out == Stopped* || $out == "No dispatcher"* ]]; then
     echo "  stopped the dispatcher (pid $dispatcher)"
-  else echo "  couldn't stop the dispatcher (pid $dispatcher): $out" >&2; failed=1; fi
+  else
+    echo "  couldn't stop the dispatcher (pid $dispatcher): $out" >&2
+    die "down: stopped nothing else while the dispatcher runs (it may be starting something); the record stays in $record. Retry once it's gone: pnpm prd dispatch --stop (or kill $dispatcher), then pnpm prd down"
+  fi
 fi
 for n in ${servers[@]+"${servers[@]}"}; do
   if stack_hook serve "$n" --stop </dev/null >/dev/null; then echo "  stopped dev server $n"
