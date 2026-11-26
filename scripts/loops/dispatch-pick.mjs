@@ -26,7 +26,12 @@
 //      start this tick.
 //   6. A `to-write` topic with waiting items may be `plan`ned when every
 //      `After` topic is `done` and no planner runs, other than ones whose
-//      topic has an open question (at most caps.planners + 1 planners).
+//      topic has an open question (at most caps.planners + 1 planners), and
+//      the lookahead has room: the planned topics waiting to start (state
+//      `planned`, not `standing`, not `hold`, not running) plus the planners
+//      running number fewer than the lane cap (caps.prds) + 1. A `hold` topic
+//      is never planned here (its state is `hold`, not `to-write`); planning
+//      one early stays possible by hand (`pnpm prd plan`).
 //   7. Starts before plans; within each, row order. `hold`, `done` and `idle`
 //      rows are never picked.
 //
@@ -235,8 +240,13 @@ export function pick(facts) {
   });
   const activePlanners = planners.filter((w) => !questionOf(w.topic));
   const plannerFree = activePlanners.length < caps.planners && planners.length < caps.planners + 1;
+  // The lookahead: plans written ahead of the lanes, so none goes stale on a topic held meanwhile.
+  const waitingPlans = planned.filter((r) => !flags(r).includes("standing") && !flags(r).includes("hold"));
+  const ahead = waitingPlans.length + planners.length;
+  const lookahead = caps.prds + 1;
   /** Why `r` may not be planned, or null when it may. @param {PickRow} r */
   const planBlock = (r) => {
+    if (flags(r).includes("hold")) return "on hold";
     if (!(r.waiting ?? 0)) return "nothing waiting to plan";
     if (planWorktrees.some((w) => w.topic === r.topic)) return "being planned";
     const q = questionOf(r.topic);
@@ -245,6 +255,8 @@ export function pick(facts) {
     if (waits.length) return `waits for ${waits.join(", ")}`;
     if (!plannerFree)
       return `a planner is running (${activePlanners.map((w) => w.session).join(", ") || planners.map((w) => w.session).join(", ")})`;
+    if (ahead >= lookahead)
+      return `the lookahead is full: ${waitingPlans.length} planned waiting${planners.length ? ` and ${planners.length} being planned` : ""}, lane cap ${caps.prds} + 1 (plan it by hand: pnpm prd plan)`;
     return null;
   };
   const toWrite = rows.filter((r) => r.state === "to-write");

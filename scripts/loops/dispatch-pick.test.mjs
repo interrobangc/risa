@@ -474,6 +474,66 @@ describe("rule 6: planning", () => {
   });
 });
 
+describe("rule 6: the lookahead (lane cap + 1)", () => {
+  // Two lanes full, so no planned topic may start: only the plan is in question.
+  const full = (planned, extra = {}) => ({
+    rows: [
+      row("x", "running"),
+      row("y", "running"),
+      ...planned.map((t) => row(t, "planned")),
+      row("w", "to-write", { waiting: 2 }),
+    ],
+    ...runningFacts(["x", "y"]),
+    caps: { prds: 2 },
+    ...extra,
+  });
+
+  it("cap 2 with 3 planned topics waiting plans nothing, and says why", () => {
+    const p = go(full(["a", "b", "c"]));
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "w")).toBe(
+      "the lookahead is full: 3 planned waiting, lane cap 2 + 1 (plan it by hand: pnpm prd plan)",
+    );
+  });
+
+  it("cap 2 with 2 planned topics waiting plans one", () => {
+    expect(go(full(["a", "b"]))).toMatchObject({ action: "plan", topic: "w" });
+  });
+
+  it("a running planner counts toward the lookahead", () => {
+    const facts = full(["a", "b"], {
+      worktrees: [prdWt("x"), prdWt("y"), planWt("p")],
+      sessions: [session("prd-x"), session("prd-y"), session("plan-p")],
+      asks: [question("q1", "p", { session: "plan-p" })],
+    });
+    facts.rows.push(row("p", "to-write", { waiting: 1 }));
+    const p = go(facts);
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "w")).toBe(
+      "the lookahead is full: 2 planned waiting and 1 being planned, lane cap 2 + 1 (plan it by hand: pnpm prd plan)",
+    );
+  });
+
+  it("standing and held topics don't fill it", () => {
+    const facts = full(["a", "b"]);
+    facts.rows.push(
+      row("fixes-ui", "planned", { flags: ["standing"], waiting: 5, hot: ["x"] }),
+      row("h", "hold", { flags: ["hold"] }),
+    );
+    expect(go(facts)).toMatchObject({ action: "plan", topic: "w" });
+  });
+
+  it("a held topic is never planned, even with items waiting and room ahead", () => {
+    const p = go({ rows: [row("h", "hold", { flags: ["hold"], waiting: 4 })] });
+    expect(p.action).toBe("none");
+    expect(whyOf(p, "h")).toBe("on hold");
+    // Held with a stale to-write state still isn't picked.
+    const stale = go({ rows: [row("h", "to-write", { flags: ["hold"], waiting: 4 })] });
+    expect(stale.action).toBe("none");
+    expect(whyOf(stale, "h")).toBe("on hold");
+  });
+});
+
 describe("rule 7: ordering", () => {
   it("a start beats a plan, even when the plan's row comes first", () => {
     const p = go({ rows: [row("a", "to-write", { waiting: 4 }), row("b", "planned")] });
