@@ -10,10 +10,11 @@
 // and any error in it is swallowed (exit 0, no output).
 //
 // An orchestrator has two limits: past the soft one (CARETOOK_CONTEXT_LIMIT,
-// 160k) a reminder asks it to judge, again every further 25k; past the hard one
-// (CARETOOK_CONTEXT_HARD_LIMIT, 225k) it is told to rotate at the next safe
-// point, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN (10). A backlog
-// session has only the soft one, and it is never a forced close: past it the
+// 120k for an orchestrator, 160k for the others) a reminder tells it to rotate at
+// the next safe point (after a merge, a verdict or a landing; never mid-landing),
+// again every further 25k; past the hard one (CARETOOK_CONTEXT_HARD_LIMIT, 225k)
+// it is told to rotate now, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN
+// (10). A backlog session has only the soft one, and it is never a forced close: past it the
 // session tells the user its size and asks whether to hand off or keep going,
 // and no answer means keep going. The inbox session has one limit, the soft one
 // (its hard limit equals it): past it, it hands off unasked, at the crossing and
@@ -42,7 +43,8 @@
 //   pnpm prd context --keep "<why>" leave it alone for CARETOOK_CONTEXT_KEEP_MIN (30)
 //   pnpm prd context --all [--json] every live session
 //
-// CARETOOK_CONTEXT_LIMIT (the soft limit, 160000 tokens), CARETOOK_CONTEXT_HARD_LIMIT
+// CARETOOK_CONTEXT_LIMIT (the soft limit for every kind; else 120000 tokens for an
+// orchestrator, 160000 for the others), CARETOOK_CONTEXT_HARD_LIMIT
 // (225000; never below the soft one) and CARETOOK_CONTEXT_REMIND_MIN (10) are for
 // orchestrators, backlog and inbox sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
@@ -80,8 +82,13 @@ const positive = (/** @type {string | undefined} */ value, /** @type {number} */
   const n = Number(value);
   return value && Number.isFinite(n) && n > 0 ? n : fallback;
 };
-/** An orchestrator's, backlog or inbox session's soft limit. */
-export const limitOf = (env = process.env) => positive(env.CARETOOK_CONTEXT_LIMIT, 160_000);
+/** An orchestrator's (kind `prd`) default soft limit: it rotates early, at the next safe point. */
+const ORCHESTRATOR_SOFT = 120_000;
+/** The default soft limit of a backlog or inbox session (and any kind but an orchestrator). */
+const OTHER_SOFT = 160_000;
+/** A session kind's soft limit; CARETOOK_CONTEXT_LIMIT overrides it for every kind. */
+export const limitOf = (env = process.env, /** @type {string | undefined} */ kind = undefined) =>
+  positive(env.CARETOOK_CONTEXT_LIMIT, kind === "prd" ? ORCHESTRATOR_SOFT : OTHER_SOFT);
 /** An orchestrator's hard limit, never below the soft one. */
 export const hardLimitOf = (env = process.env) =>
   Math.max(positive(env.CARETOOK_CONTEXT_HARD_LIMIT, 225_000), limitOf(env));
@@ -156,7 +163,7 @@ export function orchestratorSoftReminder(
   /** @type {number} */ soft,
   /** @type {number} */ hard,
 ) {
-  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Judge whether to rotate now: go on if a step in hand can't resume from _Status_ (a landing under way) or the wave is nearly done; otherwise, at the next safe point, finish the step in hand, commit _Status_ and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight), without asking. Past the hard limit you rotate at the next safe point.`;
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Rotate at the next safe point (after a merge, a verdict or a landing; never mid-landing), without asking: write _Status_ as the brief for the fresh session, commit it and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). A step that can't resume from _Status_ (a landing under way) finishes first.`;
 }
 
 export function orchestratorReminder(/** @type {number} */ size, /** @type {number} */ hard) {
@@ -394,8 +401,8 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
       pid,
       size,
       now,
-      limit: limitOf(env),
-      hard: inbox ? limitOf(env) : hardLimitOf(env),
+      limit: limitOf(env, session.kind),
+      hard: inbox ? limitOf(env, session.kind) : hardLimitOf(env),
       remindMs: remindMsOf(env),
       loop,
       backlog,
@@ -410,10 +417,10 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
 
 /**
  * Every live session with its size and limits (`hard` null for a backlog session, the soft
- * limit for the inbox session).
+ * limit for the inbox session). `limit` unset: each session's kind's own.
  * @param {string} sessions @param {{ limit?: number, hardLimit?: number, now?: number }} [opts]
  */
-export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf(), now = Date.now() } = {}) {
+export function liveSizes(sessions, { limit: fixed, hardLimit = hardLimitOf(), now = Date.now() } = {}) {
   const dir = contextDirOf(sessions);
   // Each process's start by its own ps call's clock: a `now` taken before every call
   // would date the later ones earlier by however long the calls took under load.
@@ -422,6 +429,7 @@ export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf
     .map(({ name, record }) => {
       const size = sizeRecord(dir, name, record.pid ?? 0);
       const keep = size?.keep && Date.parse(size.keep.until) > now ? size.keep : null;
+      const limit = fixed ?? limitOf(process.env, record.kind);
       const hard = record.kind === "backlog" ? null : record.kind === "inbox" ? limit : hardLimit;
       return {
         name,
@@ -441,9 +449,8 @@ export function liveSizes(sessions, { limit = limitOf(), hardLimit = hardLimitOf
 function cli(/** @type {string[]} */ args) {
   const sessions = defaultDir();
   const dir = contextDirOf(sessions);
-  const limit = limitOf();
   if (args[0] === "--all") {
-    const rows = liveSizes(sessions, { limit, hardLimit: hardLimitOf() });
+    const rows = liveSizes(sessions, { hardLimit: hardLimitOf() });
     if (args.includes("--json")) console.log(JSON.stringify(rows));
     else for (const r of rows) console.log(`${r.name}  ${r.note}`);
     return 0;
@@ -489,6 +496,7 @@ function cli(/** @type {string[]} */ args) {
     return 0;
   }
   const record = sizeRecord(dir, name, pid);
+  const limit = limitOf(process.env, session.kind);
   const hard = hardLimitFor(session.kind);
   const limits = `soft ${kilo(limit)}, ${hard === null ? "no hard limit" : `hard ${kilo(hard)}`}`;
   console.log(`${name}: ${sizeNote(record, { limit, hard })} (${limits})`);
