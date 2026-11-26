@@ -61,6 +61,7 @@ fi
 cat <<EOF
 - Build only slice $n. Leave other slices' regions and files alone.
 - Read your handbook ($(role_doc loop) prints it) and follow it exactly: its _Loop rules_, the rules across PRDs it points to, and the _Hand-off_ format for your final message.
+- **Batch your reads:** independent reads, greps and commands go in one turn, and files are read whole, not in \`sed -n\` chunks (your handbook's _Reads and turns_).
 $stack_line Delete any scratch scripts before you commit.
 - Check with \`$prd_cmd check --quick "slice hand-off"\` (it takes a check lease and needs a clean tree, so commit first), never a bare \`$check_cmd\`. On your slice branch it is the slice check: typecheck, lint, format, every unit test, and only the integration and component test files you added or edited (never a full check; it adds the tooling tests when you change the tooling). Run no other component test or browser check: the orchestrator runs the rest and sends you what breaks. To wait on a check running in the background, run \`$prd_cmd wait check\` (it returns once this worktree's check is gone, and exits 75 at its \`--timeout\`); never \`pgrep -f\` (it matches its own shell and never exits).
 - Commit subjects are Conventional Commits with the topic as scope: \`feat($topic): …\`, \`fix($topic): …\`, \`test($topic): …\`. The commit-msg hook refuses anything else.

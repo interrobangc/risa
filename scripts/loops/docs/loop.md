@@ -12,6 +12,14 @@ Your final message:
 - anything skipped or surprising that later slices need;
 - the commit SHAs.
 
+## Reads and turns
+
+Every turn costs its whole context, so take fewer turns:
+
+- **Batch:** send independent reads, greps and commands together in one turn (parallel tool calls, or one shell command that prints several files).
+- **Read a file whole** (the Read tool, or `cat`), not in `sed -n` chunks, unless it is very large.
+- **Search once** with a pattern that covers every name you need (`grep -n 'a\|b\|c'`), not one grep per name.
+
 ## Loop rules
 
 - Your prompt ends with your slice's section, wave intro and cited PRD parts; open the plan for gaps. Read docs its `Reads` names (`prd doc planner "Slice fields"`).
