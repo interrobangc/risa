@@ -168,6 +168,53 @@ describe("trimStatus on a fixes plan", () => {
   });
 });
 
+describe("a fixes plan's Status table keeps its header (B-807)", () => {
+  const HEAD = ["| Slice | Item | State | Merge |", "| ----- | ---- | ----- | ----- |"];
+  const headOf = (text) =>
+    statusOf(text)
+      .split("\n")
+      .filter((l) => l.startsWith("|"));
+
+  it("keeps the header and separator when every row moves out", () => {
+    const all = new Set(["aaaa1111", "bbbb2222", "cccc3333", "dddd4444"]);
+    const rows = ROWS.replace("| 3 | B-3 | handed off (no commits) | — |", "| 3 | B-3 | merged | dddd4444 |")
+      .replace("| 6 | B-6 | done (no commits) | — |", "| 6 | B-6 | merged | dddd4444 |")
+      .replace("| 5 | B-5 | started (opus) | — |", "| 5 | B-5 | merged | dddd4444 |");
+    const r = trimStatus(plan(rows), {
+      topic: "fixes-x",
+      isLanded: (sha) => all.has(sha),
+      date: "2026-11-26",
+    });
+    expect(r.rows).toBe(6);
+    expect(headOf(r.plan)).toEqual(HEAD);
+    expect(r.restored).toBe(false);
+  });
+
+  it("puts back an empty table a hand-written idle hand-over dropped, then changes nothing", () => {
+    const idle = plan(ROWS).replace(/\| Slice[\s\S]*?\n\n(?=## Wave 1)/, "No slice in flight.\n\n");
+    expect(headOf(idle)).toEqual([]);
+    const r = trimStatus(idle, { topic: "fixes-x", isLanded, date: "2026-11-26" });
+    expect(r.restored).toBe(true);
+    expect(headOf(r.plan)).toEqual(HEAD);
+    const blocks = splitBlocks(statusOf(r.plan));
+    expect(blocks.at(-2)).toBe("No slice in flight.");
+    const again = trimStatus(r.plan, { topic: "fixes-x", historyText: r.history, isLanded });
+    expect(again.restored).toBe(false);
+    expect(again.plan).toBe(r.plan);
+  });
+
+  it("takes the restored table's columns from the history's", () => {
+    const history =
+      "# History: fixes-y\n\n## Trimmed\n\n| Slice | Item | State | Merge | Note |\n| - | - | - | - | - |\n| 1 | B-1 | merged | abcd1234 | x |\n";
+    const text = "# P\n\n## Status\n\nNo slice in flight.\n\n## Wave 1\n";
+    const r = trimStatus(text, { topic: "fixes-y", historyText: history });
+    expect(r).toMatchObject({ restored: true, paragraphs: 0, rows: 0, history });
+    expect(r.plan).toBe(
+      "# P\n\n## Status\n\nNo slice in flight.\n\n| Slice | Item | State | Merge | Note |\n| - | - | - | - | - |\n\n## Wave 1\n",
+    );
+  });
+});
+
 describe("trimStatus elsewhere", () => {
   it("moves only hand-offs in a plan that isn't a fixes plan", () => {
     const r = trimStatus(plan(ROWS).replace("fixes-x", "feature"), { topic: "feature", isLanded });
@@ -189,10 +236,17 @@ describe("trimStatus elsewhere", () => {
   });
 
   it("does nothing with one hand-off and no landed wave", () => {
-    const text = "# P\n\n## Status\n\n**Hand-off (2026-11-24).** Only one.\n\n## Slice 1: a\n";
+    const text =
+      "# P\n\n## Status\n\n**Hand-off (2026-11-24).** Only one.\n\n| Slice | Item | State | Merge |\n| - | - | - | - |\n\n## Slice 1: a\n";
     const r = trimStatus(text, { topic: "fixes-y" });
     expect(r.plan).toBe(text);
     expect(r.history).toBe("");
+    expect(r.restored).toBe(false);
+  });
+
+  it("puts back no table in a plan that isn't a fixes plan", () => {
+    const text = "# P\n\n## Status\n\n**Hand-off (2026-11-24).** Only one.\n\n## Slice 1: a\n";
+    expect(trimStatus(text, { topic: "feature" })).toMatchObject({ plan: text, restored: false });
   });
 
   it("keeps a fenced block whole", () => {
@@ -253,6 +307,43 @@ describe("the CLI", () => {
     expect(again.out).toContain("nothing to move");
     expect(readFileSync(planFile(), "utf8")).toBe(plan1);
     expect(readFileSync(historyFile(), "utf8")).toBe(history1);
+  });
+
+  it("keeps the table's header when it moves every row, and puts back a dropped one", async () => {
+    const file = join(repo, "plans", "fixes-z-plan.md");
+    const landed = g("rev-parse", "--short=8", "dev");
+    writeFileSync(
+      file,
+      plan(`| 1 | B-1 | merged | ${landed} |`)
+        .replace("fixes-x", "fixes-z")
+        .replace(/\*\*Wave 3[^\n]*\n\n/, ""),
+    );
+    const r = await cli("fixes-z", "--date", "2026-11-26", "--base", "dev");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("1 row(s)");
+    const head = (text) =>
+      statusOf(text)
+        .split("\n")
+        .filter((l) => l.startsWith("|"));
+    expect(head(readFileSync(file, "utf8"))).toEqual([
+      "| Slice | Item | State | Merge |",
+      "| ----- | ---- | ----- | ----- |",
+    ]);
+    // An idle hand-over written by hand drops it: the next trim puts it back, formatted.
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace(/\| Slice[^\n]*\n\|[^\n]*\n/, "No slice in flight.\n"),
+    );
+    const dry = await cli("fixes-z", "--dry-run");
+    expect(dry.out).toContain("_Status_ has no slice table: would put back an empty one");
+    expect(head(readFileSync(file, "utf8"))).toEqual([]);
+    const fix = await cli("fixes-z");
+    expect(fix.out).toContain("_Status_ has no slice table: put back an empty one; commit the plan");
+    expect(head(readFileSync(file, "utf8"))).toEqual([
+      "| Slice | Item | State | Merge |",
+      "| ----- | ---- | ----- | ----- |",
+    ]);
+    expect((await cli("fixes-z")).out).toContain("nothing to move");
   });
 
   it("--next counts the plan and its history", async () => {

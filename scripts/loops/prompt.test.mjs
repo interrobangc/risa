@@ -944,6 +944,7 @@ describe("fix categories", () => {
     expect(text).toContain("append one slice per waiting item");
     expect(text).toContain("plans/fixes-rules.md");
     expect(text).toContain("there's no plans/fixes-bug-prd.md: the plan is the whole spec");
+    expect(text).toContain("slice table keeps its header and separator with no slice in flight"); // B-807
     expect(ok("orchestrator", "T")).not.toContain("append one slice per waiting item");
   });
 });
