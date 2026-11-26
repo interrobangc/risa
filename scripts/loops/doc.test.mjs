@@ -192,7 +192,7 @@ describe("this repo's roles", () => {
     const generic = readFileSync(join(HERE, "docs", `${role}.md`), "utf8");
     const additions = readFileSync(join(root, entry.additions), "utf8");
     expect(roleDoc(role, { config, root })).toBe(
-      `${fillNames(generic, config)}\n${additions.replace(/^<!--.*-->\n\n/, "")}`,
+      fillNames(`${generic}\n${additions.replace(/^<!--.*-->\n\n/, "")}`, config),
     );
   });
 
