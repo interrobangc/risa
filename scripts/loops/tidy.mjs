@@ -92,6 +92,7 @@ export const protectedBranches = () => branchKinds().kept;
  * @property {TidyLock[]} [locks]
  * @property {string[]} [testDbOrphans]   test databases no worktree owns (the testDb hook's orphans)
  * @property {{ name: string, why: string }[]} [volumes]   the stack's leftovers no worktree's stack uses (the stackLeftovers hook)
+ * @property {string} [volumesSkipped]   why the leftovers weren't read (a stack hook failed)
  * @property {{ path: string, ageSecs: number }[]} [hangLogs]
  * @property {{ id: string, title?: string, status: string, prd?: string }[] | null} [items]   backlog items, archived ones left out
  * @property {string[] | null} [prdWorktrees]   topics with a prd/ worktree; null when unreadable (a topic's finished items stay)
@@ -214,6 +215,8 @@ export function tidy(facts) {
 
   for (const v of facts.volumes ?? [])
     safe.push({ kind: "volume", target: v.name, why: v.why, how: "stack leftovers remove volume" });
+  if (facts.volumesSkipped)
+    kept.push({ kind: "volume", target: "the stack's leftovers", why: `not checked: ${facts.volumesSkipped}` });
 
   for (const h of facts.hangLogs ?? [])
     if (h.ageSecs > HANG_LOG_DAYS * 86400)

@@ -294,8 +294,17 @@ export function collectTidyFacts({
   // alone, B-440), and the stack's data no worktree's stack uses.
   const names = worktrees.map((w) => w.name);
   const testDbOrphans = factList("orphan", runHook("testDb", ["orphans", ...names], { env }).out);
+  // Only when every stack is known: a failed stackReady could drop a stack in
+  // use from the projects, and a failed listing may be partial.
   const projects = worktrees.flatMap((w) => (w.stack ? [w.stack] : []));
-  const volumes = factList("volume", runHook("stackLeftovers", projects, { env }).out).map((l) => {
+  const unknownStacks = base.worktrees.filter((w) => w.stackFailed).map((w) => w.name);
+  const left = unknownStacks.length ? null : runHook("stackLeftovers", projects, { env });
+  const volumesSkipped = unknownStacks.length
+    ? `the stackReady hook failed for ${unknownStacks.join(", ")}, so which stacks are in use is unknown`
+    : left && !left.ok && left.status !== 127
+      ? `the stackLeftovers hook failed${left.err ? ` (${left.err.split("\n")[0]})` : ""}`
+      : undefined;
+  const volumes = (left?.ok ? factList("volume", left.out) : []).map((l) => {
     const [name, , ...why] = l.split(" ");
     return { name, why: why.join(" ") };
   });
@@ -330,6 +339,7 @@ export function collectTidyFacts({
     locks,
     testDbOrphans,
     volumes,
+    ...(volumesSkipped ? { volumesSkipped } : {}),
     hangLogs,
     // --all: a plain list leaves out live and dropped items, which are what gets archived.
     items: allItems && allItems.filter((/** @type {{ archived?: boolean }} */ i) => !i.archived),

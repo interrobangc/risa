@@ -366,6 +366,12 @@ describe("status and gc", () => {
     expect(ok("ls.sh", [])).not.toMatch(/stopped stack/);
 
     writeFileSync(secs, `${3 * 86400}\n`);
+    // A failed ready hook is no answer, not "no stack": ls says unknown, gc keeps it.
+    const failed = { env: { SAMPLE_STACK_FAIL: "ready:t-2" } };
+    expect(ok("ls.sh", [], failed)).toMatch(/^t-2 +\? .* unknown +\? \(the stackReady hook failed\)$/m);
+    const kept = ok("gc.sh", ["--list"], failed);
+    expect(kept).toMatch(/^keep {8}t-2 \(its stack is unknown: the stackReady hook failed\)$/m);
+    expect(kept).not.toMatch(/stack down/);
     const out = ok("gc.sh", ["--yes"]);
     expect(out).toMatch(/^stack down {2}t-2 /m);
     expect(calls()).toMatch(/^stack down t-2/m);

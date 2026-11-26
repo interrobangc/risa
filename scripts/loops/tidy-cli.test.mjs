@@ -296,6 +296,31 @@ describe("a failed process inspection", () => {
   });
 });
 
+describe("a failed stack hook", () => {
+  it("skips the stack's leftovers, keeps them as unchecked and lists the rest", () => {
+    const before = existsSync(log) ? readFileSync(log, "utf8").length : 0;
+    const facts = collectTidyFacts({ main, env: { ...env, SAMPLE_STACK_FAIL: "ready:t-3" } });
+    expect(facts.volumes).toEqual([]);
+    expect(facts.volumesSkipped).toMatch(/the stackReady hook failed for t-3/);
+    const lists = sortFacts(facts);
+    expect(lists.safe.some((f) => f.kind === "volume")).toBe(false);
+    expect(lists.kept).toContainEqual(
+      expect.objectContaining({ kind: "volume", why: expect.stringMatching(/^not checked: /) }),
+    );
+    // The leftovers weren't even asked for: nothing could be removed on their word.
+    const calls = readFileSync(log, "utf8").slice(before);
+    expect(calls).toMatch(/^stack status t-3$/m);
+    expect(calls).not.toMatch(/^stack leftovers/m);
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "test-db" }));
+  });
+
+  it("a failed leftovers listing gives none, and says so", () => {
+    const facts = collectTidyFacts({ main, env: { ...env, SAMPLE_STACK_FAIL: "leftovers:." } });
+    expect(facts.volumes).toEqual([]);
+    expect(facts.volumesSkipped).toMatch(/the stackLeftovers hook failed \(stack-hook\.sh: leftovers failed/);
+  });
+});
+
 describe("tidy --yes", () => {
   it("removes the merged slice worktree, the dead lease and the ended record; keeps the rest; files one report", () => {
     const out = ok(["--yes"]);

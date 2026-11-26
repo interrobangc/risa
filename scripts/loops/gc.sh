@@ -41,7 +41,12 @@ for dir in "$loops"/*/; do
     continue
   fi
   # One stack hook call per worktree: its project and how long it has been stopped.
-  facts=$(stack_hook stackReady "$dir" 2>/dev/null || true)
+  # It prints ready= on every answer; without one (but no such hook, 127) it failed.
+  rc=0; facts=$(stack_hook stackReady "$dir" 2>/dev/null) || rc=$?
+  if ((rc != 127)) && [[ -z $(fact ready "$facts") ]]; then
+    echo "keep        $name (its stack is unknown: the stackReady hook failed)"
+    continue
+  fi
   secs=$(fact stopped_secs "$facts")
   if [[ -n $(fact project "$facts") && -n $secs ]] && ((secs >= limit)); then
     down+=("$name")
