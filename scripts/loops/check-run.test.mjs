@@ -1,8 +1,9 @@
 // check-run.sh (what prd.sh check runs inside the lease): one log line per run,
 // pass or fail, with a stub command; the load gate's wait before it (a stubbed
 // load: a file the tests write); the budget and the silence limit, and a
-// machine sleep (a fake clock) that counts against neither. And the lease's
-// default of two check slots.
+// machine sleep (a fake clock) that counts against neither; the time gate on a
+// finished quick or slice check (a fake clock and load, a fixture config with
+// the local measure armed). And the lease's default of two check slots.
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -227,12 +228,15 @@ describe("check-run.sh load reading", () => {
     stub("sysctl", "exit 1");
     stub("uptime", 'echo " 10:00:00 up 3 days,  2:11,  1 user,  load average: 0.52, 0.58, 0.59"');
     const before = readFileSync(logFile, "utf8").split("\n").length - 1;
-    expect(run("quick", "linux", "exit 0", { PATH: `${bin}:${process.env.PATH}` }).status).toBe(0);
+    // No CARETOOK_LOAD_FILE: the load logged comes from the stubs (and the gate,
+    // which would read the real machine's, is off).
+    const env = { PATH: `${bin}:${process.env.PATH}`, CARETOOK_LOAD_FILE: "", CARETOOK_LOAD_GATE: "off" };
+    expect(run("quick", "linux", "exit 0", env).status).toBe(0);
     // Not lines(): its trimEnd would eat the empty trailing fields.
     const added = readFileSync(logFile, "utf8").split("\n").slice(before, -1);
     expect(added).toHaveLength(1);
     const fields = added[0].split("\t");
-    expect(fields).toHaveLength(16);
+    expect(fields).toHaveLength(18);
     expect(fields[11]).toBe("0");
     expect(fields[6]).toBe("0.58");
     expect(fields[7]).toBe("0.58");
@@ -315,6 +319,113 @@ describe("check-run.sh and the load gate", () => {
     expect(r.status).toBe(0);
     expect(r.out).not.toMatch(/busy/);
     expect(last()).toMatchObject({ reason: "unread", loadWaited: 0 });
+  });
+});
+
+describe("check-run.sh and the time gate", () => {
+  const REPO = join(HERE, "../..");
+  let armedConfig;
+  beforeAll(() => {
+    // The repo's config and tier data, with the local measure armed.
+    const dir = join(root, "armed");
+    mkdirSync(dir, { recursive: true });
+    const config = JSON.parse(readFileSync(join(REPO, "risa.json"), "utf8"));
+    const tiers = JSON.parse(readFileSync(join(REPO, config.paths.tierData), "utf8"));
+    tiers.gates.measures.quick.armed = true;
+    config.paths.tierData = "tiers.json";
+    writeFileSync(join(dir, "tiers.json"), JSON.stringify(tiers));
+    armedConfig = join(dir, "risa.json");
+    writeFileSync(armedConfig, JSON.stringify(config));
+  });
+
+  // A check that reports its step times and slowest files, then takes 400 s on
+  // the fake clock (one jump, under the sleep gap); `end` runs last (a load change).
+  const timed = (mode, { end = "", exit = 0, extra = {} } = {}) => {
+    const clock = join(root, `clock-gate-${mode}`);
+    writeFileSync(clock, "2000000000\n");
+    const cmd = [
+      'printf "5 typegen\\n80 static\\n150 unit\\n165 tooling\\n" > "$CARETOOK_CHECK_STATE/times"',
+      'printf "120 scripts/loops/fictional-slow.test.mjs\\n9 lib/fictional.test.ts\\n" > "$CARETOOK_CHECK_STATE/slowest"',
+      "sleep 0.5",
+      `echo 2000000400 > "${clock}.new"`,
+      `mv "${clock}.new" "${clock}"`,
+      "sleep 0.5",
+      end,
+      `exit ${exit}`,
+    ]
+      .filter(Boolean)
+      .join("; ");
+    return run(mode, `gate ${mode}`, cmd, {
+      CARETOOK_CLOCK_FILE: clock,
+      CARETOOK_CHECK_SLEEP_GAP: "1000",
+      CARETOOK_CHECK_CORES: "4",
+      ...extra,
+    });
+  };
+  const lastRun = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
+  const STEPS = [
+    { step: "typegen", seconds: 5 },
+    { step: "static", seconds: 80 },
+    { step: "unit", seconds: 150 },
+    { step: "tooling", seconds: 165 },
+  ];
+
+  it("fails a quiet 400 s quick check that passed when the measure is armed, naming its steps and slowest files", () => {
+    const r = timed("quick", { extra: { RISA_CONFIG: armedConfig } });
+    expect(r.status).toBe(125);
+    expect(r.stderr).toContain(
+      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s: FAIL, 40 s past the cutoff.",
+    );
+    // The tooling step's seconds count: it is one of the steps named, the slowest.
+    expect(r.stderr).toContain("  steps: tooling 165 s, unit 150 s, static 80 s, typegen 5 s");
+    expect(r.stderr).toMatch(/120 s {2}scripts\/loops\/fictional-slow\.test\.mjs/);
+    expect(r.stderr).toContain("A time breach, not a test failure");
+    expect(lastRun()).toMatchObject({
+      reason: "gate quick",
+      seconds: 400,
+      exit: 125,
+      failedStep: "",
+      breach: "",
+      verdict: "fail",
+      stepTimes: STEPS,
+    });
+  });
+
+  it("warns, saying not armed, and passes when the measure isn't armed", () => {
+    const r = timed("slice");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s: WARN, 40 s past the cutoff, not armed.",
+    );
+    expect(r.stdout).toContain("  steps: tooling 165 s");
+    expect(lastRun()).toMatchObject({ exit: 0, verdict: "warn", stepTimes: STEPS });
+  });
+
+  it("doesn't judge a check that ended on a busy machine", () => {
+    try {
+      const r = timed("quick", {
+        end: `echo "9 9 9" > "${loadFile}"`,
+        extra: { RISA_CONFIG: armedConfig },
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(
+        /Time gate quick: 6m40s \(400 s\).*: not judged \(load 1 at the start, 9 at the end/,
+      );
+      expect(lastRun()).toMatchObject({ exit: 0, verdict: "unjudged", stepTimes: STEPS });
+    } finally {
+      writeFileSync(loadFile, "1 1 1\n");
+    }
+  });
+
+  it("doesn't judge a full check, or a check that failed", () => {
+    const full = timed("full", { extra: { RISA_CONFIG: armedConfig } });
+    expect(full.status).toBe(0);
+    expect(full.stdout + full.stderr).not.toMatch(/Time gate/);
+    expect(lastRun()).toMatchObject({ mode: "full", exit: 0, verdict: "", stepTimes: STEPS });
+    const failed = timed("quick", { exit: 1, extra: { RISA_CONFIG: armedConfig } });
+    expect(failed.status).toBe(1);
+    expect(failed.stdout + failed.stderr).not.toMatch(/Time gate/);
+    expect(lastRun()).toMatchObject({ mode: "quick", exit: 1, verdict: "" });
   });
 });
 

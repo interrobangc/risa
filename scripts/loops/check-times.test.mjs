@@ -65,6 +65,30 @@ describe("check log summary", () => {
     expect(runs[1].loadWaited).toBeNull();
   });
 
+  it("parses the time gate's verdict and the step times", () => {
+    const fields = [...line("2026-11-25T10:00:00Z", "slice/x/2", "quick", 400, 125).split("\t")];
+    fields.push("0", "", "", "", "", "fail", "typegen:5,static:80,unit:150,docs:2,tooling:163,bad,x:soon");
+    const { runs, skipped } = parseLog(fields.join("\t"));
+    expect(skipped).toBe(0);
+    expect(runs[0]).toMatchObject({ exit: 125, breach: "", verdict: "fail" });
+    expect(runs[0].stepTimes).toEqual([
+      { step: "typegen", seconds: 5 },
+      { step: "static", seconds: 80 },
+      { step: "unit", seconds: 150 },
+      { step: "docs", seconds: 2 },
+      { step: "tooling", seconds: 163 },
+    ]);
+  });
+
+  it("still parses a sixteen-field line, with no verdict and no step times", () => {
+    const fields = [...line("2026-11-24T10:00:00Z", "prd/x", "slice", 300, 0).split("\t")];
+    fields.push("0", "", "", "", "");
+    expect(fields).toHaveLength(16);
+    const { runs, skipped } = parseLog(fields.join("\t"));
+    expect(skipped).toBe(0);
+    expect(runs[0]).toMatchObject({ seconds: 300, exit: 0, breach: "", verdict: "", stepTimes: [] });
+  });
+
   it("counts failures by step and the most-failed files", () => {
     const failed = (step, files, exit = 1) =>
       [...line("2026-11-22T10:00:00Z", "prd/x", "quick", 60, exit).split("\t"), "0", step, files, ""].join(

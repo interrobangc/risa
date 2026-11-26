@@ -1,6 +1,7 @@
 // The time gate: did a measured run of the tests take too long? Pure functions
 // over one measure's seconds and limits, plus a small CLI that the check runner
-// and CI's test-job wrapper call (neither does yet).
+// (check-run.sh, for a finished quick or slice check) and CI's test-job wrapper
+// call.
 //
 // The measures, each with an aim, a cutoff and an armed switch (the gates' data,
 // `gates` in the tier data, read and checked by tier-data.mjs):
@@ -18,16 +19,24 @@
 //
 // The gates' data's shape and defaults are in tier-data.mjs's header.
 //
-//   node time-gate.mjs --measure M --seconds S [--load-start L --load-end L] [--cores N]
-//     [--slowest FILE] [--steps FILE] [--json]
-//   FILE: one `<seconds> <name>` per line (a file, or a step). Out: the verdict on
-//   the first line, then the lines to print (or one JSON object with --json); exit
-//   0 for every verdict, 2 for a bad call or broken gates' data.
+//   node time-gate.mjs (--measure M | --mode CHECK_MODE) --seconds S
+//     [--load-start L --load-end L] [--cores N] [--slowest FILE] [--steps FILE] [--json]
+//   FILE: one `<seconds> <name>` per line (a file, or a step). --mode: the measure
+//   that check mode counts toward (the local one for its modes); a mode none
+//   covers (full) prints nothing. Out: the verdict on the first line, then the
+//   lines to print (or one JSON object with --json); exit 0 for every verdict, 2
+//   for a bad call or broken gates' data.
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { pathToFileURL } from "node:url";
 
-import { DEFAULT_QUIET_LOAD_PER_CORE, LOCAL_MEASURE, MEASURES, tierData } from "../ci/tier-data.mjs";
+import {
+  DEFAULT_QUIET_LOAD_PER_CORE,
+  LOCAL_MEASURE,
+  MEASURES,
+  measureForMode,
+  tierData,
+} from "../ci/tier-data.mjs";
 
 /** How many slowest files a breach names. */
 export const SLOWEST = 10;
@@ -123,12 +132,16 @@ export function runCli(argv, io) {
   for (let i = 0; i < argv.length; i++) {
     const a = /** @type {string} */ (argv[i]);
     if (a === "--json") json = true;
-    else if (/^--(measure|seconds|load-start|load-end|cores|slowest|steps)$/.test(a) && i + 1 < argv.length)
+    else if (
+      /^--(measure|mode|seconds|load-start|load-end|cores|slowest|steps)$/.test(a) &&
+      i + 1 < argv.length
+    )
       opt[a.slice(2)] = /** @type {string} */ (argv[++i]);
     else return fail(`unknown or incomplete argument ${a}`);
   }
-  const measure = opt.measure ?? "";
-  if (!MEASURES.includes(measure)) return fail(`--measure must be one of ${MEASURES.join(", ")}`);
+  if (opt.mode !== undefined && opt.measure !== undefined) return fail("--measure or --mode, not both");
+  if (opt.mode === undefined && !MEASURES.includes(opt.measure ?? ""))
+    return fail(`--measure must be one of ${MEASURES.join(", ")}`);
   const seconds = Number(opt.seconds);
   if (opt.seconds === undefined || !Number.isFinite(seconds) || seconds < 0)
     return fail("--seconds must be a number of seconds");
@@ -140,6 +153,8 @@ export function runCli(argv, io) {
   } catch (e) {
     return fail(e instanceof Error ? e.message.replaceAll("\n", "; ") : String(e));
   }
+  const measure = opt.mode === undefined ? (opt.measure ?? "") : measureForMode(gates, opt.mode);
+  if (measure === null) return { code: 0, out: "", err: "" };
   /** @type {{ slowest: Timed[], steps: Timed[] }} */
   const lists = { slowest: [], steps: [] };
   for (const k of /** @type {const} */ (["slowest", "steps"])) {

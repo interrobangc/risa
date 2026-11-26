@@ -39,6 +39,39 @@ export function failedFiles(text, cwd) {
 }
 
 /**
+ * A Vitest JSON report's slowest test files, by each file's start and end time,
+ * slowest first, names relative to cwd; none from an unreadable report. The core's
+ * copy of the project's check-failed.mjs's.
+ * @param {string} text
+ * @param {string} cwd
+ * @param {number} [n]
+ * @returns {{ name: string, seconds: number }[]}
+ */
+export function slowestFiles(text, cwd, n = 10) {
+  let report;
+  try {
+    report = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(report?.testResults)) return [];
+  return report.testResults
+    .filter(
+      (/** @type {any} */ r) =>
+        typeof r?.name === "string" &&
+        Number.isFinite(r.startTime) &&
+        Number.isFinite(r.endTime) &&
+        r.endTime >= r.startTime,
+    )
+    .map((/** @type {any} */ r) => ({
+      name: isAbsolute(r.name) ? relative(cwd, r.name) : r.name,
+      seconds: Math.round((r.endTime - r.startTime) / 100) / 10,
+    }))
+    .sort((a, b) => b.seconds - a.seconds || a.name.localeCompare(b.name))
+    .slice(0, n);
+}
+
+/**
  * Runs a command in `cwd`, its output passed on as it comes and kept.
  * @param {string} cmd
  * @param {string[]} args
@@ -83,7 +116,9 @@ export function checkProjects(config, harness) {
  * failed run reruns only its failed files, once, one at a time; a pass there
  * passes the step and names them as flakes. No rerun after an unhandled error (no
  * file owns it) or past `rerunMax` failed files. With a state directory, writes
- * `step` (tooling) and adds to `failed` and `flaky`, as the project's check does.
+ * `step` (tooling) and adds to `failed` and `flaky`, as the project's check does,
+ * and to `times` (`<seconds> tooling`, the rerun included) and `slowest` (the
+ * first run's ten slowest files, `<seconds> <file>` lines).
  * @param {{ root: string, projects: string[], state?: string, rerunMax?: number, vitest?: string }} opts
  * @returns {Promise<number>} the step's exit code
  */
@@ -101,6 +136,7 @@ export async function toolingStep({ root, projects, state = "", rerunMax = 20, v
       return []; // no report: the run died before writing one
     }
   };
+  const started = Date.now();
   try {
     if (state) writeFileSync(join(state, "step"), "tooling\n");
     const first = join(work, "first.json");
@@ -109,6 +145,20 @@ export async function toolingStep({ root, projects, state = "", rerunMax = 20, v
       ["run", ...flags, "--reporter=default", "--reporter=json", `--outputFile.json=${first}`],
       root,
     );
+    if (state) {
+      let text = "";
+      try {
+        text = readFileSync(first, "utf8");
+      } catch {
+        // no report: no slowest files
+      }
+      appendFileSync(
+        join(state, "slowest"),
+        slowestFiles(text, root)
+          .map((f) => `${f.seconds} ${f.name}\n`)
+          .join(""),
+      );
+    }
     if (run.code === 0) return 0;
     const failed = reported(first);
     if (!failed.length) {
@@ -156,6 +206,7 @@ export async function toolingStep({ root, projects, state = "", rerunMax = 20, v
     console.log(`tooling: failed again: ${still.join(" ")}`);
     return rerun.code;
   } finally {
+    if (state) appendFileSync(join(state, "times"), `${Math.round((Date.now() - started) / 1000)} tooling\n`);
     rmSync(work, { recursive: true, force: true });
   }
 }

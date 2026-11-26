@@ -15,12 +15,16 @@
 #         in the state directory, `step` (the step running, one line, rewritten
 #         as it goes) and `failed` and `flaky` (test files, one per line, added
 #         to); in the counts file, "<test files run> <test files in all>"
-#         (optional: none leaves the log's two fields empty)
+#         (optional: none leaves the log's two fields empty); optional too, in
+#         the state directory, `times` (`<seconds> <step>` lines, each step's
+#         seconds) and `slowest` (`<seconds> <file>` lines, its test steps'
+#         slowest files): the time gate names them
 #   It runs no tooling test of the tool's and needs no file of the tool's.
 # With no hook set the check fails (exit 2): a project with no check can't pass one.
 #
 # The tooling tests, when TOOLING isn't 0 and the hook passed: check-tooling.mjs, the config's testProjects.tooling (and its browserHarness when
-# TOOLING is 2), with the same rerun rules and state files (step `tooling`).
+# TOOLING is 2), with the same rerun rules and state files (step `tooling`, its
+# seconds and slowest files in `times` and `slowest`).
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=lib.sh
