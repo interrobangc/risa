@@ -16,6 +16,7 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
 export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
+wait_secs=${CARETOOK_END_WAIT:-10}
 
 (($# <= 1)) || die "usage: pnpm prd end [<name>]"
 case ${1:-} in -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; -*) die "end: unknown option $1" ;; esac
@@ -41,4 +42,4 @@ fi
 
 # Say it first: ending the caller's own session may take this output with it.
 echo "Ending $name (pid $pid, from $how)."
-end_pid "$pid" "$name"
+end_pid "$pid" "$name" "$wait_secs"

@@ -86,16 +86,12 @@ const fixture = () => {
     CARETOOK_GC_STOPPED_HOURS: "",
     SAMPLE_STACK_STATE: join(root, "stack-state"),
     SAMPLE_STACK_LOG: log,
-    // The claude rm.sh looks for above it (sessions.mjs): a stub's name, never
-    // claude, so no walk up finds a real session these tests run under.
-    CARETOOK_CLAUDE_BIN: join(bin, "claude-stub"),
-    CARETOOK_SESSIONS_DIR: join(loops, ".sessions"),
-    CARETOOK_END_WAIT: "5",
   };
-  // The stub claude: with STUB_RECORD, it holds that live session record (as
-  // session.sh writes it); then it runs rm.sh from STUB_CWD and waits.
+  // The stub claude, the nearest one rm.sh finds above it: with STUB_RECORD, it
+  // holds that live session record (as session.sh writes it); then it runs
+  // rm.sh from STUB_CWD. Its records are the default folder's, the repo's.
   writeFileSync(
-    env.CARETOOK_CLAUDE_BIN,
+    join(bin, "claude"),
     `#!/usr/bin/env bash
 echo "$$" > "$STUB_STATE/pid"
 [[ -z \${STUB_RECORD:-} ]] || node "$SESSIONS_MJS" set "$STUB_RECORD" "pid=$$" kind=prd "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -103,7 +99,7 @@ cd "$STUB_CWD" && bash "$RM_SH" "$@" > "$STUB_STATE/out" 2>&1
 echo "$?" > "$STUB_STATE/code"
 `,
   );
-  chmodSync(env.CARETOOK_CLAUDE_BIN, 0o755);
+  chmodSync(join(bin, "claude"), 0o755);
 
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
@@ -337,12 +333,12 @@ describe("rm.sh", () => {
 describe("rm.sh from inside the worktree it removes (B-812)", () => {
   const stubState = () => join(root, "stub-state");
   const sessions = () => join(loops, ".sessions");
-  /** Runs rm.sh <name> from CWD under the stub claude; resolves {signal, out, code}. */
-  const underClaude = (name, cwd, record) =>
+  /** Runs rm.sh ARGS (space-separated) from CWD under the stub claude; resolves {signal, out, code, pid}. */
+  const underClaude = (args, cwd, record) =>
     new Promise((resolve) => {
       rmSync(stubState(), { recursive: true, force: true });
       mkdirSync(stubState(), { recursive: true });
-      const child = spawn(env.CARETOOK_CLAUDE_BIN, [name], {
+      const child = spawn(join(root, "bin", "claude"), args.split(" "), {
         cwd: main,
         stdio: "ignore",
         env: {
@@ -385,13 +381,10 @@ describe("rm.sh from inside the worktree it removes (B-812)", () => {
       `rm: this shell is inside u, which rm would delete under it; run instead: cd ${main} && pnpm prd rm u && pnpm prd end`,
     );
     expect(existsSync(join(loops, "u"))).toBe(true);
-    // Another session's claude: no end in the line, nor with no claude at all.
-    const other = await underClaude("u", join(loops, "u"), "backlog");
+    // Another session's claude: no end in the line, and its options kept.
+    const other = await underClaude("u --keep-branch", join(loops, "u"), "backlog");
     expect(other.code).toBe("1");
-    expect(other.out).toMatch(/run instead: cd \S+ && pnpm prd rm u\n$/);
-    const bare = sh("rm.sh", ["u", "--keep-branch"], { cwd: join(loops, "u") });
-    expect(bare.status).toBe(1);
-    expect(bare.stderr).toMatch(/run instead: cd \S+ && pnpm prd rm u --keep-branch\n$/);
+    expect(other.out).toMatch(/run instead: cd \S+ && pnpm prd rm u --keep-branch\n$/);
     expect(existsSync(join(loops, "u"))).toBe(true);
   });
 

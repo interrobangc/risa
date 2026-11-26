@@ -63,7 +63,6 @@ esac
 end_self=""
 here=$(pwd -P 2>/dev/null || true) real_dir=$(cd "$dir" && pwd -P)
 if [[ $here == "$real_dir" || $here == "$real_dir"/* ]]; then
-  export CARETOOK_SESSIONS_DIR=${CARETOOK_SESSIONS_DIR:-$loops/.sessions}
   caller=$(node "$(dirname "$0")/sessions.mjs" caller 2>/dev/null) || caller=""
   IFS=$'\t' read -r caller_name _ caller_pid _ <<<"$caller" || true
   if [[ -n $record && $record != hotfix-* && ${caller_name:-} == "$record" ]]; then

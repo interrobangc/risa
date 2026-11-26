@@ -212,12 +212,12 @@ prd_count() {
 
 die() { echo "$*" >&2; exit 1; }
 
-# end_pid PID LABEL → end a session's process: TERM, then KILL after
-# CARETOOK_END_WAIT seconds (default 10). For pnpm prd end and rm.sh, which
-# ends its caller's own session; say what it ends first, since ending the
-# caller's session may take the output with it.
+# end_pid PID LABEL [SECS] → end a session's process: TERM, then KILL after SECS
+# seconds (default 10). For pnpm prd end and rm.sh, which ends its caller's own
+# session; say what it ends first, since ending the caller's session may take
+# the output with it.
 end_pid() {
-  local pid=$1 label=$2 wait_secs=${CARETOOK_END_WAIT:-10} i s
+  local pid=$1 label=$2 wait_secs=${3:-10} i s
   kill -TERM "$pid" 2>/dev/null || true
   for ((i = 0; i < wait_secs * 5; i++)); do
     # Gone, or a zombie waiting for its parent.
