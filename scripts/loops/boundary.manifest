@@ -49,6 +49,7 @@ scripts/ci/lists.mjs project
 scripts/ci/lists.test.mjs project
 scripts/ci/outstanding.mjs core
 scripts/ci/outstanding.test.mjs core
+scripts/ci/progress-reporter.mjs project
 scripts/ci/promote.mjs core
 scripts/ci/promote.test.mjs core
 scripts/ci/quarantine-setup.mjs project

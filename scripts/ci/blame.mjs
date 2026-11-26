@@ -28,9 +28,13 @@ const MAX_NOTICE = 200;
  * @typedef {{ dev: Placed[], branch: Placed[], unknown: Placed[] }} Split
  */
 
+/** A hung file's message: the verdict has no test message for it. */
+export const HUNG_MESSAGE = "hung: still running when its test step's watchdog stopped the run";
+
 /**
  * What a verdict says still fails: named tests, files with no named test, and
- * failed check jobs. `partial` means the list can't be the whole story.
+ * failed check jobs. `partial` means the list can't be the whole story. `hung`:
+ * the files a stopped test step was stuck on (a verdict before them has none).
  * @param {any} v
  */
 export function verdictFailures(v) {
@@ -55,10 +59,12 @@ export function verdictFailures(v) {
     files.some((f) => job.startsWith(ciTiers().isBrowserCheckFile(f) ? "browser" : ciTiers().fileTier(f))) ||
     flakeExplains(job);
   const unnamed = (v.failed?.jobs ?? []).some((/** @type {string} */ job) => !explained(job));
+  /** @type {string[]} */ const hung = Array.isArray(v.failed?.hung) ? v.failed.hung : [];
   return {
     tests,
     files,
     jobs,
+    hung: files.filter((f) => hung.includes(f)),
     partial: !!v.failed?.truncated || !!v.infra?.jobs?.length || unnamed,
   };
 }
@@ -157,7 +163,8 @@ export function splitFailures(failures, dev, absent) {
   };
   for (const t of failures.tests)
     place({ job: t.job, file: t.file, name: t.name, ...(t.message ? { message: t.message } : {}) });
-  for (const file of failures.files) place({ file, name: null });
+  for (const file of failures.files)
+    place({ file, name: null, ...(failures.hung?.includes(file) ? { message: HUNG_MESSAGE } : {}) });
   for (const job of failures.jobs) place({ job });
   return split;
 }

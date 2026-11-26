@@ -5,7 +5,14 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { devRunPlan, slicesNear, sortFlakes, splitFailures, verdictFailures } from "./blame.mjs";
+import {
+  HUNG_MESSAGE,
+  devRunPlan,
+  slicesNear,
+  sortFlakes,
+  splitFailures,
+  verdictFailures,
+} from "./blame.mjs";
 import { EXIT, blame, ciStatus, fileFlakes, main, requestRun } from "./ci.mjs";
 import { applyFindings, findingKey, keyMark, pruneQuarantine } from "./filing.mjs";
 import { tierData } from "./tier-data.mjs";
@@ -46,6 +53,7 @@ const verdict = (/** @type {any} */ o = {}) => {
       tests,
       truncated: !!o.truncated,
       unnamedJobs: o.unnamedJobs ?? [],
+      ...(o.hung ? { hung: o.hung } : {}),
     },
     afterRerun: o.afterRerun ?? null,
     flaky: o.flaky ?? [],
@@ -342,6 +350,19 @@ describe("unknown is never green", () => {
 
   it("blame refuses a verdict that isn't file or brake", async () => {
     expect(await run(world({ branchVerdict: verdict({ kind: "green" }) }))).toBe(EXIT.unknown);
+  });
+
+  it("files a hung file against that file, its message saying it hung", () => {
+    const failures = verdictFailures(verdict({ files: [UNIT], jobs: ["unit"], hung: [UNIT] }));
+    expect(failures).toMatchObject({ files: [UNIT], hung: [UNIT], partial: false });
+    const s = splitFailures(failures, onDev({ files: [UNIT], jobs: ["unit"], kind: "file" }), []);
+    expect(s.dev).toMatchObject([{ file: UNIT, name: null, message: HUNG_MESSAGE }]);
+    const passed = splitFailures(failures, onDev(), []);
+    expect(passed.branch).toMatchObject([{ file: UNIT, message: HUNG_MESSAGE }]);
+  });
+
+  it("a verdict from before hung files names none", () => {
+    expect(verdictFailures(verdict({ files: [UNIT], jobs: ["unit"] })).hung).toEqual([]);
   });
 
   it("with no dev result nothing is placed on dev or the branch", () => {
