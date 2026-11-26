@@ -27,6 +27,7 @@ import { isLive, processOf, readRecords } from "./sessions.mjs";
 import { formatTidy, reportText, tidy } from "./tidy.mjs";
 import { factList, runHook } from "./hooks.mjs";
 import { branchKinds } from "./config.mjs";
+import { gh as hostGh } from "./host.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -93,7 +94,7 @@ export const unknownProcesses = (
 export function collectCiRefs(
   /** @type {string} */ main,
   /** @type {number} */ now,
-  gh = (/** @type {string[]} */ args) => run("gh", args, { cwd: main, timeout: 15_000 }),
+  gh = (/** @type {string[]} */ args) => hostGh(args, { cwd: main, timeout: 15_000 }),
 ) {
   const listed = run("git", ["-C", main, "ls-remote", "origin", "refs/heads/ci/*"], { timeout: 15_000 });
   if (!listed.ok) return [];
@@ -167,7 +168,7 @@ export function collectTidyFacts({
   outstanding = () =>
     outstandingRuns({
       git: (args) => git(main, args),
-      gh: (args) => run("gh", args, { cwd: main, timeout: 15_000 }),
+      gh: (args) => hostGh(args, { cwd: main, timeout: 15_000 }),
     }),
 } = {}) {
   const trunk = env.TRUNK || "dev";

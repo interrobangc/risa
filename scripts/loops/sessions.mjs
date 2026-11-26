@@ -48,7 +48,7 @@
 //                                             ancestor claude: "<name>\t<kind>\t<pid>\t<topic>"
 //                                             (exit 1, saying why: no ancestor, or
 //                                             it has no live record)
-// The claude name is basename($CARETOOK_CLAUDE_BIN), default claude.
+// The claude name is basename($CARETOOK_CLAUDE_BIN), default claude (host.mjs).
 //
 // Under Vitest (VITEST set, and inherited by every script a test runs), a write
 // to a `.loops/.sessions` outside the OS temp dir is refused (B-871): a test
@@ -67,6 +67,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { claudeName as hostClaudeName } from "./host.mjs";
 
 /** How far a process's start may be from the record's `started`. */
 export const START_SLACK_MS = 60_000;
@@ -260,7 +261,8 @@ export function processOf(/** @type {number} */ pid, now = Date.now()) {
   }
 }
 
-export const claudeName = () => basename(process.env.CARETOOK_CLAUDE_BIN || "claude");
+/** The name claude's processes show (the host layer's). */
+export const claudeName = () => hostClaudeName();
 
 export const defaultDir = () => {
   if (process.env.CARETOOK_SESSIONS_DIR) return process.env.CARETOOK_SESSIONS_DIR;

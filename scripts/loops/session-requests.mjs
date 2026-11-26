@@ -36,6 +36,7 @@ import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { START_GRACE_MS } from "./keep-alive.mjs";
 import { MAX_TEXT, oneLine, raiseSeq, readSeq } from "./notices.mjs";
+import { CLAUDE } from "./host.mjs";
 import {
   ancestorClaude,
   claudeName,
@@ -197,7 +198,7 @@ export function settleRequest(
  * The session name behind a claude process's backlog Remote Control name, or
  * null. A captain's name (captain.mjs) is the main session's: `backlog`.
  */
-export function backlogRemoteOf(/** @type {string} */ args, /** @type {string} */ claude = "claude") {
+export function backlogRemoteOf(/** @type {string} */ args, /** @type {string} */ claude = CLAUDE) {
   if (!runs(args, claude)) return null;
   if (CAPTAINS.some((c) => new RegExp(`(?:^|\\s)--remote-control[ =]${c}(?=\\s|$)`).test(args)))
     return CAPTAIN_SESSION;
@@ -252,7 +253,7 @@ export function requestDecision({
   paused = false,
   max = DEFAULT_MAX_BACKLOG_SESSIONS,
   now,
-  claude = "claude",
+  claude = CLAUDE,
 }) {
   const pending = requests.filter((r) => r.state === "pending");
   if (!pending.length) return { action: "none", why: "no pending request" };

@@ -22,7 +22,7 @@
 // launchd itself is the host layer's (host.mjs: the LaunchAgents folder and
 // launchctl, each with its variable, both required under Vitest). Env:
 // CARETOOK_NODE_BIN (the Node 24 to put first; default this one when it is 24,
-// else nvm's newest v24).
+// else nvm's newest v24, which the host layer finds).
 import { spawnSync } from "node:child_process";
 import {
   accessSync,
@@ -34,15 +34,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { HOST_TOOLS, launchd } from "./host.mjs";
+import { CLAUDE, GH, HOST_TOOLS, launchd, nvmNode } from "./host.mjs";
 
 export const LABEL = "com.caretook.prd-watchdog";
 export const INTERVAL_SECS = 300;
 /** The tools the job runs, besides node. */
-export const TOOLS = ["docker", "gh", "git", "claude", ...HOST_TOOLS, "pnpm"];
+export const TOOLS = ["docker", GH, "git", CLAUDE, ...HOST_TOOLS, "pnpm"];
 const SYSTEM_PATH = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 
 const xml = (/** @type {string} */ s) =>
@@ -124,15 +123,8 @@ export function which(/** @type {string} */ name, /** @type {string} */ path) {
 export function nodeBin(env = process.env) {
   if (env.CARETOOK_NODE_BIN) return env.CARETOOK_NODE_BIN;
   if (process.versions.node.split(".")[0] === "24") return process.execPath;
-  const versions = join(env.NVM_DIR || join(homedir(), ".nvm"), "versions/node");
-  const r = spawnSync(
-    "bash",
-    ["-c", 'ls -d "$1"/v24.*/bin/node 2>/dev/null | sort -V | tail -1', "_", versions],
-    {
-      encoding: "utf8",
-    },
-  );
-  return r.stdout.trim() || null;
+  const dir = nvmNode("24", env);
+  return dir ? join(dir, "node") : null;
 }
 
 /** Where things go (the host layer's LaunchAgents): under Vitest the folder and launchctl must be given. */

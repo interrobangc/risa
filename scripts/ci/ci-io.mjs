@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
+import { gh } from "../loops/host.mjs";
 import { createNotice, listNotices, withdrawNotice } from "../loops/notices.mjs";
 
 /** The workflow's name. Runs are filtered by it: `gh run list --workflow` 404s until ci.yml is on the default branch. */
@@ -127,7 +128,7 @@ async function askTerminal(/** @type {string} */ question) {
 /** @returns {Io} */
 export const realIo = () => ({
   git: (args, input) => command("git", args, input),
-  gh: (args, timeoutMs) => command("gh", args, undefined, timeoutMs),
+  gh: (args, timeoutMs) => gh(args, { timeout: timeoutMs }),
   fileFindings,
   board: noticeBoard,
   cache: statusCache,

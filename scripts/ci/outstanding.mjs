@@ -9,6 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { branchKinds } from "../loops/config.mjs";
+import { gh } from "../loops/host.mjs";
 import { ciTiers } from "./tier-data.mjs";
 
 /**
@@ -94,7 +95,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     console.error("usage: outstanding.mjs <topic>");
     process.exit(64);
   }
-  const all = outstandingRuns({ git: (a) => command("git", a), gh: (a) => command("gh", a) });
+  const all = outstandingRuns({
+    git: (a) => command("git", a),
+    gh: (a) => gh(a, { cwd: process.argv[3], timeout: 15_000 }),
+  });
   if (all === null) process.exit(5);
   const ours = all.filter((r) => isTopicRun(r.name, topic));
   for (const r of ours) console.log(describeRun(r));

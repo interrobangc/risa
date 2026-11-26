@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The host layer: the core's one door to the machine it runs on (today a Mac
-// with iTerm2). No other core file calls osascript or launchctl (the boundary
+// with iTerm2, nvm, and the claude, codex and gh CLIs). No other core file
+// calls osascript or launchctl, or runs claude, codex or gh (the boundary
 // lint's host-call rule), so another host is this one file.
 //
 //   tabs           itermApp, canOpenTabs, openTab: a command in a new iTerm2 tab
@@ -8,6 +9,10 @@
 //   notifications  notify: a macOS notification (osascript), the asks'
 //   autostart      launchd: a per-user LaunchAgent loaded, unloaded or asked
 //                  about (launchctl), autostart's
+//   the CLIs       CLAUDE, CODEX, GH (their names), claudeBin and claudeName (the
+//                  claude to run, and the name its processes show), gh: one gh
+//                  command's { ok, out }
+//   Node           nvmNode: the bin folder of nvm's newest Node of a version
 //   HOST_TOOLS     the host's own commands a background job needs on its PATH
 //
 // A tab: the command goes to a tab it made (never "the current session"), in
@@ -19,15 +24,20 @@
 //   node host.mjs tab <line> <title> <0|1>   LINE in a new tab titled TITLE (1: in the
 //       background). Exit 0 once opened; NO_TABS (3) when no tab can open here,
 //       printing where iTerm2 was looked for; else osascript's failure (stderr kept).
+//   node host.mjs claude|codex|gh <arg>…    runs that CLI (claude: claudeBin) with
+//       this process's stdin, stdout and stderr; exits with its exit (127: not found).
+//   node host.mjs node-dir <version>        prints the bin folder of nvm's newest
+//       Node <version> (24, 24.22 or 24.22.3); exit 1 when nvm has none.
 //
-// Env: CARETOOK_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
+// Env: CARETOOK_CLAUDE_BIN (the claude to run; default claude: tests give a
+// stub); NVM_DIR (default ~/.nvm); CARETOOK_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
 // looked for); CARETOOK_LAUNCH_AGENTS_DIR (~/Library/LaunchAgents) and
 // CARETOOK_LAUNCHCTL (launchctl), both required under Vitest, so no test
 // reaches the real folder or launchd.
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, constants, existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { accessSync, constants, existsSync, readdirSync } from "node:fs";
+import { constants as osConstants, homedir } from "node:os";
+import { basename, delimiter, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** The host's own commands, for a job that runs without a login shell's PATH. */
@@ -85,6 +95,69 @@ export const runBounded = (cmd, args, seconds) =>
       resolve(code === 0 ? "ok" : `exit ${code ?? signal}`);
     });
   });
+
+// ---- the CLIs --------------------------------------------------------------------
+
+/** The CLIs' names, as a PATH lookup or a process list sees them. */
+export const CLAUDE = "claude";
+export const CODEX = "codex";
+export const GH = "gh";
+const CLIS = [CLAUDE, CODEX, GH];
+
+/** The claude to run: a test's stub (Env, above), else claude. */
+export const claudeBin = (env = process.env) => env.CARETOOK_CLAUDE_BIN || CLAUDE;
+/** The name claude's processes show: claudeBin's last part. */
+export const claudeName = (env = process.env) => basename(claudeBin(env));
+
+/**
+ * One gh command, its stdin INPUT (else none), bounded by TIMEOUT ms: ok (exit
+ * 0) and its stdout, trimmed.
+ * @param {string[]} args
+ * @param {{ cwd?: string, input?: string, timeout?: number }} [opts]
+ * @returns {{ ok: boolean, out: string }}
+ */
+export function gh(args, { cwd, input, timeout = 120_000 } = {}) {
+  const r = spawnSync(GH, args, {
+    encoding: "utf8",
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    input,
+    timeout,
+    cwd,
+  });
+  return { ok: r.status === 0, out: (r.stdout ?? "").trim() };
+}
+
+// ---- Node ------------------------------------------------------------------------
+
+/** Version parts as numbers: "v24.22.3" → [24, 22, 3]. */
+const versionOf = (/** @type {string} */ name) => name.slice(1).split(".").map(Number);
+const byVersion = (/** @type {string} */ a, /** @type {string} */ b) => {
+  const [x, y] = [versionOf(a), versionOf(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i++)
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  return 0;
+};
+
+/**
+ * The bin folder of nvm's newest installed Node WANT (24, 24.22 or 24.22.3), or null.
+ * @param {string} want
+ */
+export function nvmNode(want, env = process.env) {
+  const versions = join(env.NVM_DIR || join(homedir(), ".nvm"), "versions/node");
+  const v = `v${String(want).replace(/^v/, "")}`;
+  let names;
+  try {
+    names = readdirSync(versions);
+  } catch {
+    return null;
+  }
+  const newest = names
+    .filter((n) => n === v || n.startsWith(`${v}.`))
+    .filter((n) => existsSync(join(versions, n, "bin")))
+    .sort(byVersion)
+    .at(-1);
+  return newest ? join(versions, newest, "bin") : null;
+}
 
 // ---- tabs ------------------------------------------------------------------------
 
@@ -219,23 +292,54 @@ export function launchd(env = process.env) {
 
 // ---- the command line ------------------------------------------------------------
 
+/**
+ * CLI ARGS run with this process's stdio: its exit, 127 when it can't start,
+ * 128 + the signal's number when one ended it.
+ * @param {string} cli claude, codex or gh
+ * @param {string[]} args
+ */
+function runCli(cli, args, env = process.env) {
+  const r = spawnSync(cli === CLAUDE ? claudeBin(env) : cli, args, { stdio: "inherit", env });
+  if (r.error) {
+    console.error(`host: ${cli}: ${r.error.message}`);
+    return 127;
+  }
+  if (r.signal) return 128 + (osConstants.signals[r.signal] ?? 0);
+  return r.status ?? 1;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const [cmd, line, title, background, ...rest] = process.argv.slice(2);
-  if (
-    cmd !== "tab" ||
-    line == null ||
-    title == null ||
-    !["0", "1"].includes(background ?? "") ||
-    rest.length
-  ) {
-    console.error("usage: host.mjs tab <line> <title> <0|1>");
+  const usage = () => {
+    console.error("usage: host.mjs tab <line> <title> <0|1> | claude|codex|gh <arg>… | node-dir <version>");
     process.exit(2);
+  };
+  if (cmd && CLIS.includes(cmd)) process.exit(runCli(cmd, process.argv.slice(3)));
+  if (cmd === "node-dir") {
+    if (!line || title !== undefined) usage();
+    const dir = nvmNode(/** @type {string} */ (line));
+    // exitCode, not exit: the line reaches a pipe before the process ends.
+    if (dir) console.log(dir);
+    process.exitCode = dir ? 0 : 1;
+  } else {
+    if (
+      cmd !== "tab" ||
+      line == null ||
+      title == null ||
+      !["0", "1"].includes(background ?? "") ||
+      rest.length
+    )
+      usage();
+    if (!canOpenTabs()) {
+      console.log(itermApp());
+      process.exit(NO_TABS);
+    }
+    const r = openTab({
+      line: /** @type {string} */ (line),
+      title: /** @type {string} */ (title),
+      background: background === "1",
+    });
+    // osascript's own NO_TABS is still a failure, never "no tabs here".
+    process.exit(r.ok ? 0 : r.code === NO_TABS ? 1 : r.code);
   }
-  if (!canOpenTabs()) {
-    console.log(itermApp());
-    process.exit(NO_TABS);
-  }
-  const r = openTab({ line, title, background: background === "1" });
-  // osascript's own NO_TABS is still a failure, never "no tabs here".
-  process.exit(r.ok ? 0 : r.code === NO_TABS ? 1 : r.code);
 }

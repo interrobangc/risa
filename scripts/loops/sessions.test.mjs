@@ -340,6 +340,7 @@ beforeAll(() => {
     "config.mjs",
     "session.sh",
     "sessions.mjs",
+    "host.mjs",
     "captain.mjs",
     "end-session.sh",
     "prompt.sh",

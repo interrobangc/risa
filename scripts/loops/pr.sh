@@ -99,11 +99,11 @@ BODY
 
 number=$(pr_for "$branch") || die "gh couldn't list $branch's PRs"
 if [[ -n $number ]]; then
-  gh pr edit "$number" -R "$repo" --title "$msg" --body "$body" >/dev/null || die "couldn't update PR #$number"
-  url=$(gh pr view "$number" -R "$repo" --json url -q .url 2>/dev/null)
+  host_cli gh pr edit "$number" -R "$repo" --title "$msg" --body "$body" >/dev/null || die "couldn't update PR #$number"
+  url=$(host_cli gh pr view "$number" -R "$repo" --json url -q .url 2>/dev/null)
   echo "updated PR #$number: $url"
 else
-  url=$(gh pr create -R "$repo" --base "$trunk" --head "$branch" --title "$msg" --body "$body") ||
+  url=$(host_cli gh pr create -R "$repo" --base "$trunk" --head "$branch" --title "$msg" --body "$body") ||
     die "couldn't open a PR from $branch into $trunk"
   echo "opened $url"
 fi

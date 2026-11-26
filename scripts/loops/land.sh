@@ -710,7 +710,7 @@ resume_landing() {
     fi
     prs=unknown
     if [[ -n ${number:-} ]] && gh_r=$(gh_repo 2>/dev/null); then
-      prs=$(gh pr view "$number" -R "$gh_r" --json state -q .state 2>/dev/null | tr '[:upper:]' '[:lower:]') || prs=unknown
+      prs=$(host_cli gh pr view "$number" -R "$gh_r" --json state -q .state 2>/dev/null | tr '[:upper:]' '[:lower:]') || prs=unknown
       [[ $prs == open || $prs == merged || $prs == closed ]] || prs=unknown
     fi
   fi
@@ -786,14 +786,14 @@ else
   echo "$line"
 fi
 repo=$(gh_repo) || die "gh couldn't name origin's repository"
-merge=(gh pr merge "$number" -R "$repo" --merge --subject "$msg" --match-head-commit "$tip" --delete-branch)
+merge=(host_cli gh pr merge "$number" -R "$repo" --merge --subject "$msg" --match-head-commit "$tip" --delete-branch)
 run_gate
 land_unsynced
 [[ -z $unsynced_line ]] || merge+=(--body "$unsynced_line")
 skeptic_report
 if [[ ${CARETOOK_PR_THROWAWAY:-} == 1 ]]; then
   echo "CARETOOK_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push $trunk, then run:"
-  printf ' %q' "${merge[@]}"; echo
+  printf ' %q' "${merge[@]:1}"; echo # the gh command, without host_cli
   exit 0
 fi
 

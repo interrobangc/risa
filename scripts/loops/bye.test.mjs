@@ -199,6 +199,7 @@ beforeAll(() => {
     "config.mjs",
     "bye.mjs",
     "sessions.mjs",
+    "host.mjs",
     "captain.mjs",
     "asks.mjs",
     "notices.mjs",

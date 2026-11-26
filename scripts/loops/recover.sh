@@ -170,7 +170,7 @@ wait_for_claude() {
   local every=${CARETOOK_RECOVER_PROBE_SECS:-600} n=1
   [[ $every =~ ^[0-9]+$ ]] && ((every > 0)) || die "recover: CARETOOK_RECOVER_PROBE_SECS must be a whole number of seconds"
   echo "Waiting for Claude to answer (a claude -p probe every $(fmt_wait "$every")), then recovering. Ctrl-C to stop."
-  until claude -p ok </dev/null >/dev/null 2>&1; do
+  until host_cli claude -p ok </dev/null >/dev/null 2>&1; do
     echo "  probe $n: no answer yet (usage limit?); next at $(date -r $(($(now_secs) + every)) +%H:%M 2>/dev/null || echo "+$(fmt_secs "$every")")"
     n=$((n + 1))
     sleep "$every"

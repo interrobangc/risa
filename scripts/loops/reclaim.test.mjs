@@ -119,7 +119,7 @@ beforeAll(() => {
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter(
-    (f) => f.endsWith(".sh") || f === "slice-fields.mjs" || f === "config.mjs",
+    (f) => f.endsWith(".sh") || ["slice-fields.mjs", "config.mjs", "host.mjs"].includes(f),
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   config = stubHookConfig(main);

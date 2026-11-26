@@ -22,6 +22,7 @@
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
+import { CLAUDE } from "./host.mjs";
 
 /** The kinds kept alive; each one's session is named after it. */
 export const KEPT_KINDS = ["backlog", "inbox"];
@@ -53,7 +54,7 @@ const asTime = (/** @type {number | string | null | undefined} */ t) =>
 export function hasRemoteControl(
   /** @type {string} */ args,
   /** @type {string} */ name,
-  /** @type {string} */ claude = "claude",
+  /** @type {string} */ claude = CLAUDE,
 ) {
   if (!runs(args, claude)) return false;
   const word = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -96,7 +97,7 @@ export function keepAliveDecision({
   paused = false,
   off = false,
   now,
-  claude = "claude",
+  claude = CLAUDE,
   unready = {},
 }) {
   return kinds.map((kind) => {

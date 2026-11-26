@@ -371,23 +371,22 @@ ci_verdict() {
 # use_node → put the Node that .nvmrc names (here, else the main checkout's)
 # first on PATH, with the pnpm beside it. Scripts call this themselves, so no
 # shell needs `nvm use` first. It doesn't rely on `nvm use` taking: in agent
-# shells another node (PNPM_HOME's) sits ahead of nvm's on PATH. Returns 1 when
-# that Node isn't installed.
+# shells another node (PNPM_HOME's) sits ahead of nvm's on PATH. The host layer
+# finds nvm's (host.mjs node-dir, run by whichever node is on PATH). Returns 1
+# when that Node isn't installed.
 use_node() {
   local want dir
   want=$(cat .nvmrc 2>/dev/null || cat "$main/.nvmrc" 2>/dev/null || echo 24)
   want=${want#v}
   node_is "$want" && return 0
-  export NVM_DIR=${NVM_DIR:-$HOME/.nvm}
-  dir=$(ls -d "$NVM_DIR/versions/node/v$want"/bin "$NVM_DIR/versions/node/v$want".*/bin 2>/dev/null | sort -V | tail -1 || true)
-  if [[ -n $dir ]]; then
-    export PATH=$dir:$PATH
-  elif [[ -s $NVM_DIR/nvm.sh ]]; then
-    # shellcheck disable=SC1091
-    source "$NVM_DIR/nvm.sh" >/dev/null && nvm use >/dev/null
-  fi
+  dir=$(node "$loops_lib_dir/host.mjs" node-dir "$want" 2>/dev/null || true)
+  [[ -z $dir ]] || export PATH=$dir:$PATH
   node_is "$want" || { echo "need Node $want (from .nvmrc); got $(node -v 2>/dev/null || echo none)" >&2; return 1; }
 }
+
+# host_cli claude|codex|gh ARG… → that CLI run through the host layer
+# (host.mjs): its output and its exit. No other core script runs the three.
+host_cli() { node "$loops_lib_dir/host.mjs" "$@"; }
 
 # node_is VERSION → true when `node` on PATH is VERSION (24, 24.22 or 24.22.3).
 node_is() {
@@ -521,7 +520,7 @@ disk_line() {
 }
 
 # GitHub pull requests (review.sh; land and ready reuse these). Every call goes
-# through `gh`, against origin's repository.
+# through `gh` (host_cli), against origin's repository.
 
 # pr_branch WHAT → the branch a command means: prd/, plan/ and hotfix/ branches
 # (or any other with a slash) as given, else a topic's prd/<topic>.
@@ -529,7 +528,7 @@ pr_branch() { case $1 in */*) echo "$1" ;; *) echo "$prd_prefix$1" ;; esac; }
 
 # gh_repo → origin's owner/name (cached per shell).
 gh_repo() {
-  [[ -n ${_gh_repo:-} ]] || _gh_repo=$(cd "$main" && gh repo view --json nameWithOwner -q .nameWithOwner) || return 1
+  [[ -n ${_gh_repo:-} ]] || _gh_repo=$(cd "$main" && host_cli gh repo view --json nameWithOwner -q .nameWithOwner) || return 1
   echo "$_gh_repo"
 }
 
@@ -537,7 +536,7 @@ gh_repo() {
 pr_for() {
   local repo
   repo=$(gh_repo) || return 1
-  gh pr list -R "$repo" --head "$1" --base "$trunk" --state open --json number -q '.[0].number // empty'
+  host_cli gh pr list -R "$repo" --head "$1" --base "$trunk" --state open --json number -q '.[0].number // empty'
 }
 
 # pr_state NUMBER → the PR's state as GraphQL JSON (codex-review.mjs's PR_QUERY):
@@ -546,7 +545,7 @@ pr_state() {
   local repo query
   repo=$(gh_repo) || return 1
   query=$(node --input-type=module -e "import { PR_QUERY } from '$loops_lib_dir/codex-review.mjs'; process.stdout.write(PR_QUERY)")
-  gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
+  host_cli gh api graphql -F owner="${repo%%/*}" -F name="${repo#*/}" -F number="$1" -f query="$query"
 }
 
 # pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,

@@ -144,6 +144,7 @@ describe("the host layer", () => {
     ...OWNERS,
     ["scripts/loops/host.mjs", "core"],
     ["scripts/loops/host.test.mjs", "core"],
+    ["scripts/loops/land-fixture.mjs", "core"],
     ["scripts/project/mac.sh", "project"],
   ]);
   const hostCalls = (file, text) =>
@@ -160,6 +161,31 @@ describe("the host layer", () => {
     expect(hostCalls("scripts/loops/host.test.mjs", 'stub("osascript");\n')).toEqual([]);
     expect(hostCalls("scripts/project/mac.sh", "osascript -e x\n")).toEqual([]);
     expect(hostCalls(CORE, "fake-osascript; osascript.args\n")).toEqual([]);
+  });
+
+  it("is the one core file that runs claude, codex or gh: a shell command, a JS string", () => {
+    const sh = [
+      'gh pr view "$n"',
+      'x=$(cd "$main" && gh repo view) || die "gh couldn\'t name the repo"',
+      'until claude -p ok; do :; done; merge=(gh pr merge "$n")',
+      'echo "PR $(gh pr view "$n" -q .url)"',
+      "codex() { :; }",
+      "# gh in a comment; host_cli gh pr list; command -v gh; run_log codex x",
+      "cat <<EOF",
+      "(claude --remote-control recover) in a here-document",
+      "EOF",
+      "echo '(gh is quoted)' \"codex: and quoted\"",
+    ].join("\n");
+    expect(hostCalls(CORE, sh)).toEqual(["1 gh", "2 gh", "3 claude", "3 gh", "4 gh", "5 codex"]);
+    const js = [
+      'spawnSync("gh", args);',
+      'const bin = env.CLAUDE || "claude"; // "codex"',
+      'if (e.kind !== "codex") log("gh pr create", `the claude`);',
+    ].join("\n");
+    expect(hostCalls(CORE_JS, js)).toEqual(["1 gh", "2 claude"]);
+    expect(hostCalls("scripts/loops/host.mjs", 'spawnSync("gh", args);\n')).toEqual([]);
+    expect(hostCalls("scripts/loops/land-fixture.mjs", 'join(bin, "gh");\n')).toEqual([]);
+    expect(hostCalls("scripts/project/mac.sh", "gh pr list\n")).toEqual([]);
   });
 });
 

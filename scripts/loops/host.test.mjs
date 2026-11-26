@@ -1,11 +1,27 @@
-// The host layer (host.mjs): tabs, notifications and launchd, each against a
-// stub osascript or launchctl that records its arguments (never the real ones).
+// The host layer (host.mjs): tabs, notifications, launchd and the CLIs, each
+// against a stub osascript, launchctl, claude, codex or gh that records its
+// arguments (never the real ones), and Node in a made-up nvm folder.
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { HOST_TOOLS, NO_TABS, canOpenTabs, itermApp, launchd, notify, onPath } from "./host.mjs";
+import {
+  CLAUDE,
+  CODEX,
+  GH,
+  HOST_TOOLS,
+  NO_TABS,
+  canOpenTabs,
+  claudeBin,
+  claudeName,
+  gh,
+  itermApp,
+  launchd,
+  notify,
+  nvmNode,
+  onPath,
+} from "./host.mjs";
 
 const HOST = new URL("./host.mjs", import.meta.url).pathname;
 
@@ -134,5 +150,77 @@ esac`,
       `launchctl print ${domain}/com.example.job`,
       `launchctl bootstrap ${domain} ${join(root, "missing.plist")}`,
     ]);
+  });
+});
+
+describe("the CLIs", () => {
+  const cli = (/** @type {string[]} */ args, extra = {}, input = "") =>
+    spawnSync(process.execPath, [HOST, ...args], { encoding: "utf8", input, env: { ...env, ...extra } });
+  beforeEach(() => {
+    // Each: its name and arguments to the log, stdin to stdout, $FAIL its exit.
+    for (const name of ["gh", "codex", "claude", "claude-stub"])
+      stub(name, `echo "${name} $*" >> "${log}"\ncat\nexit \${FAIL:-0}`);
+  });
+
+  it("name claude, codex and gh, claude as CARETOOK_CLAUDE_BIN gives it", () => {
+    expect([CLAUDE, CODEX, GH]).toEqual(["claude", "codex", "gh"]);
+    expect(claudeBin({})).toBe("claude");
+    expect(claudeBin({ CARETOOK_CLAUDE_BIN: "/x/claude-stub" })).toBe("/x/claude-stub");
+    expect(claudeName({ CARETOOK_CLAUDE_BIN: "/x/claude-stub" })).toBe("claude-stub");
+    expect(claudeName({})).toBe("claude");
+  });
+
+  it("run gh for its exit and trimmed stdout, stdin given or none", () => {
+    const path = process.env.PATH;
+    process.env.PATH = env.PATH;
+    try {
+      expect(gh(["pr", "list"], { input: "  out\n" })).toEqual({ ok: true, out: "out" });
+      expect(gh(["api"], { cwd: root })).toEqual({ ok: true, out: "" });
+    } finally {
+      process.env.PATH = path;
+    }
+    expect(logged()).toBe("gh pr list\ngh api\n");
+  });
+
+  it("run each from the command line with this process's stdio and exit", () => {
+    const r = cli(["gh", "pr", "view", "7"], {}, "in");
+    expect([r.status, r.stdout]).toEqual([0, "in"]);
+    expect(cli(["codex", "review"], { FAIL: "4" }).status).toBe(4);
+    expect(cli(["claude", "-p", "ok"]).status).toBe(0);
+    expect(cli(["claude", "-p", "ok"], { CARETOOK_CLAUDE_BIN: join(bin, "claude-stub") }).status).toBe(0);
+    expect(logged()).toBe("gh pr view 7\ncodex review\nclaude -p ok\nclaude-stub -p ok\n");
+    const missing = cli(["gh", "x"], { PATH: empty });
+    expect(missing.status).toBe(127);
+    expect(missing.stderr).toMatch(/^host: gh: /);
+  });
+});
+
+describe("Node", () => {
+  let nvm;
+  beforeAll(() => {
+    nvm = join(root, "nvm");
+    for (const v of ["v22.1.0", "v24.2.0", "v24.10.1", "v24.9.9", "v240.0.0"])
+      mkdirSync(join(nvm, "versions/node", v, "bin"), { recursive: true });
+    mkdirSync(join(nvm, "versions/node", "v24.11.0"));
+  });
+
+  it("finds nvm's newest installed Node of a version", () => {
+    const at = (/** @type {string} */ v) => join(nvm, "versions/node", v, "bin");
+    expect(nvmNode("24", { NVM_DIR: nvm })).toBe(at("v24.10.1"));
+    expect(nvmNode("v24.9", { NVM_DIR: nvm })).toBe(at("v24.9.9"));
+    expect(nvmNode("22.1.0", { NVM_DIR: nvm })).toBe(at("v22.1.0"));
+    expect(nvmNode("20", { NVM_DIR: nvm })).toBeNull();
+    expect(nvmNode("24", { NVM_DIR: join(root, "no-nvm") })).toBeNull();
+  });
+
+  it("prints its folder from the command line, exit 1 with none", () => {
+    const run = (/** @type {string[]} */ args) =>
+      spawnSync(process.execPath, [HOST, "node-dir", ...args], {
+        encoding: "utf8",
+        env: { ...env, NVM_DIR: nvm },
+      });
+    expect(run(["24"]).stdout).toBe(`${join(nvm, "versions/node/v24.10.1/bin")}\n`);
+    expect(run(["20"]).status).toBe(1);
+    expect(run([]).status).toBe(2);
   });
 });

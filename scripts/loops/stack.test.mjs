@@ -117,7 +117,9 @@ echo "$?" > "$STUB_STATE/code"
     git(main, "config", k, v);
   mkdirSync(join(main, "scripts/loops"), { recursive: true });
   for (const f of readdirSync(HERE).filter(
-    (f) => f.endsWith(".sh") || ["slice-fields.mjs", "config.mjs", "run-log.mjs", "sessions.mjs"].includes(f),
+    (f) =>
+      f.endsWith(".sh") ||
+      ["slice-fields.mjs", "config.mjs", "run-log.mjs", "sessions.mjs", "host.mjs"].includes(f),
   ))
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   env.RISA_CONFIG = stubHookConfig(main, { copy: true });

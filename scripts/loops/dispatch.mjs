@@ -133,7 +133,7 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
-import { canOpenTabs, itermApp } from "./host.mjs";
+import { canOpenTabs, claudeBin, claudeName, itermApp } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
@@ -706,7 +706,7 @@ function contextStep(
         [
           join(HERE, "open-session.sh"),
           "--command",
-          helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+          helperLine({ main: p.main, claude: claudeBin(env), line: push }),
           "--title",
           HELPER_SESSION,
           "--background",
@@ -938,7 +938,7 @@ function stuckStep(
         [
           join(HERE, "open-session.sh"),
           "--command",
-          helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+          helperLine({ main: p.main, claude: claudeBin(env), line: push }),
           "--title",
           HELPER_SESSION,
           "--background",
@@ -1043,7 +1043,7 @@ function requestStep(
     paused: Boolean(state.paused),
     max: positive(env.CARETOOK_MAX_BACKLOG_SESSIONS, DEFAULT_MAX_BACKLOG_SESSIONS),
     now,
-    claude: basename(env.CARETOOK_CLAUDE_BIN || "claude"),
+    claude: claudeName(env),
   });
   if (d.action === "none") {
     if (dryRun && d.why !== "no pending request") out(`session request: waits (${d.why})`);
@@ -1595,7 +1595,7 @@ export function tick(
     paused: facts.paused || drain.state !== "normal",
     off: env.CARETOOK_KEEP_SESSIONS === "off",
     now,
-    claude: basename(env.CARETOOK_CLAUDE_BIN || "claude"),
+    claude: claudeName(env),
   });
   for (const d of keepDecisions)
     if (dryRun || d.action !== "none")
@@ -1704,7 +1704,7 @@ export function tick(
           .find((l) => l.startsWith("Now send a PushNotification: "))
           ?.slice("Now send a PushNotification: ".length) ?? `${d.kind}: ${d.text}`;
       const helper = openTab(
-        helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+        helperLine({ main: p.main, claude: claudeBin(env), line: push }),
         HELPER_SESSION,
       );
       if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${result(helper)}`);
@@ -1813,7 +1813,7 @@ export function tick(
           ?.slice("Now send a PushNotification: ".length) ?? `${topic}: ${choice.text}`;
       out(`  filed ask ${id}`);
       const helper = openTab(
-        helperLine({ main: p.main, claude: env.CARETOOK_CLAUDE_BIN || "claude", line: push }),
+        helperLine({ main: p.main, claude: claudeBin(env), line: push }),
         HELPER_SESSION,
       );
       out(

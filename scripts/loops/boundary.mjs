@@ -6,8 +6,11 @@
 //                    boundary.appPaths) in a core file
 //   core-to-project  a core file reaching a project file
 //   project-to-core  a project file, anywhere in the repo, reaching a core file
-//   host-call        osascript or launchctl in a core file's code other than the
-//                    host layer's (HOST, host.mjs), the tests' (which stub them)
+//   host-call        osascript or launchctl in a core file's code, or a run of
+//                    claude, codex or gh (in JS the name as a whole string, not
+//                    compared; in shell the name where a command starts, outside
+//                    quotes and here-documents), other than the host layer's
+//                    (HOST, host.mjs), the tests' and fixtures' (which stub them)
 //                    and this lint's
 // The two reach rules see every form, and a finding names its form:
 //   import    a JS import, dynamic import or require; a shell `source` or `.`
@@ -74,8 +77,13 @@ export const HOST = "scripts/loops/host.mjs";
 /** The machine's commands only the host layer calls. */
 const HOST_CALL = /(?<![\w.-])(?:osascript|launchctl)(?![\w.-])/g;
 const SELF = "scripts/loops/boundary.mjs";
+/** The CLIs only the host layer runs: in JS a whole string, not after a comparison. */
+const CLI_JS = /(?<![=!]=\s*)(["'`])(claude|codex|gh)\1/g;
+/** …in shell, the command a line, pipe, list, subshell or keyword starts. */
+const CLI_SHELL =
+  /(?:^|[;&|({!]|\b(?:then|do|else|elif|if|while|until|time|exec))\s*(claude|codex|gh)(?![\w.-])/g;
 const callsHost = (/** @type {string} */ path) =>
-  path !== HOST && path !== SELF && !/\.test\.[a-z]+$/.test(path);
+  path !== HOST && path !== SELF && !/(\.test\.[a-z]+|-fixture\.mjs)$/.test(path);
 
 const inRoots = (path) => ROOTS.some((root) => path.startsWith(`${root}/`));
 const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -275,6 +283,75 @@ function shellCode(text) {
     .join("\n");
 }
 
+/**
+ * Shell as its commands read: comments, quoted text and here-documents blanked
+ * (same length, same lines), a `$(…)` inside double quotes kept as code.
+ * @param {string} text
+ */
+export function shellCommands(text) {
+  /** @type {"" | "'" | '"'} */
+  let quote = "";
+  /** Each open `$(` inside double quotes: its depth of other parentheses. */
+  const subs = [];
+  let heredoc = null;
+  const pending = [];
+  return text
+    .split("\n")
+    .map((line) => {
+      if (heredoc) {
+        if ((heredoc.tabs ? line.replace(/^\t+/, "") : line) === heredoc.word)
+          heredoc = pending.shift() ?? null;
+        return " ".repeat(line.length);
+      }
+      let out = "";
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (quote === "'") {
+          if (c === "'") quote = "";
+          out += " ";
+        } else if (c === "\\") {
+          out += quote ? "  " : c + (line[i + 1] ?? "");
+          i++;
+        } else if (quote === '"') {
+          if (c === "$" && line[i + 1] === "(") {
+            subs.push(0);
+            quote = "";
+            out += "$(";
+            i++;
+          } else {
+            if (c === '"') quote = "";
+            out += " ";
+          }
+        } else if (c === "'" || c === '"') {
+          quote = c;
+          out += " ";
+        } else if (c === "#" && (i === 0 || /\s/.test(line[i - 1]))) {
+          out += " ".repeat(line.length - i);
+          break;
+        } else {
+          if (subs.length && c === "(") subs[subs.length - 1]++;
+          else if (subs.length && c === ")") {
+            if (subs[subs.length - 1] === 0) {
+              subs.pop();
+              quote = '"';
+              out += c;
+              continue;
+            }
+            subs[subs.length - 1]--;
+          } else if (c === "<" && line[i + 1] === "<" && line[i + 2] !== "<" && line[i - 1] !== "<") {
+            const m = /^<<(-?)\s*(["']?)([A-Za-z_][A-Za-z0-9_]*)\2/.exec(line.slice(i));
+            if (m && (m[2] || /^[A-Z_][A-Z0-9_]*$/.test(m[3])))
+              pending.push({ tabs: m[1] === "-", word: m[3] });
+          }
+          out += c;
+        }
+      }
+      if (!quote && pending.length) heredoc = pending.shift();
+      return out;
+    })
+    .join("\n");
+}
+
 /** `#` comments blanked: a `#` that starts a line or follows a space. */
 const hashCode = (text) =>
   text
@@ -411,6 +488,7 @@ export function findings({ files, owners, project, data = [] }) {
     const lang = language(file, text);
     const raw = text.split("\n");
     const code = codeOf(file, text).split("\n");
+    const runs = core && callsHost(file) ? cliRuns(lang, text, code) : [];
     for (let i = 0; i < raw.length; i++) {
       const add = (rule, form, found) => out.push({ file, line: i + 1, rule, form, text: found });
       if (core) {
@@ -427,6 +505,7 @@ export function findings({ files, owners, project, data = [] }) {
       if (core && appRe)
         for (const m of line.matchAll(appRe)) add("app-path", null, m[0].replace(/\/+$/, "/"));
       if (core && callsHost(file)) for (const m of line.matchAll(HOST_CALL)) add("host-call", null, m[0]);
+      for (const cli of runs[i] ?? []) add("host-call", null, cli);
       for (const m of line.matchAll(/[\w.*\-/]+/g)) {
         const before = line.slice(0, m.index);
         const reached = candidates(m[0], file, before.slice(-1)).filter((path) => {
@@ -443,6 +522,22 @@ export function findings({ files, owners, project, data = [] }) {
     }
   }
   return out.sort((a, b) => byText(a.file, b.file) || a.line - b.line || byText(a.rule, b.rule));
+}
+
+/**
+ * The CLIs each line runs (the host-call rule's claude, codex and gh), by line.
+ * @param {string} lang
+ * @param {string} text
+ * @param {string[]} code the lines with comments blanked
+ * @returns {string[][]}
+ */
+function cliRuns(lang, text, code) {
+  if (lang === "js") return code.map((l) => [...l.matchAll(CLI_JS)].map((m) => m[2]));
+  if (lang === "shell")
+    return shellCommands(text)
+      .split("\n")
+      .map((l) => [...l.matchAll(CLI_SHELL)].map((m) => m[1]));
+  return [];
 }
 
 /** A finding as one line: file, line, rule, form, and what was found. */
