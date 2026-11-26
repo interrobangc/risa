@@ -45,8 +45,10 @@ case "$1 $2" in
 esac
 `;
 
-// The stub backlog: `list` prints the items; `ci-file` logs what it was given and
-// whether the branch was already in dev, and files everything as B-77.
+// The stub backlog: `list` prints the items, deriving an item's status as the real
+// one does (ready, then landed once dev holds its commit; here its commitRef);
+// `ci-file` logs what it was given and whether the branch was already in dev, and
+// files everything as B-77.
 const BACKLOG = (items) => `import { spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 if (process.argv[2] === "ci-file") {
@@ -56,7 +58,12 @@ if (process.argv[2] === "ci-file") {
   if (process.env.CI_FILE_LOG)
     appendFileSync(process.env.CI_FILE_LOG, JSON.stringify({ merged, push: process.argv.includes("--push"), keys: findings.map((f) => f.key) }) + "\\n");
   console.log(JSON.stringify({ filed: findings.map((f) => ({ key: f.key, id: "B-77", created: true })), removed: [], pushed: !(process.env.CI_FILE_UNPUSHED && process.argv.includes("--push")) }));
-} else process.stdout.write(${JSON.stringify(JSON.stringify(items))});
+} else {
+  const items = ${JSON.stringify(items)};
+  const inDev = (ref) => spawnSync("git", ["merge-base", "--is-ancestor", ref, "dev"]).status === 0;
+  for (const it of items) if (it.commitRef && inDev(it.commitRef)) it.status = "landed";
+  process.stdout.write(JSON.stringify(items));
+}
 `;
 
 // The stub of GitHub's runs. $GH_CI_FIXTURE holds the verdicts already there
@@ -140,7 +147,13 @@ export function useLandRepo() {
       });
     // A stubbed backlog: what `backlog list --prd throwaway-x --json` would print.
     const items = [
-      { id: "B-1", type: "feature", status: "ready", title: "A throwaway feature" },
+      {
+        id: "B-1",
+        type: "feature",
+        status: "ready",
+        title: "A throwaway feature",
+        commitRef: "prd/throwaway-x",
+      },
       { id: "B-2", type: "bug", status: "triaged", title: "A follow-up bug" },
       { id: "B-3", type: "feature", status: "landed", title: "An earlier wave" },
     ];

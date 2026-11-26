@@ -29,8 +29,9 @@
 # merge in the branch's worktree (unsynced.sh, in a check lease; none for a
 # Markdown-only diff) and lands the unsynced tip, saying so in the merge body and
 # the report. Never with --fixes, with --force unless --by-user, on the branch's own brake verdict,
-# on a known dev brake (a brake verdict on the tip of dev it measures against, or
-# a live dev-brake notice; no verdict is not a brake), or with
+# on a known dev brake (a brake verdict on the tip of dev it measures against or
+# on origin/dev's tip after a fetch, or a live dev-brake notice; no verdict is not
+# a brake; an unreadable state warns), or with
 # CARETOOK_UNSYNCED=off: those keep the drift refusal.
 # --tier <t>: the tier to wait for; the default is what the diff proposes
 # (check-plan.mjs). Below the proposal it needs --why "<reason>", and the report
@@ -44,9 +45,11 @@
 # --force and --no-review each need a land skeptic's go for this topic, tip and
 # action (--skeptic <id>, repeated for both; land-skeptic.mjs) or the user's word
 # (--by-user). A `no` refuses with its why. On a known brake or an unsynced tip,
-# --force needs --by-user. Codex out of credits lets --no-review through with
-# neither. The to-test file and land's output carry the verdict, and every Codex
-# decline verdict recorded for the topic since its last landing.
+# --force needs --by-user, and so does a brake state that couldn't be read
+# (GitHub, the fetch of origin/dev, the notice board). Codex out of credits lets
+# --no-review through with neither. The to-test file and land's output carry the
+# verdict, and every Codex decline verdict recorded for the topic since its last
+# landing.
 # --force skips the check requirement, not the sync, and not the doc budget:
 # it also refuses (the config's docBudget hook) when the branch grows a doc that
 # is already over its budget, for every kind of branch (a plan branch lands docs).
@@ -218,8 +221,10 @@ if [[ -z $resume ]]; then
     verdict_lines+="- \`--$action\`: skeptic $out"$'\n'
     echo "--$action: skeptic $out"
   }
-  # force_brake → why a skeptic's go can't force this landing: a known dev brake,
-  # or a brake verdict on the branch's tip. Empty when neither is known.
+  # force_brake → why a skeptic's go can't force this landing: a known dev brake
+  # (unsynced_dev_brake: dev's tip or origin's newer one), or a brake verdict on
+  # the branch's tip; else `unread<TAB>why` when either state couldn't be read
+  # (fail closed: an unread state isn't no brake). Empty when it's all read clean.
   force_brake() {
     local sha out rc=0
     unsynced_dev_brake "$(git -C "$main" rev-parse "$drift_ref")"
@@ -228,6 +233,8 @@ if [[ -z $resume ]]; then
     out=$(cd "$main" && node "$ci_bin" "$sha" 2>/dev/null) || rc=$?
     if ((rc == 1)) && grep -q "^verdict: brake · [^ ]* · ${sha:0:8} · " <<< "$out"; then
       echo "CI reads a brake on $branch's tip ${sha:0:8}"
+    elif [[ -n $dev_brake_unread ]]; then
+      printf 'unread\t%s\n' "$dev_brake_unread"
     fi
     return 0
   }
@@ -236,6 +243,8 @@ if [[ -z $resume ]]; then
     authorize force "$skeptic_tip"
     if [[ -z $byuser ]]; then
       brake=$(force_brake)
+      [[ $brake != unread$'\t'* ]] ||
+        die "a skeptic's go needs dev's brake state, and it couldn't be read (${brake#unread$'\t'}): retry once it reads, or --force --by-user, on the user's word"
       [[ -z $brake ]] || die "a skeptic's go doesn't cover a brake ($brake): --force --by-user, on the user's word"
     fi
   fi
@@ -338,11 +347,16 @@ typecheck_merge() {
     *) drift_refusal "the typecheck stopped (exit $rc)" ;;
   esac
 }
-# refuse_dev_brake SHA → the drift refusal when dev is known to be braked.
+# refuse_dev_brake SHA → the drift refusal when dev is known to be braked. A
+# state it couldn't read is no known brake here: it warns, once, and goes on.
 refuse_dev_brake() {
   [[ -z $force ]] || return 0 # --force got here on the user's word
   unsynced_dev_brake "$1"
   [[ -z $dev_brake ]] || drift_refusal "$dev_brake"
+  if [[ -n $dev_brake_unread && -z $dev_brake_warned ]]; then
+    echo "warning: dev's brake state couldn't all be read ($dev_brake_unread): going on as if there's no brake" >&2
+    dev_brake_warned=1
+  fi
 }
 # land_unsynced → after the CI gate, before the merge: judge dev and its brake,
 # typecheck, and read both again. If dev moved, do it once more, then refuse.
@@ -410,6 +424,24 @@ if [[ -z $resume ]]; then
   commits=$(git -C "$main" log --first-parent --format='- %s (`%h`)' "$drift_ref..$branch" | grep -vE "\): merge (origin/)?$trunk( |\$)" | head -30 || true)
 fi
 checkline=${checkline:-}
+# try_lines → the to-test file's "What to try" bullets (no "- "). A diff that is
+# only docs and tooling (exempt_re: what needs no check) has no screen to open:
+# the commands to try, from the main checkout. Anything else: the project's
+# landing hook (its dev URL and sign-ins).
+try_lines() {
+  if [[ -n $changed ]] && ! grep -qEv "$exempt_re" <<< "$changed"; then
+    local prd backlog tests
+    prd=$(config_get tool.prd 2>/dev/null) || prd="pnpm prd"
+    backlog=$(config_get tool.backlog 2>/dev/null) || backlog="pnpm backlog"
+    tests=$(config_get commands.toolingTests 2>/dev/null) || tests=""
+    echo "Only docs and tooling changed: no app screen to open. Try the commands the commits above name, in $main."
+    ! grep -q '^scripts/loops/' <<< "$changed" || echo "The PRD tooling: \`$prd help\` lists its commands."
+    ! grep -q '^scripts/backlog/' <<< "$changed" || echo "The backlog: \`$backlog\` lists it; its commands are at the top of scripts/backlog/backlog.mjs."
+    [[ -z $tests ]] || echo "Its tests: \`$tests\`."
+    return 0
+  fi
+  landing_hook try "$main"
+}
 # render_to_test PR_URL → before the merge, the to-test file's body into the
 # journal ($journal_body), with @@LANDED_AS@@ for the commit the merge makes,
 # and its name (to-test/<date>-<time>-<topic>.md in the main checkout) in
@@ -458,15 +490,18 @@ render_to_test() {
     echo
     echo "## What to try, and where"
     echo
-    landing_hook try "$main" | sed 's/^/- /'
+    try_lines | sed 's/^/- /'
     echo "- Changed files, to find the screen or tool:"
     sed 's/^/  - /' <<< "$(head -20 <<< "$changed")"
     echo
     echo "## What wasn't checked"
     echo
-    [[ -z $checkline ]] || echo "- The check that ran: $checkline."
-    [[ -z $tierline ]] || echo "- The landing's $tierline."
-    printf -- '- %s\n' "${unchecked[@]}"
+    {
+      # "none needed" is said once, as the check that didn't run.
+      [[ -z $checkline || $checkline == "none needed"* ]] || echo "- The check that ran: $checkline."
+      [[ -z $tierline ]] || echo "- The landing's $tierline."
+      printf -- '- %s\n' "${unchecked[@]}"
+    } | awk '!seen[$0]++'
     echo
     if [[ -n $verdict_lines ]]; then
       echo "## What the skeptic said"

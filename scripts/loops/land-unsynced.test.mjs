@@ -342,9 +342,11 @@ exit 0
       landed(go());
     });
 
-    it("lands when GitHub can't be reached", () => {
+    it("lands when GitHub can't be reached, and says so", () => {
       drifted();
-      landed(go({ GH_CI: join(root, "no-such-stub.mjs") }));
+      const r = go({ GH_CI: join(root, "no-such-stub.mjs") });
+      landed(r);
+      expect(r.stderr).toContain("dev's brake state couldn't all be read (GitHub couldn't be read for");
     });
 
     it("lands on an unreadable board, and says so", () => {
