@@ -20,9 +20,16 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { STUB_HOOK_COPY, stubHookConfig } from "./config-fixture.mjs";
+import { loadConfig } from "./config.mjs";
+import { FIXTURE_CONFIG, STUB_HOOK_COPY, stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
+// The environment without the project's own variables (its NAME_ prefix): a run
+// under a session inherits its records' folder, and the stub claude wrote
+// prd-u.json and overwrote backlog.json in the real one (B-871). Without them the
+// stub's records go to the throwaway repo's default folder.
+const PREFIX = `${loadConfig({ path: FIXTURE_CONFIG }).config.name.toUpperCase().replace(/-/g, "_")}_`;
+const INHERITED = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith(PREFIX)));
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
 
 const PLAN = `# Plan: T
@@ -78,7 +85,7 @@ const fixture = () => {
   for (const f of ["pnpm", "lsof"]) chmodSync(join(bin, f), 0o755);
   writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
   const env = {
-    ...process.env,
+    ...INHERITED,
     PATH: `${bin}:${process.env.PATH}`,
     NVM_DIR: nvm,
     FAKE_LOG: log,
@@ -386,6 +393,8 @@ describe("rm.sh from inside the worktree it removes (B-812)", () => {
     expect(other.code).toBe("1");
     expect(other.out).toMatch(/run instead: cd \S+ && pnpm prd rm u --keep-branch\n$/);
     expect(existsSync(join(loops, "u"))).toBe(true);
+    // The stub's record went to the repo's own folder, not an inherited one (B-871).
+    expect(JSON.parse(read(sessions(), "backlog.json"))).toMatchObject({ pid: other.pid, kind: "prd" });
   });
 
   it("from the main checkout removes it as before and ends no session", async () => {
