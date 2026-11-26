@@ -320,19 +320,6 @@ exit 0
       refused(go(), `CI reads a brake on dev's tip ${measured.slice(0, 8)}`);
     });
 
-    it("refuses on a brake only on origin/dev's tip, newer than the local dev it measures against", () => {
-      drifted();
-      const local = git("rev-parse", "dev");
-      commit({ "apps/web/later.ts": "l" }, "newer dev work");
-      git("push", "-q", "origin", "dev");
-      const newer = git("rev-parse", "dev");
-      git("reset", "-q", "--hard", local);
-      git("update-ref", "refs/remotes/origin/dev", local);
-      runs([[newer, "brake"]]);
-      refused(go({ CARETOOK_PR_THROWAWAY: "" }), `CI reads a brake on origin/dev's tip ${newer.slice(0, 8)}`);
-      expect(steps()).toEqual([]);
-    });
-
     it("refuses when a brake appears during the typecheck", () => {
       drifted();
       const later = join(root, "later.json");

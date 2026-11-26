@@ -36,6 +36,8 @@ describe("land.sh's --force and --no-review", () => {
       CARETOOK_SKEPTIC_DIR: store(),
     };
   };
+  // Off the seam: land measures against the local dev, not origin/dev.
+  const unseamed = { CARETOOK_PR_THROWAWAY: "" };
   const seam = (args, byCommit, extra = {}) => landWith({ ...ciEnv(byCommit), ...extra }, ...args);
   const brakeOn = (sha) => ({
     [sha]: [
@@ -169,12 +171,12 @@ describe("land.sh's --force and --no-review", () => {
       // origin/dev is a commit ahead of the local dev land measures against, and
       // the remote-tracking ref is stale: only a fetch sees the newer tip.
       const local = git("rev-parse", "dev");
-      commit({ "apps/web/dev.ts": "d" }, "dev work");
+      commit({ "notes/dev.txt": "d" }, "dev work");
       git("push", "-q", "origin", "dev");
       const newer = git("rev-parse", "dev");
       git("reset", "-q", "--hard", local);
       git("update-ref", "refs/remotes/origin/dev", local);
-      const refused = seam(["--force", "--skeptic", record()], brakeOn(newer), { CARETOOK_PR_THROWAWAY: "" });
+      const refused = seam(["--force", "--skeptic", record()], brakeOn(newer), unseamed);
       expect(refused.status).not.toBe(0);
       expect(refused.stderr).toContain(
         `doesn't cover a brake (CI reads a brake on origin/dev's tip ${newer.slice(0, 8)}`,
@@ -186,13 +188,9 @@ describe("land.sh's --force and --no-review", () => {
       expect(refused.status).not.toBe(0);
       expect(refused.stderr).toContain("couldn't be read (GitHub couldn't be read for");
       expect(refused.stderr).toContain("--force --by-user");
-      const board = join(root, "a-file");
-      writeFileSync(board, "x");
-      const noBoard = seam(
-        ["--force", "--skeptic", record()],
-        {},
-        { CARETOOK_NOTICES_DIR: join(board, "n") },
-      );
+      // The board's path is a file: it can't be listed.
+      writeFileSync(join(root, "notices"), "x");
+      const noBoard = seam(["--force", "--skeptic", record()]);
       expect(noBoard.status).not.toBe(0);
       expect(noBoard.stderr).toContain("couldn't read the dev-brake notices");
       const r = seam(["--force", "--by-user"], {}, { GH_CI: join(root, "no-such-stub.mjs") });
@@ -221,13 +219,7 @@ describe("land.sh's --force and --no-review", () => {
     record({ action: "decline T_1", why: "the guard is above it" });
     record({ action: "decline T_2", verdict: "no", why: "a real bug" });
     const ids = [record(), record({ action: "no-review", why: "Codex is stuck" })];
-    const r = seam(
-      ["--force", "--no-review", "--skeptic", ids[0], "--skeptic", ids[1]],
-      {},
-      {
-        CARETOOK_PR_THROWAWAY: "",
-      },
-    );
+    const r = seam(["--force", "--no-review", "--skeptic", ids[0], "--skeptic", ids[1]], {}, unseamed);
     expect(r.status, r.stdout + r.stderr).toBe(0);
     const text = report();
     expect(text).toContain("## What the skeptic said");
