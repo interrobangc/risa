@@ -220,6 +220,7 @@ beforeAll(() => {
     "heartbeat.mjs",
     "open-session.sh",
     "open-session.mjs",
+    "host.mjs",
     "planner-model.mjs",
     "prompt.sh",
     "rm.sh",

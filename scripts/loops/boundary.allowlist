@@ -26,7 +26,7 @@ scripts/loops/ask.mjs project-name 1
 scripts/loops/ask.test.mjs project-env 22
 scripts/loops/ask.test.mjs project-name 1
 scripts/loops/asks.mjs project-env 1
-scripts/loops/autostart.mjs project-env 13
+scripts/loops/autostart.mjs project-env 5
 scripts/loops/autostart.mjs project-name 1
 scripts/loops/autostart.test.mjs project-env 7
 scripts/loops/autostart.test.mjs project-name 2
@@ -69,7 +69,7 @@ scripts/loops/dispatch-context.test.mjs project-env 21
 scripts/loops/dispatch-pick.mjs project-env 3
 scripts/loops/dispatch-pick.test.mjs app-path 2
 scripts/loops/dispatch-stuck.mjs project-env 4
-scripts/loops/dispatch.mjs project-env 61
+scripts/loops/dispatch.mjs project-env 60
 scripts/loops/dispatch.mjs project-name 1
 scripts/loops/dispatch.test.mjs project-env 57
 scripts/loops/dispatch.test.mjs project-name 1
@@ -81,6 +81,8 @@ scripts/loops/gc.sh project-env 1
 scripts/loops/heartbeat.mjs project-env 3
 scripts/loops/heartbeat.test.mjs app-path 1
 scripts/loops/heartbeat.test.mjs project-env 5
+scripts/loops/host.mjs project-env 10 # the iTerm2 and LaunchAgents knobs, moved here from autostart.mjs, dispatch.mjs and open-session.sh: the RISA_ rename, orchestration-split-3 slice 4
+scripts/loops/host.test.mjs project-env 8 # sets the host layer's knobs: the RISA_ rename, orchestration-split-3 slice 4
 scripts/loops/inbox-settings.json project-env 14
 scripts/loops/inventory-facts.mjs project-env 13
 scripts/loops/inventory-facts.mjs project-name 1
@@ -118,7 +120,7 @@ scripts/loops/notice.mjs project-env 6
 scripts/loops/notices.test.mjs project-env 3
 scripts/loops/open-session.mjs project-env 11
 scripts/loops/open-session.mjs project-name 3
-scripts/loops/open-session.sh project-env 5
+scripts/loops/open-session.sh project-env 4
 scripts/loops/open-session.test.mjs project-env 10
 scripts/loops/open-session.test.mjs project-name 7
 scripts/loops/pr.sh project-env 2

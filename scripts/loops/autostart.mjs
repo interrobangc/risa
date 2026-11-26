@@ -19,10 +19,10 @@
 // child processes when it exits (AbandonProcessGroup: dev servers, tabs),
 // loads only in a login (Aqua) session, and logs to DIR/.loops/.watchdog.log.
 //
-// Env: CARETOOK_LAUNCH_AGENTS_DIR (~/Library/LaunchAgents), CARETOOK_LAUNCHCTL
-// (launchctl), CARETOOK_NODE_BIN (the Node 24 to put first; default this one
-// when it is 24, else nvm's newest v24). Under Vitest the first two must be set,
-// so no test reaches the real folder or launchd.
+// launchd itself is the host layer's (host.mjs: the LaunchAgents folder and
+// launchctl, each with its variable, both required under Vitest). Env:
+// CARETOOK_NODE_BIN (the Node 24 to put first; default this one when it is 24,
+// else nvm's newest v24).
 import { spawnSync } from "node:child_process";
 import {
   accessSync,
@@ -37,11 +37,12 @@ import {
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { HOST_TOOLS, launchd } from "./host.mjs";
 
 export const LABEL = "com.caretook.prd-watchdog";
 export const INTERVAL_SECS = 300;
 /** The tools the job runs, besides node. */
-export const TOOLS = ["docker", "gh", "git", "claude", "osascript", "pnpm"];
+export const TOOLS = ["docker", "gh", "git", "claude", ...HOST_TOOLS, "pnpm"];
 const SYSTEM_PATH = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 
 const xml = (/** @type {string} */ s) =>
@@ -134,24 +135,11 @@ export function nodeBin(env = process.env) {
   return r.stdout.trim() || null;
 }
 
-/** Where things go. Under Vitest the folder and launchctl must be given. */
+/** Where things go (the host layer's LaunchAgents): under Vitest the folder and launchctl must be given. */
 export function where(env = process.env) {
-  if (env.VITEST && (!env.CARETOOK_LAUNCH_AGENTS_DIR || !env.CARETOOK_LAUNCHCTL))
-    throw new Error("autostart: a test must set CARETOOK_LAUNCH_AGENTS_DIR and CARETOOK_LAUNCHCTL");
-  const dir = env.CARETOOK_LAUNCH_AGENTS_DIR || join(homedir(), "Library/LaunchAgents");
-  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
-  return {
-    dir,
-    file: join(dir, `${LABEL}.plist`),
-    launchctl: env.CARETOOK_LAUNCHCTL || "launchctl",
-    domain: `gui/${uid}`,
-  };
+  const agents = launchd(env);
+  return { ...agents, file: agents.fileOf(LABEL) };
 }
-
-const launchctl = (/** @type {ReturnType<typeof where>} */ w, /** @type {string[]} */ args) =>
-  spawnSync(w.launchctl, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-const loaded = (/** @type {ReturnType<typeof where>} */ w) =>
-  launchctl(w, ["print", `${w.domain}/${LABEL}`]).status === 0;
 
 function install(/** @type {string} */ main, env = process.env) {
   const w = where(env);
@@ -169,10 +157,9 @@ function install(/** @type {string} */ main, env = process.env) {
     writeFileSync(`${w.file}.tmp`, text);
     renameSync(`${w.file}.tmp`, w.file);
   }
-  if (loaded(w)) launchctl(w, ["bootout", `${w.domain}/${LABEL}`]);
-  const r = launchctl(w, ["bootstrap", w.domain, w.file]);
-  if (r.status !== 0)
-    throw new Error(`autostart: launchctl bootstrap failed: ${(r.stderr || r.stdout).trim()}`);
+  if (w.loaded(LABEL)) w.unload(LABEL);
+  const r = w.load(w.file);
+  if (!r.ok) throw new Error(`autostart: ${r.out}`);
   console.log(
     `${same ? "Reloaded" : "Installed"} ${w.file}: the watchdog runs at login and every ${INTERVAL_SECS / 60} minutes, from ${main}.`,
   );
@@ -187,8 +174,8 @@ function install(/** @type {string} */ main, env = process.env) {
 
 function remove(env = process.env) {
   const w = where(env);
-  const was = loaded(w);
-  if (was) launchctl(w, ["bootout", `${w.domain}/${LABEL}`]);
+  const was = w.loaded(LABEL);
+  if (was) w.unload(LABEL);
   const had = existsSync(w.file);
   rmSync(w.file, { force: true });
   rmSync(`${w.file}.tmp`, { force: true });
@@ -213,7 +200,7 @@ async function status(/** @type {string} */ main, env = process.env) {
     console.log(`autostart: not installed (${w.file}); pnpm prd autostart install`);
     return false;
   }
-  const isLoaded = loaded(w);
+  const isLoaded = w.loaded(LABEL);
   ok &&= isLoaded;
   console.log(
     `autostart: installed (${w.file}), ${isLoaded ? "loaded" : "NOT loaded: pnpm prd autostart install"}`,
