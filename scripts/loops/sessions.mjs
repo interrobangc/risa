@@ -38,9 +38,23 @@
 //                                             (exit 1, saying why: no ancestor, or
 //                                             it has no live record)
 // The claude name is basename($CARETOOK_CLAUDE_BIN), default claude.
+//
+// Under Vitest (VITEST set, and inherited by every script a test runs), a write
+// to a `.loops/.sessions` outside the OS temp dir is refused (B-871): a test
+// that forgets its own CARETOOK_SESSIONS_DIR, and inherits the session's (the
+// real one, which session.sh exports), fails instead of overwriting live records.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** How far a process's start may be from the record's `started`. */
@@ -184,6 +198,32 @@ export function parseFields(/** @type {string[]} */ words) {
   return fields;
 }
 
+/** P's real path, through its nearest existing ancestor when P doesn't exist yet. */
+const realish = (/** @type {string} */ p) => {
+  const rest = [];
+  let cur = resolve(p);
+  while (!existsSync(cur)) {
+    const up = dirname(cur);
+    if (up === cur) break;
+    rest.unshift(basename(cur));
+    cur = up;
+  }
+  return join(realpathSync(cur), ...rest);
+};
+
+/**
+ * Why a write to DIR is refused, or null: under Vitest (ENV.VITEST), a
+ * `.loops/.sessions` that isn't inside the OS temp dir is a real checkout's.
+ */
+export function liveDirRefusal(/** @type {string} */ dir, env = process.env, tmp = tmpdir()) {
+  if (!env.VITEST) return null;
+  const real = realish(dir);
+  if (!real.endsWith(`${sep}.loops${sep}.sessions`)) return null;
+  const t = realish(tmp);
+  if (real.startsWith(t.endsWith(sep) ? t : t + sep)) return null;
+  return `sessions.mjs: refusing to write session records into ${real} under Vitest: a test must set CARETOOK_SESSIONS_DIR to a temp dir (B-871)`;
+}
+
 /**
  * Merges FIELDS into NAME's record (undefined removes a key), written atomically.
  * With `ifPid`, only while the record's pid is that pid: otherwise nothing is
@@ -195,6 +235,8 @@ export function writeRecord(
   /** @type {Record<string, unknown>} */ fields,
   /** @type {{ ifPid?: number }} */ { ifPid } = {},
 ) {
+  const refusal = liveDirRefusal(dir);
+  if (refusal) throw new Error(refusal);
   mkdirSync(dir, { recursive: true });
   const current = readRecord(dir, name);
   if (ifPid !== undefined && current?.pid !== ifPid) return null;

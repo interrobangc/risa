@@ -86,10 +86,13 @@ const fixture = () => {
     CARETOOK_GC_STOPPED_HOURS: "",
     SAMPLE_STACK_STATE: join(root, "stack-state"),
     SAMPLE_STACK_LOG: log,
+    // The repo's own records, never the inherited session's (B-871: a run under
+    // a session wrote prd-u.json and overwrote backlog.json in the real one).
+    CARETOOK_SESSIONS_DIR: join(loops, ".sessions"),
   };
   // The stub claude, the nearest one rm.sh finds above it: with STUB_RECORD, it
   // holds that live session record (as session.sh writes it); then it runs
-  // rm.sh from STUB_CWD. Its records are the default folder's, the repo's.
+  // rm.sh from STUB_CWD. Its records are the repo's (CARETOOK_SESSIONS_DIR).
   writeFileSync(
     join(bin, "claude"),
     `#!/usr/bin/env bash
@@ -386,6 +389,8 @@ describe("rm.sh from inside the worktree it removes (B-812)", () => {
     expect(other.code).toBe("1");
     expect(other.out).toMatch(/run instead: cd \S+ && pnpm prd rm u --keep-branch\n$/);
     expect(existsSync(join(loops, "u"))).toBe(true);
+    // The stub's record went to the repo's own folder (B-871), not an inherited one.
+    expect(JSON.parse(read(sessions(), "backlog.json"))).toMatchObject({ pid: other.pid, kind: "prd" });
   });
 
   it("from the main checkout removes it as before and ends no session", async () => {

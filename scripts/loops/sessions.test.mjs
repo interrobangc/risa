@@ -23,6 +23,7 @@ import { CAPTAINS } from "./captain.mjs";
 import {
   ancestorClaude,
   isLive,
+  liveDirRefusal,
   parseEtime,
   parseFields,
   readRecord,
@@ -156,6 +157,40 @@ describe("the pure part", () => {
       expect(node("prd-t", "--if-pid", "x", "ended=now").status).toBe(2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // B-871: a test that inherits the session's CARETOOK_SESSIONS_DIR (the real
+  // one) fails instead of writing into it.
+  it("refuses a write to the real checkout's .loops/.sessions under Vitest, and allows a temp one", () => {
+    const main = execFileSync("git", ["-C", HERE, "worktree", "list", "--porcelain"], { encoding: "utf8" })
+      .split("\n")[0]
+      .replace(/^worktree /, "");
+    const real = join(main, ".loops", ".sessions");
+    const probe = "b871-guard-probe";
+    expect(liveDirRefusal(real)).toMatch(
+      /refusing to write session records into .*\.loops\/\.sessions under Vitest/,
+    );
+    expect(() => writeRecord(real, probe, { pid: 1 })).toThrow(/CARETOOK_SESSIONS_DIR to a temp dir/);
+    // Through the CLI too: the scripts a test runs inherit VITEST.
+    const cli = spawnSync("node", [join(HERE, "sessions.mjs"), "set", probe, "pid=1"], {
+      encoding: "utf8",
+      env: { ...process.env, CARETOOK_SESSIONS_DIR: real },
+    });
+    expect(cli.status).not.toBe(0);
+    expect(cli.stderr).toMatch(/refusing to write session records/);
+    expect(existsSync(join(real, `${probe}.json`))).toBe(false);
+    // Outside Vitest, any folder; under it, a temp dir's .loops/.sessions, or one not named so.
+    expect(liveDirRefusal(real, {})).toBeNull();
+    const tmp = mkdtempSync(join(tmpdir(), "sessions-guard-"));
+    try {
+      const temp = join(tmp, "repo", ".loops", ".sessions");
+      expect(liveDirRefusal(temp)).toBeNull();
+      expect(writeRecord(temp, probe, { pid: 1 })).toEqual({ pid: 1 });
+      expect(liveDirRefusal("/nowhere/repo/.loops/.sessions", { VITEST: "true" }, tmp)).toMatch(/refusing/);
+      expect(liveDirRefusal("/nowhere/repo/records", { VITEST: "true" }, tmp)).toBeNull();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
     }
   });
 });
