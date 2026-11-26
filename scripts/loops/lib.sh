@@ -165,6 +165,20 @@ parent_of() {
   esac
 }
 
+# branch_name BRANCH → what follows its kind's prefix (prd/x, plan/x, hotfix/x → x;
+# slice/x/2 → x/2), else the branch itself: config.mjs's nameOf in bash.
+branch_name() {
+  local p
+  for p in "$prd_prefix" "$slice_prefix" "$plan_prefix" "$hotfix_prefix"; do
+    [[ $1 == "$p"* ]] && { echo "${1#"$p"}"; return 0; }
+  done
+  echo "$1"
+}
+
+# re_escape TEXT → TEXT with every character a grep -E or [[ =~ ]] pattern reads
+# specially escaped, so a name from the config matches only itself.
+re_escape() { printf '%s\n' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
+
 # lease_slot N NAME → atomically claim slot N for NAME (mkdir is the lock).
 lease_slot() {
   mkdir -p "$leases"

@@ -47,7 +47,7 @@ case $branch in
   "$plan_prefix"*) die "$branch lands locally (pnpm prd land $branch): plans and docs skip review" ;;
   *) die "$branch: pr takes a $prd_prefix or $hotfix_prefix branch" ;;
 esac
-topic=${branch#"$prd_prefix"}; topic=${topic#"$hotfix_prefix"}
+topic=$(branch_name "$branch")
 dir=$(land_dir "$branch")
 pr_seam "$branch"
 
