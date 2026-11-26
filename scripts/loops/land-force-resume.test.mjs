@@ -165,6 +165,40 @@ describe("land.sh's --force and --no-review", () => {
       expect(refused.stderr).toContain("doesn't cover a brake");
     });
 
+    it("a brake only on origin/dev's newer tip needs --by-user", () => {
+      // origin/dev is a commit ahead of the local dev land measures against, and
+      // the remote-tracking ref is stale: only a fetch sees the newer tip.
+      const local = git("rev-parse", "dev");
+      commit({ "apps/web/dev.ts": "d" }, "dev work");
+      git("push", "-q", "origin", "dev");
+      const newer = git("rev-parse", "dev");
+      git("reset", "-q", "--hard", local);
+      git("update-ref", "refs/remotes/origin/dev", local);
+      const refused = seam(["--force", "--skeptic", record()], brakeOn(newer), { CARETOOK_PR_THROWAWAY: "" });
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain(
+        `doesn't cover a brake (CI reads a brake on origin/dev's tip ${newer.slice(0, 8)}`,
+      );
+    });
+
+    it("a brake state that can't be read refuses a go, naming --by-user", () => {
+      const refused = seam(["--force", "--skeptic", record()], {}, { GH_CI: join(root, "no-such-stub.mjs") });
+      expect(refused.status).not.toBe(0);
+      expect(refused.stderr).toContain("couldn't be read (GitHub couldn't be read for");
+      expect(refused.stderr).toContain("--force --by-user");
+      const board = join(root, "a-file");
+      writeFileSync(board, "x");
+      const noBoard = seam(
+        ["--force", "--skeptic", record()],
+        {},
+        { CARETOOK_NOTICES_DIR: join(board, "n") },
+      );
+      expect(noBoard.status).not.toBe(0);
+      expect(noBoard.stderr).toContain("couldn't read the dev-brake notices");
+      const r = seam(["--force", "--by-user"], {}, { GH_CI: join(root, "no-such-stub.mjs") });
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+    });
+
     it("an unsynced tip needs --by-user", () => {
       commit({ "apps/web/dev.ts": "d" }, "dev work");
       git("push", "-q", "origin", "dev");
