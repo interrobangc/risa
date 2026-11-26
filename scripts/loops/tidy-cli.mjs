@@ -370,7 +370,7 @@ export function removeLease(/** @type {string} */ path, { env = process.env } = 
     "bash",
     [
       "-c",
-      'source "$1" && lease_dir() { echo "$4"; } && lease_take_over "$2" "$3"',
+      'source "$1" && tidy_kind_dir=$4 && lease_dir() { echo "$tidy_kind_dir"; } && lease_take_over "$2" "$3"',
       "tidy",
       join(HERE, "lease.sh"),
       kind,
