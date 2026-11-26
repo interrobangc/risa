@@ -91,18 +91,24 @@ fi
 
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# The context watch (context.mjs): orchestrators, backlog and inbox sessions get its hook through an extra
-# settings file, so the user's own sessions never run it. Any other kind clears
-# what it could inherit from a session that started it.
+# Claude Code's side, from the host layer (host.mjs claude-session): the config
+# folder this claude gets (its variable set, unset for Claude Code's default,
+# or left as it is when nothing names one), and the settings file its
+# kind runs with. The context watch (context.mjs) comes in through that file:
+# orchestrators, backlog and inbox sessions get its hook, so the user's own
+# sessions never run it. Any other kind clears what it could inherit from a
+# session that started it.
+claude_lines=$(node "$bin/host.mjs" claude-session "$kind" "${main:-$(pwd -P)}") || exit 2
+{ read -r claude_env || true; read -r settings || true; } <<< "$claude_lines"
+case $claude_env in
+  "") ;;
+  *=*) export "${claude_env?}" ;;
+  *) unset "$claude_env" ;;
+esac
 unset CARETOOK_SESSION_NAME CARETOOK_SESSION_PID CARETOOK_CONTEXT_HOOK
-if [[ $kind == prd || $kind == backlog ]]; then
+if [[ -n $settings ]]; then
   export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
-  set -- --settings "$bin/context-settings.json" "$@"
-elif [[ $kind == inbox ]]; then
-  # The inbox session's own settings: claude takes one --settings, so
-  # inbox-settings.json holds the context hook as well as effortLevel and fastMode.
-  export CARETOOK_SESSION_NAME=$name CARETOOK_CONTEXT_HOOK=$bin/context.mjs
-  set -- --settings "$bin/inbox-settings.json" "$@"
+  set -- --settings "$settings" "$@"
 fi
 
 # The child records its own pid, then becomes claude, so the recorded pid is

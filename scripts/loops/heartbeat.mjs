@@ -1,5 +1,5 @@
 // The heartbeat: what each agent of a recorded session is doing, from the
-// context hook (context-settings.json runs `context.mjs hook` on PreToolUse,
+// context hook (the session settings file runs `context.mjs hook` on PreToolUse,
 // PostToolUse, PostToolUseFailure, SubagentStop and Stop). Each tool call
 // records its start and end, so a started, unfinished call is a running
 // command; a stop records that the agent (or, on Stop, the session itself)
@@ -19,11 +19,12 @@
 //   running    { <tool_use_id>: { tool, at, command? } }, the calls started and
 //              not yet ended (a stop clears them; at most MAX_RUNNING are kept)
 //
-// Hook input fields used (Claude Code's hooks reference): hook_event_name,
-// agent_id, agent_type, cwd, tool_name, tool_input, tool_use_id.
+// The hook input is read by the host layer (host.mjs claudeInput): the event, the
+// agent and its type, the cwd, the tool, its input and its call's id.
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { updateRecord } from "./context.mjs";
+import { claudeInput } from "./host.mjs";
 
 /** The most unfinished calls a record keeps (an end the hook missed must not pile up). */
 const MAX_RUNNING = 20;
@@ -69,31 +70,34 @@ function pathsOf(/** @type {any} */ toolInput) {
  */
 export function heartbeatEvent(input, loops) {
   if (!input || typeof input !== "object") return null;
+  const c = claudeInput(input);
+  if (!c) return null;
   const type = {
     PreToolUse: "start",
     PostToolUse: "end",
     PostToolUseFailure: "end",
     SubagentStop: "stop",
     Stop: "stop",
-  }[String(input.hook_event_name)];
+  }[String(c.event)];
   if (!type) return null;
-  const rawAgent = typeof input.agent_id === "string" ? input.agent_id.replace(/^agent-/, "") : "";
+  const rawAgent = c.agent;
   if (rawAgent && !/^[\w-]+$/.test(rawAgent)) return null;
   // A session's own Stop has no agent; a SubagentStop always names one.
-  if (input.hook_event_name === "SubagentStop" && !rawAgent) return null;
+  if (c.event === "SubagentStop" && !rawAgent) return null;
+  const toolInput = /** @type {any} */ (c.toolInput);
   const command =
-    input.tool_name === "Bash" && typeof input.tool_input?.command === "string"
-      ? input.tool_input.command.replace(/\s+/g, " ").trim().slice(0, COMMAND_CHARS)
+    c.tool === "Bash" && typeof toolInput?.command === "string"
+      ? toolInput.command.replace(/\s+/g, " ").trim().slice(0, COMMAND_CHARS)
       : null;
   return {
     type,
     agent: rawAgent || null,
-    agentType: typeof input.agent_type === "string" && input.agent_type ? input.agent_type : null,
-    tool: typeof input.tool_name === "string" ? input.tool_name : null,
-    id: typeof input.tool_use_id === "string" && input.tool_use_id ? input.tool_use_id : null,
+    agentType: c.agentType,
+    tool: c.tool,
+    id: c.toolUseId,
     command,
-    worktrees: type === "stop" ? [] : worktreesIn(pathsOf(input.tool_input), loops),
-    cwdWorktree: worktreeOfCwd(input.cwd, loops),
+    worktrees: type === "stop" ? [] : worktreesIn(pathsOf(toolInput), loops),
+    cwdWorktree: worktreeOfCwd(/** @type {string} */ (c.cwd), loops),
   };
 }
 

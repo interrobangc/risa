@@ -2,20 +2,13 @@
 // gateway's spend limit) is used, and when each resets, as Claude Code hands it to a
 // status line; and which sessions stopped on a rate limit.
 //
-// The input, confirmed against the installed Claude Code (2.1.331):
-//   status line  { session_id, transcript_path, cwd, model, …, rate_limits?: {
-//                  five_hour?: { used_percentage, resets_at }, seven_day?: { … },
-//                  spend_limit?: { used_percentage, resets_at, used_usd?, limit_usd?, period? } } }
-//                resets_at in Unix seconds. rate_limits only for a subscriber (or behind a
-//                gateway with a spend limit), after the first API response; each window only
-//                while its reset hasn't passed. No per-model weekly window, and no overage flag.
-//   StopFailure  the common hook fields (session_id, transcript_path, cwd, …),
-//                hook_event_name "StopFailure", error (authentication_failed, billing_error,
-//                rate_limit, overloaded, server_error, unknown, …), error_details?,
-//                last_assistant_message?: no reset time of its own.
+// The input is Claude Code's, read by the host layer (host.mjs claudeInput): the status
+// line's windows (the 5-hour, weekly and spend limit, each a percent and a reset, only
+// while its reset hasn't passed; no per-model weekly window, and no overage flag), and a
+// StopFailure's error (rate_limit, …) with no reset time of its own.
 //
-// context-settings.json and inbox-settings.json (session.sh: orchestrators, backlog and
-// inbox sessions) run `usage.mjs statusline` as the status line, every 60 s as well as on
+// The session settings files (host.mjs settingsFor: orchestrators, backlog and inbox
+// sessions) run `usage.mjs statusline` as the status line, every 60 s as well as on
 // Claude Code's own updates, and `usage.mjs stop-failure` on StopFailure. Both are found
 // beside CARETOOK_CONTEXT_HOOK. Neither ever fails: any error is swallowed (exit 0).
 //
@@ -23,8 +16,10 @@
 //   .loops/.usage/<session>.json  (CARETOOK_USAGE_DIR; else .usage beside CARETOOK_SESSIONS_DIR)
 //     session, pid, at, windows: { fiveHour?, sevenDay?, spend? } (each percent, resetsAt
 //     ISO or null, at: when it was read, and for spend usedUsd, limitUsd, period),
-//     stalled?: { at, error, resetsAt, pid }
+//     stalled?: { at, error, resetsAt, pid }, account? (the Claude config folder the
+//     session's claude used, when not Claude Code's default: host.mjs claudeAccount)
 //   A window the input leaves out keeps its last value and age; a new pid clears a stall.
+//   Each account's usage is its own: a reading counts only for its account's merge.
 //
 // The merge (`mergeReadings`, pure): a window read more than CARETOOK_USAGE_STALE_MIN (15)
 // ago, or past its reset, doesn't count; with none left the usage is unknown. Of the rest,
@@ -42,6 +37,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
 import { updateRecord } from "./context.mjs";
+import { claudeAccount, claudeInput } from "./host.mjs";
 
 const MIN_MS = 60_000;
 /** Two resets this close are the same window (a reading's rounding). */
@@ -50,11 +46,11 @@ const SAME_RESET_MS = MIN_MS;
 export const STALL_NO_RESET_MS = 5 * 60 * MIN_MS;
 const NAME_OK = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** The windows: the input's key, the reading's, and the label people read. */
+/** The windows: the reading's name, and the label people read. */
 export const WINDOWS = /** @type {const} */ ([
-  ["five_hour", "fiveHour", "5h"],
-  ["seven_day", "sevenDay", "7d"],
-  ["spend_limit", "spend", "spend"],
+  ["fiveHour", "5h"],
+  ["sevenDay", "7d"],
+  ["spend", "spend"],
 ]);
 
 /** How old a window's reading may be and still count. */
@@ -80,18 +76,18 @@ const finite = (/** @type {unknown} */ v) => {
 };
 
 /**
- * One window of the input: percent and reset (ms or null), or null without a percent.
- * @param {any} w @param {string} key
+ * One window of the input (claudeInput's): percent and reset (ms or null), or null without a percent.
+ * @param {any} w @param {string} name
  */
-function windowOf(w, key) {
+function windowOf(w, name) {
   if (!w || typeof w !== "object") return null;
-  const percent = finite(w.used_percentage);
+  const percent = finite(w.percent);
   if (percent === null) return null;
   /** @type {{ percent: number, resetsAt: number | null, usedUsd?: number, limitUsd?: number, period?: string }} */
-  const out = { percent: Math.max(0, percent), resetsAt: timeOf(w.resets_at) };
-  if (key === "spend_limit") {
-    const used = finite(w.used_usd);
-    const limit = finite(w.limit_usd);
+  const out = { percent: Math.max(0, percent), resetsAt: timeOf(w.resetsAt) };
+  if (name === "spend") {
+    const used = finite(w.usedUsd);
+    const limit = finite(w.limitUsd);
     if (used !== null) out.usedUsd = used;
     if (limit !== null) out.limitUsd = limit;
     if (typeof w.period === "string") out.period = w.period;
@@ -105,42 +101,33 @@ function windowOf(w, key) {
  * @param {unknown} input the raw text or the parsed value
  */
 export function parseInput(input) {
-  let v = input;
-  if (typeof v === "string") {
-    try {
-      v = JSON.parse(v);
-    } catch {
-      return null;
-    }
-  }
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  const o = /** @type {any} */ (v);
+  const o = claudeInput(input);
+  if (!o) return null;
   /** @type {Record<string, NonNullable<ReturnType<typeof windowOf>>>} */
   const windows = {};
-  const rl = o.rate_limits;
-  if (rl && typeof rl === "object")
-    for (const [key, name] of WINDOWS) {
-      const w = windowOf(rl[key], key);
-      if (w) windows[name] = w;
-    }
-  return { sessionId: typeof o.session_id === "string" ? o.session_id : null, windows };
+  for (const [name] of WINDOWS) {
+    const w = windowOf(o.windows[name], name);
+    if (w) windows[name] = w;
+  }
+  return { sessionId: o.sessionId, windows };
 }
 
 const iso = (/** @type {number | null} */ ms) => (ms === null ? null : new Date(ms).toISOString());
 
 /**
  * This session's next reading: the input's windows read now, the others kept as they were;
- * a stall kept only while the pid is the same. Pure.
+ * a stall kept only while the pid is the same; ACCOUNT (claudeAccount's) kept when set. Pure.
  * @param {any} current the session's last reading, or null
  * @param {NonNullable<ReturnType<typeof parseInput>>} parsed
- * @param {{ session: string, pid: number | null, now: number }} at
+ * @param {{ session: string, pid: number | null, now: number, account?: string | null }} at
  */
-export function nextReading(current, parsed, { session, pid, now }) {
+export function nextReading(current, parsed, { session, pid, now, account = null }) {
   const windows = { ...(current?.windows && typeof current.windows === "object" ? current.windows : {}) };
   for (const [name, w] of Object.entries(parsed.windows))
     windows[name] = { ...w, resetsAt: iso(w.resetsAt), at: iso(now) };
   /** @type {any} */
   const next = { session, pid, at: iso(now), windows };
+  if (account) next.account = account;
   if (current?.stalled && (current.stalled.pid ?? null) === pid) next.stalled = current.stalled;
   return next;
 }
@@ -154,7 +141,7 @@ export function resetFromReadings(readings, now) {
   /** @type {{ percent: number, resetsAt: number } | null} */
   let best = null;
   for (const r of readings)
-    for (const [, name] of WINDOWS) {
+    for (const [name] of WINDOWS) {
       const w = r?.windows?.[name];
       const resetsAt = timeOf(w?.resetsAt);
       const percent = finite(w?.percent);
@@ -171,8 +158,9 @@ export function resetFromReadings(readings, now) {
  * @param {any} input @param {number} now
  */
 export function resetFromInput(input, now) {
-  const found = [timeOf(input?.resets_at), timeOf(input?.rate_limits?.resets_at)];
-  const details = typeof input?.error_details === "string" ? input.error_details : "";
+  const o = claudeInput(input);
+  const found = (o?.resets ?? []).map(timeOf);
+  const details = o?.errorDetails ?? "";
   for (const m of details.matchAll(/\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)/g))
     found.push(timeOf(m[0]));
   for (const m of details.matchAll(/\b\d{10}\b/g)) found.push(timeOf(Number(m[0])));
@@ -221,7 +209,7 @@ export function mergeReadings(readings, { now, staleMs }) {
   const merged = { fiveHour: null, sevenDay: null, spend: null };
   let newest = null;
   const sessions = new Set();
-  for (const [, name] of WINDOWS) {
+  for (const [name] of WINDOWS) {
     /** @type {Window | null} */
     let best = null;
     for (const r of readings) {
@@ -323,7 +311,7 @@ function stalledNote(
 export function statusLine(u, { now, staleMs, timeZone }) {
   const parts = [];
   if (!u.known) parts.push(`unknown (no reading in the last ${span(staleMs)})`);
-  for (const [, name, label] of WINDOWS) {
+  for (const [name, label] of WINDOWS) {
     const w = u[/** @type {"fiveHour" | "sevenDay" | "spend"} */ (name)];
     if (w) parts.push(`${label} ${pct(w.percent)} (${resetNote(w.resetsAt, now, timeZone)})`);
   }
@@ -351,7 +339,7 @@ export function report(u, { now, staleMs, timeZone }) {
       `Usage, read ${u.at === null ? "?" : `${span(now - u.at)} ago`} from ${u.sessions} session${u.sessions === 1 ? "" : "s"}:`,
     );
   const labels = { fiveHour: "5-hour", sevenDay: "weekly", spend: "spend limit" };
-  for (const [, name] of WINDOWS) {
+  for (const [name] of WINDOWS) {
     const w = u[/** @type {"fiveHour" | "sevenDay" | "spend"} */ (name)];
     if (!w) continue;
     const usd =
@@ -376,7 +364,7 @@ export function report(u, { now, staleMs, timeZone }) {
 
 /** The status line's own text: this input's windows, or "". Pure. */
 export function ownLine(/** @type {NonNullable<ReturnType<typeof parseInput>>} */ parsed) {
-  return WINDOWS.flatMap(([, name, label]) => {
+  return WINDOWS.flatMap(([name, label]) => {
     const w = parsed.windows[name];
     return w ? [`${label} ${pct(w.percent)}`] : [];
   }).join(" · ");
@@ -413,27 +401,36 @@ export function readReadings(/** @type {string} */ dir) {
   return out;
 }
 
-/** The merged reading from DIR. */
-export function readUsage(/** @type {string | null} */ dir, { now = Date.now(), env = process.env } = {}) {
-  return mergeReadings(dir ? readReadings(dir) : [], { now, staleMs: staleMsOf(env) });
+/**
+ * The merged reading from DIR, of ACCOUNT's readings only (a Claude config folder, null
+ * for Claude Code's default; by default the one ENV's claude uses).
+ * @param {string | null} dir
+ * @param {{ now?: number, env?: NodeJS.ProcessEnv, account?: string | null }} [opts]
+ */
+export function readUsage(dir, { now = Date.now(), env = process.env, account = claudeAccount(env) } = {}) {
+  const mine = (dir ? readReadings(dir) : []).filter((r) => (r.account ?? null) === account);
+  return mergeReadings(mine, { now, staleMs: staleMsOf(env) });
 }
 
 /**
  * Mark SESSION stalled (the dispatcher's stop, or a StopFailure). RESETS_AT null takes the
  * last reading's. Throws on a bad name or an unwritable folder.
  * @param {string} dir @param {string} session
- * @param {{ error?: string, resetsAt?: number | null, pid?: number | null, now?: number }} [opts]
+ * @param {{ error?: string, resetsAt?: number | null, pid?: number | null, now?: number,
+ *   account?: string | null }} [opts] account: the session's, for a reading it starts
  */
 export function markStalled(
   dir,
   session,
-  { error = "rate_limit", resetsAt = null, pid = null, now = Date.now() } = {},
+  { error = "rate_limit", resetsAt = null, pid = null, now = Date.now(), account = null } = {},
 ) {
   if (!NAME_OK.test(session)) throw new Error(`usage: a bad session name ${session}`);
   const reset = resetsAt ?? resetFromReadings(readReadings(dir), now);
-  return updateRecord(join(dir, `${session}.json`), (current) =>
-    stalledReading(current, { error, resetsAt: reset, session, pid, now }),
-  );
+  return updateRecord(join(dir, `${session}.json`), (current) => {
+    const next = stalledReading(current, { error, resetsAt: reset, session, pid, now });
+    if (account && !next.account) next.account = account;
+    return next;
+  });
 }
 
 /** Clear SESSION's stall (a resume). */
@@ -469,7 +466,7 @@ export function runStatusLine(raw, env = process.env, now = Date.now()) {
   if (dir && session) {
     const pid = pidOf(env);
     updateRecord(join(dir, `${session}.json`), (current) =>
-      nextReading(current, parsed, { session, pid, now }),
+      nextReading(current, parsed, { session, pid, now, account: claudeAccount(env) }),
     );
   }
   return ownLine(parsed);
@@ -480,21 +477,17 @@ export function runStatusLine(raw, env = process.env, now = Date.now()) {
  * @param {string} raw @param {NodeJS.ProcessEnv} env @param {number} now
  */
 export function runStopFailure(raw, env = process.env, now = Date.now()) {
-  let input;
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    return false;
-  }
+  const input = claudeInput(raw);
   if (input?.error !== "rate_limit") return false;
   const dir = usageDirOf(env);
-  const session = sessionOf(env, typeof input.session_id === "string" ? input.session_id : null);
+  const session = sessionOf(env, input.sessionId);
   if (!dir || !session) return false;
   markStalled(dir, session, {
     error: "rate_limit",
-    resetsAt: resetFromInput(input, now),
+    resetsAt: resetFromInput(raw, now),
     pid: pidOf(env),
     now,
+    account: claudeAccount(env),
   });
   return true;
 }

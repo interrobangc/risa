@@ -2,8 +2,8 @@
 // or hotfix worktree, or a recorded backlog or recovery session, the command that brings its session back, started through
 // session.sh so it is recorded (.loops/.sessions/<session>.json).
 //
-//   - a saved Claude conversation for that path (a *.jsonl transcript in
-//     ~/.claude/projects/<path with every non-alphanumeric as ->):
+//   - a saved Claude conversation for that path (a transcript in the projects
+//     folder of the Claude config folder that session's claude gets, host.mjs):
 //       cd <dir> && <this checkout>/scripts/loops/session.sh <session> [--auto] [--managed] -- --continue --remote-control <session>
 //   - otherwise a fresh session with the resume prompt:
 //       prd:  cd <dir> && scripts/loops/session.sh prd-<topic> [--auto] [--managed] -- --remote-control prd-<topic> \
@@ -42,12 +42,10 @@
 // CLI: node open-session.mjs <worktree dir> [--carry-on]  → JSON {session, kind, topic, mode, auto, managed, command}
 //      (the main backlog session's adds title: its captain, the tab's title and Remote Control name)
 //      node open-session.mjs --main <name> <main checkout>   the same, for a backlog, recovery or inbox record
-// Env: CARETOOK_CLAUDE_PROJECTS (tests: in place of ~/.claude/projects);
-// CARETOOK_CLAUDE_CONFIG (tests: in place of ~/.claude.json, only ever read);
-// CARETOOK_INBOX_DIR (the inbox session's directory when its record has none;
+// Env: the Claude folders' stand-ins for tests (host.mjs); CARETOOK_INBOX_DIR (the inbox session's directory when its record has none;
 // default ~/.caretook/inbox); CARETOOK_SESSIONS_DIR (default .sessions beside the worktree).
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -55,16 +53,22 @@ import { CAPTAIN_SESSION, pickCaptain } from "./captain.mjs";
 import { plannerModelFor } from "./planner-model.mjs";
 import { isLive, processOf, readRecord } from "./sessions.mjs";
 import { branchKinds } from "./config.mjs";
+import {
+  claudeChoiceFor,
+  claudeEnv,
+  claudeProjects,
+  claudeState,
+  folderTrusted,
+  hasConversation,
+  projectFolder,
+  roleOfKind,
+} from "./host.mjs";
 
-/** Claude Code's projects folder name for a working directory. */
-export const projectFolder = (/** @type {string} */ dir) => dir.replace(/[^A-Za-z0-9]/g, "-");
+export { projectFolder };
 
-/** Whether DIR has a saved Claude conversation under PROJECTS. */
-export function hasConversation(/** @type {string} */ dir, /** @type {string} */ projects) {
-  const folder = join(projects, projectFolder(dir));
-  if (!existsSync(folder)) return false;
-  return readdirSync(folder).some((f) => f.endsWith(".jsonl"));
-}
+/** The environment the claude of a session of KIND in MAIN's repo runs with (its config folder). */
+const claudeEnvOf = (/** @type {string} */ kind, /** @type {string | null} */ main) =>
+  claudeEnv(process.env, claudeChoiceFor({ main, role: roleOfKind(kind) }));
 
 /** Whether a plan's _Status_ section records the run-through landing mode. */
 export function runThrough(/** @type {string} */ planText) {
@@ -104,8 +108,8 @@ export function inboxDirOf(/** @type {{ dir?: string } | null | undefined} */ re
 export function inboxUntrusted(
   /** @type {string} */ dir,
   {
-    projects = defaultProjects(),
-    config = process.env.CARETOOK_CLAUDE_CONFIG || join(homedir(), ".claude.json"),
+    projects = claudeProjects(claudeEnvOf("inbox", ownMain())),
+    config = claudeState(claudeEnvOf("inbox", ownMain())),
   } = {},
 ) {
   const ask = "run `pnpm prd inbox` once by hand and accept the folder";
@@ -115,18 +119,7 @@ export function inboxUntrusted(
   } catch {
     return `its directory ${dir} doesn't exist yet: ${ask}`;
   }
-  if (hasConversation(real, projects)) return null;
-  /** @type {Record<string, { hasTrustDialogAccepted?: boolean }>} */
-  let known = {};
-  try {
-    known = JSON.parse(readFileSync(config, "utf8")).projects ?? {};
-  } catch {
-    /* unreadable: only a saved conversation counts */
-  }
-  for (let d = real; ; d = dirname(d)) {
-    if (known[d]?.hasTrustDialogAccepted === true) return null;
-    if (dirname(d) === d) break;
-  }
+  if (hasConversation(real, projects) || folderTrusted(real, config)) return null;
   return `its directory ${real} isn't trusted yet: ${ask}`;
 }
 
@@ -280,10 +273,19 @@ const mainOf = (/** @type {string} */ dir) =>
     .split("\n")[0]
     .replace(/^worktree /, "");
 
+/** The main checkout of the repo this opener is in, or null. */
+const ownMain = () => {
+  try {
+    return mainOf(dirname(fileURLToPath(import.meta.url)));
+  } catch {
+    return null;
+  }
+};
+
 /** Reads the worktree's facts (branch, transcript, plan, session record) and chooses. */
 export function chooseFor(
   /** @type {string} */ dir,
-  projects = defaultProjects(),
+  projects = /** @type {string | undefined} */ (undefined),
   sessions = process.env.CARETOOK_SESSIONS_DIR || join(dirname(dir), ".sessions"),
   { carryOn = false } = {},
 ) {
@@ -296,15 +298,13 @@ export function chooseFor(
   return chooseCommand({
     dir,
     branch,
-    conversation: hasConversation(dir, projects),
+    conversation: hasConversation(dir, projects ?? claudeProjects(claudeEnvOf(kind, mainOf(dir)))),
     runThrough: existsSync(plan) && runThrough(readFileSync(plan, "utf8")),
     record,
     plannerModel: kind === "plan" ? plannerModelFor(topic, mainOf(dir)) : DEFAULT_MODEL,
     carryOn,
   });
 }
-
-const defaultProjects = () => process.env.CARETOOK_CLAUDE_PROJECTS || join(homedir(), ".claude", "projects");
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const dir = process.argv[2];

@@ -35,7 +35,7 @@
 # host layer says where it looked for iTerm2.
 #
 # Env: CARETOOK_ITERM_APP (default /Applications/iTerm.app: where iTerm2 is
-# looked for); CARETOOK_CLAUDE_PROJECTS (default ~/.claude/projects).
+# looked for); the saved conversations' folder is the host layer's (host.mjs).
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"

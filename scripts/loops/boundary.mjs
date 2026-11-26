@@ -11,7 +11,10 @@
 //                    compared; in shell the name where a command starts, outside
 //                    quotes and here-documents), other than the host layer's
 //                    (HOST, host.mjs), the tests' and fixtures' (which stub them)
-//                    and this lint's
+//                    and this lint's; and the same files naming Claude Code's own
+//                    (its config folder, CLAUDE_CONFIG_DIR, .claude.json, the
+//                    session settings files) or reading its hook and status line
+//                    input's fields (transcript_path, rate_limits, …) in code
 // The two reach rules see every form, and a finding names its form:
 //   import    a JS import, dynamic import or require; a shell `source` or `.`
 //   --import  a path handed to Node's --import
@@ -82,6 +85,14 @@ const CLI_JS = /(?<![=!]=\s*)(["'`])(claude|codex|gh)\1/g;
 /** …in shell, the command a line, pipe, list, subshell or keyword starts. */
 const CLI_SHELL =
   /(?:^|[;&|({!]|\b(?:then|do|else|elif|if|while|until|time|exec))\s*(claude|codex|gh)(?![\w.-])/g;
+/** Claude Code's files and its hook input's fields: only the host layer names them, in code. */
+const CLAUDE_FILES = new RegExp(
+  String.raw`(?<![\w.-])(?:\.claude(?:\.json)?|CLAUDE_CONFIG_DIR|(?:context|inbox)-settings\.json)(?![\w-])` +
+    String.raw`|(?<!\w)(?:hook_event_name|session_id|transcript_path|agent_transcript_path|agent_id|agent_type` +
+    String.raw`|tool_name|tool_input|tool_use_id|rate_limits|used_percentage|resets_at|error_details` +
+    String.raw`|five_hour|seven_day|spend_limit|used_usd|limit_usd)(?!\w)`,
+  "g",
+);
 const callsHost = (/** @type {string} */ path) =>
   path !== HOST && path !== SELF && !/(\.test\.[a-z]+|-fixture\.mjs)$/.test(path);
 
@@ -505,6 +516,8 @@ export function findings({ files, owners, project, data = [] }) {
       if (core && appRe)
         for (const m of line.matchAll(appRe)) add("app-path", null, m[0].replace(/\/+$/, "/"));
       if (core && callsHost(file)) for (const m of line.matchAll(HOST_CALL)) add("host-call", null, m[0]);
+      if (core && callsHost(file) && (lang === "js" || lang === "shell"))
+        for (const m of line.matchAll(CLAUDE_FILES)) add("host-call", null, m[0]);
       for (const cli of runs[i] ?? []) add("host-call", null, cli);
       for (const m of line.matchAll(/[\w.*\-/]+/g)) {
         const before = line.slice(0, m.index);

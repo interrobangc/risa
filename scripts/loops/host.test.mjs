@@ -6,6 +6,22 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import "./config-fixture.mjs";
+import { agentTranscript } from "./context.mjs";
+import {
+  CONFIG_DIR_VAR,
+  claudeAccount,
+  claudeChoiceFor,
+  claudeConfigDir,
+  claudeEnv,
+  claudeEnvPrefix,
+  claudeInput,
+  claudeProjects,
+  claudeState,
+  hasConversation,
+  settingsFor,
+} from "./host.mjs";
+import { readUsage, runStatusLine } from "./usage.mjs";
 import {
   CLAUDE,
   CODEX,
@@ -222,5 +238,127 @@ describe("Node", () => {
     expect(run(["24"]).stdout).toBe(`${join(nvm, "versions/node/v24.10.1/bin")}\n`);
     expect(run(["20"]).status).toBe(1);
     expect(run([]).status).toBe(2);
+  });
+});
+
+describe("Claude Code's files", () => {
+  const HOST_CLI = (/** @type {string[]} */ args, extra = {}) =>
+    spawnSync(process.execPath, [HOST, ...args], { encoding: "utf8", env: { ...env, ...extra } });
+  let machine;
+  beforeAll(() => {
+    machine = join(root, "machine.json");
+    writeFileSync(
+      machine,
+      JSON.stringify({
+        repos: [
+          { path: join(root, "per-role"), claudeConfigDir: { orchestrator: "/acct/work" } },
+          { path: join(root, "one"), claudeConfigDir: "/acct/one" },
+        ],
+      }),
+    );
+    for (const d of ["per-role", "one"]) mkdirSync(join(root, d));
+  });
+
+  it("chooses the folder: the variable, then the machine config's, then risa.json's, else none", () => {
+    expect(claudeConfigDir({ env: { [CONFIG_DIR_VAR]: "/a" }, machine: "/b", project: "/c" })).toEqual({
+      dir: "/a",
+      from: CONFIG_DIR_VAR,
+    });
+    expect(claudeConfigDir({ env: {}, machine: "/b", project: "/c" })?.dir).toBe("/b");
+    // Folders for other roles only: Claude Code's default for this one, not risa.json's.
+    expect(claudeConfigDir({ env: {}, machine: null, project: "/c" })?.dir).toBeNull();
+    expect(claudeConfigDir({ env: { HOME: "/h" }, project: "~/.claude-x" })?.dir).toBe("/h/.claude-x");
+    expect(claudeConfigDir({ env: {}, project: "relative" })).toBeNull();
+    expect(claudeConfigDir({ env: {} })).toBeNull();
+    expect(() => claudeConfigDir({ env: { [CONFIG_DIR_VAR]: "rel" } })).toThrow(/absolute/);
+  });
+
+  it("reads the machine config's entry for the repo, per role", () => {
+    const e = { ...env, RISA_MACHINE_CONFIG: machine };
+    const at = (/** @type {string} */ repo, /** @type {string} */ role) =>
+      claudeChoiceFor({ main: join(root, repo), role, env: e });
+    expect(at("per-role", "orchestrator")?.dir).toBe("/acct/work");
+    expect(at("per-role", "backlog")).toEqual({ dir: null, from: "the machine config" });
+    expect(at("one", "backlog")?.dir).toBe("/acct/one");
+    expect(at("elsewhere", "orchestrator")).toBeNull();
+    expect(claudeChoiceFor({ main: join(root, "one"), env: { ...e, [CONFIG_DIR_VAR]: "/v" } })?.dir).toBe(
+      "/v",
+    );
+  });
+
+  it("sets CLAUDE_CONFIG_DIR, unsets it for the default, and leaves it alone with nothing set", () => {
+    const base = { CLAUDE_CONFIG_DIR: "/inherited", X: "1" };
+    expect(claudeEnv(base, { dir: "/acct", from: "" })).toEqual({ CLAUDE_CONFIG_DIR: "/acct", X: "1" });
+    expect(claudeEnv(base, { dir: null, from: "" })).toEqual({ X: "1" });
+    expect(claudeEnv(base, null)).toEqual(base);
+    expect(claudeEnvPrefix({ dir: "/my acct", from: "" })).toBe("CLAUDE_CONFIG_DIR='/my acct' ");
+    expect(claudeEnvPrefix({ dir: null, from: "" })).toBe("env -u CLAUDE_CONFIG_DIR ");
+    expect(claudeEnvPrefix(null)).toBe("");
+  });
+
+  it("gives every claude it starts the folder: the CLI's claude and session.sh's lines", () => {
+    stub("claude-env", `echo "dir=\${CLAUDE_CONFIG_DIR-unset}" >> "${log}"`);
+    const claude = { CARETOOK_CLAUDE_BIN: join(bin, "claude-env") };
+    expect(HOST_CLI(["claude", "-p"], { ...claude, [CONFIG_DIR_VAR]: "/acct" }).status).toBe(0);
+    expect(HOST_CLI(["claude", "-p"], { ...claude, CLAUDE_CONFIG_DIR: "" }).status).toBe(0);
+    expect(logged()).toBe("dir=/acct\ndir=\n");
+    const lines = (/** @type {string} */ kind, extra = {}) =>
+      HOST_CLI(["claude-session", kind, join(root, "per-role")], { RISA_MACHINE_CONFIG: machine, ...extra });
+    expect(lines("prd").stdout).toBe(`CLAUDE_CONFIG_DIR=/acct/work\n${settingsFor("prd")}\n`);
+    expect(lines("hotfix").stdout).toBe("CLAUDE_CONFIG_DIR\n\n");
+    expect(lines("inbox", { RISA_MACHINE_CONFIG: "" }).stdout).toBe(`\n${settingsFor("inbox")}\n`);
+    expect(settingsFor("plan")).toBeNull();
+    const bad = lines("prd", { [CONFIG_DIR_VAR]: "rel" });
+    expect([bad.status, bad.stderr]).toEqual([2, expect.stringMatching(/absolute/)]);
+  });
+
+  it("reads the transcripts and the trusted folders from the folder in use", () => {
+    expect(claudeProjects({ CLAUDE_CONFIG_DIR: "/acct" })).toBe("/acct/projects");
+    expect(claudeState({ CLAUDE_CONFIG_DIR: "/acct" })).toBe("/acct/.claude.json");
+    expect(claudeProjects({})).toMatch(/\/\.claude\/projects$/);
+    const projects = claudeProjects({ CLAUDE_CONFIG_DIR: join(root, "acct") });
+    mkdirSync(join(projects, "-w"), { recursive: true });
+    writeFileSync(join(projects, "-w", "s.jsonl"), "{}\n");
+    expect([hasConversation("/w", projects), hasConversation("/w", join(root, "other"))]).toEqual([
+      true,
+      false,
+    ]);
+    // The context watch sizes the transcript Claude Code names, so it follows the folder too.
+    const transcript = join(root, "acct/projects/-w/s.jsonl");
+    expect(agentTranscript({ agent_id: "a1", transcript_path: transcript })).toBe(
+      join(root, "acct/projects/-w/s/subagents/agent-a1.jsonl"),
+    );
+  });
+
+  it("reads Claude Code's input in one place", () => {
+    const c = claudeInput(
+      JSON.stringify({
+        hook_event_name: "StopFailure",
+        session_id: "s",
+        error: "rate_limit",
+        agent_id: "agent-x",
+        rate_limits: { five_hour: { used_percentage: 40, resets_at: 9 } },
+      }),
+    );
+    expect(c).toMatchObject({ event: "StopFailure", sessionId: "s", error: "rate_limit", agent: "x" });
+    expect(c?.windows.fiveHour).toMatchObject({ percent: 40, resetsAt: 9 });
+    expect([claudeInput("nope"), claudeInput("[]")]).toEqual([null, null]);
+  });
+
+  it("keeps each account's usage apart; with no folder set, one usage as before", () => {
+    const usage = join(root, "usage");
+    const now = Date.parse("2026-11-26T12:00:00Z");
+    const input = (/** @type {number} */ p) =>
+      JSON.stringify({ rate_limits: { five_hour: { used_percentage: p, resets_at: now / 1000 + 3600 } } });
+    const at = (/** @type {Record<string, string>} */ e) => ({ CARETOOK_USAGE_DIR: usage, ...e });
+    runStatusLine(input(90), at({ CARETOOK_SESSION_NAME: "prd-w", CLAUDE_CONFIG_DIR: "/acct/work" }), now);
+    runStatusLine(input(20), at({ CARETOOK_SESSION_NAME: "backlog" }), now);
+    expect(claudeAccount({ CLAUDE_CONFIG_DIR: "/acct/work" })).toBe("/acct/work");
+    expect(claudeAccount({})).toBeNull();
+    const pct = (/** @type {Record<string, string>} */ e) =>
+      readUsage(usage, { now, env: at(e) }).fiveHour?.percent;
+    expect(pct({ CLAUDE_CONFIG_DIR: "/acct/work" })).toBe(90);
+    expect(pct({})).toBe(20);
+    expect(readUsage(usage, { now, env: at({}), account: "/acct/work" }).fiveHour?.percent).toBe(90);
   });
 });

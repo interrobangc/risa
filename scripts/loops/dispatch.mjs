@@ -94,7 +94,7 @@
 // Env: CARETOOK_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
 // the pick's caps; CARETOOK_LOAD_* (load-gate.mjs); CARETOOK_SESSIONS_DIR,
 // CARETOOK_ASKS_DIR; CARETOOK_ITERM_APP (the host layer's, host.mjs: where iTerm2 is);
-// CARETOOK_CLAUDE_BIN (the helper's claude); CARETOOK_CLOCK_FILE (tests: epoch
+// CARETOOK_CLAUDE_BIN (the helper's claude; its config folder: host.mjs); CARETOOK_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -134,7 +134,7 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
-import { canOpenTabs, claudeBin, claudeName, itermApp } from "./host.mjs";
+import { canOpenTabs, claudeBin, claudeChoiceFor, claudeEnvPrefix, claudeName, itermApp } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
@@ -223,9 +223,21 @@ export const helperPrompt = (/** @type {string} */ line) =>
   `call the PushNotification tool once with this text: ${JSON.stringify(line)}. ` +
   `Then run \`pnpm prd end\` in Bash (it ends this session and closes its tab).`;
 
-/** The helper's tab command. */
-export const helperLine = (/** @type {{ main: string, claude: string, line: string }} */ h) =>
-  `cd ${sh(h.main)} && ${sh(h.claude)} --model haiku --remote-control ${HELPER_SESSION} ${sh(helperPrompt(h.line))}`;
+/**
+ * The helper's claude: claudeBin, after the Claude config folder it gets for MAIN's
+ * repo (host.mjs; its role is `helper`). The sessions the dispatcher starts get theirs
+ * from session.sh.
+ */
+const helperClaude = (/** @type {string} */ main, /** @type {NodeJS.ProcessEnv} */ env) => ({
+  claude: claudeBin(env),
+  prefix: claudeEnvPrefix(claudeChoiceFor({ main, role: "helper", env })),
+});
+
+/** The helper's tab command; PREFIX (host.mjs claudeEnvPrefix) sets its claude's config folder. */
+export const helperLine = (
+  /** @type {{ main: string, claude: string, line: string, prefix?: string }} */ h,
+) =>
+  `cd ${sh(h.main)} && ${h.prefix ?? ""}${sh(h.claude)} --model haiku --remote-control ${HELPER_SESSION} ${sh(helperPrompt(h.line))}`;
 
 // ---- files -----------------------------------------------------------------------
 
@@ -709,7 +721,7 @@ function contextStep(
         [
           join(HERE, "open-session.sh"),
           "--command",
-          helperLine({ main: p.main, claude: claudeBin(env), line: push }),
+          helperLine({ main: p.main, ...helperClaude(p.main, env), line: push }),
           "--title",
           HELPER_SESSION,
           "--background",
@@ -941,7 +953,7 @@ function stuckStep(
         [
           join(HERE, "open-session.sh"),
           "--command",
-          helperLine({ main: p.main, claude: claudeBin(env), line: push }),
+          helperLine({ main: p.main, ...helperClaude(p.main, env), line: push }),
           "--title",
           HELPER_SESSION,
           "--background",
@@ -1707,7 +1719,7 @@ export function tick(
           .find((l) => l.startsWith("Now send a PushNotification: "))
           ?.slice("Now send a PushNotification: ".length) ?? `${d.kind}: ${d.text}`;
       const helper = openTab(
-        helperLine({ main: p.main, claude: claudeBin(env), line: push }),
+        helperLine({ main: p.main, ...helperClaude(p.main, env), line: push }),
         HELPER_SESSION,
       );
       if (!helper.ok) out(`  ${HELPER_SESSION} didn't start (ignored): ${result(helper)}`);
@@ -1816,7 +1828,7 @@ export function tick(
           ?.slice("Now send a PushNotification: ".length) ?? `${topic}: ${choice.text}`;
       out(`  filed ask ${id}`);
       const helper = openTab(
-        helperLine({ main: p.main, claude: claudeBin(env), line: push }),
+        helperLine({ main: p.main, ...helperClaude(p.main, env), line: push }),
         HELPER_SESSION,
       );
       out(

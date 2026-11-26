@@ -1,8 +1,8 @@
 // The context watch: how large a recorded session has grown, and the reminders
 // past its soft and hard limits.
 //
-// session.sh gives `prd` and `backlog` sessions context-settings.json, and the
-// inbox session inbox-settings.json (claude --settings), hooks that run `context.mjs hook`
+// session.sh gives `prd`, `backlog` and inbox sessions their settings file (host.mjs
+// settingsFor; claude --settings), hooks that run `context.mjs hook`
 // on PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop and Stop. Every event
 // feeds the heartbeat (heartbeat.mjs); only PostToolUse is sized. The hook reads the transcript
 // it is handed, writes the size record and stays silent under the limit. Over
@@ -64,6 +64,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { recordHeartbeat } from "./heartbeat.mjs";
+import { claudeInput } from "./host.mjs";
 import { defaultDir, isLive, processOf, readRecord, readRecords } from "./sessions.mjs";
 import { branchKinds } from "./config.mjs";
 
@@ -149,13 +150,14 @@ export function readSize(/** @type {string} */ file, /** @type {{ agent?: boolea
 
 /** Where a subagent's own transcript is, or null when its id can't be part of a path. */
 export function agentTranscript(/** @type {any} */ input) {
-  const id = String(input.agent_id ?? "").replace(/^agent-/, "");
-  if (!/^[\w-]+$/.test(id)) return null;
-  if (typeof input.agent_transcript_path === "string") return input.agent_transcript_path;
-  if (typeof input.transcript_path !== "string") return null;
+  const c = claudeInput(input);
+  const id = c?.agent ?? "";
+  if (!c || !/^[\w-]+$/.test(id)) return null;
+  if (c.agentTranscript !== null) return c.agentTranscript;
+  if (c.transcript === null) return null;
   const file = `agent-${id}.jsonl`;
-  if (basename(input.transcript_path) === file) return input.transcript_path;
-  return join(input.transcript_path.replace(/\.jsonl$/, ""), "subagents", file);
+  if (basename(c.transcript) === file) return c.transcript;
+  return join(c.transcript.replace(/\.jsonl$/, ""), "subagents", file);
 }
 
 export function orchestratorSoftReminder(
@@ -378,18 +380,19 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
     /* the heartbeat never hurts the size watch */
   }
   // Only a finished call is sized; the other events are the heartbeat's alone.
-  const event = input?.hook_event_name;
-  if (event !== undefined && event !== "PostToolUse") return "";
+  const c = claudeInput(input);
+  if (!c) return "";
+  if (c.event !== null && c.event !== "PostToolUse") return "";
   const dir = contextDirOf(sessions);
-  const loop = Boolean(input.agent_id);
+  const loop = Boolean(c.agent);
   const backlog = session.kind === "backlog";
   const inbox = session.kind === "inbox" ? inboxRotate(dirname(dirname(sessions))) : "";
   if (loop && (backlog || inbox)) return "";
-  const transcript = loop ? agentTranscript(input) : input.transcript_path;
+  const transcript = loop ? agentTranscript(input) : c.transcript;
   if (typeof transcript !== "string") return "";
   const size = readSize(transcript, { agent: loop });
   if (size === null) return "";
-  const id = String(input.agent_id ?? "").replace(/^agent-/, "");
+  const id = c.agent;
   const file = loop ? join(dir, ".agents", name, `${id}.json`) : join(dir, `${name}.json`);
   /** @type {string | null} */
   let message = null;
