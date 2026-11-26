@@ -1,5 +1,6 @@
 // review.sh's run log: Codex's answer on a head is recorded once per PR and
-// head, however often it's polled, and out of credits apart. A throwaway repo
+// head, however often it's polled, and out of credits apart; --json's stdout is
+// only the verdict; --again --wait times out when Codex never takes it up. A throwaway repo
 // with these scripts copied in and a stubbed `gh` serving a fixture PR state
 // (codex-review.fixtures/); the run log is a temp file.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -25,6 +26,7 @@ const GH = `#!/usr/bin/env bash
 case "$1 $2" in
   "repo view") echo o/r ;;
   "pr list") echo 7 ;;
+  "pr comment") ;;
   "api graphql") cat "$PR_FIXTURE" ;;
   *) echo "unexpected gh $*" >&2; exit 1 ;;
 esac
@@ -53,7 +55,8 @@ const events = () =>
         .filter(Boolean)
         .map((l) => JSON.parse(l))
     : [];
-const review = (name, ...args) =>
+const review = (name, ...args) => reviewWith({}, name, ...args);
+const reviewWith = (env, name, ...args) =>
   spawnSync("bash", ["scripts/loops/review.sh", "throwaway-x", ...args], {
     cwd: repo,
     encoding: "utf8",
@@ -62,6 +65,7 @@ const review = (name, ...args) =>
       PATH: `${join(root, "bin")}:${process.env.PATH}`,
       PR_FIXTURE: fixture(name),
       CARETOOK_RUN_LOG: log(),
+      ...env,
     },
   });
 const headOf = (name) => JSON.parse(readFileSync(fixture(name), "utf8")).headRefOid;
@@ -93,5 +97,26 @@ describe("review.sh's run log", () => {
     expect(found).toMatchObject({ head: headOf("findings"), state: "findings", answer: "review" });
     expect(found.findings).toBeGreaterThan(0);
     expect(credits).toMatchObject({ head: headOf("out-of-credits"), answer: "out-of-credits" });
+  });
+});
+
+describe("review.sh's output and waits", () => {
+  it("--json prints only the verdict on stdout, progress on stderr", () => {
+    const waited = review("clean", "--json", "--wait", "1");
+    expect(waited.status).toBe(0);
+    expect(JSON.parse(waited.stdout)).toMatchObject({ state: "clean", headSha: headOf("clean") });
+
+    const asked = review("clean", "--json", "--again");
+    expect(asked.status).toBe(0);
+    expect(JSON.parse(asked.stdout)).toMatchObject({ state: "clean" });
+    expect(asked.stderr).toContain("asked Codex to review PR #7 again");
+  });
+
+  it("--again --wait exits 75 when Codex's summary never changes, not with the old verdict", () => {
+    const r = reviewWith({ REVIEW_TAKE_UP: "0" }, "clean", "--again", "--wait", "1");
+    expect(r.status).toBe(75);
+    expect(r.stderr).toContain("didn't take up the re-review of PR #7");
+    expect(r.stdout).not.toContain("clean");
+    expect(events()).toEqual([]);
   });
 });
