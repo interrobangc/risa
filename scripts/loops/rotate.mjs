@@ -9,6 +9,12 @@
 //     standing topic, or already done.
 //   - clearsHot(rows, topic): whether removing TOPIC's worktree clears its row's
 //     hot files: a standing topic (a fixes topic's wave sets them) that has some.
+//   - contextHold({ planText, slices, record, hard }): the slices a mid-wave
+//     rotation for context would cut off at work (a worktree whose _Status_ row
+//     isn't handed off or finished; no row or no table: at work), or [] once the
+//     session's size record is past the hard limit. Each one cut off comes back
+//     as a --continue agent that reloads its base and reruns its check (B-877:
+//     a 166k mid-wave rotation ended five slices waiting on their hand-off checks).
 //
 // CLI:
 //   node rotate.mjs slices-left <plan file>   the slices left, one line, space-
@@ -23,9 +29,14 @@
 //                                             run-through landing mode
 //   node rotate.mjs brief-check <file>        exit 0 when the file can lead a new
 //                                             prompt; else prints why (exit 1)
+//   node rotate.mjs context-hold <plan file> <session name> <pid> <n>...
+//                                             prints the slices at work and exits
+//                                             1 when a context rotation waits
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { contextDirOf, hardLimitOf, sizeRecord } from "./context.mjs";
 import { runThrough } from "./open-session.mjs";
+import { defaultDir } from "./sessions.mjs";
 
 /** A State that means the slice has nothing left to run. */
 const FINISHED = /^(merged|landed|done|dropped|moved|split out|cut|skipped)\b/i;
@@ -99,8 +110,22 @@ export function clearsHot(rows, topic) {
   return Boolean(row?.flags.includes("standing") && row.hot?.length);
 }
 
+/** A State whose agent is done with it: handed off, or finished. */
+const DONE_WITH = /^(handed off|merged|landed|done|dropped|moved|split out|cut|skipped)\b/i;
+
+/**
+ * The slices a mid-wave rotation for context would cut off at work, or [] past the hard limit.
+ * @param {{ planText: string, slices: string[], record?: { size?: number, hardOverAt?: string } | null, hard?: number }} input
+ *   `slices`: the topic's slice worktrees' numbers; `record`: the session's size record (context.mjs), when live
+ */
+export function contextHold({ planText, slices, record = null, hard = hardLimitOf() }) {
+  if (record && (record.hardOverAt || (typeof record.size === "number" && record.size > hard))) return [];
+  const states = new Map((sliceStates(planText) ?? []).map((r) => [r.slice, r.state]));
+  return slices.filter((n) => !DONE_WITH.test(states.get(n) ?? ""));
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const [cmd, arg] = process.argv.slice(2);
+  const [cmd, arg, ...more] = process.argv.slice(2);
   const read = (/** @type {string} */ f) => {
     try {
       return readFileSync(f, "utf8");
@@ -138,9 +163,24 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       }
       break;
     }
+    case "context-hold": {
+      const [name, pid, ...slices] = more;
+      let record = null;
+      try {
+        record = sizeRecord(contextDirOf(defaultDir()), name ?? "", Number(pid));
+      } catch {
+        /* no record: its size is unknown */
+      }
+      const held = contextHold({ planText: read(arg ?? ""), slices, record });
+      if (held.length) {
+        console.log(held.join(" "));
+        process.exit(1);
+      }
+      break;
+    }
     default:
       console.error(
-        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan> | brief-check <file>",
+        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>...",
       );
       process.exit(2);
   }
