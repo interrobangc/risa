@@ -39,6 +39,7 @@ scripts/ci/ci-runs.mjs core
 scripts/ci/ci-status.mjs core
 scripts/ci/ci.mjs core
 scripts/ci/ci.test.mjs core
+scripts/ci/component-durations.json project
 scripts/ci/env.mjs project
 scripts/ci/env.test.mjs project
 scripts/ci/filing.mjs core
@@ -58,6 +59,9 @@ scripts/ci/release-jobs.mjs project
 scripts/ci/release-jobs.test.mjs project
 scripts/ci/release.mjs core
 scripts/ci/release.test.mjs core
+scripts/ci/shard-sequencer.mjs project
+scripts/ci/shards.mjs project
+scripts/ci/shards.test.mjs project
 scripts/ci/test-job.mjs project
 scripts/ci/test-job.test.mjs project
 scripts/ci/tier-data.mjs core
@@ -192,9 +196,13 @@ scripts/loops/inventory.mjs core
 scripts/loops/inventory.test.mjs core
 scripts/loops/keep-alive.mjs core
 scripts/loops/keep-alive.test.mjs core
+scripts/loops/land-fixture.mjs core
+scripts/loops/land-force-resume.test.mjs core
+scripts/loops/land-gate.test.mjs core
 scripts/loops/land-journal.mjs core
 scripts/loops/land-journal.test.mjs core
 scripts/loops/land-skeptic.mjs core
+scripts/loops/land-unsynced.test.mjs core
 scripts/loops/land.sh core
 scripts/loops/land.test.mjs core
 scripts/loops/lease.mjs core
@@ -312,6 +320,7 @@ scripts/project/landing.test.mjs project
 scripts/project/log.sh project
 scripts/project/package-diff.mjs project
 scripts/project/prompt-golden.txt project
+scripts/project/quick-guards.test.mjs project
 scripts/project/risa.mjs project
 scripts/project/serve.sh project
 scripts/project/stack-facts.sh project

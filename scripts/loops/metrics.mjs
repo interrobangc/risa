@@ -8,7 +8,8 @@
 //                    older lines name a check <name>.mjs, newer <name>.spec.mjs
 //
 // The summary: slice and landing durations (count, median, slowest), check
-// times by mode, the flake rate by check and overall, and how many reviewed
+// times by mode (and their failures by kind, overall, by mode and by PRD: test
+// failures, budget stops, silence stops, time breaches), the flake rate by check and overall, and how many reviewed
 // heads Codex had findings on (out-of-credits answers apart). Malformed lines
 // are counted and skipped. usualTime answers "how long does this kind of work
 // usually take", for the check budget and the watch.
@@ -16,7 +17,7 @@
 // Pure functions over the logs' text; readData and the CLI at the bottom read files.
 import { existsSync, readFileSync } from "node:fs";
 
-import { parseLog as parseCheckLine } from "./check-times.mjs";
+import { FAILURE_COLUMNS, failureCounts, parseLog as parseCheckLine, prdOf } from "./check-times.mjs";
 import { branchKinds } from "./config.mjs";
 
 const median = (xs) => {
@@ -203,18 +204,22 @@ export function summarize(data, { since } = {}) {
   const landed = lands.filter((l) => l.landed);
 
   const checks = data.checks.filter((r) => after(r.start));
-  const byMode = {};
-  for (const mode of [...new Set(checks.map((r) => r.mode))].sort()) {
-    const runs = checks.filter((r) => r.mode === mode);
+  const checkRow = (runs) => {
     const passed = runs.filter((r) => r.exit === 0);
-    byMode[mode] = {
+    return {
       runs: runs.length,
       passed: passed.length,
-      failures: runs.length - passed.length,
+      ...failureCounts(runs),
       medianMinutes: passed.length ? median(passed.map((r) => r.seconds)) / 60 : null,
       slowestMinutes: passed.length ? Math.max(...passed.map((r) => r.seconds)) / 60 : null,
     };
-  }
+  };
+  const checksBy = (key) =>
+    Object.fromEntries(
+      [...new Set(checks.map(key))].sort().map((k) => [k, checkRow(checks.filter((r) => key(r) === k))]),
+    );
+  const byMode = checksBy((r) => r.mode);
+  const byPrd = checksBy(prdOf);
 
   // Flakes: a check run is flaky when it passed only by rerunning failed files
   // (its line's flaky field); lines from before that field can't say, so they
@@ -265,7 +270,7 @@ export function summarize(data, { since } = {}) {
       ...durations(landed, (l) => l.branch),
       notLanded: lands.length - landed.length,
     },
-    checks: { runs: checks.length, byMode },
+    checks: { runs: checks.length, overall: checkRow(checks), byMode, byPrd },
     flakes: {
       byCheck: sortedFlakes,
       overall: { runs: allRuns, flaky: allFlaky, rate: rate(allFlaky, allRuns) },
@@ -336,13 +341,17 @@ export function formatSummary(s) {
   lines.push("Checks:");
   if (!s.checks.runs) lines.push("  none recorded");
   else {
+    const cells = (g) => FAILURE_COLUMNS.map(([k, h]) => String(g[k]).padStart(h.length + 1)).join("");
+    const checkLine = (name, g) =>
+      `  ${name.padEnd(24)} ${String(g.runs).padStart(5)}${cells(g)} ${min(g.medianMinutes).padStart(8)} ${min(g.slowestMinutes).padStart(9)}`;
     lines.push(
-      `  ${"".padEnd(10)} ${"runs".padStart(5)} ${"failed".padStart(6)} ${"median m".padStart(8)} ${"slowest m".padStart(9)}  (passing runs)`,
+      `  ${"".padEnd(24)} ${"runs".padStart(5)}${FAILURE_COLUMNS.map(([, h]) => ` ${h}`).join("")} ${"median m".padStart(8)} ${"slowest m".padStart(9)}  (passing runs)`,
+      checkLine("all", s.checks.overall),
+      " by mode:",
+      ...Object.entries(s.checks.byMode).map(([mode, g]) => checkLine(mode, g)),
+      " by PRD:",
+      ...Object.entries(s.checks.byPrd).map(([prd, g]) => checkLine(prd, g)),
     );
-    for (const [mode, g] of Object.entries(s.checks.byMode))
-      lines.push(
-        `  ${mode.padEnd(10)} ${String(g.runs).padStart(5)} ${String(g.failures).padStart(6)} ${min(g.medianMinutes).padStart(8)} ${min(g.slowestMinutes).padStart(9)}`,
-      );
   }
   lines.push("Flakes:");
   const rows = Object.entries(s.flakes.byCheck);
