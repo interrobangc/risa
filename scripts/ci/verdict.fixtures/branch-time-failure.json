@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "runId": "1",
+  "tier": "unit",
+  "ranTier": "unit",
+  "narrowed": false,
+  "narrowedFiles": [],
+  "forcedFlake": null,
+  "kind": "time",
+  "failed": {
+    "jobs": ["unit"],
+    "files": ["scripts/loops/fictional.test.mjs"],
+    "tests": [
+      {
+        "job": "unit",
+        "file": "scripts/loops/fictional.test.mjs",
+        "name": "breaks"
+      }
+    ],
+    "truncated": false,
+    "unnamedJobs": []
+  },
+  "afterRerun": {
+    "files": [],
+    "tests": []
+  },
+  "flaky": [
+    {
+      "job": "unit",
+      "file": "scripts/loops/fictional.test.mjs",
+      "name": "breaks",
+      "brake": false
+    }
+  ],
+  "brake": {
+    "jobs": [],
+    "tests": [],
+    "files": []
+  },
+  "infra": {
+    "jobs": [],
+    "notRun": []
+  },
+  "time": {
+    "jobs": ["unit"],
+    "breaches": [
+      {
+        "job": "unit",
+        "measure": "unit",
+        "seconds": 400,
+        "verdict": "fail",
+        "armed": true
+      }
+    ]
+  },
+  "browser": null,
+  "secondZone": null,
+  "quarantined": [],
+  "quarantineList": []
+}

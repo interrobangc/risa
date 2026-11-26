@@ -157,6 +157,22 @@ describe("a verdict file", () => {
     const lines = verdictLines({ ...old, notBuilt: ["components", "full"] }).join("\n");
     expect(lines).toMatch(/not built yet, so not run: components, full/);
   });
+
+  it("names a time verdict's kind and each timed step past its aim", () => {
+    const v = JSON.parse(readFileSync(new URL("branch-time-failure.json", FIXTURES), "utf8"));
+    const warned = {
+      job: "components-2",
+      measure: "components",
+      seconds: 330,
+      verdict: "warn",
+      armed: false,
+    };
+    const lines = verdictLines({ ...v, time: { ...v.time, breaches: [...v.time.breaches, warned] } });
+    expect(lines[0]).toMatch(/^verdict: time · unit · /);
+    expect(lines).toContain("  time: unit (unit) 400 s, fail");
+    expect(lines).toContain("  time: components-2 (components) 330 s, warn, not armed");
+    expect(exitFor("time")).toBe(6);
+  });
 });
 
 describe("ci run", () => {

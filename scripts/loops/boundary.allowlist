@@ -17,6 +17,7 @@ scripts/ci/ci.mjs project-name 1
 scripts/ci/ci.test.mjs app-path 4
 scripts/ci/promote.test.mjs project-name 1
 scripts/ci/release-gate.test.mjs project-name 1
+scripts/ci/test-job.mjs project-to-core 2 # CI's test step feeds the core's time gate (one module judges every measure) with the gates' data: the tool's package at the move
 scripts/ci/tiers.json project-to-core 1 # the tier data's tooling file group (the browser harness test): residual until the move
 scripts/ci/tiers.test.mjs project-to-core 1 # compares the core's tier reader with this one until the move; the removal commit drops that half
 scripts/ci/verdict.test.mjs project-to-core 2 # ties the core's verdict fixtures and reader version to the writer, buildVerdict: the core keeps the fixtures at the move, this half goes with the writer
@@ -52,7 +53,7 @@ scripts/loops/check-gate.test.mjs project-name 1
 scripts/loops/check-hook.sh project-env 4 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
 scripts/loops/check-hook.test.mjs project-env 3 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
 scripts/loops/check-run.sh project-env 30
-scripts/loops/check-run.test.mjs project-env 50
+scripts/loops/check-run.test.mjs project-env 45
 scripts/loops/check-times.mjs project-env 2
 scripts/loops/codex-review.fixtures/clean.json project-name 10
 scripts/loops/codex-review.fixtures/declined.json project-name 8

@@ -232,6 +232,16 @@ describe("the CLI", () => {
     expect(runCli(["--measure", "quick", "--seconds", "200"], io()).out).toMatch(/^unjudged\n/);
   });
 
+  it("finds the measure for a check mode, and judges none for a mode no measure covers", () => {
+    const quiet = ["--seconds", "400", "--load-start", "1", "--load-end", "1"];
+    for (const mode of ["quick", "slice"])
+      expect(runCli(["--mode", mode, ...quiet], io()).out).toMatch(/^warn\nTime gate quick: /);
+    expect(runCli(["--mode", "full", ...quiet], io())).toEqual({ code: 0, out: "", err: "" });
+    const r = runCli(["--mode", "quick", "--measure", "quick", ...quiet], io());
+    expect(r).toMatchObject({ code: 2 });
+    expect(r.err).toContain("--measure or --mode, not both");
+  });
+
   it("gives one JSON object with --json, an armed fail included", () => {
     const gates = gatesFrom({ measures: { components: { armed: true } } });
     const r = runCli(["--measure", "components", "--seconds", "400", "--json"], io({}, gates));

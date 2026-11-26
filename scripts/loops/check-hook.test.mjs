@@ -17,14 +17,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkProjects, failedFiles } from "./check-tooling.mjs";
+import { checkProjects, failedFiles, slowestFiles } from "./check-tooling.mjs";
 import { makeRepo } from "./sample-project/repo.mjs";
 
 let root, repo, calls, state;
 
 // The stub vitest: log the arguments (but the reporters); a run reads
 // $STUB_TESTS, "<file>:<times it fails>" pairs: a listed file still failing goes
-// in the JSON report and fails the run.
+// in the JSON report and fails the run. A first run reports $STUB_TIMES,
+// "<file>:<seconds>" pairs, as passing files with their times.
 const STUB = `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
@@ -42,7 +43,12 @@ for (const pair of (process.env.STUB_TESTS || "").split(",").filter(Boolean)) {
   if (counts[file] <= Number(times)) failed.push(file);
 }
 fs.writeFileSync(seen, JSON.stringify(counts));
-fs.writeFileSync(out, JSON.stringify({ testResults: failed.map((name) => ({ name: process.cwd() + "/" + name, status: "failed" })) }));
+const results = failed.map((name) => ({ name: process.cwd() + "/" + name, status: "failed" }));
+for (const pair of rerun ? [] : (process.env.STUB_TIMES || "").split(",").filter(Boolean)) {
+  const [file, secs] = pair.split(":");
+  results.push({ name: process.cwd() + "/" + file, status: "passed", startTime: 5000, endTime: 5000 + Number(secs) * 1000 });
+}
+fs.writeFileSync(out, JSON.stringify({ testResults: results }));
 process.exit(failed.length || process.env.STUB_UNHANDLED ? 1 : 0);
 `;
 
@@ -71,6 +77,7 @@ const hook = (args, extra = {}, cwd = repo) => {
       ...env,
       STUB_CALLS: calls,
       STUB_TESTS: "",
+      STUB_TIMES: "",
       STUB_UNHANDLED: "",
       SAMPLE_CHECK_EXIT: "",
       CARETOOK_CHECK_STATE: state,
@@ -79,7 +86,9 @@ const hook = (args, extra = {}, cwd = repo) => {
     },
   });
   const read = (name) =>
-    existsSync(join(state, name)) ? readFileSync(join(state, name), "utf8").trim().split("\n") : [];
+    existsSync(join(state, name))
+      ? readFileSync(join(state, name), "utf8").trim().split("\n").filter(Boolean)
+      : [];
   return {
     status: r.status,
     out: r.stdout,
@@ -88,6 +97,8 @@ const hook = (args, extra = {}, cwd = repo) => {
     step: read("step")[0],
     failed: read("failed"),
     flaky: read("flaky"),
+    times: read("times"),
+    slowest: read("slowest"),
   };
 };
 
@@ -169,6 +180,30 @@ describe("the check's tooling step reruns a failed test file", () => {
   });
 });
 
+describe("the check's tooling step's times", () => {
+  it("writes its seconds and its slowest files to the check's state directory", () => {
+    const times = ["slow.test.mjs:90", ...Array.from({ length: 11 }, (_, i) => `t${i}.test.mjs:${i}`)];
+    const r = hook(["slice", "abc123", "1"], { STUB_TIMES: times.join(",") });
+    expect(r.status).toBe(0);
+    expect(r.times).toHaveLength(1);
+    expect(r.times[0]).toMatch(/^\d+ tooling$/);
+    expect(r.slowest).toHaveLength(10);
+    expect(r.slowest.slice(0, 2)).toEqual(["90 slow.test.mjs", "10 t10.test.mjs"]);
+  });
+
+  it("times a failed step too, its rerun included", () => {
+    const r = hook(["slice", "abc123", "1"], { STUB_TESTS: "a.test.mjs:2" });
+    expect(r.status).toBe(1);
+    expect(r.times).toEqual([expect.stringMatching(/^\d+ tooling$/)]);
+  });
+
+  it("writes nothing when the plan runs no tooling tests", () => {
+    const r = hook(["slice", "abc123", "0"]);
+    expect(r.times).toEqual([]);
+    expect(r.slowest).toEqual([]);
+  });
+});
+
 describe("check-tooling.mjs", () => {
   it("names the projects, and none for a config with no tooling tests", () => {
     const config = { testProjects: { tooling: ["t:unit"], browserHarness: "t:browser" } };
@@ -176,6 +211,21 @@ describe("check-tooling.mjs", () => {
     expect(checkProjects(config, true)).toEqual(["t:unit", "t:browser"]);
     expect(checkProjects({ testProjects: { tooling: ["t:unit"] } }, true)).toEqual(["t:unit"]);
     expect(checkProjects({}, true)).toBeNull();
+  });
+
+  it("reads the slowest files of a report, and none of a broken one", () => {
+    const report = JSON.stringify({
+      testResults: [
+        { name: "/r/a.test.mjs", status: "passed", startTime: 0, endTime: 1500 },
+        { name: "/r/b.test.mjs", status: "failed", startTime: 0, endTime: 4000 },
+        { name: "/r/c.test.mjs", status: "passed" },
+      ],
+    });
+    expect(slowestFiles(report, "/r")).toEqual([
+      { name: "b.test.mjs", seconds: 4 },
+      { name: "a.test.mjs", seconds: 1.5 },
+    ]);
+    expect(slowestFiles("not json", "/r")).toEqual([]);
   });
 
   it("reads the failed files of a report, and none of a broken one", () => {

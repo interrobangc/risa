@@ -6,7 +6,7 @@
 //       workflow. A ref already at the commit reuses its live run, or is deleted
 //       and pushed again (a push of the same commit starts nothing). With --wait
 //       (default 30 min) it blocks until the verdict: exit 0 green, 1 brake, 2 file,
-//       3 flake, 4 infra, 5 unknown, 75 at the timeout. The ref is deleted only
+//       3 flake, 4 infra, 5 unknown, 6 time, 75 at the timeout. The ref is deleted only
 //       after a final verdict; at a timeout it stays for `pnpm prd tidy`.
 //       --files narrows the run to those test files: a throwaway commit on top of
 //       the target adds the list, on its own ref, and its verdict never counts as

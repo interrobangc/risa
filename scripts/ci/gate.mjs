@@ -5,7 +5,7 @@ import { label } from "./blame.mjs";
 import { proposedTiers, tierRank } from "../loops/check-plan.mjs";
 import { ciTiers } from "./tier-data.mjs";
 
-const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5 };
+const CODE = { land: 0, brake: 1, branch: 2, infra: 4, unknown: 5, time: 6 };
 
 /**
  * A whole-tier verdict that ran this tier or higher, and not a proof run's. `ranTier`,
@@ -157,6 +157,11 @@ export function decideGate({ verdict, tier, branch, touched, blamed = null, fixe
   if (verdict.kind === "green") return land([`green at ${verdict.ranTier}`]);
   if (verdict.kind === "infra")
     return refuse(CODE.infra, [`infra: the run died before its tests. Retry: ${retry}`]);
+  // Never blamed, never a flake: the tests passed and a timed step ran past its armed cutoff.
+  if (verdict.kind === "time")
+    return refuse(CODE.time, [
+      `time: past an armed cutoff in ${(verdict.time?.jobs ?? []).join(", ") || "a timed step"}; its tests passed. Trim the step, then: ${retry}`,
+    ]);
   if (!["flake", "file", "brake"].includes(verdict.kind))
     return refuse(CODE.unknown, [`an unknown verdict (${verdict.kind}). Retry: ${retry}`]);
 

@@ -2,21 +2,30 @@
 // summary: `pnpm prd check --times [--since <date>]`. Pure functions, plus a
 // small CLI at the bottom.
 //
-// A line has sixteen tab-separated fields: start, worktree, branch, mode,
+// A line has eighteen tab-separated fields: start, worktree, branch, mode,
 // reason, seconds, load at start, load at end, exit code, test files run, test
 // files in all, the seconds the check waited for the load (the load gate), the
 // step that failed, the failed test files and the flaky ones (comma-separated),
-// and the limit that stopped it (`budget` or `silence`; empty when none did).
-// Older lines have nine to fifteen, and none of what they lack.
+// the limit that stopped it (`budget` or `silence`; empty when none did), the
+// time gate's verdict (`ok`, `warn`, `fail` or `unjudged`; empty when it judged
+// nothing) and the step times (`<step>:<seconds>`, comma-separated, in order).
+// Older lines have nine to seventeen, and none of what they lack.
 import { existsSync, readFileSync } from "node:fs";
 import { branchKinds } from "./config.mjs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
  *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
- *   loadWaited: number | null, failedStep: string, failedFiles: string[], flakyFiles: string[], breach: string }} Run */
+ *   loadWaited: number | null, failedStep: string, failedFiles: string[], flakyFiles: string[], breach: string,
+ *   verdict: string, stepTimes: { step: string, seconds: number }[] }} Run */
 
 const names = (s) => (s ? s.split(",").filter(Boolean) : []);
 const num = (s) => (s !== undefined && s !== "" && Number.isFinite(Number(s)) ? Number(s) : null);
+/** `unit:120,tooling:90` into steps and seconds; a malformed entry is left out. */
+const stepTimes = (s) =>
+  names(s).flatMap((x) => {
+    const m = /^([^:]+):(\d+(?:\.\d+)?)$/.exec(x);
+    return m ? [{ step: m[1], seconds: Number(m[2]) }] : [];
+  });
 
 /** @param {string} text @returns {{ runs: Run[], skipped: number }} */
 export function parseLog(text) {
@@ -55,6 +64,8 @@ export function parseLog(text) {
       failedFiles: names(f[13]),
       flakyFiles: names(f[14]),
       breach: f[15] ?? "",
+      verdict: f[16] ?? "",
+      stepTimes: stepTimes(f[17]),
     });
   }
   return { runs, skipped };

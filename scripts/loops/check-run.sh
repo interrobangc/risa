@@ -27,9 +27,20 @@
 # sets; CARETOOK_CHECK_FILES_RUN and CARETOOK_CHECK_FILES_ALL override it), the
 # seconds waited for the load, the step that failed (or was running at the
 # limit), the failed test files and the flaky ones (comma-separated), and the
-# limit that stopped it (budget or silence; none for a check that ended). The command
-# reports those three in the directory named by CARETOOK_CHECK_STATE: `step`,
-# `failed`, `flaky`.
+# limit that stopped it (budget or silence; none for a check that ended), the
+# time gate's verdict and the step times (`<step>:<seconds>`, comma-separated,
+# in the order they ran; a step run twice is summed). The command reports the
+# step, the failed and flaky files and the step times in the directory named by
+# CARETOOK_CHECK_STATE: `step`, `failed`, `flaky`, `times` (`<seconds> <step>`
+# lines), and `slowest` (`<seconds> <file>` lines, its test steps' slowest files).
+#
+# The time gate (time-gate.mjs, the gates' data in the tier data): a quick or
+# slice check that passed (the local measure's modes) is judged on its seconds,
+# its load at the start and the end and the machine's core count: ok, warn, fail or unjudged (a busy machine), with
+# its lines printed after the check's output, naming the steps and the slowest
+# files. A `fail` (an armed measure past its cutoff) exits 125: a time breach, not
+# a test failure. A full check, a failed or stopped one, or a gate that can't
+# read its data logs no verdict.
 # Env: CARETOOK_CHECK_LOG (default: .loops/.check-times.log in the main checkout).
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
@@ -146,17 +157,41 @@ if [[ -n $breach ]]; then
     tail -n 30 "$out" | sed 's/^/  | /'
   } >&2
 fi
+# The step times, summed by step in the order the steps first ran: `<seconds> <step>`.
+steps_file=$state/steps; : > "$steps_file"
+[[ ! -f $state/times ]] || awk '$1 ~ /^[0-9]+(\.[0-9]+)?$/ && NF == 2 {
+    if (!($2 in s)) o[n++] = $2; s[$2] += $1 }
+  END { for (i = 0; i < n; i++) print s[o[i]], o[i] }' "$state/times" > "$steps_file"
+step_times=$(awk '{ printf "%s%s:%s", (NR > 1 ? "," : ""), $2, $1 }' "$steps_file")
 list() { [[ -f $1 ]] && sort -u "$1" | paste -sd, - ; }
 failed="" flaky=""
 if [[ -n $breach ]]; then failed=""; elif ((code)); then failed=$(list "$state/failed"); else step=""; fi
 flaky=$(list "$state/flaky")
-read -r crun call < "$counts" 2>/dev/null || true; rm -f "$counts"; rm -rf "$state"
+read -r crun call < "$counts" 2>/dev/null || true; rm -f "$counts"
 files_run=${CARETOOK_CHECK_FILES_RUN:-${crun:-}}; files_all=${CARETOOK_CHECK_FILES_ALL:-${call:-}}
 secs=$(($(now) - t0 - slept)); ((secs >= 0)) || secs=0; l1=$(load5)
+verdict=""
+if [[ -z $breach ]] && ((code == 0)); then
+  gate_args=(--mode "$mode" --seconds "$secs" --load-start "$l0" --load-end "$l1" --steps "$steps_file")
+  [[ ! -f $state/slowest ]] || gate_args+=(--slowest "$state/slowest")
+  if gate=$(node "$here/time-gate.mjs" "${gate_args[@]}" 2> "$state/gate-err"); then
+    said=$(sed -n '2,$p' <<< "$gate")
+    case $(head -n 1 <<< "$gate") in
+      fail)
+        verdict=fail code=125
+        { echo "$said"; echo "A time breach, not a test failure: the check passed its tests but took too long."; } >&2
+        ;;
+      ok | warn | unjudged) verdict=$(head -n 1 <<< "$gate"); echo "$said" ;;
+    esac
+  else
+    echo "The time gate couldn't judge the check: $(tr '\n' ' ' < "$state/gate-err")" >&2
+  fi
+fi
+rm -rf "$state"
 clean() { printf '%s' "$1" | tr '\t\n' '  '; }
 top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
   "$start" "$(basename "$top")" "$(clean "$branch")" "$mode" "$(clean "$why")" \
   "$secs" "$l0" "$l1" "$code" "$files_run" "$files_all" "$load_waited" \
-  "$(clean "$step")" "$(clean "$failed")" "$(clean "$flaky")" "$breach" >> "$log"
+  "$(clean "$step")" "$(clean "$failed")" "$(clean "$flaky")" "$breach" "$verdict" "$(clean "$step_times")" >> "$log"
 exit "$code"

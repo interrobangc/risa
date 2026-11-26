@@ -69,6 +69,7 @@ scripts/ci/verdict.fixtures/branch-flake-beside-failure.json core
 scripts/ci/verdict.fixtures/branch-flake-beside-passed-rerun.json core
 scripts/ci/verdict.fixtures/branch-flake-failed-job.json core
 scripts/ci/verdict.fixtures/branch-load-failure.json core
+scripts/ci/verdict.fixtures/branch-time-failure.json core
 scripts/ci/verdict.fixtures/candidate-green.json core
 scripts/ci/verdict.fixtures/dev-load-failure.json core
 scripts/ci/verdict.fixtures/dev-named-failure.json core

@@ -56,7 +56,7 @@ export function gateStatus(v, sha) {
       state: "success",
       description: clip(`${decision.why} (release run ${v.runId})`, MAX_DESCRIPTION),
     };
-  const failed = ["file", "brake", "flake"].includes(v?.kind);
+  const failed = ["file", "brake", "flake", "time"].includes(v?.kind);
   return {
     pass: false,
     state: failed ? "failure" : "error",

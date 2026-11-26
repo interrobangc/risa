@@ -12,7 +12,17 @@ import { createNotice, listNotices, withdrawNotice } from "../loops/notices.mjs"
 
 /** The workflow's name. Runs are filtered by it: `gh run list --workflow` 404s until ci.yml is on the default branch. */
 export const WORKFLOW_NAME = "CI";
-export const EXIT = { green: 0, brake: 1, file: 2, flake: 3, infra: 4, unknown: 5, usage: 64, timeout: 75 };
+export const EXIT = {
+  green: 0,
+  brake: 1,
+  file: 2,
+  flake: 3,
+  infra: 4,
+  unknown: 5,
+  time: 6,
+  usage: 64,
+  timeout: 75,
+};
 /** A verdict's exit code; a kind this version doesn't know is unknown, never green. */
 export const exitFor = (/** @type {string} */ kind) =>
   kind !== "usage" && kind !== "timeout" && Object.hasOwn(EXIT, kind)
