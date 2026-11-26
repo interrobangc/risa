@@ -48,7 +48,7 @@ scripts/loops/captain.test.mjs project-env 2
 scripts/loops/check-areas.d/_global project-to-core 3
 scripts/loops/check-budget.mjs project-env 7
 scripts/loops/check-budget.test.mjs project-env 7
-scripts/loops/check-gate.test.mjs app-path 16
+scripts/loops/check-gate.test.mjs app-path 7
 scripts/loops/check-gate.test.mjs project-name 1
 scripts/loops/check-hook.sh project-env 4 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
 scripts/loops/check-hook.test.mjs project-env 3 # the check's state and counts (CHECK_STATE, CHECK_COUNTS: the RISA_ rename, orchestration-split-3) and the rerun cap the tooling step shares with the project's check
@@ -104,10 +104,9 @@ scripts/loops/land-unsynced.test.mjs app-path 30
 scripts/loops/land-unsynced.test.mjs project-env 10
 scripts/loops/land-unsynced.test.mjs project-name 3
 scripts/loops/land.sh project-env 14
-scripts/loops/land.test.mjs app-path 22
-scripts/loops/land.test.mjs core-to-project 6
+scripts/loops/land.test.mjs app-path 20
+scripts/loops/land.test.mjs core-to-project 5
 scripts/loops/land.test.mjs project-env 6
-scripts/loops/land.test.mjs project-name 1
 scripts/loops/lease.mjs project-env 2
 scripts/loops/lease.sh project-env 25
 scripts/loops/lease.test.mjs project-env 18
