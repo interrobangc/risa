@@ -1843,6 +1843,7 @@ function parse(/** @type {string[]} */ argv) {
     resume: false,
     stop: false,
     cap: /** @type {string | null} */ (null),
+    reexec: /** @type {string | null} */ (null),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -1859,7 +1860,9 @@ function parse(/** @type {string[]} */ argv) {
       if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
         throw new Error(`--cap takes a number from 1 to ${MAX_CAP}, or default`);
       o.cap = v;
-    } else if (a === "-h" || a === "--help") o.help = true;
+    } else if (a === "--reexec") o.reexec = argv[++i] ?? "";
+    // (internal: the old code's hash, passed by the re-exec)
+    else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
         `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --cap <n>|default)`,
@@ -1985,7 +1988,7 @@ async function main() {
   process.on("SIGINT", () => stop("SIGINT"));
   process.on("exit", () => releaseLock(p.lock));
 
-  const reexeced = process.env.CARETOOK_DISPATCH_REEXEC;
+  const reexeced = o.reexec;
   if (!o.once) {
     // A start begins again after "stop keeping it alive" (a re-exec is no start).
     updateState(p.state, (s) => {
@@ -2022,8 +2025,10 @@ async function main() {
       nowOf(),
     );
     console.log(`${stamp(nowOf())} re-exec: new code ${end.to} on the main checkout (was ${end.from})`);
-    const args = [...process.execArgv, join(p.main, "scripts/loops/dispatch.mjs"), ...process.argv.slice(2)];
-    const env = { ...process.env, CARETOOK_DISPATCH_REEXEC: end.from ?? "" };
+    const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
+    const script = join(p.main, "scripts/loops/dispatch.mjs");
+    const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
+    const env = process.env;
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.
     if (typeof process.execve === "function")
       process.execve(process.execPath, [process.execPath, ...args], env);

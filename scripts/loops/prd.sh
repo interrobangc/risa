@@ -19,7 +19,8 @@ pnpm prd <command>
 
   See what's going on
     status                    every worktree: branch, changes, dev server link; sessions (managed or by hand);
-                              the dispatcher (running, its code current or stale, paused and why, stopped; its last line); lease holders; the load;
+                              the dispatcher (running, paused and why, stopped; its last line) and its code (current or
+                              stale); lease holders; the load;
                               the workers (each lease, pnpm prd command and slice agent: age, usual time, state)
     status-watch [seconds]    status, redrawn every few seconds (default 5) until Ctrl-C
     watch [topic] [--json] [--wait [--timeout <s>]]   each slice agent's state (ok, slow, quiet, no-progress,
