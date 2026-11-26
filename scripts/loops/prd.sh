@@ -353,7 +353,11 @@ case $cmd in
     fi
     topic=$1; shift; open=0 items=()
     for a in "$@"; do
-      case $a in --open) open=1 ;; "$backlog_id_prefix"[0-9]*) items+=("$a") ;; *) die "plan: unknown argument $a" ;; esac
+      case $a in
+        --open) open=1 ;;
+        "$backlog_id_prefix"[0-9]* | "${backlog_former_prefix:-$backlog_id_prefix}"[0-9]*) items+=("$(backlog_id_normalize "$a")") ;;
+        *) die "plan: unknown argument $a" ;;
+      esac
     done
     dir=$loops/plan-$topic
     [[ -d $dir ]] || "$bin/new.sh" plan "$topic"

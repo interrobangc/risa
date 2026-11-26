@@ -785,6 +785,19 @@ describe("backlog CLI: a former id prefix", () => {
     expect(text).toContain("### RISA-773 · bug · Fresh one");
     expect(text).not.toMatch(/^### B-/m);
   });
+
+  it("ingests an inbox whose line is tagged with a former id as filed", () => {
+    writeFileSync(join(m5, "plans/inbox.md"), "# Inbox\n\n## Chores\n\n- Moved over (B-772)\n- Brand new\n");
+    git(m5, "add", ".");
+    git(m5, "commit", "-q", "-m", "inbox");
+    const out = run5("ingest");
+    expect(out).toMatch(/RISA-774 +feature|RISA-774 +chore/);
+    expect(out).not.toMatch(/Moved over/);
+    const inbox = readFileSync(join(m5, "plans/inbox.md"), "utf8");
+    expect(inbox).toContain("- Moved over (B-772)");
+    expect(inbox).toContain("- Brand new (RISA-774)");
+    expect(run5("doctor")).not.toMatch(/772/);
+  });
 });
 
 describe("backlog CLI: a broken project config", () => {

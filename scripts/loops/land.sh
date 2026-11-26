@@ -112,8 +112,11 @@ while (($#)); do
       shift 2 ;;
     --fixes)
       fixes=${2:-}
-      [[ $fixes =~ ^$backlog_id_prefix[0-9]+(,$backlog_id_prefix[0-9]+)*$ ]] ||
+      [[ $fixes =~ ^$backlog_id_re(,$backlog_id_re)*$ ]] ||
         die "--fixes takes backlog ids: --fixes ${backlog_id_prefix}1,${backlog_id_prefix}2"
+      _f="" && IFS=, read -ra _ids <<< "$fixes"
+      for _i in "${_ids[@]}"; do _f+="${_f:+,}$(backlog_id_normalize "$_i")"; done
+      fixes=$_f && unset _f _i _ids
       shift 2 ;;
     --recheck) die "--recheck is gone: land waits for the CI tier itself (--tier <t>)" ;;
     --pr) path=pr; shift ;;

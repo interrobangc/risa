@@ -16,7 +16,7 @@ import { tierDataOrExit } from "./tier-data.mjs";
 
 const { TIERS, fileTier, isBrowserCheckFile } = tierDataOrExit("ci");
 /** A dev-brake notice: its item and key. */
-const BRAKE_NOTICE = new RegExp(`^dev brake ${backlogIds().pattern} \\[ci-key ([^\\]]+)\\]`);
+const BRAKE_NOTICE = new RegExp(`^dev brake ${backlogIds().lookupPattern} \\[ci-key ([^\\]]+)\\]`);
 
 /** The whole tier a failed check job needs on dev. */
 const CHECK_JOB_TIER = /** @type {const} */ ({ static: "static", build: "full" });

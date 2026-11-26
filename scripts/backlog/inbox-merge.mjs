@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 
 import { IDS, parseInbox } from "./format.mjs";
 
-const TAG = new RegExp(`\\s\\(${IDS.pattern}\\)\\s*$`);
+const TAG = new RegExp(`\\s\\(${IDS.lookupPattern}\\)\\s*$`);
 /** A reworded bullet shares at least this share of its words, and two of them. */
 const REWORD_OVERLAP = 0.5;
 

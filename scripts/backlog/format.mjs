@@ -304,7 +304,8 @@ const HEADING_TYPES = [
   [/feature|idea|request/i, "feature"],
 ];
 const BULLET = /^[-*+] +(.*\S)\s*$/;
-const TAG = new RegExp(`\\s\\((${IDS.pattern})\\)\\s*$`);
+/** A line's tag: its id, a former one too (read as its own: normalize). */
+const TAG = new RegExp(`\\s\\((${IDS.lookupPattern})\\)\\s*$`);
 const TITLE_MAX = 100;
 
 /** @param {string} heading */
@@ -342,7 +343,7 @@ export function parseInbox(text) {
         type,
         text: tag ? b[1].slice(0, tag.index).trim() : b[1],
         details: "",
-        id: tag?.[1] ?? null,
+        id: tag?.[1] ? IDS.normalize(tag[1]) : null,
       };
       entries.push(cur);
       return;

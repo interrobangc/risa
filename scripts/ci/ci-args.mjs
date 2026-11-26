@@ -7,7 +7,7 @@ import { tierDataOrExit } from "./tier-data.mjs";
 
 const { TIERS, isTier } = tierDataOrExit("ci");
 const IDS = backlogIds();
-const ID = new RegExp(`^${IDS.pattern}$`);
+const ID = new RegExp(`^${IDS.lookupPattern}$`);
 
 /** @typedef {import("./ci-io.mjs").Io} Io */
 
@@ -85,7 +85,7 @@ export function parseGateArgs(/** @type {string[]} */ args) {
   if (!isTier(tier)) throw new Error(`ci gate: --tier needs one of ${TIERS.join(", ")}`);
   if (!base || base.startsWith("-")) throw new Error("ci gate: --base needs a commit");
   if (fixes.some((f) => !ID.test(f))) throw new Error(`ci gate: --fixes takes ${IDS.prefix}n,${IDS.prefix}m`);
-  return { ref, tier, base, fixes, out, peek };
+  return { ref, tier, base, fixes: fixes.map(IDS.normalize), out, peek };
 }
 
 /** The branch name and commit a request means. */

@@ -10,11 +10,12 @@ const COMMENT = /^\s*(#|$)/;
 /**
  * @typedef {{ file: string, name: string, item: string }} QuarantineEntry
  * @param {string} text
- * @param {{ prefix: string, pattern: string }} [ids] the project's backlog ids
+ * @param {{ prefix: string, pattern: string, lookupPattern?: string, normalize?: (s: string) => string }} [ids]
+ *   the project's backlog ids; a former id (backlog.formerIdPrefix) is read as its own
  * @returns {QuarantineEntry[]}
  */
 export function parseQuarantine(text, ids = backlogIds()) {
-  const item = new RegExp(`^${ids.pattern}$`);
+  const item = new RegExp(`^${ids.lookupPattern ?? ids.pattern}$`);
   return text
     .split("\n")
     .filter((line) => !COMMENT.test(line))
@@ -23,7 +24,7 @@ export function parseQuarantine(text, ids = backlogIds()) {
       const [file, name, id] = fields;
       if (fields.length !== 3 || !file || !name || !item.test(id ?? ""))
         throw new Error(`quarantine: a line needs <file><TAB><test name><TAB><${ids.prefix}n>: ${line}`);
-      return { file, name, item: /** @type {string} */ (id) };
+      return { file, name, item: ids.normalize?.(/** @type {string} */ (id)) ?? /** @type {string} */ (id) };
     });
 }
 

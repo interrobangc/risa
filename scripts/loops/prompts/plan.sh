@@ -6,7 +6,7 @@ auto="" items=""
 for a in "${@:3}"; do
   case $a in
     --auto) auto=1 ;;
-    "$backlog_id_prefix"[0-9]*) items+="${items:+ }$a" ;;
+    "$backlog_id_prefix"[0-9]* | "${backlog_former_prefix:-$backlog_id_prefix}"[0-9]*) items+="${items:+ }$(backlog_id_normalize "$a")" ;;
     *) echo "plan takes --auto and ${backlog_id_prefix}<n> ids, not $a" >&2; exit 1 ;;
   esac
 done
