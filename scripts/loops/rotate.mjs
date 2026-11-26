@@ -29,13 +29,14 @@
 //                                             run-through landing mode
 //   node rotate.mjs brief-check <file>        exit 0 when the file can lead a new
 //                                             prompt; else prints why (exit 1)
-//   node rotate.mjs context-hold <plan file> <size record> <pid> <n>...
+//   node rotate.mjs context-hold <plan file> <session name> <pid> <n>...
 //                                             prints the slices at work and exits
 //                                             1 when a context rotation waits
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { hardLimitOf } from "./context.mjs";
+import { contextDirOf, hardLimitOf, sizeRecord } from "./context.mjs";
 import { runThrough } from "./open-session.mjs";
+import { defaultDir } from "./sessions.mjs";
 
 /** A State that means the slice has nothing left to run. */
 const FINISHED = /^(merged|landed|done|dropped|moved|split out|cut|skipped)\b/i;
@@ -163,11 +164,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       break;
     }
     case "context-hold": {
-      const [recordFile, pid, ...slices] = more;
+      const [name, pid, ...slices] = more;
       let record = null;
       try {
-        const r = JSON.parse(read(recordFile ?? ""));
-        record = r?.pid === Number(pid) ? r : null;
+        record = sizeRecord(contextDirOf(defaultDir()), name ?? "", Number(pid));
       } catch {
         /* no record: its size is unknown */
       }
@@ -180,7 +180,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     }
     default:
       console.error(
-        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <record> <pid> <n>...",
+        "usage: rotate.mjs slices-left <plan> | done-flags <topic> | clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>...",
       );
       process.exit(2);
   }

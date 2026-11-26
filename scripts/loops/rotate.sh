@@ -153,7 +153,7 @@ if [[ -n $mid_wave && $reason == context && -n $slices ]]; then
   nums=()
   for s in $slices; do nums+=("${s##*-}"); done
   rc=0
-  held=$(node "$bin/rotate.mjs" context-hold "$dir/$plan" "$(dirname "$CARETOOK_SESSIONS_DIR")/.context/$name.json" "$pid" "${nums[@]}") || rc=$?
+  held=$(node "$bin/rotate.mjs" context-hold "$dir/$plan" "$name" "$pid" "${nums[@]}") || rc=$?
   ((rc != 1)) || die "rotate: a context rotation under the hard limit waits for the slices still at work ($held): each would come back as a --continue agent that reloads its base and reruns its check. Drain first: merge their hand-offs, then plain rotate (past the hard limit it goes ahead; on the user's word, --reason user)"
 fi
 
