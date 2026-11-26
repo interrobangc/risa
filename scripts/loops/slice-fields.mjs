@@ -7,7 +7,9 @@
 //
 // Fields are separated by "·", ";" or "|"; names are case-insensitive. A missing
 // field gets its default (no stack, nothing extra to read, no tests named) and a
-// warning, as does a malformed one. (`prd doc planner "Slice fields"`.)
+// warning, as does a malformed one. An optional `Blocked by: slice 3` (or `3`,
+// `1, 2`, `none`) names the slices this one waits for; leaving it out is fine.
+// (`prd doc planner "Slice fields"`.)
 //
 //   node slice-fields.mjs <n> [plan-file]   (the plan on stdin when no file)
 //     prints "Stack: …", "Reads: …" and "Tests: …", warnings on stderr
@@ -17,8 +19,12 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const FIELDS = ["stack", "reads", "tests"];
+/** Known fields a slice may leave out without a warning. */
+export const OPTIONAL_FIELDS = ["blocked by"];
+const KNOWN = [...FIELDS, ...OPTIONAL_FIELDS];
 const HEADING = /^#{2,4}\s+Slice\s+(\d+)\b/i;
-const FIELD = /^([A-Za-z]+)\s*:\s*(.*)$/;
+const FIELD = /^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*:\s*(.*)$/;
+const fieldName = (raw) => raw.toLowerCase().replace(/\s+/g, " ");
 
 /** Split on commas outside parentheses: "a (b, c), d" → ["a (b, c)", "d"]. */
 export function splitList(text) {
@@ -40,7 +46,7 @@ export function splitList(text) {
 /** Is this line a fields line (it starts with a known field name and a colon)? */
 export function isFieldsLine(line) {
   const m = FIELD.exec(line.trim());
-  return !!m && FIELDS.includes(m[1].toLowerCase());
+  return !!m && KNOWN.includes(fieldName(m[1]));
 }
 
 /**
@@ -57,8 +63,8 @@ export function parseFieldsLine(line) {
       warnings.push(`can't read "${part}" (expected Name: value)`);
       continue;
     }
-    const name = m[1].toLowerCase();
-    if (!FIELDS.includes(name)) warnings.push(`unknown field "${m[1]}"`);
+    const name = fieldName(m[1]);
+    if (!KNOWN.includes(name)) warnings.push(`unknown field "${m[1]}"`);
     else if (name in values) warnings.push(`${m[1]} is given twice; using the first`);
     else values[name] = m[2].trim();
   }
@@ -67,7 +73,7 @@ export function parseFieldsLine(line) {
 
 /**
  * The fields of slice `n` in a plan's text.
- * → { found, stack: boolean, reads: string[], readsText, tests: string[], missing: string[], warnings: string[] }
+ * → { found, stack: boolean, reads: string[], readsText, tests: string[], blockedBy: number[], missing: string[], warnings: string[] }
  * `found` is false when the plan has no such slice heading. Defaults apply to
  * anything missing or malformed, and each such case adds a warning.
  */
@@ -79,6 +85,7 @@ export function sliceFields(planText, n) {
     reads: [],
     readsText: "",
     tests: [],
+    blockedBy: [],
     missing: [],
     warnings: [],
   };
@@ -117,6 +124,14 @@ export function sliceFields(planText, n) {
   if ("tests" in values) {
     result.tests = splitList(values.tests);
     if (!result.tests.length) result.warnings.push("Tests is empty");
+  }
+  if ("blocked by" in values) {
+    for (const item of splitList(values["blocked by"])) {
+      const m = /^(?:slices?\s+)?(\d+)$/i.exec(item);
+      if (m) result.blockedBy.push(Number(m[1]));
+      else if (!/^nothing$/i.test(item))
+        result.warnings.push(`Blocked by takes slice numbers, not "${item}"`);
+    }
   }
   result.missing = FIELDS.filter((f) => !(f in values));
   for (const f of result.missing) result.warnings.push(`no ${f[0].toUpperCase()}${f.slice(1)} field`);

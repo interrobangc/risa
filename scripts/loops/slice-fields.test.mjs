@@ -35,6 +35,18 @@ Some text first.
 
 Stack: yes
 
+## Slice 6: Blocked by
+
+Stack: no · Reads: none · Tests: unit · Blocked by: slice 3, 4
+
+## Slice 7: Blocked by, other forms
+
+Stack: no · Tests: unit · blocked  BY: none · Colour: blue
+
+## Slice 8: Blocked by, malformed
+
+Blocked by: 2, later · Stack: no · Reads: none · Tests: unit
+
 ## Slice 12: Two digits
 
 Stack: no | Reads: none | Tests: integration
@@ -87,6 +99,21 @@ describe("sliceFields", () => {
     );
   });
 
+  it("knows Blocked by, parses its value and still warns on an unknown field", () => {
+    const f = sliceFields(plan, 6);
+    expect(f).toMatchObject({ stack: false, tests: ["unit"], blockedBy: [3, 4], missing: [], warnings: [] });
+    const g = sliceFields(plan, 7);
+    expect(g.blockedBy).toEqual([]);
+    expect(g.warnings).toEqual(['unknown field "Colour"', "no Reads field"]);
+    expect(sliceFields(plan, 1).blockedBy).toEqual([]);
+  });
+
+  it("warns on a Blocked by that isn't slice numbers, and starts a fields line with it", () => {
+    const f = sliceFields(plan, 8);
+    expect(f).toMatchObject({ tests: ["unit"], blockedBy: [2], missing: [] });
+    expect(f.warnings).toEqual(['Blocked by takes slice numbers, not "later"']);
+  });
+
   it("only reads fields directly under the heading", () => {
     const f = sliceFields(plan, 5);
     expect(f.stack).toBe(false);
@@ -94,9 +121,9 @@ describe("sliceFields", () => {
   });
 
   it("says when the slice isn't in the plan", () => {
-    const f = sliceFields(plan, 7);
+    const f = sliceFields(plan, 9);
     expect(f.found).toBe(false);
-    expect(f.warnings).toEqual(['no "Slice 7" heading in the plan']);
+    expect(f.warnings).toEqual(['no "Slice 9" heading in the plan']);
     // "Slice 1" doesn't match "Slice 12", nor the other way round
     expect(sliceFields(plan, 12).found).toBe(true);
   });
