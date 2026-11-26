@@ -104,17 +104,17 @@ describe("hookDecision", () => {
     expect(d.record).toEqual({ pid: PID, size: 160_000, readAt: iso(NOW) });
   });
 
-  it("tells an orchestrator to rotate at the next safe point past soft, then only every further 25k, whatever the time", () => {
+  it("tells an orchestrator to rotate at the next wave boundary past soft, then only every further 25k, whatever the time", () => {
     const first = hookDecision(null, { ...facts, size: 170_000 });
     expect(first.message).toContain("170k");
     expect(first.message).toContain("soft limit of 160k");
     expect(first.message).toContain("hard limit is 225k");
-    expect(first.message).toContain(
-      "Rotate at the next safe point (after a merge, a verdict or a landing; never mid-landing), without asking",
-    );
+    expect(first.message).toContain("Rotate unasked between waves only: at the next wave boundary");
     expect(first.message).toContain("write _Status_ as the brief");
+    expect(first.message).toContain("run `pnpm prd rotate`, without asking");
+    expect(first.message).toContain("Not mid-wave");
+    expect(first.message).not.toContain('--mid-wave --reason "context"');
     expect(first.message).not.toContain("Judge");
-    expect(first.message).toContain('pnpm prd rotate --mid-wave --reason "context"');
     expect(first.record.hardOverAt).toBeUndefined();
     const quiet = hookDecision(first.record, { ...facts, size: 194_999, now: NOW + 60 * MIN });
     expect(quiet.message).toBeNull();
@@ -393,8 +393,9 @@ describe("the hook as a command", () => {
     writeFileSync(transcript, assistant(1, 125_000));
     const orchestrator = contextOf(hook({ transcript_path: transcript }).stdout).additionalContext;
     expect(orchestrator).toContain("past the soft limit of 120k");
-    expect(orchestrator).toContain("Rotate at the next safe point");
-    expect(orchestrator).toContain('pnpm prd rotate --mid-wave --reason "context"');
+    expect(orchestrator).toContain("at the next wave boundary");
+    expect(orchestrator).toContain("Not mid-wave");
+    expect(orchestrator).not.toContain('--mid-wave --reason "context"');
     // A slice agent of that orchestrator: its own transcript, its own 175k limit.
     mkdirSync(join(root, "s1", "subagents"), { recursive: true });
     writeFileSync(

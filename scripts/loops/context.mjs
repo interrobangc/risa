@@ -10,10 +10,10 @@
 // and any error in it is swallowed (exit 0, no output).
 //
 // An orchestrator has two limits: past the soft one (CARETOOK_CONTEXT_LIMIT,
-// 120k for an orchestrator, 160k for the others) a reminder tells it to rotate at
-// the next safe point (after a merge, a verdict or a landing; never mid-landing),
-// again every further 25k; past the hard one (CARETOOK_CONTEXT_HARD_LIMIT, 225k)
-// it is told to rotate now, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN
+// 120k for an orchestrator, 160k for the others) a reminder tells it to rotate
+// unasked between waves only (at the next wave boundary, never --mid-wave), again
+// every further 25k; past the hard one (CARETOOK_CONTEXT_HARD_LIMIT, 225k) it is
+// told to rotate at the next safe point, mid-wave if need be, at the crossing and every CARETOOK_CONTEXT_REMIND_MIN
 // (10). A backlog session has only the soft one, and it is never a forced close: past it the
 // session tells the user its size and asks whether to hand off or keep going,
 // and no answer means keep going. The inbox session has one limit, the soft one
@@ -163,7 +163,7 @@ export function orchestratorSoftReminder(
   /** @type {number} */ soft,
   /** @type {number} */ hard,
 ) {
-  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Rotate at the next safe point (after a merge, a verdict or a landing; never mid-landing), without asking: write _Status_ as the brief for the fresh session, commit it and run \`pnpm prd rotate --mid-wave --reason "context"\` (plain \`pnpm prd rotate\` with no slice in flight). A step that can't resume from _Status_ (a landing under way) finishes first.`;
+  return `Context watch: this session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Rotate unasked between waves only: at the next wave boundary (the wave landed and its docs done, no slice in flight), write _Status_ as the brief for the fresh session, commit it and run \`pnpm prd rotate\`, without asking. Not mid-wave: \`--mid-wave\` stays for the user's word or past the hard limit.`;
 }
 
 export function orchestratorReminder(/** @type {number} */ size, /** @type {number} */ hard) {
