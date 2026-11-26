@@ -172,4 +172,24 @@ describe("the bash scripts, on the sample project's prefixes", () => {
       writeFileSync(tiers, good);
     }
   });
+
+  it("the check tells a git diff that fails from a check plan that fails", () => {
+    const bin = join(root, "fake-bin");
+    mkdirSync(bin, { recursive: true });
+    const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+    // git fails only on the check's own diff of the changed names.
+    writeFileSync(
+      join(bin, "git"),
+      `#!/bin/sh\ncase " $* " in *" diff --name-only "*) echo "fatal: a broken diff" >&2; exit 128 ;; esac\nexec '${real}' "$@"\n`,
+      { mode: 0o755 },
+    );
+    const r = spawnSync("bash", [join(main, "scripts/loops/prd.sh"), "check", "--quick", "t"], {
+      cwd: join(main, ".loops/x-1"),
+      encoding: "utf8",
+      env: { ...env, PATH: `${bin}:${env.PATH}` },
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("check: git couldn't list the changes since");
+    expect(r.stderr).not.toContain("the check plan (check-plan.mjs) failed");
+  });
 });

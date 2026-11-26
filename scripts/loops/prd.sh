@@ -480,7 +480,9 @@ case $cmd in
     fi
     base=$(check_base "$dir" "$asked")
     # A plan that fails (its line is above) or gives no mode runs no check.
-    plan=$(git -C "$dir" diff --name-only "$base" HEAD | node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD) ||
+    changed=$(git -C "$dir" diff --name-only "$base" HEAD) ||
+      die "check: git couldn't list the changes since $base, so no check ran"
+    plan=$(node "$bin/check-plan.mjs" --mode "$asked" --repo "$dir" --base "$base" --head HEAD <<< "$changed") ||
       die "check: the check plan (check-plan.mjs) failed, so no check ran"
     pmode="" ptooling="" pown=""
     { read -r pmode || true; read -r ptooling || true; read -r pown || true; } <<< "$plan"
