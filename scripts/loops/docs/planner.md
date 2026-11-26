@@ -1,5 +1,7 @@
 # Planner handbook
 
+For a planning agent: writing a PRD and its plan on `plan/<topic>` in `.loops/plan-<topic>` (stackless, from the trunk). Read `prd doc backlog` too: you triage items into the topic.
+
 ## From idea to plan
 
 **Decide, then report.** The user accepts nearly every recommendation, so don't interview: explore, decide, write, and ask only what _What to ask_ names.

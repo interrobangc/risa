@@ -4,9 +4,12 @@
 // Each role (loop, orchestrator, planner, …) has one generic doc, the core's, in
 // docs/<role>.md beside this file. A project changes it through its config's
 // roles group: `roles.<role>.additions` (a file printed after the generic doc) or
-// `roles.<role>.replacement` (a file printed instead of it). With a section, only
-// that heading's text: the heading line through the line before the next heading
-// of its level or higher, from the merged doc.
+// `roles.<role>.replacement` (a file printed instead of it). The additions follow
+// the generic doc's last line, so they can continue only its last section; one
+// that opens with an HTML comment (`<!-- … -->`, a pointer for someone reading the
+// file itself) has it left out. With a section, only that heading's text: the
+// heading line through the line before the next heading of its level or higher,
+// from the merged doc.
 //
 // Exit 2 on an unknown role or section, a named file that is missing, or a role
 // that names both. Every prompt and core file names a role's doc through this
@@ -20,6 +23,9 @@ import { ConfigError, loadConfig } from "./config.mjs";
 export const GENERIC_DIR = fileURLToPath(new URL("./docs", import.meta.url));
 
 export class DocError extends Error {}
+
+/** An additions file's opening HTML comment, with the blank lines after it. */
+const LEADING_COMMENT = /^<!--[\s\S]*?-->[ \t]*\n(\s*\n)*/;
 
 const read = (file, what) => {
   try {
@@ -93,7 +99,7 @@ export function roleDoc(role, { config, root, section, genericDir = GENERIC_DIR 
         join(root, entry.additions),
         `the ${role} role's additions, ${entry.additions},`,
       );
-      text = `${text.replace(/\n*$/, "\n")}\n${additions}`;
+      text = `${text.replace(/\n*$/, "\n")}\n${additions.replace(LEADING_COMMENT, "")}`;
     }
   }
   if (!section) return text;

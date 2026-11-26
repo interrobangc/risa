@@ -3,7 +3,15 @@
 // config: every role is split, printing the core's generic doc and then the
 // project's additions, none a replacement.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -59,6 +67,14 @@ describe("prd doc on the sample project", () => {
 
   it("prints the generic doc, then the additions", () => {
     expect(ok("planner")).toBe(`${GENERIC_PLANNER}\n${ADDITIONS}`);
+  });
+
+  it("leaves out an additions file's opening comment, a pointer for its direct reader", () => {
+    const config = { roles: { planner: { additions: "pointed.md" } } };
+    writeFileSync(join(repo, "pointed.md"), `<!-- Read it whole: risa doc planner. -->\n\n${ADDITIONS}`);
+    expect(roleDoc("planner", { config, root: repo, genericDir: join(repo, "scripts/loops/docs") })).toBe(
+      `${GENERIC_PLANNER}\n${ADDITIONS}`,
+    );
   });
 
   it("prints a replacement alone, byte for byte", () => {
@@ -135,7 +151,19 @@ describe("this repo's roles", () => {
   it.each(split)("%s prints the core's generic doc, then the project's additions", (role, entry) => {
     const generic = readFileSync(join(HERE, "docs", `${role}.md`), "utf8");
     const additions = readFileSync(join(root, entry.additions), "utf8");
-    expect(roleDoc(role, { config, root })).toBe(`${generic}\n${additions}`);
+    expect(roleDoc(role, { config, root })).toBe(`${generic}\n${additions.replace(/^<!--.*-->\n\n/, "")}`);
+  });
+
+  it("the project's loop additions open with a pointer to the doc command, left out of the merged text", () => {
+    expect(readFileSync(join(root, config.roles.loop.additions), "utf8")).toMatch(
+      /^<!-- .*`pnpm prd doc loop`/,
+    );
+    expect(roleDoc("loop", { config, root })).not.toContain("<!--");
+  });
+
+  it("each merged doc opens with its title and intro, the generic one first", () => {
+    for (const role of Object.keys(config.roles))
+      expect(roleDoc(role, { config, root })).toMatch(/^# .+\n\n[^#\n-].+\n/);
   });
 
   it.each([

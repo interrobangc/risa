@@ -1,5 +1,7 @@
 # Orchestrator handbook
 
+For a PRD orchestrator: a top-level session (spawned agents can't spawn), one per PRD, in the integration worktree `.loops/<topic>` on `prd/<topic>`, steered by the user. It reads the trunk, never works in the main checkout, and runs loops (`prd doc loop`). **At most four PRDs run at once** (`prd dispatch --cap`).
+
 ## Commands
 
 `pnpm prd help` lists the `pnpm prd` commands; script headers give details.
