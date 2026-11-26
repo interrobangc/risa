@@ -12,6 +12,10 @@
 //           landed wave, and the slice table's rows of landed waves (a row
 //           whose merge SHA is in dev, or with no SHA and not in flight).
 //       A list right after a moved paragraph that ends in ":" moves with it.
+//       A fixes plan's slice table keeps its header and separator even when
+//       every row moves out, and a _Status_ that lost its table (a hand-written
+//       idle hand-over, B-807) gets an empty one back, in the history's columns
+//       or SLICE_COLUMNS.
 //       The landing mode, other paragraphs, lists and open rows stay. The
 //       history file gets a "## Trimmed <date>" section at its top (newest
 //       first: paragraphs, then the rows in a table of the plan's columns),
@@ -39,6 +43,8 @@ export const STATUS_WARN_BYTES = 6 * 1024;
 const STATUS = /^## Status[ \t]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m;
 const SLICE_HEADING = /^#{2,4}\s+Slice\s+(\d+)\b/i;
 const WAVE_HEADING = /^##\s+Wave\s+(\d+)\b/i;
+/** A fixes plan's slice table columns, when neither the plan nor its history has a table. */
+export const SLICE_COLUMNS = ["Slice", "Item", "State", "Merge"];
 /** A State still in flight: such a row stays even in a landed wave. */
 const IN_FLIGHT = /^(not started|started|ready|blocked|waiting|in progress|running|held|queued)\b/i;
 
@@ -144,10 +150,17 @@ const newer = (/** @type {any[]} */ a, /** @type {any[]} */ b) => {
  * Trim a plan's _Status_.
  * @param {string} planText
  * @param {{ topic: string, historyText?: string, isLanded?: (sha: string) => boolean, date?: string }} opts
- * @returns {{ plan: string, history: string, paragraphs: number, rows: number, landedWaves: number[] }}
+ * @returns {{ plan: string, history: string, paragraphs: number, rows: number, landedWaves: number[], restored: boolean }}
  */
 export function trimStatus(planText, { topic, historyText = "", isLanded = () => false, date = "" }) {
-  const unchanged = { plan: planText, history: historyText, paragraphs: 0, rows: 0, landedWaves: [] };
+  const unchanged = {
+    plan: planText,
+    history: historyText,
+    paragraphs: 0,
+    rows: 0,
+    landedWaves: /** @type {number[]} */ ([]),
+    restored: false,
+  };
   const at = statusAt(planText);
   if (!at) return unchanged;
   const fixes = topic.startsWith("fixes-");
@@ -166,7 +179,17 @@ export function trimStatus(planText, { topic, historyText = "", isLanded = () =>
   for (const h of handOffs) if (h.i !== latest?.i) moved.add(h.i);
 
   // A fixes plan: landed waves' paragraphs and table rows.
-  const tableIdx = fixes ? blocks.findIndex(isSliceTable) : -1;
+  let tableIdx = fixes ? blocks.findIndex(isSliceTable) : -1;
+  // A fixes plan's _Status_ always has its table: put back an empty one a hand edit dropped.
+  const restored = fixes && tableIdx < 0;
+  if (restored) {
+    const old = splitBlocks(historyText).find(isSliceTable)?.split("\n").slice(0, 2);
+    const cols = old ?? [
+      `| ${SLICE_COLUMNS.join(" | ")} |`,
+      `| ${SLICE_COLUMNS.map((c) => "-".repeat(c.length)).join(" | ")} |`,
+    ];
+    tableIdx = blocks.push(cols.join("\n")) - 1;
+  }
   /** @type {string[]} */ let movedRows = [];
   let header = /** @type {string[]} */ ([]);
   /** @type {number[]} */ let landedWaves = [];
@@ -216,7 +239,11 @@ export function trimStatus(planText, { topic, historyText = "", isLanded = () =>
     if (moved.has(owner) && !isList(blocks[owner]) && /:\s*$/.test(blocks[owner])) moved.add(i);
   }
 
-  if (!moved.size && !movedRows.length) return { ...unchanged, landedWaves };
+  if (!moved.size && !movedRows.length) {
+    if (!restored) return { ...unchanged, landedWaves };
+    const plan = `${planText.slice(0, at.start)}\n${blocks.join("\n\n")}\n\n${planText.slice(at.end).replace(/^\n+/, "")}`;
+    return { ...unchanged, plan, landedWaves, restored };
+  }
 
   const paras = [...moved]
     .sort((a, b) => a - b)
@@ -252,7 +279,7 @@ export function trimStatus(planText, { topic, historyText = "", isLanded = () =>
   const history = first
     ? `${base.slice(0, first.index)}${section.join("\n\n")}\n\n${base.slice(first.index)}`
     : `${base.trimEnd()}\n\n${section.join("\n\n")}\n`;
-  return { plan, history, paragraphs: moved.size, rows: movedRows.length, landedWaves };
+  return { plan, history, paragraphs: moved.size, rows: movedRows.length, landedWaves, restored };
 }
 
 // ---- CLI -------------------------------------------------------------------------
@@ -343,7 +370,7 @@ export async function main(/** @type {string[]} */ argv, { out = console.log, er
   const refs = base ? [base] : ["dev", "origin/dev"];
   const r = trimStatus(planText, { topic, historyText, isLanded: landedIn(repo, refs), date });
   const before = statusBytes(planText);
-  if (!r.paragraphs && !r.rows) {
+  if (!r.paragraphs && !r.rows && !r.restored) {
     out(`status-trim: nothing to move; _Status_ is ${kb(before)}`);
     if (before > STATUS_WARN_BYTES) out(`  still over ${kb(STATUS_WARN_BYTES)}: shorten what stays by hand`);
     return 0;
@@ -353,6 +380,16 @@ export async function main(/** @type {string[]} */ argv, { out = console.log, er
   const after = statusBytes(plan);
   const what = `${r.paragraphs} paragraph(s) and ${r.rows} row(s)`;
   const waves = r.landedWaves.length ? `; landed waves ${r.landedWaves.join(", ")}` : "";
+  const table = `_Status_ has no slice table: ${dry ? "would put" : "put"} back an empty one`;
+  if (!r.paragraphs && !r.rows) {
+    if (dry) out(`status-trim (dry run): ${table}`);
+    else {
+      writeFileSync(planFile, plan);
+      out(`status-trim: ${table}; commit the plan`);
+    }
+    return 0;
+  }
+  if (r.restored) out(`status-trim${dry ? " (dry run)" : ""}: ${table}`);
   if (dry) {
     out(`status-trim (dry run): would move ${what} to plans/${topic}-history.md${waves}`);
     out(`  _Status_ ${kb(before)} → ${kb(after)}`);
