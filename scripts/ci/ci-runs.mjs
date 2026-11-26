@@ -23,6 +23,7 @@ const COMMIT_STATE = /** @type {Record<string, string>} */ ({
   flake: "success",
   file: "failure",
   brake: "failure",
+  time: "failure",
 });
 
 /** The remote SHA of a ref: a string (empty when absent), or null when unreachable. */
@@ -103,6 +104,10 @@ export function verdictLines(/** @type {any} */ v) {
     lines.push(`  flaky${t.brake ? " (brake list)" : ""}: ${t.file}${t.name ? `: ${t.name}` : ""}`);
   if (v.infra?.notRun?.length) lines.push(`  browser checks not run: ${v.infra.notRun.join(", ")}`);
   else if (v.infra?.jobs?.length) lines.push(`  died before any test: ${v.infra.jobs.join(", ")}`);
+  for (const t of v.time?.breaches ?? [])
+    lines.push(
+      `  time: ${t.job} (${t.measure}) ${t.seconds} s, ${t.verdict}${t.verdict === "warn" && !t.armed ? ", not armed" : ""}`,
+    );
   if (v.browser?.length) {
     const count = (/** @type {string} */ result) =>
       v.browser.filter((/** @type {{ result: string }} */ c) => c.result === result).length;

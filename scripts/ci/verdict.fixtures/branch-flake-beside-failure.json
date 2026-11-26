@@ -54,6 +54,10 @@
     "jobs": [],
     "notRun": []
   },
+  "time": {
+    "jobs": [],
+    "breaches": []
+  },
   "browser": null,
   "secondZone": null,
   "quarantined": [],

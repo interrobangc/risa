@@ -27,6 +27,10 @@
     "jobs": [],
     "notRun": []
   },
+  "time": {
+    "jobs": [],
+    "breaches": []
+  },
   "browser": null,
   "secondZone": {
     "zone": "America/New_York",
