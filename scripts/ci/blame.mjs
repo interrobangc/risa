@@ -178,14 +178,17 @@ const title = (/** @type {string} */ text) => {
  * @param {Placed[]} failures
  * @param {{ branch: string, url?: string, topic?: string }} from
  */
-export const devFindings = (failures, { branch, url, topic = ciFailureTopic() }) =>
-  failures.map((f) => ({
+export const devFindings = (failures, { branch, url, topic }) => {
+  if (!failures.length) return [];
+  const prd = topic ?? ciFailureTopic();
+  return failures.map((f) => ({
     key: f.key,
     title: title(`CI: ${label(f)} fails on dev`),
-    prd: topic,
+    prd,
     note: `Fails on dev too${f.brake ? " (a brake)" : ""}; found by ${branch}${url ? ` in ${url}` : ""}.`,
     quarantine: null,
   }));
+};
 
 /**
  * The board's line for a dev brake.
