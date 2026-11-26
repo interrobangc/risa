@@ -40,6 +40,19 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
+/**
+ * Items as the CLI writes them, for fixtures written straight to disk: each
+ * `cli` write is a node start and 25–35 git spawns, so a fixture built through
+ * it outran the 10 s hook timeout at load 40 (B-754).
+ */
+const items = (...rows) =>
+  rows
+    .map(
+      ([id, type, title, status = "inbox", prd = ""]) =>
+        `\n### ${id} · ${type} · ${title}\n\n- status: ${status}\n- prd:${prd && ` ${prd}`}\n- owner:\n- commit:\n`,
+    )
+    .join("");
+
 const file = () => readFileSync(join(main, "plans/backlog.md"), "utf8");
 const lastFiles = () => git(main, "show", "--name-only", "--format=", "HEAD");
 
@@ -349,12 +362,12 @@ describe("backlog CLI: multi-id writes and amending", () => {
     git(m3, "config", "user.name", "Test");
     git(m3, "config", "commit.gpgsign", "false");
     execFileSync("mkdir", ["-p", join(m3, "plans")]);
-    writeFileSync(join(m3, "plans/backlog.md"), "# Backlog\n\n## Items\n");
+    const four = ["One", "Two", "Three", "Four"].map((t, i) => [`B-${i + 1}`, "feature", t]);
+    writeFileSync(join(m3, "plans/backlog.md"), `# Backlog\n\n## Items\n${items(...four)}`);
     git(m3, "add", ".");
     git(m3, "commit", "-q", "-m", "init");
     git(m3, "worktree", "add", "-q", "-b", "prd/z", p3);
-    for (const t of ["One", "Two", "Three", "Four"]) cli(m3, "add", "feature", t);
-  }, 60_000);
+  });
   afterAll(() => rmSync(r3, { recursive: true, force: true }));
 
   it("set with several ids is one commit that changes them all", () => {
@@ -568,15 +581,21 @@ describe("backlog CLI: look-alikes and archive by id", () => {
     git(m4, "config", "user.name", "Test");
     git(m4, "config", "commit.gpgsign", "false");
     execFileSync("mkdir", ["-p", join(m4, "plans")]);
-    writeFileSync(join(m4, "plans/backlog.md"), "# Backlog\n\n## Items\n");
+    // What adding three items, dropping B-2 and archiving it leaves.
+    writeFileSync(
+      join(m4, "plans/backlog.md"),
+      `# Backlog\n\n## Items\n${items(
+        ["B-1", "bug", "Login link can be clicked twice", "triaged", "auth"],
+        ["B-3", "feature", "Weekly summary for the family"],
+      )}`,
+    );
+    writeFileSync(
+      join(m4, "plans/backlog-archive.md"),
+      `# Backlog archive\n\n## Items\n${items(["B-2", "bug", "Calendar export drops the time zone", "dropped"])}`,
+    );
     writeFileSync(join(m4, "plans/inbox.md"), "# Inbox\n\n## Bugs\n\n## Features\n");
     git(m4, "add", ".");
     git(m4, "commit", "-q", "-m", "init");
-    cli(m4, "add", "bug", "Login link can be clicked twice", "--prd", "auth"); // B-1
-    cli(m4, "add", "bug", "Calendar export drops the time zone"); // B-2
-    cli(m4, "add", "feature", "Weekly summary for the family"); // B-3
-    cli(m4, "set", "B-2", "status=dropped");
-    cli(m4, "archive", "B-2");
   });
   afterAll(() => rmSync(r4, { recursive: true, force: true }));
 
