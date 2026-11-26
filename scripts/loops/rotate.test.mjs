@@ -215,6 +215,7 @@ beforeAll(() => {
     "rotate.sh",
     "rotate-into.sh",
     "rotate.mjs",
+    "landed.mjs",
     "context.mjs",
     "heartbeat.mjs",
     "open-session.sh",
@@ -870,6 +871,10 @@ The registry.
 | \`notable\` | — | — | — | no table |
 | \`fixes-x\` | standing, alone | — | \`scripts/loops/\`, \`docs/\` | a fixes wave |
 | \`busy\` | — | — | \`apps/web/\` | a PRD with hot files |
+| \`tailp\` | — | — | — | landed, then its plan's status |
+| \`taild\` | — | — | — | landed, then docs |
+| \`tailc\` | — | — | — | landed, then code |
+| \`itm\` | — | — | — | an item not landed |
 
 ## Items
 
@@ -877,6 +882,11 @@ The registry.
 
 - status: triaged
 - prd: std
+
+### B-2 · bug · Still open
+
+- status: triaged
+- prd: itm
 `;
   const OLD = `# Backlog tracker
 
@@ -962,6 +972,80 @@ Intro.
       );
       for (const t of ["open", "std", "notable", "unm"]) expect(flags[t]).not.toContain("done");
       expect(flags.std).toEqual(["standing"]);
+    });
+  });
+
+  // B-431: the orchestrator's 'landed' commit after the final land left the branch
+  // unmerged, so rm kept it and never set done, and the dispatcher started it again.
+  describe("a landed branch with a tail past its landing", () => {
+    /** prd/<topic>: a commit landed in dev with a merge, then TAIL committed on the branch. */
+    const landedWorktree = (topic, tail) => {
+      const dir = join(loops, topic);
+      git(main, "worktree", "add", "-q", "-b", `prd/${topic}`, dir, "dev");
+      writeFileSync(join(dir, `${topic}.txt`), "work\n");
+      git(dir, "add", "-A");
+      git(dir, "commit", "-q", "-m", `feat(${topic}): work`);
+      git(main, "merge", "-q", "--no-ff", "-m", `feat(${topic}): land`, `prd/${topic}`);
+      for (const [f, text] of Object.entries(tail)) {
+        mkdirSync(join(dir, f, ".."), { recursive: true });
+        writeFileSync(join(dir, f), text);
+      }
+      git(dir, "add", "-A");
+      git(dir, "commit", "-q", "-m", `docs(${topic}): landed`);
+    };
+    beforeAll(() => {
+      commitOnDev({
+        "plans/backlog.md": REGISTRY,
+        "plans/tailp-plan.md": plan(MERGED),
+        "plans/taild-plan.md": plan(MERGED),
+        "plans/tailc-plan.md": plan(MERGED),
+        "plans/itm-plan.md": plan(MERGED),
+      });
+      landedWorktree("tailp", { "plans/tailp-plan.md": `${plan(MERGED)}\nLanded in dev.\n` });
+      landedWorktree("taild", { "docs/tail-notes.md": "# Notes\n" });
+      landedWorktree("tailc", { "plans/tailc-plan.md": `${plan(MERGED)}\nLanded.\n`, "code.mjs": "x\n" });
+      prdWorktree("itm");
+    }, 60_000);
+
+    it("marks it done when the tail changes only its plan, and drops the tail with the branch", () => {
+      const r = run("rm.sh", ["tailp"]);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("Marked tailp done in the PRD registry (flags done)");
+      expect(r.stdout).toContain(
+        "Removed tailp and its branch prd/tailp, dropping its 1 commit(s) past its last landing in dev (they change only plans/tailp-plan.md)",
+      );
+      expect(flagsOf("tailp")).toEqual(["done"]);
+      expect(git(main, "branch", "--list", "prd/tailp")).toBe("");
+    });
+
+    it("marks it done when the tail is other docs, landing them in dev first", () => {
+      const r = run("rm.sh", ["taild"]);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toMatch(
+        /Landed prd\/taild's 1 docs commit\(s\) past its last landing in dev as [0-9a-f]{7}/,
+      );
+      expect(r.stdout).toContain("Marked taild done");
+      expect(r.stdout).toContain("Removed taild and its branch prd/taild (merged into dev)");
+      expect(readFileSync(join(main, "docs/tail-notes.md"), "utf8")).toBe("# Notes\n");
+      expect(git(main, "log", "-2", "--format=%s").split("\n")).toEqual([
+        "chore(backlog): prd set taild: flags=done",
+        "docs(taild): the docs after its last landing",
+      ]);
+    });
+
+    it("leaves it undone, branch kept, when the tail has code", () => {
+      const r = run("rm.sh", ["tailc"]);
+      expect(r.stdout).toContain(
+        "Not marking tailc done: prd/tailc has 1 commit(s) past its last landing in dev that aren't Markdown only",
+      );
+      expect(r.stdout).toMatch(/kept prd\/tailc: it isn't merged/);
+      expect(flagsOf("tailc")).toEqual([]);
+    });
+
+    it("leaves a merged topic undone while one of its items isn't landed", () => {
+      const r = run("rm.sh", ["itm"]);
+      expect(r.stdout).toContain("Not marking itm done: B-2 aren't landed yet");
+      expect(flagsOf("itm")).toEqual([]);
     });
   });
 

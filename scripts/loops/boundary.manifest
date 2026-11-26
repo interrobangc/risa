@@ -208,6 +208,8 @@ scripts/loops/land-skeptic.mjs core
 scripts/loops/land-unsynced.test.mjs core
 scripts/loops/land.sh core
 scripts/loops/land.test.mjs core
+scripts/loops/landed.mjs core
+scripts/loops/landed.test.mjs core
 scripts/loops/lease.mjs core
 scripts/loops/lease.sh core
 scripts/loops/lease.test.mjs core

@@ -345,6 +345,68 @@ describe("land.sh writes a to-test file", () => {
   });
 });
 
+// B-431: the topic's last landing marks it done, so a commit after it can't leave
+// the row planned for the dispatcher to start again. A stub backlog: one row,
+// $ITEMS as the topic's items, each `prd set` logged.
+describe("land.sh marks a topic done at its last landing", () => {
+  const STUB = `import { appendFileSync } from "node:fs";
+const a = process.argv.slice(2);
+if (a[0] === "prd" && a[1] === "list") console.log(JSON.stringify([{ topic: "throwaway-x", flags: ["hold"], hot: [] }]));
+else if (a[0] === "prd" && a[1] === "set") appendFileSync(process.env.PRD_SET_LOG, a.slice(2).join(" ") + "\\n");
+else console.log(process.env.ITEMS ?? "[]");
+`;
+  const PLAN = (rows) =>
+    `# Plan: X\n\n## Status\n\n| Slice | Wave | State | Merge |\n| ----- | ---- | ----- | ----- |\n${rows}\n`;
+  const DONE = "| 1 | 1 | merged | abc |";
+  const landLocal = (items) => {
+    const log = join(root, "prd-set.log");
+    const r = spawnSync(
+      "bash",
+      [
+        "scripts/loops/land.sh",
+        "throwaway-x",
+        "--local",
+        "--force",
+        "--by-user",
+        "-m",
+        "feat(throwaway-x): t",
+      ],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: { ...process.env, PRD_SET_LOG: log, ITEMS: JSON.stringify(items) },
+      },
+    );
+    return { r, set: existsSync(log) ? readFileSync(log, "utf8") : "" };
+  };
+  const landedItem = { id: "B-1", status: "landed" };
+
+  it("marks it done when no slice is left and every item is landed, keeping its other flags", () => {
+    commit({ "scripts/backlog/backlog.mjs": STUB }, "stub");
+    branch({ "lib/b.ts": "2", "plans/throwaway-x-plan.md": PLAN(DONE) });
+    const { r, set } = landLocal([landedItem, { id: "B-2", status: "dropped" }]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("Marked throwaway-x done in the PRD registry");
+    expect(set).toBe("throwaway-x flags=done\n");
+  });
+
+  it("leaves it while a slice is left, or an item isn't landed", () => {
+    commit({ "scripts/backlog/backlog.mjs": STUB }, "stub");
+    branch({ "lib/b.ts": "2", "plans/throwaway-x-plan.md": PLAN(`${DONE}\n| 2 | 2 | not started | |`) });
+    let { r, set } = landLocal([landedItem]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).not.toContain("done in the PRD registry");
+    expect(set).toBe("");
+
+    git("branch", "-D", "prd/throwaway-x");
+    branch({ "lib/c.ts": "3", "plans/throwaway-x-plan.md": PLAN(DONE) });
+    ({ r, set } = landLocal([landedItem, { id: "B-2", status: "triaged" }]));
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("Not marking throwaway-x done: no slice is left, but B-2 aren't landed");
+    expect(set).toBe("");
+  });
+});
+
 describe("land.sh posts a landing notice", () => {
   const board = () => join(root, "notices");
   const notices = () =>
