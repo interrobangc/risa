@@ -128,6 +128,57 @@ describe("taking and waiting", SLOW, () => {
     expect(cli(["release", "killed", "--pid", String(process.pid)]).status).toBe(0);
     expect(existsSync(dir("killed", 1))).toBe(false);
   });
+
+  // B-867: on CI a takeover removed a lease made a moment before, a second taker
+  // made the slot again, and both went ahead. Here the test makes that
+  // interleaving by hand: each taker stops after its mkdir, before writing its
+  // name file (CARETOOK_LEASE_TEST_WRITE_PAUSE), and goes on once MARKER.go exists.
+  it.each([
+    ["the first taker writes first", ["a", "b"]],
+    ["the second taker writes first", ["b", "a"]],
+  ])("never lets two takers hold one slot when it is made twice (%s)", async (_, order) => {
+    const kind = `race-${order[0]}`;
+    const takers = {};
+    for (const who of ["a", "b"]) {
+      const marker = join(root, `${kind}-${who}`);
+      // (start's object, not a copy: its out and err grow as the taker writes)
+      takers[who] = Object.assign(
+        start(["hold", kind, "--label", who], { CARETOOK_LEASE_TEST_WRITE_PAUSE: marker }),
+        { marker },
+      );
+      await until(() => existsSync(marker));
+      expect(existsSync(dir(kind, 1))).toBe(true);
+      // a's slot goes as a takeover's rm -rf took it; b then makes it again.
+      if (who === "a") rmSync(dir(kind, 1), { recursive: true });
+    }
+    const [first, second] = order.map((who) => takers[who]);
+    writeFileSync(`${first.marker}.go`, "");
+    await until(() => holdLine(first));
+    expect(holdLine(first)[1]).toBe("1");
+    writeFileSync(`${second.marker}.go`, "");
+    await until(() => second.err.includes("All 1 race"));
+    expect(holdLine(second)).toBeNull();
+    expect(readFileSync(join(dir(kind, 1), "name"), "utf8")).toMatch(
+      new RegExp(`^check=${order[0]}\\npid=${first.child.pid}$`, "m"),
+    );
+    expect(cli(["holders", kind]).out).toMatch(/^race-\w leases: 1 of 1 held$/m);
+
+    first.child.stdin.end();
+    expect(await first.exit).toBe(0);
+    await until(() => holdLine(second), 8000);
+    expect(readFileSync(join(dir(kind, 1), "name"), "utf8")).toMatch(new RegExp(`^check=${order[1]}$`, "m"));
+    second.child.stdin.end();
+    expect(await second.exit).toBe(0);
+    expect(existsSync(dir(kind, 1))).toBe(false);
+  });
+
+  it("leaves a lone taker's name file whole, with no temp file beside it", async () => {
+    const h = await hold("lone", "alone");
+    expect(readFileSync(join(h.path, "name"), "utf8")).toMatch(/^check=alone\npid=\d+$/m);
+    expect(execFileSync("ls", ["-A", h.path], { encoding: "utf8" }).trim()).toBe("name");
+    h.child.stdin.end();
+    expect(await h.exit).toBe(0);
+  });
 });
 
 describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", SLOW, () => {
