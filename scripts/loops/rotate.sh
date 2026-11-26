@@ -10,7 +10,11 @@
 # Refuses when plans/<topic>-plan.md has uncommitted changes (commit _Status_
 # first), when it finds no session, or when slice worktrees of the topic exist
 # (their agents would die with the session) unless --mid-wave, which ends them
-# too: the fresh session respawns them with --continue.
+# too: the fresh session respawns them with --continue. A mid-wave rotation
+# for context (--reason context) also waits for the slices still at work (a
+# worktree whose _Status_ row isn't handed off or finished): each would come
+# back as a --continue agent that reloads its base and reruns its check. Drain
+# first; past the hard limit (the session's size record) it goes ahead.
 #
 # Then it opens rotate-into.sh in a background iTerm2 tab (the opener's
 # --background) and returns at once, so the calling session can say its last
@@ -44,7 +48,7 @@ while (($#)); do
     --self) self=1 ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
     --brief-path) brief_path=1 ;;
-    -h | --help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>, --self, --brief <file>, --brief-path)" ;;
     *) [[ -z $topic ]] || die "rotate: one topic at a time"; topic=$1 ;;
   esac
@@ -142,6 +146,15 @@ elif [[ $here_topic == "$topic" ]]; then
   die "rotate: no session to end: no live record $name, and this shell isn't under a claude process"
 else
   die "rotate: no session to end: no live record $name (without one, run it from $topic's own session)"
+fi
+
+# A context rotation under the hard limit waits for the slices still at work (B-877).
+if [[ -n $mid_wave && $reason == context && -n $slices ]]; then
+  nums=()
+  for s in $slices; do nums+=("${s##*-}"); done
+  rc=0
+  held=$(node "$bin/rotate.mjs" context-hold "$dir/$plan" "$(dirname "$CARETOOK_SESSIONS_DIR")/.context/$name.json" "$pid" "${nums[@]}") || rc=$?
+  ((rc != 1)) || die "rotate: a context rotation under the hard limit waits for the slices still at work ($held): each would come back as a --continue agent that reloads its base and reruns its check. Drain first: merge their hand-offs, then plain rotate (past the hard limit it goes ahead; on the user's word, --reason user)"
 fi
 
 line="cd $(printf %q "$dir") && $(printf %q "$bin/rotate-into.sh") $name $pid"
