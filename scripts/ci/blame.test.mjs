@@ -496,6 +496,48 @@ describe("filing a dev failure", () => {
   });
 });
 
+describe("a failure's message", () => {
+  const message = "AssertionError: expected 812 to be below 500\n  at search.test.ts:40";
+  const said = { ...test1, message };
+
+  it("prints beside the test in blame, on one line", async () => {
+    const w = world({ branchVerdict: verdict({ tests: [said] }) });
+    expect(await run(w)).toBe(2);
+    const at = w.lines.findIndex((l) => l.startsWith("  the branch's: "));
+    expect(w.lines[at + 1]).toBe("      AssertionError: expected 812 to be below 500 at search.test.ts:40");
+  });
+
+  it("is kept in blame's JSON and quoted in dev's filed note", async () => {
+    const w = world({
+      branchVerdict: verdict({ tests: [said] }),
+      dev: onDev({ kind: "file", tests: [test1] }),
+    });
+    await run(w, true);
+    expect(JSON.parse(w.lines.at(-1) ?? "").devFailures[0].message).toBe(message);
+    expect(w.filings[0].findings[0].note).toMatch(
+      / First failure: AssertionError: expected 812 to be below 500 at search\.test\.ts:40$/,
+    );
+  });
+
+  it("is quoted in a filed flake's note, and a test with none adds nothing", () => {
+    const flake = { job: "unit", file: UNIT, name: "one", brake: false };
+    const [filed] = sortFlakes([{ ...flake, message }], [], { branch: "b" }).findings;
+    expect(filed.note).toContain("; found by b. First failure: AssertionError: expected 812");
+    const [bare] = sortFlakes([flake], [], { branch: "b" }).findings;
+    expect(bare.note).not.toContain("First failure");
+  });
+
+  it("prints under a branch's own flake in ci file", () => {
+    const w = world({
+      branchVerdict: verdict({ kind: "flake", jobs: ["unit"], flaky: [{ ...test1, brake: false, message }] }),
+      diff: UNIT,
+    });
+    fileFlakes({ branch: "slice/t/5", sha: SHA, base: null }, w.io);
+    const at = w.lines.findIndex((l) => l.includes("the branch's flake"));
+    expect(w.lines[at + 1]).toContain("expected 812 to be below 500");
+  });
+});
+
 describe("ci file", () => {
   const flaky = (/** @type {any} */ o = {}) => ({ job: "unit", file: UNIT, name: "one", brake: false, ...o });
   const file = (/** @type {any} */ w, base = /** @type {string | null} */ (null)) =>

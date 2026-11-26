@@ -2,7 +2,7 @@
 // backlog: `ci file` (a verdict's flakes) and `ci zone-file` (a release verdict's
 // second-zone failures; the release gate files through fileZoneVerdict).
 import { sortFlakes } from "./blame.mjs";
-import { failureLabel } from "./ci-blame.mjs";
+import { failureLabel, logFailure } from "./ci-blame.mjs";
 import { EXIT } from "./ci-io.mjs";
 import { findVerdict, readVerdict, unknown } from "./ci-runs.mjs";
 import { zoneFindings } from "./release.mjs";
@@ -49,7 +49,7 @@ function fileRunFlakes({ branch, sha, base = null, runId = null, noPush = false 
   if (!diff.ok) return unknown(io, "could not read what the branch changed");
   const touched = diff.out ? diff.out.split("\n") : [];
   const sorted = sortFlakes(flaky, touched, { branch, ...(found.run?.url ? { url: found.run.url } : {}) });
-  for (const t of sorted.branch) io.log(`  the branch's flake: ${failureLabel(t)}`);
+  for (const t of sorted.branch) logFailure(io, `  the branch's flake: ${failureLabel(t)}`, t);
   if (sorted.findings.length) {
     const push = !noPush && sorted.findings.some((f) => f.quarantine);
     const out = io.fileFindings?.(sorted.findings, push) ?? null;

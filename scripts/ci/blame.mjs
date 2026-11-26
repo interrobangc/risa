@@ -23,7 +23,7 @@ const MAX_TITLE = 120;
 const MAX_NOTICE = 200;
 
 /**
- * @typedef {{ job?: string, file?: string, name?: string | null }} Failure
+ * @typedef {{ job?: string, file?: string, name?: string | null, message?: string }} Failure
  * @typedef {Failure & { key: string, brake: boolean, absent?: boolean }} Placed
  * @typedef {{ dev: Placed[], branch: Placed[], unknown: Placed[] }} Split
  */
@@ -35,7 +35,8 @@ const MAX_NOTICE = 200;
  */
 export function verdictFailures(v) {
   const after = v.afterRerun ?? v.failed ?? {};
-  /** @type {{ job?: string, file: string, name: string }[]} */ const tests = after.tests ?? [];
+  /** @type {{ job?: string, file: string, name: string, message?: string }[]} */ const tests =
+    after.tests ?? [];
   const named = new Set(tests.map((t) => t.file));
   /** @type {string[]} */ const files = (after.files ?? []).filter(
     (/** @type {string} */ f) => !named.has(f),
@@ -154,7 +155,8 @@ export function splitFailures(failures, dev, absent) {
     else if (flakyOnDev(f) || notCompared(f)) split.unknown.push({ ...f, key, brake: false });
     else split.branch.push({ ...f, key, brake: false });
   };
-  for (const t of failures.tests) place({ job: t.job, file: t.file, name: t.name });
+  for (const t of failures.tests)
+    place({ job: t.job, file: t.file, name: t.name, ...(t.message ? { message: t.message } : {}) });
   for (const file of failures.files) place({ file, name: null });
   for (const job of failures.jobs) place({ job });
   return split;
@@ -166,6 +168,16 @@ export const blameExit = (/** @type {Split} */ s, partial = false) =>
 
 export const label = (/** @type {Failure} */ f) =>
   f.file ? `${f.file}${f.name ? `: ${f.name}` : ""}` : `the ${f.job} job`;
+
+/** A failure's message on one line (the verdict already capped it), or "" with none. */
+export const messageLine = (/** @type {Failure} */ f) =>
+  typeof f.message === "string" ? f.message.replace(/\s+/g, " ").trim() : "";
+
+/** A note's ending that quotes the failure's message, or "" with none. */
+const messageNote = (/** @type {Failure} */ f) => {
+  const line = messageLine(f);
+  return line ? ` First failure: ${line}` : "";
+};
 
 /** A backlog title is one line and can't hold the heading's separator. */
 const title = (/** @type {string} */ text) => {
@@ -185,7 +197,7 @@ export const devFindings = (failures, { branch, url, topic }) => {
     key: f.key,
     title: title(`CI: ${label(f)} fails on dev`),
     prd,
-    note: `Fails on dev too${f.brake ? " (a brake)" : ""}; found by ${branch}${url ? ` in ${url}` : ""}.`,
+    note: `Fails on dev too${f.brake ? " (a brake)" : ""}; found by ${branch}${url ? ` in ${url}` : ""}.${messageNote(f)}`,
     quarantine: null,
   }));
 };
@@ -207,7 +219,7 @@ export const noticeKey = (/** @type {string} */ text) => BRAKE_NOTICE.exec(text)
  * Sort a verdict's flakes: a file the branch touched is the branch's and nothing
  * is written; a brake-list flake or a whole-file flake is filed with no entry;
  * the rest are filed and quarantined.
- * @param {{ job?: string, file: string, name: string | null, brake?: boolean }[]} flaky
+ * @param {{ job?: string, file: string, name: string | null, brake?: boolean, message?: string }[]} flaky
  * @param {string[]} touched
  * @param {{ branch: string, url?: string }} from
  */
@@ -232,7 +244,7 @@ export function sortFlakes(flaky, touched, { branch, url }) {
           : t.name
             ? ""
             : "; a whole-file flake can't be quarantined by name"
-      }; found by ${branch}${url ? ` in ${url}` : ""}.`,
+      }; found by ${branch}${url ? ` in ${url}` : ""}.${messageNote(t)}`,
       quarantine: listed ? { file: t.file, name: /** @type {string} */ (t.name) } : null,
     });
   }
