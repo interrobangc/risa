@@ -109,7 +109,7 @@ scripts/loops/land.test.mjs core-to-project 6
 scripts/loops/land.test.mjs project-env 6
 scripts/loops/land.test.mjs project-name 1
 scripts/loops/lease.mjs project-env 2
-scripts/loops/lease.sh project-env 26
+scripts/loops/lease.sh project-env 25
 scripts/loops/lease.test.mjs project-env 18
 scripts/loops/lib.sh project-env 27
 scripts/loops/lib.sh project-name 1

@@ -18,6 +18,8 @@ import { LEASE_SH, takeLease } from "./lease.mjs";
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
 // The variable naming the lease root lease.sh reads, named once (the boundary lint counts each).
 const ROOT_VAR = "CARETOOK_LEASE_ROOT";
+// The test hook's variable: a marker pauses a take after its mkdir, write:<marker> before its name file.
+const PAUSE_VAR = "CARETOOK_LEASE_TEST_PAUSE";
 
 let root, env;
 const children = [];
@@ -132,7 +134,7 @@ describe("taking and waiting", SLOW, () => {
   // B-867: on CI a takeover removed a lease made a moment before, a second taker
   // made the slot again, and both went ahead. Here the test makes that
   // interleaving by hand: each taker stops after its mkdir, before writing its
-  // name file (CARETOOK_LEASE_TEST_WRITE_PAUSE), and goes on once MARKER.go exists.
+  // name file (the test hook, `write:<marker>`), and goes on once MARKER.go exists.
   it.each([
     ["the first taker writes first", ["a", "b"]],
     ["the second taker writes first", ["b", "a"]],
@@ -142,10 +144,9 @@ describe("taking and waiting", SLOW, () => {
     for (const who of ["a", "b"]) {
       const marker = join(root, `${kind}-${who}`);
       // (start's object, not a copy: its out and err grow as the taker writes)
-      takers[who] = Object.assign(
-        start(["hold", kind, "--label", who], { CARETOOK_LEASE_TEST_WRITE_PAUSE: marker }),
-        { marker },
-      );
+      takers[who] = Object.assign(start(["hold", kind, "--label", who], { [PAUSE_VAR]: `write:${marker}` }), {
+        marker,
+      });
       await until(() => existsSync(marker));
       expect(existsSync(dir(kind, 1))).toBe(true);
       // a's slot goes as a takeover's rm -rf took it; b then makes it again.
@@ -275,7 +276,7 @@ describe("releasing", SLOW, () => {
     ["run", ["run", "window", "--", "true"]],
   ])("leaves no lease when %s is TERMed between making the lease and recording it", async (_, args) => {
     const marker = join(root, `window-${args[0]}`);
-    const p = start(args, { CARETOOK_LEASE_TEST_PAUSE: marker });
+    const p = start(args, { [PAUSE_VAR]: marker });
     await until(() => existsSync(marker));
     expect(existsSync(dir("window", 1))).toBe(true); // made, not yet recorded
     p.child.kill("SIGTERM");

@@ -55,6 +55,10 @@ declare -F env_get >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # Callers may set lease_worktree, lease_pid and lease_cmd before taking, and
 # lease_say to a function for chatter (browser.sh: vsay).
 lease_path="" lease_n="" lease_kind="" lease_started=""
+# Tests only: "<marker>" pauses a take between its mkdir and recording the lease
+# (lease_test_pause), "write:<marker>" before it writes the name file
+# (lease_test_write_pause).
+lease_test_hook=${CARETOOK_LEASE_TEST_PAUSE:-}
 
 lease_valid_kind() { [[ $1 =~ ^[a-z][a-z0-9-]*$ ]]; }
 
@@ -224,7 +228,7 @@ lease_write() {
   [[ -n $lease_path ]] || return 0
   local p=$lease_path me=${lease_pid:-$$} tmp ok=""
   tmp=$p/name.tmp.${BASHPID:-$$}
-  [[ -z ${CARETOOK_LEASE_TEST_WRITE_PAUSE:-} ]] || lease_test_write_pause "$CARETOOK_LEASE_TEST_WRITE_PAUSE"
+  [[ $lease_test_hook != write:* ]] || lease_test_write_pause "${lease_test_hook#write:}"
   if printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
     "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "$me" "${lease_cmd-$(basename "$0")}" \
     "${lease_started:-$(date +%s)}" 2>/dev/null > "$tmp"; then
@@ -266,7 +270,7 @@ lease_claim() {
   trap 'lease_deferred=TERM' TERM
   trap 'lease_deferred=INT' INT
   if mkdir "$2/$3" 2>/dev/null; then
-    [[ -z ${CARETOOK_LEASE_TEST_PAUSE:-} ]] || lease_test_pause "$CARETOOK_LEASE_TEST_PAUSE"
+    [[ -z $lease_test_hook || $lease_test_hook == write:* ]] || lease_test_pause "$lease_test_hook"
     lease_kind=$1 lease_path=$2/$3 lease_n=$3 lease_started=$(date +%s)
     rc=0
   fi
