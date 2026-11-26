@@ -93,15 +93,13 @@
 //
 // Env: CARETOOK_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), CARETOOK_MAX_PLANNERS (1), CARETOOK_FIXES_MIN (3):
 // the pick's caps; CARETOOK_LOAD_* (load-gate.mjs); CARETOOK_SESSIONS_DIR,
-// CARETOOK_ASKS_DIR; CARETOOK_ITERM_APP (default /Applications/iTerm.app);
+// CARETOOK_ASKS_DIR; CARETOOK_ITERM_APP (the host layer's, host.mjs: where iTerm2 is);
 // CARETOOK_CLAUDE_BIN (the helper's claude); CARETOOK_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  accessSync,
   appendFileSync,
-  constants,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -112,7 +110,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, delimiter, dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
 import { CAPTAIN_SESSION, nextCaptain } from "./captain.mjs";
@@ -135,6 +133,7 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
+import { canOpenTabs, itermApp } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
@@ -1839,16 +1838,6 @@ export function tick(
 
 // ---- the command line ------------------------------------------------------------
 
-const onPath = (/** @type {string} */ cmd) =>
-  (process.env.PATH ?? "").split(delimiter).some((d) => {
-    try {
-      accessSync(join(d, cmd), constants.X_OK);
-      return Boolean(d);
-    } catch {
-      return false;
-    }
-  });
-
 const stamp = (/** @type {number} */ ms) => new Date(ms).toISOString().replace(/\.\d+Z$/, "Z");
 
 function parse(/** @type {string[]} */ argv) {
@@ -1982,10 +1971,9 @@ async function main() {
     return;
   }
 
-  const iterm = process.env.CARETOOK_ITERM_APP || "/Applications/iTerm.app";
-  if (!existsSync(iterm) || !onPath("osascript")) {
+  if (!canOpenTabs()) {
     console.error(
-      `pnpm prd: dispatch needs iTerm2 (${iterm}) to open sessions; --dry-run shows what it would do`,
+      `pnpm prd: dispatch needs iTerm2 (${itermApp()}) to open sessions; --dry-run shows what it would do`,
     );
     process.exit(1);
   }

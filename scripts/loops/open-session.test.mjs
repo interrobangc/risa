@@ -133,6 +133,7 @@ beforeAll(() => {
     "config.mjs",
     "open-session.sh",
     "open-session.mjs",
+    "host.mjs",
     "planner-model.mjs",
     "sessions.mjs",
     "captain.mjs",

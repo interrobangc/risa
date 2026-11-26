@@ -139,6 +139,30 @@ describe("a core file", () => {
   });
 });
 
+describe("the host layer", () => {
+  const owners = new Map([
+    ...OWNERS,
+    ["scripts/loops/host.mjs", "core"],
+    ["scripts/loops/host.test.mjs", "core"],
+    ["scripts/project/mac.sh", "project"],
+  ]);
+  const hostCalls = (file, text) =>
+    findings({ files: new Map([[file, text]]), owners, project })
+      .filter((f) => f.rule === "host-call")
+      .map((f) => `${f.line} ${f.text}`);
+
+  it("is the one core file that calls osascript or launchctl, in code", () => {
+    const text = '# osascript opens tabs\nosascript - "$line"\nlaunchctl print "gui/$uid"\n';
+    expect(hostCalls(CORE, text)).toEqual(["2 osascript", "3 launchctl"]);
+    expect(hostCalls(CORE_JS, 'spawnSync("osascript", ["-"]); // launchctl\n')).toEqual(["1 osascript"]);
+    expect(hostCalls("scripts/loops/host.mjs", 'spawnSync("osascript", ["-"]);\n')).toEqual([]);
+    // A test stubs them; a project file may call them; a longer name is another word.
+    expect(hostCalls("scripts/loops/host.test.mjs", 'stub("osascript");\n')).toEqual([]);
+    expect(hostCalls("scripts/project/mac.sh", "osascript -e x\n")).toEqual([]);
+    expect(hostCalls(CORE, "fake-osascript; osascript.args\n")).toEqual([]);
+  });
+});
+
 describe("a project file", () => {
   it.each([
     [

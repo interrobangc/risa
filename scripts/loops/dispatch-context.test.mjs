@@ -447,6 +447,7 @@ describe("the tick", () => {
       "load-gate.mjs",
       "rotate.mjs",
       "open-session.mjs",
+      "host.mjs",
       "planner-model.mjs",
       "config.mjs",
       "drain.mjs",

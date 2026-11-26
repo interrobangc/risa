@@ -6,6 +6,9 @@
 //                    boundary.appPaths) in a core file
 //   core-to-project  a core file reaching a project file
 //   project-to-core  a project file, anywhere in the repo, reaching a core file
+//   host-call        osascript or launchctl in a core file's code other than the
+//                    host layer's (HOST, host.mjs), the tests' (which stub them)
+//                    and this lint's
 // The two reach rules see every form, and a finding names its form:
 //   import    a JS import, dynamic import or require; a shell `source` or `.`
 //   --import  a path handed to Node's --import
@@ -53,12 +56,26 @@ import { loadConfig } from "./config.mjs";
 /** The folders the manifest covers. */
 export const ROOTS = ["scripts/loops", "scripts/backlog", "scripts/ci", "scripts/project", ".githooks"];
 export const OWNERS = ["core", "project"];
-export const RULES = ["app-path", "core-to-project", "project-env", "project-name", "project-to-core"];
+export const RULES = [
+  "app-path",
+  "core-to-project",
+  "host-call",
+  "project-env",
+  "project-name",
+  "project-to-core",
+];
 export const FORMS = ["import", "--import", "spawn", "path"];
 
 /** The lint's own data, which names both sides and is never read as code. */
 export const MANIFEST = "scripts/loops/boundary.manifest";
 export const ALLOWLIST = "scripts/loops/boundary.allowlist";
+/** The host layer: the one core file that calls the machine's own commands. */
+export const HOST = "scripts/loops/host.mjs";
+/** The machine's commands only the host layer calls. */
+const HOST_CALL = /(?<![\w.-])(?:osascript|launchctl)(?![\w.-])/g;
+const SELF = "scripts/loops/boundary.mjs";
+const callsHost = (/** @type {string} */ path) =>
+  path !== HOST && path !== SELF && !/\.test\.[a-z]+$/.test(path);
 
 const inRoots = (path) => ROOTS.some((root) => path.startsWith(`${root}/`));
 const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -409,6 +426,7 @@ export function findings({ files, owners, project, data = [] }) {
       const line = (code[i] ?? "").replace(/\\([/.-])/g, "$1");
       if (core && appRe)
         for (const m of line.matchAll(appRe)) add("app-path", null, m[0].replace(/\/+$/, "/"));
+      if (core && callsHost(file)) for (const m of line.matchAll(HOST_CALL)) add("host-call", null, m[0]);
       for (const m of line.matchAll(/[\w.*\-/]+/g)) {
         const before = line.slice(0, m.index);
         const reached = candidates(m[0], file, before.slice(-1)).filter((path) => {

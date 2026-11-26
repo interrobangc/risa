@@ -28,7 +28,7 @@
 // …" for the asking session to push to the keeper's phone; a report prints no
 // such line and is never pushed (the keeper wants pushes for questions only,
 // and only this line). Either kind also shows a macOS notification
-// when osascript is on the PATH, and runs `$CARETOOK_ASK_NOTIFY <id> <kind>
+// (the host layer, host.mjs, when osascript is on the PATH), and runs `$CARETOOK_ASK_NOTIFY <id> <kind>
 // <topic> <text>` when that is set (a command line, run by sh), bounded by
 // CARETOOK_ASK_NOTIFY_TIMEOUT seconds (default 10); either one failing is only
 // a warning. `--wait` polls every CARETOOK_ASK_POLL seconds (default 2).
@@ -36,9 +36,7 @@
 // CARETOOK_CLOCK_FILE (tests, and the dispatcher's own under test): a file
 // holding epoch seconds that `ask` files at and `asks` lists from, so a
 // countdown or an age reads from a fixed now; `--wait` keeps the real clock.
-import { spawn } from "node:child_process";
-import { accessSync, constants, readFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { readFileSync } from "node:fs";
 import {
   AskError,
   DEFAULT_WAIT_MIN,
@@ -58,6 +56,7 @@ import {
   span,
   validateAsk,
 } from "./asks.mjs";
+import { notify, runBounded } from "./host.mjs";
 import { SkepticError, questionHash, useRecord } from "./skeptics.mjs";
 
 const TIMED_OUT = 75;
@@ -99,72 +98,17 @@ function parse(argv, valued, flags = []) {
   return { opts, rest };
 }
 
-const onPath = (cmd) => {
-  for (const d of (process.env.PATH ?? "").split(delimiter)) {
-    if (!d) continue;
-    try {
-      accessSync(join(d, cmd), constants.X_OK);
-      return join(d, cmd);
-    } catch {
-      /* not here */
-    }
-  }
-  return null;
-};
-
-// run(cmd, args, seconds) → "ok", "exit <n>" or "timed out": in its own process
-// group, so a hook that hangs (and anything it started) is killed at the limit.
-const run = (cmd, args, seconds) =>
-  new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(cmd, args, { detached: true, stdio: ["ignore", "ignore", "inherit"] });
-    } catch (e) {
-      resolve(`failed: ${e.message}`);
-      return;
-    }
-    const timer = setTimeout(() => {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        /* gone */
-      }
-      resolve("timed out");
-    }, seconds * 1000);
-    child.once("error", (e) => {
-      clearTimeout(timer);
-      resolve(`failed: ${e.message}`);
-    });
-    child.once("exit", (code, signal) => {
-      clearTimeout(timer);
-      resolve(code === 0 ? "ok" : `exit ${code ?? signal}`);
-    });
-  });
-
 async function tell(ask) {
-  const osascript = onPath("osascript");
-  if (osascript) {
-    const title = `Caretook ${ask.kind}: ${ask.topic}`;
-    const r = await run(
-      osascript,
-      [
-        "-e",
-        "on run argv",
-        "-e",
-        "display notification (item 2 of argv) with title (item 1 of argv)",
-        "-e",
-        "end run",
-        title,
-        shorten(ask.text, 200),
-      ],
-      5,
-    );
-    if (r !== "ok") console.error(`warning: the macOS notification ${r} (ignored)`);
-  }
+  const shown = await notify(`Caretook ${ask.kind}: ${ask.topic}`, shorten(ask.text, 200));
+  if (shown && shown !== "ok") console.error(`warning: the macOS notification ${shown} (ignored)`);
   const hook = process.env.CARETOOK_ASK_NOTIFY;
   if (hook) {
     const limit = Number(process.env.CARETOOK_ASK_NOTIFY_TIMEOUT) || 10;
-    const r = await run("sh", ["-c", `${hook} "$@"`, "sh", ask.id, ask.kind, ask.topic, ask.text], limit);
+    const r = await runBounded(
+      "sh",
+      ["-c", `${hook} "$@"`, "sh", ask.id, ask.kind, ask.topic, ask.text],
+      limit,
+    );
     if (r !== "ok") console.error(`warning: CARETOOK_ASK_NOTIFY ${r} (ignored)`);
   }
 }
