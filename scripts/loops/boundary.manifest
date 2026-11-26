@@ -118,6 +118,7 @@ scripts/loops/check-areas.d/providers project
 scripts/loops/check-areas.d/search project
 scripts/loops/check-areas.d/security-headers project
 scripts/loops/check-areas.d/sync project
+scripts/loops/check-areas.d/tags project
 scripts/loops/check-areas.d/timeline project
 scripts/loops/check-areas.d/todos project
 scripts/loops/check-budget.mjs core
