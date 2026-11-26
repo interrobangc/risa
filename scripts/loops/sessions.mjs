@@ -41,7 +41,7 @@
 //
 // Under Vitest (VITEST set, and inherited by every script a test runs), a write
 // to a `.loops/.sessions` outside the OS temp dir is refused (B-871): a test
-// that forgets its own CARETOOK_SESSIONS_DIR, and inherits the session's (the
+// that forgets to name its own records' folder, and inherits the session's (the
 // real one, which session.sh exports), fails instead of overwriting live records.
 import { execFileSync } from "node:child_process";
 import {
@@ -221,7 +221,7 @@ export function liveDirRefusal(/** @type {string} */ dir, env = process.env, tmp
   if (!real.endsWith(`${sep}.loops${sep}.sessions`)) return null;
   const t = realish(tmp);
   if (real.startsWith(t.endsWith(sep) ? t : t + sep)) return null;
-  return `sessions.mjs: refusing to write session records into ${real} under Vitest: a test must set CARETOOK_SESSIONS_DIR to a temp dir (B-871)`;
+  return `sessions.mjs: refusing to write session records into ${real} under Vitest: a test names a records' folder in a temp dir (B-871)`;
 }
 
 /**

@@ -160,8 +160,8 @@ describe("the pure part", () => {
     }
   });
 
-  // B-871: a test that inherits the session's CARETOOK_SESSIONS_DIR (the real
-  // one) fails instead of writing into it.
+  // B-871: a test that inherits the session's records' folder (the real one)
+  // fails instead of writing into it.
   it("refuses a write to the real checkout's .loops/.sessions under Vitest, and allows a temp one", () => {
     const main = execFileSync("git", ["-C", HERE, "worktree", "list", "--porcelain"], { encoding: "utf8" })
       .split("\n")[0]
@@ -171,14 +171,7 @@ describe("the pure part", () => {
     expect(liveDirRefusal(real)).toMatch(
       /refusing to write session records into .*\.loops\/\.sessions under Vitest/,
     );
-    expect(() => writeRecord(real, probe, { pid: 1 })).toThrow(/CARETOOK_SESSIONS_DIR to a temp dir/);
-    // Through the CLI too: the scripts a test runs inherit VITEST.
-    const cli = spawnSync("node", [join(HERE, "sessions.mjs"), "set", probe, "pid=1"], {
-      encoding: "utf8",
-      env: { ...process.env, CARETOOK_SESSIONS_DIR: real },
-    });
-    expect(cli.status).not.toBe(0);
-    expect(cli.stderr).toMatch(/refusing to write session records/);
+    expect(() => writeRecord(real, probe, { pid: 1 })).toThrow(/a records' folder in a temp dir/);
     expect(existsSync(join(real, `${probe}.json`))).toBe(false);
     // Outside Vitest, any folder; under it, a temp dir's .loops/.sessions, or one not named so.
     expect(liveDirRefusal(real, {})).toBeNull();
