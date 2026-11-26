@@ -216,7 +216,11 @@ export function tidy(facts) {
   for (const v of facts.volumes ?? [])
     safe.push({ kind: "volume", target: v.name, why: v.why, how: "stack leftovers remove volume" });
   if (facts.volumesSkipped)
-    kept.push({ kind: "volume", target: "the stack's leftovers", why: `not checked: ${facts.volumesSkipped}` });
+    kept.push({
+      kind: "volume",
+      target: "the stack's leftovers",
+      why: `not checked: ${facts.volumesSkipped}`,
+    });
 
   for (const h of facts.hangLogs ?? [])
     if (h.ageSecs > HANG_LOG_DAYS * 86400)
