@@ -6,7 +6,7 @@
 
 | Slice | Wave | State   | Merge into `prd/after-split-2` |
 | ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | recheck |                                |
+| 1     | 1    | merged  | 11b94c5                        |
 | 2     | 1    | working |                                |
 | 3     | 2    | planned |                                |
 
@@ -16,7 +16,7 @@
 
 **Now (2026-11-27):** wave 1 running: worktrees `.loops/after-split-2-1` and `-2` (from a2831a5), one background agent each on opus; watch running. No new items at the wave boundary. Slice 3 waits for 1 and 2 merged.
 
-**Slice 1:** handed off at 37d7591 (projectTop and stack_hook take `worktree list`'s first line); slice check failed only on load timeouts (load 26–36, 18 untouched files), sent back to rerun at load ~10.
+**Slice 1:** merged at 11b94c5 (from 37d7591). Its slice check failed twice only on load timeouts in files it doesn't touch (bye, tidy-cli, land-unsynced, recover, rotate, stack); bye and tidy-cli pass alone on its tip at load ~8. The wave's CI run is the gate.
 
 ## Architectural decisions
 
