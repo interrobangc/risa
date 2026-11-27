@@ -88,12 +88,13 @@
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
 // BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { withLock as withLockAt } from "./lock.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
@@ -215,34 +216,8 @@ const readArchive = (opts) => {
   return text === null ? null : fmt.parse(text, opts);
 };
 
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-
-/** Run `fn` under the lock; a lock older than 30 s is from a crashed writer and is taken over. */
-function withLock(fn) {
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      mkdirSync(lockDir);
-      break;
-    } catch (e) {
-      if (e.code !== "EEXIST") throw e;
-      let age;
-      try {
-        age = Date.now() - statSync(lockDir).mtimeMs;
-      } catch {
-        continue; // released between the two calls
-      }
-      if (age > 30_000) rmSync(lockDir, { recursive: true, force: true });
-      else if (Date.now() > deadline) throw new fmt.BacklogError(`backlog is locked (${lockDir}); try again`);
-      else sleep(150);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    rmSync(lockDir, { recursive: true, force: true });
-  }
-}
+/** Run `fn` under the backlog lock (lock.mjs: a stale one is taken over under its guard, as lib.sh does). */
+const withLock = (fn) => withLockAt(lockDir, fn, { Error: fmt.BacklogError });
 
 /** Every file a backlog write commits. */
 const BACKLOG_FILES = [REL, INBOX_REL, ARCHIVE_REL];
