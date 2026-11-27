@@ -11,7 +11,7 @@
 | 1     | 1    | RISA-935 | opus | merged | 182c26b |
 | 2     | 1    | RISA-933 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-2`, agent spawned) | — |
 | 3     | 1    | RISA-367 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-3`, agent spawned) | — |
-| 4     | 1    | RISA-477 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-4`, agent spawned) | — |
+| 4     | 1    | RISA-477 | opus | handed off (e959760; `prd status` and dispatch `--dry-run` printing the reason left for later: `loops/ls.sh`, `loops/dispatch*` are after-split hot) | — |
 | 5     | 1    | RISA-911 | opus | handed off (adcb902); merges after 2 to 4 | — |
 | 6     | 1    | RISA-880 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-6`, agent spawned) | — |
 | 7     | 1    | RISA-721 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-7`, agent spawned) | — |
