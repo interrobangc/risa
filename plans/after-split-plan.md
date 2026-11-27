@@ -6,7 +6,7 @@
 
 | Slice | Wave | State | Merge into `prd/after-split` |
 | ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | —     | —                            |
+| 1     | 1    | working | —                          |
 | 2     | 2    | —     | —                            |
 | 3     | 2    | —     | —                            |
 | 4     | 2    | —     | —                            |
@@ -17,7 +17,7 @@
 
 **Models:** slice 1 opus (real logic: env, tests in a session).
 
-**Now:** wave 1, slice 1 starting.
+**Now:** wave 1: slice 1 worktree made (.loops/after-split-1), agent spawned on opus, working.
 
 **Backlog:** claim each slice's items as it starts; `done` them when it merges. Slice 1: RISA-975, RISA-979, RISA-932, RISA-953. Slice 2: RISA-970, RISA-971. Slice 3: RISA-976 (the fixtures' half). Slice 4: RISA-976 (the git floor; `done` it when both 3 and 4 have merged). Slice 5: RISA-978, RISA-977. Slice 6: RISA-974.
 
