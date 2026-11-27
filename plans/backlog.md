@@ -21,7 +21,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Also moved to the bottom of the queue by the user 2026-11-24. Released 2026-11-23 by the user. The backlog session as go-between for every agent's questions, and asks queue hygiene. Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic) |
 | `risa-next` | hold | — | — | — |
 | `usage-aware-drain` | hold | — | — | Plan-aware drain line, after the orchestrator split |
-| `after-split-2` | — | `after-split` | — | — |
+| `after-split-2` | — | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
 
 ## Summary
 
