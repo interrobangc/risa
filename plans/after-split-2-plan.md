@@ -8,7 +8,7 @@
 | ----- | ---- | ------- | ------------------------------ |
 | 1     | 1    | merged  | 11b94c5                        |
 | 2     | 1    | merged  | 57736ed                        |
-| 3     | 2    | planned |                                |
+| 3     | 2    | working |                                |
 
 **Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
 
@@ -20,7 +20,9 @@
 
 **Slice 2:** merged at 57736ed (from a415761): rm re-points RISA_CONFIG and the mark at `$main/risa.json` when the config is under the removed worktree. Same load-timeout story in its slice check; stack.test passes 22/22 alone.
 
-**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip.
+**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip (running).
+
+**Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
 
 ## Architectural decisions
 
