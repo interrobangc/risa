@@ -91,6 +91,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-996 | chore | triaged | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
 | RISA-997 | chore | triaged | fixes-tooling |  | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
 | RISA-998 | feature | triaged | risa-next |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
+| RISA-999 | bug | triaged | fixes-tooling |  | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
+| RISA-1000 | bug | triaged | fixes-tooling |  | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
 
 ## Items
 
@@ -728,6 +730,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/fixes-tooling): The user, 2026-11-27: 'Land it and review codex later'. Codex hadn't reviewed after two 20-min waits.
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27: asked Codex on PR #5 (comment); findings to triage when it answers (fixes-tooling wave 2 orchestrator).
 
 ### RISA-997 · chore · CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict')
 
@@ -747,3 +750,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-27 (Robert Bo Davis): From the inbox: A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before it runs or between waves) to replan the whole PRD
 - 2026-11-27 (Robert Bo Davis): Triage: risa-next, the bin for new dispatcher and registry features; the user chose a whole-PRD replan (a registry state), not an item status. Could join self-recovery-3 instead (both touch loops/dispatch).
+
+### RISA-999 · bug · An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): Codex on PR #7 (thread PRRT_kwDOV9ctaM689rK9, backlog/registry.mjs:421), from RISA-934's prd archive: archiveDone strips After references only to the rows it moves now; a later prd add/set after=<archived> keeps one. Fix: drop or refuse an archived After on write, or have dispatch read the archive.
+
+### RISA-1000 · bug · Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/after-split-2): Seen 2026-11-27 by after-split-2: two slice checks and the wave-1 full check failed only on timeouts (ask, bye, tidy-cli, land-unsynced, land-gate, recover, rotate, stack, load-gate, dispatch, sessions…); all pass run alone at load ~7. Fix candidates: scale vitest testTimeout/hookTimeout with load as check-budget does, or lower parallelism under load.
