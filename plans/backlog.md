@@ -442,6 +442,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-26 (Robert Bo Davis): 2026-11-26: the user's word: narrowed to splitting; the mid-slice hand-off half moved to B-912 (slices as headless sessions, self-recovery-2).
 - 2026-11-27 (the Risa move, B-543): Was B-881 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: widened from 'split a 200k+ slice' to a planner slicing rule. The planner owns the breakdown; the orchestrator's split is the fallback. The budget figures are a starting point, judged with RISA-883 (cost by price). Needs hermetic tests first (after-split slice 1); pairs with RISA-882 (Sonnet for tightly specified slices). The floor: a slice's fixed cost (worktree, session start, prompt, check, review, merge) must stay a small share of it.
+- 2026-11-27 (Robert Bo Davis): 2026-11-27: projects get the rule from Risa's generic planner and orchestrator docs once they move to the release that has it. What each project supplies: a command that runs one test file, set in its risa.json (the narrow check differs per runner, so the rule has to name a config key, not hard-code vitest), and its own role-doc additions checked so they don't contradict the rule.
 
 ### RISA-882 · chore · Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now)
 
