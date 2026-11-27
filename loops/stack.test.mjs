@@ -361,6 +361,26 @@ describe("a repo with no stack or testDb hooks (RISA-973)", () => {
     }
   });
 
+  it("ls.sh says there is no test database, not unknown (RISA-977)", () => {
+    // A repo of its own with no worktrees: ls.sh walks every one (see "status and gc").
+    use(fixture());
+    try {
+      const raw = JSON.parse(read(env.RISA_CONFIG));
+      for (const h of Object.keys(raw.hooks)) if (/^stack|^testDb$/.test(h)) delete raw.hooks[h];
+      const config = join(root, "no-stack-hooks.json");
+      writeFileSync(config, `${JSON.stringify(raw, null, 2)}\n`);
+      const status = ok("ls.sh", [], { env: { RISA_CONFIG: config } });
+      expect(status).toContain("test database: none (no testDb hook)");
+      expect(status).not.toMatch(/test database: unknown/);
+      const sample = ok("ls.sh", []);
+      expect(sample).toMatch(/sample test database: /);
+      expect(sample).not.toContain("no testDb hook");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      use(shared);
+    }
+  });
+
   it("starts a PRD worktree with no stack instead of finding every slot taken (RISA-985)", () => {
     const raw = JSON.parse(read(env.RISA_CONFIG));
     for (const h of Object.keys(raw.hooks)) if (/^stack|^testDb$/.test(h)) delete raw.hooks[h];

@@ -82,6 +82,13 @@ describe("prd doc on the sample project", () => {
     expect(named).toBeGreaterThan(20);
   });
 
+  it("no generic doc names a literal backticked prd command: each is {{prd}}", () => {
+    for (const f of readdirSync(GENERIC_DIR).filter((f) => f.endsWith(".md"))) {
+      const raw = readFileSync(join(GENERIC_DIR, f), "utf8");
+      expect(raw.match(/`prd [^`]*`/g) ?? [], f).toEqual([]);
+    }
+  });
+
   it("leaves a placeholder a config has no name for", () => {
     expect(fillNames("`{{prd}} land` and `{{backlog}} add`", { tool: { prd: "x", backlog: "x b" } })).toBe(
       "`x land` and `x b add`",
@@ -186,6 +193,13 @@ describe("the fixture project's roles", () => {
     const additions = readFileSync(join(root, entry.additions), "utf8");
     expect(roleDoc(role, { config, root })).toBe(
       fillNames(`${generic}\n${additions.replace(/^<!--.*-->\n\n/, "")}`, config),
+    );
+  });
+
+  it("the loop doc's rules-across-PRDs reference names the config's tool.prd", () => {
+    expect(config.tool.prd).toBe("pnpm prd");
+    expect(roleDoc("loop", { config, root })).toContain(
+      `(migrations, seeds, registries, hot files; \`pnpm prd doc orchestrator "Rules across PRDs"\`)`,
     );
   });
 

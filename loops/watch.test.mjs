@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { gitInit, withOldGit } from "./git-init.mjs";
 import {
   decide,
   nextState,
@@ -286,6 +287,23 @@ describe("the command", () => {
   });
   const watch = (...args) =>
     spawnSync("node", [join(HERE, "watch.mjs"), "topic", ...args], { encoding: "utf8", env: env() });
+  // A slice's checkout at DIR: on its slice branch, one empty commit.
+  const sliceRepo = (dir) => {
+    gitInit(["-q", "-b", "slice/topic/4", dir]);
+    spawnSync("git", [
+      "-C",
+      dir,
+      "-c",
+      "user.email=loop@example.test",
+      "-c",
+      "user.name=Fixture",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "chore: start",
+    ]);
+  };
   const beat = (lastMin) => {
     const t = new Date(Date.now() - lastMin * M).toISOString();
     const dir = join(loops, ".heartbeat", "prd-topic");
@@ -311,21 +329,7 @@ describe("the command", () => {
     sessions = join(loops, ".sessions");
     watchDir = join(root, "watch");
     mkdirSync(sessions, { recursive: true });
-    const slice = join(loops, "topic-4");
-    spawnSync("git", ["init", "-q", "-b", "slice/topic/4", slice]);
-    spawnSync("git", [
-      "-C",
-      slice,
-      "-c",
-      "user.email=loop@example.test",
-      "-c",
-      "user.name=Fixture",
-      "commit",
-      "-q",
-      "--allow-empty",
-      "-m",
-      "chore: start",
-    ]);
+    sliceRepo(join(loops, "topic-4"));
     // A live session the heartbeat belongs to: a process of our own, recorded as started now.
     sleeper = spawn("sleep", ["120"], { stdio: "ignore" });
     writeFileSync(
@@ -336,6 +340,13 @@ describe("the command", () => {
   afterAll(() => {
     sleeper?.kill();
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it("the slice fixture stops at a failed git init, before any later git command", () => {
+    const dir = join(root, "old-git");
+    const { error, calls } = withOldGit(() => sliceRepo(dir));
+    expect(error?.message).toMatch(/^git init -q -b slice\/topic\/4 .* failed \(exit 129\)/);
+    expect(calls).toEqual([`init -q -b slice/topic/4 ${dir}`]);
   });
 
   it("marks survive a new process; a bad mark is refused", () => {

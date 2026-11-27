@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { gitInit, withOldGit } from "../loops/git-init.mjs";
 import { REFUSED } from "./candidate.mjs";
 import { EXIT, main } from "./ci.mjs";
 import { applyFindings } from "./filing.mjs";
@@ -185,7 +186,8 @@ const expectNothingMerged = (/** @type {string} */ stagingBefore) => {
   expect(onOrigin(BRANCH)).toBe(prs.find((p) => p.headRefName === BRANCH).headRefOid);
 };
 
-beforeEach(() => {
+// The fixture: origin a bare repository in a new temp directory, repo its clone.
+function setUp() {
   root = realpathSync(mkdtempSync(join(tmpdir(), "risa-promote-test-")));
   const origin = join(root, "origin.git");
   repo = join(root, "repo");
@@ -196,7 +198,7 @@ beforeEach(() => {
   lines = [];
   world = {};
   backlog = { items: [] };
-  run(root, ["init", "-q", "--bare", "-b", "dev", origin]);
+  gitInit(["-q", "--bare", "-b", "dev", origin], { cwd: root, env: gitEnv() });
   run(root, ["clone", "-q", origin, repo]);
   git(["checkout", "-q", "-B", "dev"]);
   commit("chore: start", "a.txt");
@@ -233,10 +235,25 @@ beforeEach(() => {
   ];
   // The guard on every test: the only remote is the bare repository in the temp directory.
   expect(git(["remote", "get-url", "origin"]).startsWith(root)).toBe(true);
-});
+}
+beforeEach(setUp);
 
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
+});
+
+describe("the fixture", () => {
+  it("stops at a failed git init, before any later git command", () => {
+    const prior = root;
+    try {
+      const { error, calls } = withOldGit(setUp);
+      expect(error?.message).toMatch(/^git init -q --bare -b dev .* failed \(exit 129\)/);
+      expect(calls).toEqual([`init -q --bare -b dev ${join(root, "origin.git")}`]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      root = prior;
+    }
+  });
 });
 
 describe("promote merges", () => {

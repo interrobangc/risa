@@ -15,6 +15,7 @@ import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 const SAMPLE_GOLDEN = new URL("./sample-project/prompt-golden.txt", import.meta.url).pathname;
 
 describe("the prompts, byte for byte, for every kind and flag", () => {
+  // It renders every prompt kind and flag, past the default timeout on a loaded machine.
   it("on the sample project, in its own names", async () => {
     const out = renderPrompts(SAMPLE_CONFIG);
     await expect(out).toMatchFileSnapshot(SAMPLE_GOLDEN);
@@ -42,5 +43,5 @@ describe("the prompts, byte for byte, for every kind and flag", () => {
       expect(out, name).toContain(name);
     for (const name of ["pnpm", "docs/agents/", "AGENTS.md is", "B-<n>", "plans/inbox.md", "on dev"])
       expect(out, name).not.toContain(name);
-  });
+  }, 60_000);
 });

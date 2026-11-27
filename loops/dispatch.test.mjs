@@ -20,7 +20,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAsk, getAsk } from "./asks.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
@@ -161,9 +161,12 @@ describe("the code check between ticks (B-809)", () => {
       process.env.RISA_MAIN = "/fictional/project";
       expect(mainCheckout()).toBe("/fictional/project");
       delete process.env.RISA_MAIN;
-      expect(mainCheckout()).toBe(
-        execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: HERE, encoding: "utf8" }).trim(),
-      );
+      // The main checkout, even from a linked worktree (a slice's): its common git dir's folder.
+      const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+        cwd: HERE,
+        encoding: "utf8",
+      }).trim();
+      expect(mainCheckout()).toBe(dirname(common));
     } finally {
       if (was === undefined) delete process.env.RISA_MAIN;
       else process.env.RISA_MAIN = was;
@@ -1362,6 +1365,48 @@ describe("the inbox session's keep-alive", () => {
     ok(["--once"], on);
     expect(inboxOpens()).toEqual([]);
     expect(existsSync(join(sessions, "inbox.json"))).toBe(false);
+  });
+
+  const inboxReports = () =>
+    existsSync(asks)
+      ? readdirSync(asks)
+          .map((f) => askFile(f.replace(/\.json$/, "")))
+          .filter((a) => a.session === "dispatch-keep" && a.kind === "report")
+      : [];
+
+  it("files one report naming the folder and `inbox` while it can't open (RISA-978)", () => {
+    writeFileSync(join(root, "processes"), backlogLive);
+    mkdirSync(inboxDir, { recursive: true });
+    expect(ok(["--once"], on)).toContain("keep-alive inbox: reported it can't open");
+    ok(["--once"], on);
+    const reports = inboxReports();
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ topic: "dispatch" });
+    expect(reports[0].text).toContain("`pnpm prd inbox`");
+    expect(reports[0].text).toContain(realpathSync(inboxDir));
+    expect(dstate().inboxReported).toBe(true);
+  });
+
+  it("trusted clears the record, so untrusted again files a second report", () => {
+    writeFileSync(join(root, "processes"), backlogLive);
+    mkdirSync(inboxDir, { recursive: true });
+    ok(["--once"], on);
+    trust();
+    ok(["--once"], on);
+    expect(dstate().inboxReported).toBeUndefined();
+    rmSync(claudeConfig, { force: true });
+    ok(["--once"], on);
+    expect(inboxReports()).toHaveLength(2);
+  });
+
+  it("a dry run files none and says it would; switched off, none", () => {
+    writeFileSync(join(root, "processes"), backlogLive);
+    mkdirSync(inboxDir, { recursive: true });
+    expect(ok(["--dry-run"], on)).toContain("keep-alive inbox: would report it can't open");
+    expect(inboxReports()).toEqual([]);
+    ok(["--once"], { RISA_KEEP_SESSIONS: "off" });
+    expect(inboxReports()).toEqual([]);
+    expect(dstate().inboxReported).toBeUndefined();
   });
 
   it("opens a managed inbox session through the opener once trusted, outside the PRD slots", () => {
