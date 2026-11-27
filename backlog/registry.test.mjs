@@ -267,3 +267,55 @@ describe("findings", () => {
     expect(reg.findings([row("a", { after: ["x"] })], []).every((f) => f.fixable === false)).toBe(true);
   });
 });
+
+describe("the archive's rows", () => {
+  const ARCHIVE = "# Backlog archive\n\nFinished items.";
+  const rows = [
+    row("a", { flags: ["done"] }),
+    row("b", { after: ["a", "c"] }),
+    row("c", { flags: ["done"], notes: "landed" }),
+    row("d", { flags: ["standing"] }),
+    row("e", { flags: ["done"] }),
+  ];
+
+  it("moves only done rows, keeps one with a worktree, and drops the moved ones from After", () => {
+    const x = reg.archiveDone(rows, new Set(["e"]));
+    expect(topics(x.moved)).toEqual(["a", "c"]);
+    expect(x.kept).toEqual(["e"]);
+    expect(topics(x.rows)).toEqual(["b", "d", "e"]);
+    expect(x.rows[0].after).toEqual([]);
+    expect(x.rows[1]).toBe(rows[3]);
+    const again = reg.archiveDone(x.rows, new Set(["e"]));
+    expect(again.moved).toEqual([]);
+    expect(again.rows).toEqual(x.rows);
+  });
+
+  it("adds the table to an archive without one, then appends to it, and reads it back", () => {
+    expect(reg.archivedRowsOf(ARCHIVE)).toEqual([]);
+    const once = reg.withArchivedRows(ARCHIVE, [rows[0]]);
+    expect(once).toContain(`## PRDs\n\n${reg.ARCHIVE_INTRO}\n\n| PRD | Flags |`);
+    expect(reg.archivedRowsOf(once)).toEqual([rows[0]]);
+    const twice = reg.withArchivedRows(once, [rows[0], rows[2]]);
+    expect(reg.archivedRowsOf(twice)).toEqual([rows[0], rows[2]]);
+    expect(twice.match(/## PRDs/g)).toHaveLength(1);
+    expect(() => reg.withArchivedRows(`${ARCHIVE}\n\n## PRDs\n\nNo table.`, [])).toThrow(/no table under it/);
+  });
+
+  it("takes an archived topic's name", () => {
+    expect(() => reg.addRow([row("b")], "a", [], { last: true }, { archived: ["a"] })).toThrow(
+      /already a PRD row "a" \(archived in plans\/backlog-archive\.md\)/,
+    );
+  });
+
+  it("counts an archived topic as known and done in the findings", () => {
+    const found = (live, items, archived) =>
+      reg.findings(live, items, archived).map((f) => `${f.id}: ${f.problem}`);
+    expect(found([row("b", { after: ["a"] })], [], [rows[0]])).toEqual([]);
+    expect(found([row("b")], [{ id: "B-1", status: "triaged", prd: "a" }], [rows[0]])).toEqual([
+      "B-1: is triaged, but its topic a is done",
+    ]);
+    expect(found([row("a")], [], [rows[0]])).toEqual([
+      "a: has a row in the PRD table and in plans/backlog-archive.md",
+    ]);
+  });
+});
