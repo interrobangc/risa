@@ -307,7 +307,8 @@ describe("Claude Code's files", () => {
     expect(lines("prd").stdout).toBe(`CLAUDE_CONFIG_DIR=/acct/work\n${settingsFor("prd")}\n`);
     expect(lines("hotfix").stdout).toBe("CLAUDE_CONFIG_DIR\n\n");
     expect(lines("inbox", { RISA_MACHINE_CONFIG: "" }).stdout).toBe(`\n${settingsFor("inbox")}\n`);
-    expect(settingsFor("plan")).toBeNull();
+    expect(settingsFor("plan")).toBe(settingsFor("prd"));
+    expect(settingsFor("hotfix")).toBeNull();
     const bad = lines("prd", { [CONFIG_DIR_VAR]: "rel" });
     expect([bad.status, bad.stderr]).toEqual([2, expect.stringMatching(/absolute/)]);
   });

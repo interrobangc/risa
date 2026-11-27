@@ -7,8 +7,8 @@
 // while its reset hasn't passed; no per-model weekly window, and no overage flag), and a
 // StopFailure's error (rate_limit, …) with no reset time of its own.
 //
-// The session settings files (host.mjs settingsFor: orchestrators, backlog and inbox
-// sessions) run `usage.mjs statusline` as the status line, every 60 s as well as on
+// The session settings files (host.mjs settingsFor: orchestrators, planners, backlog
+// and inbox sessions) run `usage.mjs statusline` as the status line, every 60 s as well as on
 // Claude Code's own updates, and `usage.mjs stop-failure` on StopFailure. Both are found
 // beside RISA_CONTEXT_HOOK. Neither ever fails: any error is swallowed (exit 0).
 //

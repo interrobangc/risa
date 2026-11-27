@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { agentTranscript, hardLimitFor, hookDecision, limitOf, sizeFromTranscript } from "./context.mjs";
+import { toolCmd } from "./config.mjs";
 import { processOf } from "./sessions.mjs";
 
 const CONTEXT = new URL("./context.mjs", import.meta.url).pathname;
@@ -274,6 +275,41 @@ describe("hookDecision", () => {
     });
   });
 
+  describe("a planner's limits", () => {
+    const planner = (current, size, extra = {}) =>
+      hookDecision(current, { ...facts, size, limit: 160_000, plan: { topic: "t" }, ...extra });
+
+    it("tells it to head for landing past soft, then only every further 25k, never an orchestrator's rotate", () => {
+      expect(planner(null, 150_000).message).toBeNull();
+      const first = planner(null, 170_000);
+      expect(first.message).toContain("planning session is at 170k");
+      expect(first.message).toContain("past the soft limit of 160k");
+      expect(first.message).toContain("Head for landing");
+      expect(first.message).toContain("_Hand-over_");
+      expect(first.message).not.toContain("rotate");
+      expect(first.message).not.toContain("wave");
+      expect(planner(first.record, 194_999, { now: NOW + 60 * MIN }).message).toBeNull();
+      expect(planner(first.record, 195_000).message).toContain("195k");
+    });
+
+    it("tells it to land or hand over past hard, at the crossing and after the repeat time", () => {
+      const first = planner(null, 240_000);
+      expect(first.message).toContain("past the hard limit of 225k");
+      expect(first.message).toContain("hand over now");
+      expect(first.message).toContain(`\`${toolCmd.prd} plan t --open\``);
+      expect(first.message).toContain(`\`${toolCmd.prd} end\``);
+      expect(first.message).not.toContain("rotate");
+      expect(planner(first.record, 241_000, { now: NOW + MIN }).message).toBeNull();
+      expect(planner(first.record, 241_000, { now: NOW + 11 * MIN }).message).toContain("hand over now");
+    });
+
+    it("has an unattended planner report its hand-over and wait, not end", () => {
+      const m = planner(null, 240_000, { plan: { topic: "t", auto: true } }).message;
+      expect(m).toContain(`\`${toolCmd.prd} ask --topic t --report`);
+      expect(m).toContain("without ending the session");
+    });
+  });
+
   it("gives the inbox session its own words: its hand-off command, no brief", () => {
     const inbox = "pnpm -s -C /m prd rotate --self";
     const first = hookDecision(null, { ...facts, size: 170_000, inbox });
@@ -496,6 +532,29 @@ describe("the hook as a command", () => {
       `\`pnpm -s -C ${dirname(root)} prd rotate --self\``,
     );
     expect(JSON.parse(readFileSync(join(context, "inbox.json"), "utf8"))).toMatchObject({ size: 170_001 });
+  });
+
+  it("gives a planner a planner's words past each limit, and its subagents the loop's", () => {
+    writeFileSync(
+      join(sessions, "plan-t.json"),
+      JSON.stringify({ pid: PID, kind: "plan", topic: "t", auto: true, started: new Date().toISOString() }),
+    );
+    const asPlanner = { RISA_SESSION_NAME: "plan-t" };
+    writeFileSync(transcript, assistant(1, 170_000));
+    const soft = contextOf(hook({ transcript_path: transcript }, asPlanner).stdout).additionalContext;
+    expect(soft).toContain("planning session is at 170k");
+    expect(soft).toContain("Head for landing");
+    writeFileSync(transcript, assistant(1, 240_000));
+    const hard = contextOf(hook({ transcript_path: transcript }, asPlanner).stdout).additionalContext;
+    expect(hard).toContain("past the hard limit of 225k");
+    expect(hard).toContain("--report");
+    mkdirSync(join(root, "s1", "subagents"), { recursive: true });
+    writeFileSync(
+      join(root, "s1", "subagents", "agent-a3.jsonl"),
+      assistant(1, 180_000, 0, { isSidechain: true }),
+    );
+    const sub = hook({ transcript_path: transcript, agent_id: "a3" }, asPlanner);
+    expect(contextOf(sub.stdout).additionalContext).toContain("this agent is at 180k");
   });
 
   it("exits 0 with no output on a missing transcript, bad input or an unwritable folder", () => {

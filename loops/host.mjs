@@ -464,11 +464,11 @@ export function folderTrusted(/** @type {string} */ dir, state = claudeState()) 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /**
  * The settings file a session of KIND runs with (claude --settings), or null: the
- * context hook and the usage status line for orchestrators and backlog sessions,
+ * context hook and the usage status line for orchestrators, planners and backlog sessions,
  * and the inbox session's own (one --settings: its effort and fast mode as well).
  */
 export function settingsFor(/** @type {string} */ kind) {
-  if (kind === "prd" || kind === "backlog") return join(HERE, "context-settings.json");
+  if (kind === "prd" || kind === "plan" || kind === "backlog") return join(HERE, "context-settings.json");
   if (kind === "inbox") return join(HERE, "inbox-settings.json");
   return null;
 }
