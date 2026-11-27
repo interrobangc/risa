@@ -55,6 +55,12 @@ case $kind in
   hotfix) name=hotfix-$topic branch=$hotfix_prefix$topic base=${base:-$trunk} stack=${stack:-0} ;;
   *) echo "kind must be prd, slice, plan or hotfix" >&2; exit 1 ;;
 esac
+# A repo with no stack hooks (Risa's own) has no stacks: no slot to lease and
+# nothing to bring up, so every worktree there is stackless (RISA-985).
+if ((stack)) && ! has_hook stackUp; then
+  echo "no stack hooks in the config: $name gets no stack"
+  stack=0
+fi
 dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }

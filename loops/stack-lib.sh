@@ -10,9 +10,11 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # slot_busy N → true when slot N is leased, or the stack hook says a worktree or
-# a listening port has it.
+# a listening port has it. With no stackStatus hook only a lease counts: the
+# hook's empty answer isn't "in use" (RISA-985).
 slot_busy() {
   [[ -e $leases/$1 ]] && return 0
+  has_hook stackStatus || return 1
   [[ $(fact in_use "$(stack_hook stackStatus --slot "$1" --probe)") != no ]]
 }
 
