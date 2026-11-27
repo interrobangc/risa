@@ -73,7 +73,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-927 | bug | triaged | fixes-tooling |  | The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers |
 | RISA-932 | bug | live | after-split | prd/after-split | rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*) |
 | RISA-933 | chore | live | fixes-tooling | prd/fixes-tooling | test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line |
-| RISA-934 | chore | in-progress | fixes-tooling | prd/fixes-tooling | Archive finished rows out of the PRD registry table (75 done rows clutter it) |
+| RISA-934 | chore | ready | fixes-tooling | prd/fixes-tooling | Archive finished rows out of the PRD registry table (75 done rows clutter it) |
 | RISA-935 | bug | live | fixes-tooling | prd/fixes-tooling | prd tidy lists lease .waiting files as safe to remove, then refuses them as not a lease |
 | RISA-952 | chore | triaged | fixes-tooling |  | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
 | RISA-953 | bug | live | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
@@ -601,10 +601,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-934 · chore · Archive finished rows out of the PRD registry table (75 done rows clutter it)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 00269bb
 
 - 2026-11-26 (Robert Bo Davis): Filed from the backlog session 2026-11-26 on the user's word: a registry archive (e.g. backlog prd archive) moving done rows out of the PRD table, like backlog archive does for items.
 - 2026-11-27 (the Risa move, B-543): Was B-934 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
