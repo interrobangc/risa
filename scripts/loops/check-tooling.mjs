@@ -9,11 +9,14 @@
 //   node check-tooling.mjs [--harness] [--state DIR] [--rerun-max N]
 //
 // No tooling tests in the config (testProjects.tooling unset): the project has
-// none, so the step runs nothing and passes (tooling-tests.mjs too).
+// none, so the step runs nothing and passes (tooling-tests.mjs too). First, the
+// project-data check (project-check.mjs): its failure fails the step with its
+// lines (step `tooling`), and no test runs.
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 
 /**
@@ -238,7 +241,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   };
   const max = Number(opt("--rerun-max") ?? 20);
   const projects = checkProjects(loadConfig().config, args.includes("--harness"));
-  if (!projects) {
+  const state = opt("--state") ?? "";
+  const here = dirname(fileURLToPath(import.meta.url));
+  const checked = spawnSync(process.execPath, [join(here, "project-check.mjs")], {
+    cwd: root || process.cwd(),
+    stdio: "inherit",
+  });
+  if (checked.status !== 0) {
+    if (state) writeFileSync(join(state, "step"), "tooling\n");
+    console.log("tooling: the project-data check failed (above), so no tooling test ran");
+    process.exitCode = checked.status ?? 1;
+  } else if (!projects) {
     console.log(
       "The project config names no tooling tests (testProjects.tooling): the tooling step has none to run.",
     );
@@ -246,7 +259,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = await toolingStep({
       root: root || process.cwd(),
       projects,
-      state: opt("--state") ?? "",
+      state,
       rerunMax: Number.isInteger(max) && max >= 0 ? max : 20,
     });
   }

@@ -5,6 +5,8 @@
 // on the command line (they filter). The check's own tooling step (check-hook.sh)
 // is check-tooling.mjs: the same projects, under the check's rerun rules. No
 // testProjects.tooling in the config: the project has none, so both run nothing.
+// Both run the project-data check (project-check.mjs) first: its failure fails
+// the run with its lines, before any test.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,6 +63,11 @@ export function toolingProjects(changed, named = [], { config = loadConfig().con
 if (import.meta.url === `file://${process.argv[1]}`) {
   const named = process.argv.slice(2);
   const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
+  const checked = spawnSync(process.execPath, [join(HERE, "project-check.mjs")], { stdio: "inherit" });
+  if (checked.status !== 0) {
+    console.log("test:tooling: the project-data check failed (above), so no test ran");
+    process.exit(checked.status ?? 1);
+  }
   const projects = toolingProjects(root ? changedSinceBase(root) : null, named);
   if (!projects.length) {
     console.log("test:tooling: the config names no tooling tests (testProjects.tooling): nothing to run");
