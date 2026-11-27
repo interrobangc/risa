@@ -10,5 +10,7 @@ Agents file each new line into the tracker ([backlog.md](backlog.md)) and add it
 
 - Inbox per project, not per machine
   Probably move planning (backlog, PRDs, plans, etc.) to gists, GitHub issues or some other mechanism so the same project can be worked on across machines safely, avoiding the git sync problems we keep hitting.
+- Tell backlog agents they can communicate with each other
+  Example: caretook's backlog agent can file issues with risa's, and risa's can ask caretook's backlog to update risa after a fix is deployed.
 
 ## Features
