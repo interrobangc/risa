@@ -9,7 +9,7 @@
 | 1     | 1    | merged                                  | caad988 (hand-off 5341bd5)   |
 | 2     | 2    | working                                 | —                            |
 | 3     | 2    | handed off (fc30975), merges after 2    | —                            |
-| 4     | 2    | working                                 | —                            |
+| 4     | 2    | handed off (8e136b5), merges after 2, 3 | —                            |
 | 5     | 2    | handed off (836d563), merges after 2, 4 | —                            |
 | 6     | 3    | —                                       | —                            |
 
