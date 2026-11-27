@@ -17,7 +17,8 @@ generic role docs in `loops/docs/` (`risa doc <role>`), with one addition: the p
 - **`main` is the trunk and the only long-lived branch.** `prd/`, `slice/`, `plan/` and
   `hotfix/` branches land into `main` by PR. There is no `dev` and no `staging`.
 - **Checks:** `pnpm check` (prettier, eslint, the docs budget, the tests) before handing
-  off. There is no CI yet; the tests run locally.
+  off. GitHub Actions (`.github/workflows/ci.yml`) runs the same `pnpm check` on pushes
+  and PRs to `main` and on `risa ci run`'s `ci/` refs.
 - **Commit subjects are Conventional Commits:** `<type>(<scope>)!: <description>`, backlog
   ids in parentheses at the end (`RISA-n`).
 - **Releases are tags** (`v0.1.0`). A project pins one exactly; a change that breaks a
