@@ -175,8 +175,9 @@ ${prd_cmd} <command>
                               hand-offs but the latest, and a fixes plan's landed waves (their paragraphs and
                               table rows), to plans/<topic>-history.md, newest first; --next: the next slice number
     wait [check|browser|<kind>] [--timeout <s>]   block until this worktree's check (or that lease kind's
-                              holder or queued taker here) is gone; exit 75 at the timeout (default 3600 s),
-                              naming it. Wait on a background check with this, never \`pgrep -f\` (it matches itself)
+                              holder or queued taker here) is gone; exit 75 at the timeout (default 160 s,
+                              under the harness's ~170 s foreground limit), naming it. Wait on a background check
+                              with this, never \`pgrep -f\` (it matches itself); on 75, run it again
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode, PRD and step, the ten most-failed test files); runs no check,
                               works from any checkout
