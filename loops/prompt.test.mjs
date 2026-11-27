@@ -209,7 +209,7 @@ describe("orchestrator", () => {
       expect(out).toContain("`review --again` until clean");
       expect(out).toContain("After about three rounds, ask the user");
       expect(out).toContain(
-        "`--force` and `--no-review` each need a Fable land skeptic's `go` for this tip and action",
+        "`--force` and `--no-review` each need an Opus land skeptic's `go` for this tip and action",
       );
       expect(out).toContain("on a brake or an unsynced tip `--force` needs `--by-user`");
       expect(out).toContain("Before declining a finding");
