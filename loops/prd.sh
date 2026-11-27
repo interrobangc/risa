@@ -39,7 +39,8 @@ ${prd_cmd} <command>
                               reopens PRDs by itself, one action a tick, in the registry's row order; new code
                               on the main checkout re-execs it between ticks
     dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
-    dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's)
+    dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's:
+                              ${backlog_cmd} prd set <topic> flags+=hold why="<reason>" holds it with its reason)
     queue <topic>             put the topic first in the PRD registry and return: the dispatcher takes it next
                               (or, with none running, says to start one or ${prd_cmd} start <topic>)
     plan <topic> [--open] [${backlog_id_prefix}n …]   a docs-only worktree for writing a PRD and plan; --open starts its

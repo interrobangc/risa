@@ -6,15 +6,15 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
-| 1     | 1    | RISA-935 | opus | —  | — |
-| 2     | 1    | RISA-933 | opus | —  | — |
-| 3     | 1    | RISA-367 | opus | —  | — |
-| 4     | 1    | RISA-477 | opus | —  | — |
-| 5     | 1    | RISA-911 | opus | —  | — |
-| 6     | 1    | RISA-880 | opus | —  | — |
-| 7     | 1    | RISA-721 | opus | —  | — |
+| Slice | Wave | Item     | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------- | ----- | ----- | ------------------------------ |
+| 1     | 1    | RISA-935 | opus  | —     | —                              |
+| 2     | 1    | RISA-933 | opus  | —     | —                              |
+| 3     | 1    | RISA-367 | opus  | —     | —                              |
+| 4     | 1    | RISA-477 | opus  | —     | —                              |
+| 5     | 1    | RISA-911 | opus  | —     | —                              |
+| 6     | 1    | RISA-880 | opus  | —     | —                              |
+| 7     | 1    | RISA-721 | opus  | —     | —                              |
 
 **Wave 1** (2026-11-27): slices 1 to 7, no shared file among them.
 
