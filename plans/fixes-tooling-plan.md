@@ -6,17 +6,17 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item     | Model | State                                                                                                                                                | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 1     | 1    | RISA-935 | opus  | merged                                                                                                                                               | 182c26b                        |
-| 2     | 1    | RISA-933 | opus  | merged                                                                                                                                               | 9ed410c                        |
-| 3     | 1    | RISA-367 | opus  | started 2026-11-27 (worktree `.loops/fixes-tooling-3`, agent spawned)                                                                                | —                              |
-| 4     | 1    | RISA-477 | opus  | handed off (e959760; `prd status` and dispatch `--dry-run` printing the reason left for later: `loops/ls.sh`, `loops/dispatch*` are after-split hot) | —                              |
-| 5     | 1    | RISA-911 | opus  | handed off (adcb902); merges after 2 to 4                                                                                                            | —                              |
-| 6     | 1    | RISA-880 | opus  | handed off (68b19a0; planner soft limit 160k, hard 225k)                                                                                             | —                              |
-| 7     | 1    | RISA-721 | opus  | handed off (e7d50a2; also edits `backlog/backlog.mjs`, like slice 4: watch the merge)                                                                | —                              |
+| Slice | Wave | Item     | Model | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------- | ----- | ------ | ------------------------------ |
+| 1     | 1    | RISA-935 | opus  | merged | 182c26b                        |
+| 2     | 1    | RISA-933 | opus  | merged | 9ed410c                        |
+| 3     | 1    | RISA-367 | opus  | merged | 634f5dd                        |
+| 4     | 1    | RISA-477 | opus  | merged | 5e2515c                        |
+| 5     | 1    | RISA-911 | opus  | merged | 06d42e8                        |
+| 6     | 1    | RISA-880 | opus  | merged | 57c983b                        |
+| 7     | 1    | RISA-721 | opus  | merged | bb7b20d                        |
 
-**Wave 1** (2026-11-27): slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
+**Wave 1** (2026-11-27): all seven merged (tip bb7b20d); gate: `pnpm test` with `RISA_*` and `CLAUDE_CODE_*` unset, running. Slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
 
 **Open issue:** `risa check` can't run here (risa.json has no `paths.checkPlanRules`; `loops/check-plan.mjs`), so slices hand off on hand-run vitest, eslint and prettier; the inherited `RISA_CONFIG` leaks into fixtures (unset `RISA_*` for test runs); `loops/prompt.test.mjs` has 47 failures on the base. Backlog session (risa-2a), on the user's word: a hotfix fixes the check-plan rules (RISA-988, `hotfix/check-plan-rules`), and it will say when that lands; until then slices merge on hand-run tests and the wave gate is `pnpm test` with `RISA_*` and `CLAUDE_CODE_*` unset (the prompt.test failures are that same leak).
 
