@@ -6,10 +6,15 @@
 //   | ------- | -------------- | --------------- | ----------------------- | ------------- |
 //   | `topic` | hold, standing | `other`, `more` | `loops/`, `x.ts` | any Markdown  |
 //
+// A hold set with a reason (`prd set <topic> flags=hold why="…"`) carries it
+// and the date in its Flags cell: `standing, hold (2026-11-21: waits on the
+// user)`; a bare `hold` (the older rows) is a hold with no reason.
+//
 // Row order is the priority. A row stores only what git can't say: its flags
-// (FLAGS, or —), the topics it comes after, its hot files (repo path prefixes,
-// which may name files not made yet) and notes. Whether a topic is to write,
-// planned, running or idle is worked out by stateOf, never stored.
+// (FLAGS, or —) and a hold's reason, the topics it comes after, its hot files
+// (repo path prefixes, which may name files not made yet) and notes. Whether
+// a topic is to write, planned, running or idle is worked out by stateOf,
+// never stored.
 //
 // The table before the registry (PRD, Doc, Depends on, Hot files: prose) is
 // "old": it is recognised and refused, never read as rows (it was converted
@@ -34,7 +39,9 @@ const HEADER = ["PRD", "Flags", "After", "Hot files", "Doc and notes"];
 const NONE = "—";
 
 /**
- * @typedef {{ topic: string, flags: string[], after: string[], hot: string[], notes: string }} Row
+ * @typedef {{ date: string, why: string }} Held a hold's reason and the day it was given
+ * @typedef {{ topic: string, flags: string[], held?: Held, after: string[], hot: string[], notes: string }} Row
+ *   held: only on a row whose hold was set with a reason
  * @typedef {{ topic: string, doc: string, depends: string, hot: string }} OldRow
  * @typedef {{ format: "none" } | { format: "old", rows: OldRow[] } | { format: "new", rows: Row[] }} Registry
  */
@@ -70,9 +77,30 @@ export function parseList(cell) {
 const escape = (s) => s.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
 const codeList = (xs) => (xs.length ? xs.map((x) => `\`${x}\``).join(", ") : NONE);
 
+// A hold with its reason: "hold (2026-11-21: why)". The reason runs to the
+// cell's last ")" (no other flag has one), so it may hold commas and brackets.
+const HELD = /(^|,)\s*hold\s*\((\d{4}-\d{2}-\d{2})(?::\s*(.*))?\)/s;
+
+/** A Flags cell → its flags and, for a hold with a reason, that. @param {string} cell @returns {{ flags: string[], held?: Held }} */
+export function parseFlags(cell) {
+  const m = HELD.exec(cell);
+  if (!m) return { flags: parseList(cell) };
+  const rest = `${cell.slice(0, m.index)}${m[1]}hold${cell.slice(m.index + m[0].length)}`;
+  return { flags: parseList(rest), held: { date: m[2], why: (m[3] ?? "").trim() } };
+}
+
+/** "2026-11-21: why" for a hold with a reason, else "". @param {{ held?: Held }} r */
+export const heldText = (r) => (r.held ? `${r.held.date}${r.held.why ? `: ${r.held.why}` : ""}` : "");
+
+/** @param {Row} r */
+const flagsCell = (r) =>
+  r.flags.length
+    ? r.flags.map((f) => (f === "hold" && r.held ? `hold (${heldText(r)})` : f)).join(", ")
+    : NONE;
+
 /** @param {Row} r */
 const rowLine = (r) =>
-  `| \`${r.topic}\` | ${r.flags.length ? r.flags.join(", ") : NONE} | ${codeList(r.after)} | ${codeList(r.hot)} | ${escape(r.notes) || NONE} |`;
+  `| \`${r.topic}\` | ${escape(flagsCell(r))} | ${codeList(r.after)} | ${codeList(r.hot)} | ${escape(r.notes) || NONE} |`;
 
 /** The table's lines for `rows`, in order. @param {Row[]} rows */
 export const renderTable = (rows) => [
@@ -112,7 +140,7 @@ export function parseRegistry(preamble) {
       format: "new",
       rows: rows.map(([topic = "", flags = "", after = "", hot = "", notes = ""]) => ({
         topic: unquote(topic),
-        flags: parseList(flags),
+        ...parseFlags(flags),
         after: parseList(after),
         hot: parseList(hot),
         notes: notes === NONE ? "" : notes,
@@ -210,14 +238,22 @@ function insert(rows, row, pos) {
   return out;
 }
 
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 /**
  * Apply "key=value" pairs (flags, after, hot: comma-separated, — or empty
- * clears; notes: text) to a copy of `row`. `flags+=a,b` adds flags and
- * `flags-=a,b` removes them, keeping the others (a hold keeps `standing`).
- * @param {Row} row @param {string[]} pairs @returns {Row}
+ * clears; notes: text; why: a hold's reason, — clears it) to a copy of `row`.
+ * `flags+=a,b` adds flags and `flags-=a,b` removes them, keeping the others
+ * (a hold keeps `standing`). `why=` records its reason with `today`; it needs
+ * the row held once the pairs are applied. A hold that stays keeps its reason;
+ * clearing the hold clears it.
+ * @param {Row} row @param {string[]} pairs @param {{ today?: string }} [opts] @returns {Row}
  */
-export function setRow(row, pairs) {
+export function setRow(row, pairs, opts = {}) {
   const r = { ...row };
+  /** @type {string | undefined} */
+  let why;
   for (const p of pairs) {
     const eq = p.indexOf("=");
     if (eq < 1) throw new BacklogError(`"${p}" isn't key=value`);
@@ -229,6 +265,7 @@ export function setRow(row, pairs) {
       if (key !== "flags") throw new BacklogError(`"${p}": only flags takes += or -=`);
     }
     if (key === "notes") r.notes = value.trim() === NONE ? "" : value.trim();
+    else if (key === "why") why = value.trim() === NONE ? "" : value.trim();
     else if (key === "flags") {
       const flags = [...new Set(parseList(value))];
       const bad = flags.filter((f) => !FLAGS.includes(f));
@@ -242,23 +279,28 @@ export function setRow(row, pairs) {
       if (after.includes(r.topic)) throw new BacklogError(`${r.topic} can't come after itself`);
       r.after = after;
     } else if (key === "hot") r.hot = [...new Set(parseList(value))];
-    else throw new BacklogError(`can't set "${key}" (use flags, after, hot or notes)`);
+    else throw new BacklogError(`can't set "${key}" (use flags, after, hot, notes or why)`);
   }
+  if (!r.flags.includes("hold")) {
+    if (why) throw new BacklogError(`why= is a hold's reason: ${r.topic} isn't held (add flags+=hold)`);
+    delete r.held;
+  } else if (why === "") delete r.held;
+  else if (why !== undefined) r.held = { date: opts.today ?? localDate(), why };
   return r;
 }
 
-/** A new row. @param {Row[]} rows @param {string} topic @param {string[]} pairs @param {Position} pos */
-export function addRow(rows, topic, pairs, pos = { last: true }) {
+/** A new row. @param {Row[]} rows @param {string} topic @param {string[]} pairs @param {Position} pos @param {{ today?: string }} [opts] */
+export function addRow(rows, topic, pairs, pos = { last: true }, opts = {}) {
   checkTopic(topic);
   if (rows.some((r) => r.topic === topic)) throw new BacklogError(`there's already a PRD row "${topic}"`);
-  return insert(rows, setRow({ topic, flags: [], after: [], hot: [], notes: "" }, pairs), pos);
+  return insert(rows, setRow({ topic, flags: [], after: [], hot: [], notes: "" }, pairs, opts), pos);
 }
 
-/** @param {Row[]} rows @param {string} topic @param {string[]} pairs */
-export function updateRow(rows, topic, pairs) {
+/** @param {Row[]} rows @param {string} topic @param {string[]} pairs @param {{ today?: string }} [opts] */
+export function updateRow(rows, topic, pairs, opts = {}) {
   const i = indexOf(rows, topic);
-  if (!pairs.length) throw new BacklogError("usage: prd set <topic> flags=… after=… hot=… notes=…");
-  return rows.map((r, j) => (j === i ? setRow(r, pairs) : r));
+  if (!pairs.length) throw new BacklogError("usage: prd set <topic> flags=… after=… hot=… notes=… why=…");
+  return rows.map((r, j) => (j === i ? setRow(r, pairs, opts) : r));
 }
 
 /** @param {Row[]} rows @param {string} topic @param {Position} pos */
