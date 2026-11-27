@@ -1,7 +1,7 @@
 // The project's hooks from Node, as lib.sh's stack_hook runs them from bash: the
-// config's hooks.NAME, run by bash from the top of the checkout the project's
-// config is in (its main checkout, which has the hook scripts; the tool lives
-// outside the project, B-846), ARGs after it. A hook prints facts as key=value lines and exits non-zero on failure.
+// config's hooks.NAME, run by bash from the main checkout of the repo the
+// project's config is in (it has the hook scripts, even when the config is a
+// worktree's own; the tool lives outside the project, B-846, RISA-972), ARGs after it. A hook prints facts as key=value lines and exits non-zero on failure.
 //
 //   runHook(name, args, { env })   { status, ok, out, err }: status 127 when the
 //                                  config sets no such hook
@@ -10,10 +10,14 @@
 import { spawnSync } from "node:child_process";
 import { loadConfig } from "./config.mjs";
 
-/** The top of the checkout the config's folder is in, else that folder (lib.sh's stack_hook). */
+/**
+ * The main checkout of the repo the config's folder is in (the first worktree
+ * line of git's list), else that folder (lib.sh's stack_hook).
+ */
 function projectTop(/** @type {string} */ root) {
-  const r = spawnSync("git", ["-C", root, "rev-parse", "--show-toplevel"], { encoding: "utf8" });
-  return r.status === 0 ? r.stdout.trim() : root;
+  const r = spawnSync("git", ["-C", root, "worktree", "list", "--porcelain"], { encoding: "utf8" });
+  const main = r.status === 0 ? /^worktree (.+)$/m.exec(r.stdout)?.[1] : undefined;
+  return main || root;
 }
 
 /**

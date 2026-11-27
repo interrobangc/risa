@@ -49,9 +49,10 @@ describe("runHook", () => {
     expect(factList("arg", r.out)).toEqual(["a b", "c"]);
   });
 
-  // B-846: the tool lives outside the project, so a hook runs from the top of the
-  // project's checkout (the one its config is in), never the tool's.
-  it("runs from the top of the checkout the config is in, from Node and from lib.sh's stack_hook", () => {
+  // B-846: the tool lives outside the project, so a stack hook runs from the top of
+  // the project's main checkout (of the repo its config is in), never the tool's,
+  // and never a worktree's, even when the config is the worktree's own (RISA-972).
+  it("runs from the top of the main checkout the config is in, from Node and from lib.sh's stack_hook", () => {
     const project = join(root, "project");
     mkdirSync(join(project, "tools"), { recursive: true });
     execFileSync("git", ["init", "-q", project]);
@@ -67,6 +68,35 @@ describe("runHook", () => {
       env,
     });
     expect(fact("top", sh.trim())).toBe(project);
+
+    // A worktree of the project with its own config: stack hooks still run from
+    // the main checkout; run_hook (a non-stack hook) from the worktree's top.
+    const git = (/** @type {string[]} */ ...a) =>
+      execFileSync("git", ["-C", project, ...a], { stdio: "ignore" });
+    git(
+      "-c",
+      "user.name=T",
+      "-c",
+      "user.email=t@example.test",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "--no-verify",
+      "-m",
+      "init",
+    );
+    const wt = join(root, "project-wt");
+    git("worktree", "add", "-q", "-b", "wt", wt);
+    raw.hooks = { stackStatus: 'echo "top=$PWD"', checkAreas: 'echo "top=$PWD"' };
+    writeFileSync(join(wt, "risa.json"), JSON.stringify(raw));
+    const wtEnv = { ...env, RISA_CONFIG: join(wt, "risa.json") };
+    expect(fact("top", runHook("stackStatus", [], { env: wtEnv }).out)).toBe(project);
+    const both = execFileSync(
+      "bash",
+      ["-c", `source "${join(HERE, "lib.sh")}" && stack_hook stackStatus && run_hook checkAreas`],
+      { cwd: wt, encoding: "utf8", env: wtEnv },
+    );
+    expect(factList("top", both.trim())).toEqual([project, wt]);
   });
 
   it("gives a failing hook's exit status and its stderr", () => {
