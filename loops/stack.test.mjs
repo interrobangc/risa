@@ -360,6 +360,28 @@ describe("a repo with no stack or testDb hooks (RISA-973)", () => {
       rmSync(config, { force: true });
     }
   });
+
+  it("starts a PRD worktree with no stack instead of finding every slot taken (RISA-985)", () => {
+    const raw = JSON.parse(read(env.RISA_CONFIG));
+    for (const h of Object.keys(raw.hooks)) if (/^stack|^testDb$/.test(h)) delete raw.hooks[h];
+    const config = join(loops, "no-stack-hooks.json");
+    mkdirSync(loops, { recursive: true });
+    writeFileSync(config, `${JSON.stringify(raw, null, 2)}\n`);
+    try {
+      const made = sh("new.sh", ["prd", "nostack"], { env: { RISA_CONFIG: config } });
+      expect(made.stderr).not.toMatch(/slots are taken|no value for hooks/);
+      expect(made.status).toBe(0);
+      expect(made.stdout).toMatch(/no stack hooks in the config: nostack gets no stack/);
+      expect(existsSync(join(loops, "nostack"))).toBe(true);
+      // Earlier tests in the shared fixture may hold slots; none is this worktree's.
+      const holders = leases().map((s) => read(join(loops, ".slots", s, "name")).trim());
+      expect(holders).not.toContain("nostack");
+      expect(calls()).not.toMatch(/^(stack|test-db) /m);
+      expect(sh("rm.sh", ["nostack"], { env: { RISA_CONFIG: config } }).status).toBe(0);
+    } finally {
+      rmSync(config, { force: true });
+    }
+  });
 });
 
 describe("rm.sh from inside the worktree it removes (B-812)", () => {
