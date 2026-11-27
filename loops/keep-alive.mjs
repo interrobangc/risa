@@ -24,7 +24,11 @@ import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
 import { CLAUDE } from "./host.mjs";
 
-/** The optional machine tag session.sh puts before a backlog or inbox Remote Control name (`NA-inbox`). */
+/**
+ * The two-letter machine tag v0.1.3 and v0.1.4 put before a backlog or inbox Remote Control name
+ * (`NA-inbox`). Nothing adds it now; the matchers still accept it so a session named then is kept
+ * alive and found until it rotates. Drop it once no machine runs those releases.
+ */
 export const MACHINE_TAG = "[A-Z]{2}-";
 
 /** The kinds kept alive; each one's session is named after it. */

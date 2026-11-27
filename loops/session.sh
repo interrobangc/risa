@@ -75,38 +75,6 @@ for a in "$@"; do
   prev=$a
 done
 
-# For now (until multi-machine support), backlog and inbox sessions show on the
-# phone under a two-letter machine tag: `NA-Garrett`, `NA-inbox`. Only the
-# Remote Control name: the record keeps the plain one, so captain draws,
-# rotations and lookups are unchanged, and the process matchers
-# (keep-alive.mjs, session-requests.mjs) accept the tag. RISA_MACHINE_TAG sets
-# it (empty: none); else the host name's first two letters, upper case.
-machine_tag() {
-  if [[ -n ${RISA_MACHINE_TAG+x} ]]; then printf '%s' "$RISA_MACHINE_TAG"; return; fi
-  local h
-  h=$(scutil --get ComputerName 2>/dev/null || hostname -s 2>/dev/null || true)
-  h=${h//[^A-Za-z]/}
-  printf '%s' "${h:0:2}" | tr '[:lower:]' '[:upper:]'
-}
-shown_remote=""
-if [[ -n $remote && ($kind == backlog || $kind == inbox) ]]; then
-  tag=$(machine_tag)
-  if [[ $tag =~ ^[A-Z]{2}$ ]]; then
-    tagged=() prev=""
-    for a in "$@"; do
-      shown=$a
-      if [[ $prev == --remote-control ]]; then
-        shown="$tag-$a"
-      else
-        case $a in --remote-control=*) shown="--remote-control=$tag-${a#--remote-control=}" ;; esac
-      fi
-      tagged+=("$shown") prev=$a
-    done
-    set -- "${tagged[@]}"
-    shown_remote="$tag-$remote"
-  fi
-fi
-
 # The main backlog session's display name is a captain's (captain.mjs, given as
 # its --remote-control): the tab's title too, which Claude Code is told not to
 # retitle. A session it starts doesn't inherit that.
@@ -114,7 +82,7 @@ if [[ -n ${RISA_CAPTAIN_TITLE:-} ]]; then unset RISA_CAPTAIN_TITLE CLAUDE_CODE_D
 if [[ $name == backlog && $kind == backlog && -n $remote && $remote != backlog ]]; then
   export RISA_CAPTAIN_TITLE=1 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
   # The tab's title by escape (OSC 0) when this is a terminal (RISA_TAB_TITLE=always: tests).
-  if [[ -t 1 || ${RISA_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "${shown_remote:-$remote}"; fi
+  if [[ -t 1 || ${RISA_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$remote"; fi
 fi
 
 # A brief left from before never leads a later prompt: whoever uses one has
