@@ -13,13 +13,17 @@
 //   node config.mjs check       loads it; prints each problem; exit 2 on any
 //
 // Where it lives: RISA_CONFIG (a path; tests and sample projects set it), else
-// risa.json at the root of the checkout this file is in.
+// risa.json at the root of the checkout this file is in. When the tool is
+// installed as a package (under node_modules), that file is the tool's own config,
+// not the project's: then it's risa.json at the root of the checkout the current
+// directory is in (a project importing the tool, or running it in CI with no
+// machine config), and the tool's own only outside one.
 //
 // The shape is SHAPE below, one line per key, so two slices never edit the same
 // line. A key ending in `?` is optional: the slice that builds what reads it
 // sets it in risa.json. An unknown key is an error, so a typo can't hide.
-import { readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The file's name, here and nowhere else. */
@@ -295,13 +299,38 @@ export function configProblems(raw) {
 }
 
 /**
- * Where the config is: RISA_CONFIG, else risa.json at the root of this checkout.
+ * The root of the checkout DIR is in (the nearest folder holding `.git`, a folder
+ * or a worktree's file), or null outside one. No git call: it runs on every load.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function checkoutRoot(dir) {
+  for (let at = resolve(dir); ; at = dirname(at)) {
+    if (existsSync(join(at, ".git"))) return at;
+    if (dirname(at) === at) return null;
+  }
+}
+
+/**
+ * Where the config is: RISA_CONFIG, else risa.json at the root of the tool's own
+ * checkout, unless the tool is an installed package: then at the root of CWD's
+ * checkout when it has one.
  * @param {Record<string, string | undefined>} [env]
+ * @param {string} [cwd]
+ * @param {string} [toolRoot] the tool's own folder (tests pass one)
  * @returns {string}
  */
-export function configPath(env = process.env) {
+export function configPath(
+  env = process.env,
+  cwd = process.cwd(),
+  toolRoot = join(dirname(fileURLToPath(import.meta.url)), ".."),
+) {
   if (env.RISA_CONFIG) return resolve(env.RISA_CONFIG);
-  return join(dirname(fileURLToPath(import.meta.url)), "..", CONFIG_NAME);
+  if (resolve(toolRoot).split(sep).includes("node_modules")) {
+    const root = checkoutRoot(cwd);
+    if (root && existsSync(join(root, CONFIG_NAME))) return join(root, CONFIG_NAME);
+  }
+  return join(toolRoot, CONFIG_NAME);
 }
 
 /**

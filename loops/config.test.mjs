@@ -70,6 +70,36 @@ describe("the loader", () => {
     expect(configPath({ RISA_CONFIG: "/x/sample.json" })).toBe("/x/sample.json");
   });
 
+  it("else, for an installed package, at the root of the current directory's checkout when it has one", () => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), "config-path-")));
+    try {
+      const project = join(tmp, "project");
+      const pkg = join(project, "node_modules/risa");
+      mkdirSync(join(project, ".git"), { recursive: true });
+      mkdirSync(pkg, { recursive: true });
+      writeFileSync(join(project, CONFIG_NAME), "{}\n");
+      expect(configPath({}, pkg, pkg)).toBe(join(project, CONFIG_NAME));
+      expect(configPath({}, join(project, "sub"), pkg)).toBe(join(project, CONFIG_NAME));
+      expect(configPath({ RISA_CONFIG: "/x/sample.json" }, project, pkg)).toBe("/x/sample.json");
+      // A worktree's .git is a file.
+      const worktree = join(tmp, "worktree");
+      mkdirSync(worktree);
+      writeFileSync(join(worktree, ".git"), "gitdir: elsewhere\n");
+      writeFileSync(join(worktree, CONFIG_NAME), "{}\n");
+      expect(configPath({}, worktree, pkg)).toBe(join(worktree, CONFIG_NAME));
+      // A checkout with no config, or no checkout: the package's own.
+      const bare = join(tmp, "bare");
+      mkdirSync(join(bare, ".git"), { recursive: true });
+      expect(configPath({}, bare, pkg)).toBe(join(pkg, CONFIG_NAME));
+      expect(configPath({}, tmp, pkg)).toBe(join(pkg, CONFIG_NAME));
+      // Not a package (a checkout or a release): its own, wherever it runs from.
+      expect(configPath({}, project, join(tmp, "tool"))).toBe(join(tmp, "tool", CONFIG_NAME));
+      expect(configPath({}, project)).toBe(join(ROOT, CONFIG_NAME));
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("gives the shape one line per key, each with a known type", () => {
     const keys = SHAPE.map(([key]) => key);
     expect(new Set(keys).size).toBe(keys.length);
