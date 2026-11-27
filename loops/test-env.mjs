@@ -20,6 +20,7 @@ export const SESSION_VARS = [
   "RISA_CHECK_LOG",
   "RISA_MAIN",
   "RISA_DISPATCH_MAIN",
+  "RISA_CONFIG_FOUND",
   "CLAUDECODE",
 ];
 /** A session's state variables, by prefix: the usage watch's and Claude Code's own. */

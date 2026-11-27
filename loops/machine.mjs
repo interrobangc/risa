@@ -35,12 +35,14 @@
 //                                           problem; exit 2 on any
 //   node machine.mjs repo --cwd <dir>       the main checkout of DIR's repo when the
 //                                           file lists it, then its project config's
-//                                           path; exit 1 when it doesn't
+//                                           path (configFor: DIR's checkout's own
+//                                           risa.json, else the main checkout's);
+//                                           exit 1 when it doesn't
 //   node machine.mjs work --main <m> [--who <cmd>]   exit 0 when the switch is on;
 //                                           off: one line naming the switch and the
 //                                           variable on stderr, exit 3
 import { execFileSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -272,6 +274,29 @@ function mainOf(dir) {
   }
 }
 
+/**
+ * The project config a checkout reads: its own risa.json when it has one (a
+ * worktree's, so a branch's config change shows there), else the main checkout's.
+ * @param {{ top: string, main: string, exists: (path: string) => boolean }} facts
+ *   TOP, the checkout's root; MAIN, the repo's main checkout; EXISTS, whether a file is there
+ */
+export function configFor({ top, main, exists }) {
+  const own = join(top, CONFIG_NAME);
+  return exists(own) ? own : join(main, CONFIG_NAME);
+}
+
+/** The root of the checkout DIR is in, or null outside one. @param {string} dir */
+function topOf(dir) {
+  try {
+    return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /** Exits 2 with one `machine.mjs: …` line on a machine config that doesn't load. */
 function loadOrExit() {
   try {
@@ -315,7 +340,7 @@ if (isMain()) {
     const main = mainOf(cwd);
     const entry = main ? repoEntry(m, main) : null;
     if (!entry || !main) process.exit(1);
-    console.log(`${main}\n${join(main, CONFIG_NAME)}`);
+    console.log(`${main}\n${configFor({ top: topOf(cwd) ?? main, main, exists: existsSync })}`);
   } else if (verb === "work") {
     const main = opt("--main") ?? usage();
     const m = loadOrExit();
