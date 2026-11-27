@@ -6,18 +6,18 @@
 
 | Slice | Wave | State | Merge into `prd/after-split` |
 | ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | working | —                          |
-| 2     | 2    | —     | —                            |
-| 3     | 2    | —     | —                            |
-| 4     | 2    | —     | —                            |
-| 5     | 2    | —     | —                            |
+| 1     | 1    | merged | caad988 (hand-off 5341bd5)  |
+| 2     | 2    | working | —                          |
+| 3     | 2    | working | —                          |
+| 4     | 2    | working | —                          |
+| 5     | 2    | working | —                          |
 | 6     | 3    | —     | —                            |
 
 **Landing mode:** run everything through (start every ready slice, land each green wave, ask only real questions). Started 2026-11-27; anchors fixed in the plan at start.
 
-**Models:** slice 1 opus (real logic: env, tests in a session).
+**Models:** slices 1–5 opus (each has real logic).
 
-**Now:** wave 1: slice 1 worktree made (.loops/after-split-1), agent spawned on opus, working.
+**Now:** slice 1 merged (caad988); RISA-975/979/932/953 done; RISA-990 (fixed by slice 1) moved in. Wave 2 (slices 2–5) worktrees made, agents spawned on opus, working. **Blocker:** `risa check`/tier/CI can't run here (no `paths.checkPlanRules`, RISA-988); the backlog session says hotfix/check-plan-rules lands it on the user's word and it will message us; a background loop waits for `risa-check-plan.json` on origin/main. Then: `risa sync`, then the wave gate (CI) for slices 1–5 together. Slice 1's note: `prompt-golden.test.mjs` sits at its 20 s timeout under load; `risa stack down` errors in a stackless repo (no hooks.stackDown).
 
 **Backlog:** claim each slice's items as it starts; `done` them when it merges. Slice 1: RISA-975, RISA-979, RISA-932, RISA-953. Slice 2: RISA-970, RISA-971. Slice 3: RISA-976 (the fixtures' half). Slice 4: RISA-976 (the git floor; `done` it when both 3 and 4 have merged). Slice 5: RISA-978, RISA-977. Slice 6: RISA-974.
 
