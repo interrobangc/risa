@@ -1,0 +1,21 @@
+{
+  "ownTests": "\\.(int\\.test\\.mjs|browser\\.test\\.mjs)$",
+  "suite": {
+    "tier": "unit",
+    "rules": [
+      {
+        "match": "^pnpm-lock\\.yaml$",
+        "why": "the lockfile"
+      },
+      {
+        "match": "(^|/)package\\.json$",
+        "why": "a package.json"
+      },
+      {
+        "match": "^vitest\\.config\\.mjs$",
+        "why": "the Vitest config"
+      }
+    ]
+  },
+  "byPath": []
+}
