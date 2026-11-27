@@ -4,11 +4,11 @@
 
 ## Status
 
-| Slice | Wave | State   | Merge into `prd/after-split-2` |
-| ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | merged  | 11b94c5                        |
-| 2     | 1    | merged  | 57736ed                        |
-| 3     | 2    | handed  |                                |
+| Slice | Wave | State  | Merge into `prd/after-split-2` |
+| ----- | ---- | ------ | ------------------------------ |
+| 1     | 1    | merged | 11b94c5                        |
+| 2     | 1    | merged | 57736ed                        |
+| 3     | 2    | handed |                                |
 
 **Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
 
