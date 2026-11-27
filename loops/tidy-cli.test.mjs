@@ -462,6 +462,7 @@ describe("tidy archives finished items", () => {
       "format.mjs",
       "inbox-edit.mjs",
       "inbox-merge.mjs",
+      "lock.mjs",
       "origin.mjs",
       "registry.mjs",
     ])
