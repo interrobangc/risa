@@ -85,6 +85,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-976 | bug | triaged | after-split |  | A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28 |
 | RISA-977 | bug | triaged | after-split |  | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
 | RISA-978 | change | triaged | after-split |  | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
+| RISA-979 | bug | triaged | after-split |  | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
 
 ## Items
 
@@ -673,6 +674,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Found on the second machine, 2026-11-27, with git 2.39
+- 2026-11-27 (Robert Bo Davis): Main machine at 36125ab, git 2.50.1: only 10 fail of 2195 (dispatch drain x6, drain new.sh slice, stack rm.sh B-812 x2, usage status line), none of the risa.json kind. So the 217 are specific to the second machine (its env or machine config); the 10 may be the live dispatcher and usage readings leaking into tests (unchecked).
 
 ### RISA-976 · bug · A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28
 
@@ -696,3 +698,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - prd: after-split
 - owner:
 - commit:
+
+### RISA-979 · bug · 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab
+
+- status: triaged
+- prd: after-split
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): Shelby's run, 2026-11-27: 2185 of 2195 pass, prettier/eslint/docs budget pass. Usage got 'Usage: unknown: no current reading' for 'Usage, read 1m ago from 1 session'. Guessed cause (unchecked): the machine's live dispatcher, sessions and usage readings leak into the tests. Log on that machine: /private/tmp/claude-501/-Users-bo-git-caretook-caretook-com/7d3733d4-a8b2-4aaa-8c54-c653f5760b8f/scratchpad/risa-check.log. Separate from RISA-975 (217 fail on the second machine).
