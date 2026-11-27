@@ -4,14 +4,14 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/after-split` |
-| ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | merged | caad988 (hand-off 5341bd5)  |
-| 2     | 2    | working | —                          |
-| 3     | 2    | working | —                          |
-| 4     | 2    | working | —                          |
-| 5     | 2    | working | —                          |
-| 6     | 3    | —     | —                            |
+| Slice | Wave | State                                | Merge into `prd/after-split` |
+| ----- | ---- | ------------------------------------ | ---------------------------- |
+| 1     | 1    | merged                               | caad988 (hand-off 5341bd5)   |
+| 2     | 2    | working                              | —                            |
+| 3     | 2    | handed off (fc30975), merges after 2 | —                            |
+| 4     | 2    | working                              | —                            |
+| 5     | 2    | working                              | —                            |
+| 6     | 3    | —                                    | —                            |
 
 **Landing mode:** run everything through (start every ready slice, land each green wave, ask only real questions). Started 2026-11-27; anchors fixed in the plan at start.
 
