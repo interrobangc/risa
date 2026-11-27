@@ -101,8 +101,8 @@ export const SHAPE = [
   ["paths.docs", "path"],
   ["paths.agentsDoc", "path"],
   ["paths.preferences", "path?"],
-  // The project's own prompt golden: the core's prompt test renders every prompt on this
-  // config and holds it to that file.
+  // The project's own prompt golden: the project-data check (project-check.mjs) renders
+  // every prompt on this config and holds it to that file.
   ["paths.promptGolden", "path?"],
   ["paths.browserChecks", "path?"],
   ["paths.checksManifest", "path?"],

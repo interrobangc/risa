@@ -1,10 +1,13 @@
 // The boundary lint (boundary.mjs): each rule and form on a sample project, the
-// manifest and the allowlist, and this repo itself, which must pass.
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// manifest and the allowlist, and the whole lint on a made-up tree. The lint of this
+// repo's own tree is the project-data check's (project-check.mjs), which the check
+// runs, and GitHub CI through the project's own test that runs that check.
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   ALLOWLIST,
   FORMS,
@@ -24,7 +27,7 @@ import {
 } from "./boundary.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(HERE, "../..");
+const SAMPLE_CONFIG = join(HERE, "sample-project/risa.json");
 
 // A sample project, "acme": its folders are web/ and server/, its variables ACME_*.
 const project = { names: ["acme"], envPrefixes: ["ACME_"], appPaths: ["web", "server"] };
@@ -446,46 +449,66 @@ describe("CI's two lists", () => {
   });
 });
 
-describe("this repo", () => {
-  const result = lintRepo(ROOT);
+describe("the lint of a made-up tree", () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "boundary-")));
+  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
-  it("has every file under the manifest's folders in the manifest, sorted, each with an owner", () => {
+  /** A git repo (nothing committed) on the sample config, with the files given. */
+  const tree = (/** @type {Record<string, string>} */ files) => {
+    const root = mkdtempSync(join(tmp, "tree-"));
+    execFileSync("git", ["init", "-q", root]);
+    const all = {
+      "risa.json": readFileSync(SAMPLE_CONFIG, "utf8"),
+      ".gitignore": "out/\n",
+      [MANIFEST]: `${ALLOWLIST} core\n${MANIFEST} core\nscripts/loops/tool.mjs core\nscripts/project/up.sh project\n`,
+      [ALLOWLIST]: "",
+      "scripts/loops/tool.mjs": "export const x = 1;\n",
+      "scripts/project/up.sh": "echo up\n",
+      ...files,
+    };
+    for (const [path, text] of Object.entries(all)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    return root;
+  };
+
+  it("passes a tree that keeps to the line", () => {
+    const result = lintRepo(tree({}));
     expect(result.problems).toEqual([]);
-  });
-
-  it("crosses the line only where the allowlist says", () => {
     expect(result.failures).toEqual([]);
   });
 
-  it("allows only the residual list: each line says why it waits for the move, and none is a tool-command", () => {
-    const { allowed } = parseAllowlist(readFileSync(join(ROOT, ALLOWLIST), "utf8"));
-    expect([...allowed].filter(([, { why }]) => !why).map(([key]) => key)).toEqual([]);
-    expect([...allowed.keys()].filter((key) => key.endsWith(" tool-command"))).toEqual([]);
+  it("fails a crossing, and passes it once the allowlist counts it", () => {
+    const crossing = { "scripts/project/up.sh": "node scripts/loops/tool.mjs\n" };
+    expect(lintRepo(tree(crossing)).failures).toEqual([
+      "scripts/project/up.sh project-to-core: 1 found, none allowed",
+      "  scripts/project/up.sh:1: project-to-core (spawn): scripts/loops/tool.mjs",
+    ]);
+    const allowed = {
+      ...crossing,
+      [ALLOWLIST]: "scripts/project/up.sh project-to-core 1 # until the move\n",
+    };
+    expect(lintRepo(tree(allowed)).failures).toEqual([]);
   });
 
-  it("ignores a CI test step's output written while it runs (B-753's progress file)", () => {
-    const dir = join(ROOT, "ci-results");
-    const file = join(dir, `boundary-${process.pid}.progress.json`);
-    const made = !existsSync(dir);
-    mkdirSync(dir, { recursive: true });
-    const started = ["scripts/loops/boundary.test.mjs", "scripts/loops/boundary.mjs"];
-    writeFileSync(
-      file,
-      JSON.stringify({ limitSeconds: 300, started, finished: [], failed: [], timedOut: [] }),
+  it("names a file the manifest misses, and an allowlist line for no file", () => {
+    const { failures } = lintRepo(
+      tree({ "scripts/ci/new.mjs": "x\n", [ALLOWLIST]: "scripts/ci/gone.mjs project-to-core 1\n" }),
     );
-    try {
-      const during = lintRepo(ROOT);
-      expect(during.failures).toEqual([]);
-      expect(during.problems).toEqual([]);
-    } finally {
-      rmSync(made ? dir : file, { recursive: true, force: true });
-    }
+    expect(failures).toContain(
+      `${MANIFEST}: no line for scripts/ci/new.mjs: add \`scripts/ci/new.mjs core\` or \`scripts/ci/new.mjs project\``,
+    );
+    expect(failures).toContain(`${ALLOWLIST}: scripts/ci/gone.mjs is no file: delete its line`);
   });
 
-  it("passes from the command line too", () => {
-    const r = spawnSync(process.execPath, [join(HERE, "boundary.mjs")], { encoding: "utf8" });
-    expect(r.stdout).toMatch(/^boundary: ok \(\d+ allowed\)\n$/);
-    expect(r.status).toBe(0);
+  it("ignores an ignored file, such as a CI test step's output written while it runs (B-753's progress file)", () => {
+    const started = ["scripts/loops/tool.mjs", "scripts/project/up.sh"];
+    const root = tree({ "out/boundary.progress.json": JSON.stringify({ started }) });
+    expect(lintRepo(root).failures).toEqual([]);
+  });
+
+  it("refuses an unknown flag from the command line", () => {
     expect(spawnSync(process.execPath, [join(HERE, "boundary.mjs"), "--nope"]).status).toBe(2);
   });
 });

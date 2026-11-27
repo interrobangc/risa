@@ -12,22 +12,28 @@
 //     itself is a role's file (additions or replacement)
 //   the skeptic brief's rules read (skeptics.mjs's readRules: the never list found)
 //   each measure of the gates' data runs through the time gate (time-gate.mjs)
-//   the boundary lint passes on the tree, when the project has a manifest
+//   the boundary lint passes on the tree, when the project has a manifest, and each
+//     allowlist line says why, none a tool-command
+//   the prompt golden the config names (paths.promptGolden) matches the prompts
+//     rendered on the project's config (prompt-render.mjs)
 //
-//   node project-check.mjs    the configured project (RISA_CONFIG, else risa.json)
+//   node project-check.mjs                 the configured project (RISA_CONFIG, else risa.json)
+//   node project-check.mjs --write-golden  rewrite that golden from the prompts rendered
+//                                          now, after a deliberate prompt change (review its diff)
 //
 // Exit 0 with one `project-check: ok` line; 1 with the lines and a count; 2 for a
-// config that doesn't load. `pnpm test:tooling` and the check's tooling step run it
+// config that doesn't load or an unknown argument. `pnpm test:tooling` and the check's tooling step run it
 // first (tooling-tests.mjs, check-tooling.mjs).
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tierDataProblems, tiersFrom } from "../ci/tier-data.mjs";
 import { parseQuarantine } from "../ci/ci-lists.mjs";
-import { MANIFEST, lintRepo } from "./boundary.mjs";
+import { ALLOWLIST, MANIFEST, lintRepo, parseAllowlist } from "./boundary.mjs";
 import { CheckPlanRulesError, checkPlanFor, checkPlanRulesProblems } from "./check-plan.mjs";
-import { backlogIds, loadConfigOrExit } from "./config.mjs";
+import { CONFIG_NAME, backlogIds, loadConfigOrExit } from "./config.mjs";
 import { DocError, roleDoc } from "./doc.mjs";
+import { renderPrompts } from "./prompt-render.mjs";
 import { SkepticError, readRules } from "./skeptics.mjs";
 import { timeGate } from "./time-gate.mjs";
 
@@ -56,10 +62,11 @@ const listLines = (text) =>
 
 /**
  * What is wrong with the project's own data: one line per problem, none when it all loads.
- * @param {{ config: Record<string, any>, root: string }} project a loaded config
+ * @param {{ config: Record<string, any>, root: string, path?: string }} project a loaded
+ *   config (its path, for the prompt golden's render: the root's risa.json when left out)
  * @returns {string[]}
  */
-export function projectProblems({ config, root }) {
+export function projectProblems({ config, root, path = join(root, CONFIG_NAME) }) {
   /** @type {string[]} */
   const problems = [];
   const paths = config.paths ?? {};
@@ -173,9 +180,33 @@ export function projectProblems({ config, root }) {
   // The boundary lint, when the project has a manifest.
   if (exists(MANIFEST)) {
     try {
-      problems.push(...lintRepo(root).failures.map((f) => `boundary lint: ${f}`));
+      const lint = lintRepo(root);
+      problems.push(...lint.failures.map((f) => `boundary lint: ${f}`));
+      // The allowlist is the residual list: each line says why it waits for the move, and
+      // none lets a tool's command name through (the config names them).
+      for (const [key, { why }] of parseAllowlist(lint.allowlist).allowed) {
+        if (!why) problems.push(`${ALLOWLIST}: ${key}: says no \` # why\` it waits for the move`);
+        if (key.endsWith(" tool-command"))
+          problems.push(`${ALLOWLIST}: ${key}: a tool-command line (name the command through the config)`);
+      }
     } catch (e) {
       problems.push(`${MANIFEST}: the boundary lint didn't run (${fromRoot(message(e))})`);
+    }
+  }
+
+  // The prompt golden: every prompt rendered on the project's config, byte for byte.
+  if (paths.promptGolden && exists(paths.promptGolden)) {
+    const golden = readFileSync(join(root, paths.promptGolden), "utf8");
+    const rendered = renderPrompts(path);
+    if (rendered !== golden) {
+      const at = [...rendered].findIndex((c, i) => c !== golden[i]);
+      const line = rendered
+        .slice(0, at < 0 ? Math.min(rendered.length, golden.length) : at)
+        .split("\n").length;
+      problems.push(
+        `${paths.promptGolden}:${line}: the prompts rendered on the project's config differ from the golden ` +
+          "(after a deliberate prompt change: project-check.mjs --write-golden, then review its diff)",
+      );
     }
   }
   return problems.map((p) => (p.startsWith("/") ? rel(p) : p));
@@ -190,11 +221,23 @@ const isMain = () => {
 };
 
 if (isMain()) {
-  if (process.argv.length > 2) {
-    console.error("usage: project-check.mjs (no arguments: the configured project)");
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length && args[0] !== "--write-golden")) {
+    console.error("usage: project-check.mjs [--write-golden] (the configured project)");
     process.exit(2);
   }
-  const problems = projectProblems(loadConfigOrExit("project-check"));
+  const project = loadConfigOrExit("project-check");
+  if (args.length) {
+    const golden = project.config.paths?.promptGolden;
+    if (!golden) {
+      console.error("project-check: the config names no prompt golden (paths.promptGolden)");
+      process.exit(2);
+    }
+    writeFileSync(join(project.root, golden), renderPrompts(project.path));
+    console.log(`project-check: wrote ${golden}`);
+    process.exit(0);
+  }
+  const problems = projectProblems(project);
   if (!problems.length) console.log("project-check: ok");
   else {
     console.log(problems.join("\n"));

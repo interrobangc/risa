@@ -224,6 +224,7 @@ scripts/loops/prd.sh core
 scripts/loops/project-check.mjs core
 scripts/loops/project-check.test.mjs core
 scripts/loops/prompt-golden.test.mjs core
+scripts/loops/prompt-render.mjs core
 scripts/loops/prompt.sh core
 scripts/loops/prompt.test.mjs core
 scripts/loops/prompts/backlog.sh core

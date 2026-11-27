@@ -14,9 +14,8 @@
 // The directory is RISA_SKEPTIC_DIR (prd.sh sets the main checkout's
 // .loops/.skeptic). The topic and session default to what prd.sh passes as
 // --here-topic and --here-session.
-import { toolCmd } from "./config.mjs";
+import { loadConfig, toolCmd } from "./config.mjs";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import {
   SkepticError,
   formatRecords,
@@ -25,8 +24,6 @@ import {
   recordVerdict,
   skepticBrief,
 } from "./skeptics.mjs";
-
-const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const fail = (msg) => {
   console.error(`${toolCmd.prd}: ${msg}`);
@@ -111,7 +108,9 @@ function brief(argv) {
   } catch {
     fail(`can't read the evidence file ${opts.evidence}`);
   }
-  process.stdout.write(skepticBrief(rest[0], { evidence, rules: readRules(ROOT) }));
+  // The configured project's rules (RISA_CONFIG, else the repo's risa.json).
+  const { config, root } = loadConfig();
+  process.stdout.write(skepticBrief(rest[0], { evidence, rules: readRules(root, config) }));
 }
 
 const [cmd, ...argv] = process.argv.slice(2);

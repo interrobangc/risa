@@ -1,6 +1,7 @@
 // The skeptic: the store, the pure checker and the brief against throwaway
 // directories, and `pnpm prd skeptic` / `prompt skeptic` through prd.sh with
-// RISA_SKEPTIC_DIR set. Nothing reads or writes the real .loops/.skeptic.
+// RISA_SKEPTIC_DIR set. Nothing reads or writes the real .loops/.skeptic. The brief's
+// rules come from the fixture project (fixture-project/).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,7 +23,8 @@ import {
 } from "./skeptics.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
-const REPO = join(HERE, "../..");
+// The brief's rules come from the fixture project's docs, never this repo's.
+const FIXTURE = join(HERE, "fixture-project");
 const PRD_SH = join(HERE, "prd.sh");
 const TIP = "a".repeat(40);
 const OTHER_TIP = "b".repeat(40);
@@ -299,17 +301,18 @@ describe("a stall verdict", () => {
 });
 
 describe("the brief", () => {
-  const rules = () => readRules(REPO);
+  const rules = () => readRules(FIXTURE);
   const preferencesNever = () =>
-    /Never \(`--waits`\): (.+?) \(agent-autonomy, /.exec(
-      readFileSync(join(REPO, "docs/agents/preferences.md"), "utf8"),
+    /Never \(`--waits`\): (.+?) \(fixture, /.exec(
+      readFileSync(join(FIXTURE, "docs/preferences.md"), "utf8"),
     )[1];
 
   it("reads the never list as the preferences doc has it", () => {
     expect(rules().neverList).toBe(preferencesNever());
-    expect(rules().whatToAsk).toContain("Existing data");
+    expect(rules().whatToAsk).toContain("costly to undo");
     expect(rules().whatToAsk).not.toContain("**Unattended**");
-    expect(rules().fixesRules).toContain("One slice and one backlog item per fix");
+    expect(rules().skepticPass).toContain("**A second send-back**");
+    expect(rules().fixesRules).toBe("A fix wave takes small fixes, one slice each.");
   });
 
   it.each([
@@ -362,7 +365,7 @@ describe("the brief", () => {
 
 describe("the commands", () => {
   const prd = (...args) => {
-    const env = { ...process.env, RISA_SKEPTIC_DIR: dir };
+    const env = { ...process.env, RISA_SKEPTIC_DIR: dir, RISA_CONFIG: join(FIXTURE, "risa.json") };
     delete env.RISA_SESSION;
     const r = spawnSync("bash", [PRD_SH, ...args], { encoding: "utf8", env });
     return { code: r.status, out: r.stdout, err: r.stderr };
@@ -441,6 +444,7 @@ describe("the commands", () => {
     const ok = prd("prompt", "skeptic", "land", "--evidence", file);
     expect(ok.code).toBe(0);
     expect(ok.out).toContain("the failing test is unrelated");
+    expect(ok.out).toContain("money, data loss, a live deploy, a new dependency; and when unsure.");
     const missing = prd("prompt", "skeptic", "land", "--evidence", join(dir, "none.md"));
     expect(missing.code).toBe(1);
     expect(missing.err).toMatch(/can't read the evidence/);
