@@ -6,11 +6,23 @@
 
 | Slice | Wave | State   | Merge into `prd/after-split-2` |
 | ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | planned |                                |
-| 2     | 1    | planned |                                |
-| 3     | 2    | planned |                                |
+| 1     | 1    | merged  | 11b94c5                        |
+| 2     | 1    | merged  | 57736ed                        |
+| 3     | 2    | handed  |                                |
 
-**Backlog:** claim RISA-972 when slice 1 starts; `done` it when slice 3 merges.
+**Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
+
+**Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic).
+
+**Now (2026-11-27):** wave 1 running: worktrees `.loops/after-split-2-1` and `-2` (from a2831a5), one background agent each on opus; watch running. No new items at the wave boundary. Slice 3 waits for 1 and 2 merged.
+
+**Slice 1:** merged at 11b94c5 (from 37d7591). Its slice check failed twice only on load timeouts in files it doesn't touch (bye, tidy-cli, land-unsynced, recover, rotate, stack); bye and tidy-cli pass alone on its tip at load ~8. The wave's CI run is the gate.
+
+**Slice 2:** merged at 57736ed (from a415761): rm re-points RISA_CONFIG and the mark at `$main/risa.json` when the config is under the removed worktree. Same load-timeout story in its slice check; stack.test passes 22/22 alone.
+
+**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip: 9 failures in 5 files, all load timeouts (load ~25); the 5 files pass alone (174/174) at load ~6: green. Filed RISA-1000 (fixes-tooling) for the suite timing out under load. `risa sync`: no merge needed. PR https://github.com/interrobangc/risa/pull/8 open. Codex round 1: one P2, real (stack_hook's `git worktree list` under pipefail exits before the no-checkout fallback; thread PRRT_kwDOV9ctaM689tXn): fix sent to slice 1's agent.
+
+**Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Handed off at 4b9fed8 (configFor in machine.mjs, find_repo's mark, bin/risa backlog takes line 1 + /risa.json, test-env, README); new tests pass; slice check failed only on 6 load timeouts (land-unsynced, recover, stack), which pass alone (111/111). Reviewed: looks right. Merge it after wave 1 lands (drain), then rotate; the next session gates and lands wave 2. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
 
 ## Architectural decisions
 
