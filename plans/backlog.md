@@ -86,6 +86,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-977 | bug | triaged | after-split |  | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
 | RISA-978 | change | triaged | after-split |  | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
 | RISA-979 | bug | triaged | after-split |  | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
+| RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 
 ## Items
 
@@ -707,3 +708,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Shelby's run, 2026-11-27: 2185 of 2195 pass, prettier/eslint/docs budget pass. Usage got 'Usage: unknown: no current reading' for 'Usage, read 1m ago from 1 session'. Guessed cause (unchecked): the machine's live dispatcher, sessions and usage readings leak into the tests. Log on that machine: /private/tmp/claude-501/-Users-bo-git-caretook-caretook-com/7d3733d4-a8b2-4aaa-8c54-c653f5760b8f/scratchpad/risa-check.log. Separate from RISA-975 (217 fail on the second machine).
+
+### RISA-980 · bug · Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook's main checkout (on dev) from its backlog session, on v0.1.3 with RISA_CONFIG and RISA_MAIN pointing at Caretook; ingest itself still ran. fixes-bug: wrong behaviour in a released install
