@@ -147,6 +147,11 @@ run_hook() {
   (cd "$top" && eval "$c" '"$@"')
 }
 
+# has_hook NAME → whether the config sets hooks.NAME (quietly): a repo without a
+# stack (Risa's own) sets no stack or testDb hooks, and the steps they'd do are
+# skipped, not failed (RISA-973).
+has_hook() { config_get "hooks.$1" >/dev/null 2>&1; }
+
 # stack_hook NAME [ARG…] → run_hook from the top of the checkout the project's
 # config is in (its main checkout, on the trunk), not the one the shell is in: a
 # worktree made from an older branch may not have the hook's script, and the tool

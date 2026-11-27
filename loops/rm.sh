@@ -134,9 +134,14 @@ if [[ -n $registry && $branch == "$prd_prefix"* && -n $hot_rows ]] &&
 fi
 
 # Its stack, its data and its env files (the stack hook; nothing without a stack).
-stack_hook stackDown "$dir" >/dev/null || die "couldn't take down $name's stack; the worktree stays ($(tool_command prd) stack down $name)"
+# A repo with no stack hooks has neither to do (RISA-973).
+if has_hook stackDown; then
+  stack_hook stackDown "$dir" >/dev/null || die "couldn't take down $name's stack; the worktree stays ($(tool_command prd) stack down $name)"
+fi
 # Its test databases, worker copies too (the testDb hook; nothing when that server isn't running).
-stack_hook testDb drop "$name" || echo "couldn't drop $name's test database ($(tool_command prd) test-db list)" >&2
+if has_hook testDb; then
+  stack_hook testDb drop "$name" || echo "couldn't drop $name's test database ($(tool_command prd) test-db list)" >&2
+fi
 # Whether a slice was merged into its parent, for the run log's slice-end (below).
 slice_merged=false
 if [[ $branch == "$slice_prefix"* ]] && git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then

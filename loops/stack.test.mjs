@@ -339,6 +339,29 @@ describe("rm.sh", () => {
   });
 });
 
+describe("a repo with no stack or testDb hooks (RISA-973)", () => {
+  it("makes and removes a stackless worktree, skipping the steps those hooks would do", () => {
+    const raw = JSON.parse(read(env.RISA_CONFIG));
+    for (const h of Object.keys(raw.hooks)) if (/^stack|^testDb$/.test(h)) delete raw.hooks[h];
+    const config = join(loops, "no-stack-hooks.json");
+    mkdirSync(loops, { recursive: true });
+    writeFileSync(config, `${JSON.stringify(raw, null, 2)}\n`);
+    try {
+      const made = sh("new.sh", ["slice", "t", "6"], { env: { RISA_CONFIG: config } });
+      expect(made.stderr).not.toMatch(/stackless env failed|no value for hooks/);
+      expect(made.status).toBe(0);
+      expect(existsSync(join(loops, "t-6"))).toBe(true);
+      const removed = sh("rm.sh", ["t-6"], { env: { RISA_CONFIG: config } });
+      expect(removed.stderr).not.toMatch(/couldn't take down|no value for hooks/);
+      expect(removed.status).toBe(0);
+      expect(existsSync(join(loops, "t-6"))).toBe(false);
+      expect(calls()).not.toMatch(/^(stack|test-db) /m);
+    } finally {
+      rmSync(config, { force: true });
+    }
+  });
+});
+
 describe("rm.sh from inside the worktree it removes (B-812)", () => {
   const stubState = () => join(root, "stub-state");
   const sessions = () => join(loops, ".sessions");

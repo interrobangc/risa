@@ -99,10 +99,16 @@ if project_command hooksInstall >/dev/null 2>&1; then run_project hooksInstall; 
 
 # The stackless env (.env.loop) first, stack or not, so a failed install leaves
 # a worktree without a stack, its slot given back, that a later stack up can take.
-stack_hook stackDown "$dir" --base "$base" >/dev/null || die "stackless env failed for $name"
+# A repo with no stack hooks has neither step (RISA-973).
+if has_hook stackDown; then
+  stack_hook stackDown "$dir" --base "$base" >/dev/null || die "stackless env failed for $name"
+fi
 # Integration tests use this worktree's own test database (the testDb hook),
 # stack or not; it's created on the first run.
-test_facts=$(stack_hook testDb use "$name") || die "test database setup failed for $name"
+test_facts=""
+if has_hook testDb; then
+  test_facts=$(stack_hook testDb use "$name") || die "test database setup failed for $name"
+fi
 
 use_node
 run_project install || {
