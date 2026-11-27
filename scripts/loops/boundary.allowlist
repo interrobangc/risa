@@ -19,4 +19,4 @@ scripts/project/check-plan-rules.test.mjs project-to-core 26 # Caretook's rules 
 scripts/project/doc-budget.config.mjs project-to-core 10 # the generic role docs' budget figures: Caretook's budget engine measures them until the move, then Risa's copy does
 scripts/project/doc-budget.test.mjs project-to-core 4 # the generic role docs' figures and their measuring, until the move
 scripts/project/test-projects.test.mjs project-to-core 1 # owners from the core's manifest until the move; the removal commit drops that check
-vitest.config.ts project-to-core 9 # the Vitest tooling projects run the core's tests: until the move
+vitest.config.ts project-to-core 10 # the Vitest tooling projects run the core's tests, with its test setup (test-setup.mjs): until the move

@@ -288,6 +288,7 @@ scripts/loops/status-extra.mjs core
 scripts/loops/status-extra.test.mjs core
 scripts/loops/status-trim.mjs core
 scripts/loops/status-trim.test.mjs core
+scripts/loops/test-setup.mjs core
 scripts/loops/tidy-cli.mjs core
 scripts/loops/tidy-cli.test.mjs core
 scripts/loops/tidy.mjs core
