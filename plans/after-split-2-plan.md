@@ -8,7 +8,7 @@
 | ----- | ---- | ------- | ------------------------------ |
 | 1     | 1    | merged  | 11b94c5                        |
 | 2     | 1    | merged  | 57736ed                        |
-| 3     | 2    | working |                                |
+| 3     | 2    | handed  |                                |
 
 **Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
 
@@ -22,7 +22,7 @@
 
 **Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip: 9 failures in 5 files, all load timeouts (load ~25); the 5 files pass alone (174/174) at load ~6: green. Filed RISA-1000 (fixes-tooling) for the suite timing out under load. `risa sync`: no merge needed. PR https://github.com/interrobangc/risa/pull/8 open; Codex review waiting.
 
-**Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
+**Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Handed off at 4b9fed8 (configFor in machine.mjs, find_repo's mark, bin/risa backlog takes line 1 + /risa.json, test-env, README); new tests pass; slice check failed only on 6 load timeouts (land-unsynced, recover, stack), which pass alone (111/111). Reviewed: looks right. Merge it after wave 1 lands (drain), then rotate; the next session gates and lands wave 2. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
 
 ## Architectural decisions
 
