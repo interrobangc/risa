@@ -21,6 +21,8 @@ and says which ones may start work.
 
 ## Install a release
 
+Risa needs git 2.28 or newer; the third step refuses an older one.
+
 ```sh
 git -C ~/git/risa worktree add ~/.risa/releases/v0.1.0 v0.1.0   # or a clone at the tag
 ln -sf ~/.risa/releases/v0.1.0/bin/risa ~/.local/bin/risa
