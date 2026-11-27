@@ -16,6 +16,10 @@
 //   sampleFoldersConfig(dir)  writes DIR/risa.json: that config with its check plan's
 //                         rules on the sample project's folders (web/, db/), and returns
 //                         its path, for a test whose made-up files sit there.
+//
+//   fixtureTierData(dir?) the tier data the config in RISA_CONFIG names (paths.tierData,
+//                         from that config's folder): { path, text }; with DIR, also
+//                         written there at that path, for a throwaway repo.
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -115,4 +119,21 @@ export function sampleFoldersConfig(dir) {
   put(raw.paths.checkPlanRules, `${JSON.stringify(RULES, null, 2)}\n`);
   put("risa.json", `${JSON.stringify(raw, null, 2)}\n`);
   return join(dir, "risa.json");
+}
+
+/**
+ * The tier data the config in RISA_CONFIG names: its path from that config's
+ * folder and its text. Given a throwaway repo, it is written there at that path.
+ * @param {string} [dir] the throwaway repo
+ * @returns {{ path: string, text: string }}
+ */
+export function fixtureTierData(dir) {
+  const config = process.env.RISA_CONFIG || FIXTURE_CONFIG;
+  const path = JSON.parse(readFileSync(config, "utf8")).paths.tierData;
+  const text = readFileSync(join(dirname(config), path), "utf8");
+  if (dir) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+  return { path, text };
 }

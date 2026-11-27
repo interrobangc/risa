@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { collectTidyFacts, processCwds, removeLease } from "./tidy-cli.mjs";
 import { tidy as sortFacts } from "./tidy.mjs";
-import { stubHookConfig } from "./config-fixture.mjs";
+import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -116,8 +116,9 @@ beforeAll(() => {
     copyFileSync(join(HERE, f), join(main, "scripts/loops", f));
   env.RISA_CONFIG = stubHookConfig(main);
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
-  for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
+  for (const f of ["outstanding.mjs", "tier-data.mjs"])
     copyFileSync(join(HERE, "../ci", f), join(main, "scripts/ci", f));
+  fixtureTierData(main);
   writeFileSync(join(main, "scripts/backlog/backlog.mjs"), FAKE_BACKLOG);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\nnode_modules/\n");
   mkdirSync(join(main, "plans"));
