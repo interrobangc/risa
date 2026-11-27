@@ -949,7 +949,8 @@ describe("hotfix", () => {
     expect(text).toContain("**Ask the user before every step that takes time or changes shared state**");
     expect(text).toContain("Background agents are allowed");
     expect(text).toContain("`pnpm prd doc hotfix`");
-    expect(text).toContain("into its file, docs/agents/hotfix.md.");
+    // The fixture names no hotfix additions file: the prompt says which one it means.
+    expect(text).toContain("into its file, the hotfix role's additions file.");
     expect(text).toContain('**"PR or local?"**');
     expect(text).toContain("`pnpm prd land hotfix/trim --pr` or `--local`");
     expect(text).toContain("`pnpm prd pr hotfix/trim`");

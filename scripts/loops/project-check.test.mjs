@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
-import { projectProblems } from "./project-check.mjs";
+import { projectProblems, sharedNameProblems } from "./project-check.mjs";
 import { SAMPLE_CONFIG, makeRepo, sampleData } from "./sample-project/repo.mjs";
 
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "project-check-")));
@@ -129,6 +129,33 @@ describe("the project-data check", () => {
         "(after a deliberate prompt change: project-check.mjs --write-golden, then review its diff)",
     ]);
   }, 60_000);
+});
+
+describe("the project-data check's shared names", () => {
+  const names = {
+    checked: "sample-checked",
+    unsyncedMerge: "sample-unsynced-merge",
+    backlogLock: "sample-backlog.lock",
+  };
+
+  it("passes when bash builds the names Node does, from a name they can carry", () => {
+    expect(sharedNameProblems(SAMPLE, names)).toEqual([]);
+  });
+
+  it("names each shared name bash builds differently, and a lib.sh that didn't run", () => {
+    expect(sharedNameProblems(SAMPLE, { ...names, checked: "other-checked" })).toEqual([
+      'risa.json: the shared names: checked is "other-checked" in bash (lib.sh), "sample-checked" in Node',
+    ]);
+    expect(sharedNameProblems(SAMPLE, null)).toEqual([
+      "risa.json: the shared names: lib.sh didn't run on the config",
+    ]);
+  });
+
+  it("names a name the lock, the markers, the label and the status context can't carry", () => {
+    expect(sharedNameProblems({ ...SAMPLE, name: "My Project" }, names)).toEqual([
+      'risa.json: name: "My Project" can\'t carry the shared names (a-z, 0-9 and -)',
+    ]);
+  });
 });
 
 describe("project-check.mjs", () => {

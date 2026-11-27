@@ -12,11 +12,10 @@ scripts/ci/verdict.test.mjs project-to-core 2 # ties the core's verdict fixtures
 scripts/deploy/workflows.test.mjs project-to-core 3 # the deploy workflow test pins ci.yml's tooling jobs, which run the core: until the move
 scripts/loops/boundary.mjs core-to-project 2 # the manifest's folders (ROOTS) name the hooks folder and scripts/project: goes with the manifest at the move
 scripts/loops/boundary.test.mjs core-to-project 1 # checks the manifest's folders (ROOTS), scripts/project among them: goes with the manifest at the move
-scripts/loops/shared-names.test.mjs project-name 9 # the sample of Caretook's own config: the lock, the markers, the launchd label and the CI status context keep today's values; leaves with that config at the move
 scripts/project/check-areas.d/_global project-to-core 3 # the core's folders (scripts/loops, scripts/backlog, scripts/ci) map to no check, so the check-areas lint covers every tracked file: the rules go when the core moves out
 scripts/project/check-plan-rules.json project-to-core 2 # scripts/ci asks for the full suite (the rule and its reason): the folder holds core files until the move, then only Caretook's
 scripts/project/check-plan-rules.test.mjs project-to-core 26 # Caretook's rules through the core's engine, the table from before they were data: until the move; the removal commit drops the file
 scripts/project/doc-budget.config.mjs project-to-core 10 # the generic role docs' budget figures: Caretook's budget engine measures them until the move, then Risa's copy does
 scripts/project/doc-budget.test.mjs project-to-core 4 # the generic role docs' figures and their measuring, until the move
 scripts/project/test-projects.test.mjs project-to-core 1 # owners from the core's manifest until the move; the removal commit drops that check
-vitest.config.ts project-to-core 9 # the Vitest tooling projects run the core's tests: until the move
+vitest.config.ts project-to-core 10 # the Vitest tooling projects run the core's tests, with its test setup (test-setup.mjs): until the move

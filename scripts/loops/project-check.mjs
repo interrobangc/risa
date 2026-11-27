@@ -16,6 +16,9 @@
 //     allowlist line says why, none a tool-command
 //   the prompt golden the config names (paths.promptGolden) matches the prompts
 //     rendered on the project's config (prompt-render.mjs)
+//   the shared names (config.mjs's sharedNames: the lock, the markers, the launchd
+//     label, the CI status context) come from a name they can carry, and lib.sh
+//     builds the same ones in bash
 //
 //   node project-check.mjs                 the configured project (RISA_CONFIG, else risa.json)
 //   node project-check.mjs --write-golden  rewrite that golden from the prompts rendered
@@ -24,6 +27,7 @@
 // Exit 0 with one `project-check: ok` line; 1 with the lines and a count; 2 for a
 // config that doesn't load or an unknown argument. `pnpm test:tooling` and the check's tooling step run it
 // first (tooling-tests.mjs, check-tooling.mjs).
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,13 +35,58 @@ import { tierDataProblems, tiersFrom } from "../ci/tier-data.mjs";
 import { parseQuarantine } from "../ci/ci-lists.mjs";
 import { ALLOWLIST, MANIFEST, lintRepo, parseAllowlist } from "./boundary.mjs";
 import { CheckPlanRulesError, checkPlanFor, checkPlanRulesProblems } from "./check-plan.mjs";
-import { CONFIG_NAME, backlogIds, loadConfigOrExit } from "./config.mjs";
+import { CONFIG_NAME, backlogIds, loadConfigOrExit, sharedNames } from "./config.mjs";
 import { DocError, roleDoc } from "./doc.mjs";
 import { renderPrompts } from "./prompt-render.mjs";
 import { SkepticError, readRules } from "./skeptics.mjs";
 import { timeGate } from "./time-gate.mjs";
 
 const COMMENT = /^\s*(#|$)/;
+const HERE = dirname(fileURLToPath(import.meta.url));
+// A name a file in the git dir, a launchd label and a commit status context can all carry.
+const SHARED_NAME = /^[a-z0-9][a-z0-9-]*$/;
+// The shared names lib.sh builds, in the order bashSharedNames prints them.
+const BASH_NAMES = /** @type {const} */ (["checked", "unsyncedMerge", "backlogLock"]);
+
+/**
+ * The shared names lib.sh builds on the config at PATH (checked, unsyncedMerge,
+ * backlogLock), from ROOT (a git repo); null when the bash side didn't run.
+ * @param {string} path @param {string} root
+ * @returns {Record<string, string> | null}
+ */
+export function bashSharedNames(path, root) {
+  const r = spawnSync(
+    "bash",
+    [
+      "-c",
+      `source "${join(HERE, "lib.sh")}" && source "${join(HERE, "unsynced.sh")}" && ` +
+        'basename "$(checked_file .)" && basename "$(unsynced_marker .)" && echo "$project_name-backlog.lock"',
+    ],
+    { cwd: root, encoding: "utf8", env: { ...process.env, RISA_CONFIG: path } },
+  );
+  const lines = r.stdout.trim().split("\n");
+  if (r.status !== 0 || lines.length !== BASH_NAMES.length) return null;
+  return Object.fromEntries(BASH_NAMES.map((k, i) => [k, lines[i] ?? ""]));
+}
+
+/**
+ * What is wrong with the project's shared names: a name they can't carry, or bash's
+ * (BASH, from bashSharedNames) differing from Node's.
+ * @param {Record<string, any>} config @param {Record<string, string> | null} bash
+ * @returns {string[]}
+ */
+export function sharedNameProblems(config, bash) {
+  if (!SHARED_NAME.test(String(config.name ?? "")))
+    return [
+      `${CONFIG_NAME}: name: ${JSON.stringify(config.name)} can't carry the shared names (a-z, 0-9 and -)`,
+    ];
+  if (!bash) return [`${CONFIG_NAME}: the shared names: lib.sh didn't run on the config`];
+  const node = sharedNames(config);
+  return BASH_NAMES.filter((k) => bash[k] !== node[k]).map(
+    (k) =>
+      `${CONFIG_NAME}: the shared names: ${k} is ${JSON.stringify(bash[k])} in bash (lib.sh), ${JSON.stringify(node[k])} in Node`,
+  );
+}
 const message = (/** @type {unknown} */ e) => (e instanceof Error ? e.message : String(e));
 
 /**
@@ -209,6 +258,8 @@ export function projectProblems({ config, root, path = join(root, CONFIG_NAME) }
       );
     }
   }
+  // The shared names other worktrees, the watchdog and GitHub share.
+  problems.push(...sharedNameProblems(config, bashSharedNames(path, root)));
   return problems.map((p) => (p.startsWith("/") ? rel(p) : p));
 }
 

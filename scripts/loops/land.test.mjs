@@ -192,7 +192,7 @@ describe("land.sh's doc budget", () => {
     branch({ "docs/x.md": "d" });
     const r = landWith(
       withConfig((c) => {
-        c.hooks.docBuget = c.hooks.docBudget;
+        c.hooks.docBuget = "sh -c 'exit 0'";
         delete c.hooks.docBudget;
       }),
     );
@@ -203,6 +203,17 @@ describe("land.sh's doc budget", () => {
 });
 
 describe("land.sh writes a to-test file", () => {
+  // The project's landing hook (how to try a landing): a stub that gives the app's URL.
+  beforeEach(() => {
+    const stub = join(root, "landing-hook.sh");
+    writeFileSync(
+      stub,
+      '[ "$1" = try ] && echo "Run the app in ${2:-the main checkout} and open http://localhost:5173."\nexit 0\n',
+    );
+    const raw = JSON.parse(readFileSync(config, "utf8"));
+    raw.hooks.landing = `bash '${stub}'`;
+    writeFileSync(config, `${JSON.stringify(raw, null, 2)}\n`);
+  });
   const landFor = (mergeFails = false) =>
     spawnSync(
       "bash",
