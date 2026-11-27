@@ -18,4 +18,4 @@ Agents file each new line into the tracker ([backlog.md](backlog.md)) and add it
 
 ## Features
 
-- A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before it runs or between waves) to replan the whole PRD
+- A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before it runs or between waves) to replan the whole PRD (RISA-998)
