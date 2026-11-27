@@ -101,6 +101,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-990 | bug | in-progress | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-992 | bug | triaged | fixes-tooling |  | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
+| RISA-993 | bug | triaged | fixes-tooling |  | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
+| RISA-994 | bug | triaged | fixes-tooling |  | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 
 ## Items
 
@@ -856,3 +858,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/after-split): Failed on time only in both full runs of slice 1; passes alone on base at 19.4 s
+
+### RISA-993 · bug · config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
+
+### RISA-994 · bug · Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
