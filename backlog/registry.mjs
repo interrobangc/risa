@@ -16,6 +16,10 @@
 // a topic is to write, planned, running or idle is worked out by stateOf,
 // never stored.
 //
+// `prd archive` moves done rows to the same table under the same heading in
+// the item archive's preamble (config.paths.archive): `prd show` and a name
+// already taken still find them, `prd list` leaves them out.
+//
 // The table before the registry (PRD, Doc, Depends on, Hot files: prose) is
 // "old": it is recognised and refused, never read as rows (it was converted
 // once, by hand-run tooling since removed).
@@ -35,6 +39,7 @@ export const WAITING = ["inbox", "triaged", "in-progress"];
 
 export const SECTION = config.backlog.prdsHeading;
 const BACKLOG = config.paths.backlog;
+const ARCHIVE = config.paths.archive;
 const HEADER = ["PRD", "Flags", "After", "Hot files", "Doc and notes"];
 const NONE = "—";
 
@@ -186,6 +191,50 @@ export function rowsOf(preamble) {
   throw new BacklogError(`${BACKLOG} has no "${SECTION}" table`);
 }
 
+// ---- the archive's rows ---------------------------------------------------------
+
+/** The archive's text under its PRD table's heading, when `prd archive` adds the table. */
+export const ARCHIVE_INTRO = `Done PRDs, moved here from the registry in ${BACKLOG} by \`${toolCmd.backlog} prd archive\`. \`${toolCmd.backlog} prd show <topic>\` still finds them; \`prd list\` leaves them out. Don't edit it by hand.`;
+
+/** The archived rows in the archive's preamble; none when it has no PRD table yet. @param {string} preamble */
+export const archivedRowsOf = (preamble) =>
+  parseRegistry(preamble).format === "none" ? [] : rowsOf(preamble);
+
+/**
+ * The archive's preamble with `rows` as its PRD table: the section is added
+ * at the preamble's end when it has none.
+ * @param {string} preamble @param {Row[]} rows
+ */
+export function withArchivedRows(preamble, rows) {
+  if (parseRegistry(preamble).format !== "none") return withRows(preamble, rows);
+  if (preamble.split("\n").some((l) => l.trim() === SECTION))
+    throw new BacklogError(`${ARCHIVE} has a "${SECTION}" heading but no table under it`);
+  return [preamble.trimEnd(), "", SECTION, "", ARCHIVE_INTRO, "", ...renderTable(rows)].join("\n");
+}
+
+/**
+ * The done rows to move to the archive, and the rows left. A done row whose
+ * prd/ worktree is still there (`worktrees`) stays, so the dispatcher can
+ * still name it. The rows left lose the moved topics from their After (a done
+ * topic's dependency is met; nothing reads the archive for it).
+ * @param {Row[]} rows @param {Set<string>} [worktrees]
+ * @returns {{ rows: Row[], moved: Row[], kept: string[] }}
+ */
+export function archiveDone(rows, worktrees = new Set()) {
+  const done = rows.filter((r) => r.flags.includes("done"));
+  const moved = done.filter((r) => !worktrees.has(r.topic));
+  const gone = new Set(moved.map((r) => r.topic));
+  return {
+    rows: rows
+      .filter((r) => !gone.has(r.topic))
+      .map((r) =>
+        r.after.some((a) => gone.has(a)) ? { ...r, after: r.after.filter((a) => !gone.has(a)) } : r,
+      ),
+    moved,
+    kept: done.filter((r) => worktrees.has(r.topic)).map((r) => r.topic),
+  };
+}
+
 // ---- the worked-out state --------------------------------------------------------
 
 /**
@@ -289,10 +338,16 @@ export function setRow(row, pairs, opts = {}) {
   return r;
 }
 
-/** A new row. @param {Row[]} rows @param {string} topic @param {string[]} pairs @param {Position} pos @param {{ today?: string }} [opts] */
+/**
+ * A new row. A topic in `opts.archived` (the archive's rows) is taken too.
+ * @param {Row[]} rows @param {string} topic @param {string[]} pairs @param {Position} pos
+ * @param {{ today?: string, archived?: string[] }} [opts]
+ */
 export function addRow(rows, topic, pairs, pos = { last: true }, opts = {}) {
   checkTopic(topic);
   if (rows.some((r) => r.topic === topic)) throw new BacklogError(`there's already a PRD row "${topic}"`);
+  if (opts.archived?.includes(topic))
+    throw new BacklogError(`there's already a PRD row "${topic}" (archived in ${ARCHIVE})`);
   return insert(rows, setRow({ topic, flags: [], after: [], hot: [], notes: "" }, pairs, opts), pos);
 }
 
@@ -354,18 +409,21 @@ export function cycles(rows) {
 /**
  * The registry's findings, in doctor's form (none fixable): a topic twice, an
  * unknown flag, an After topic with no row, a cycle, waiting items with no
- * row, a waiting item on a done topic.
- * @param {Row[]} rows @param {{ id: string, status: string, prd: string }[]} items
+ * row, a waiting item on a done topic. An archived row (`archived`) is a
+ * known, done topic; one in both tables is a finding.
+ * @param {Row[]} rows @param {{ id: string, status: string, prd: string }[]} items @param {Row[]} [archived]
  * @returns {{ id: string, problem: string, fixable: false }[]}
  */
-export function findings(rows, items) {
+export function findings(rows, items, archived = []) {
   /** @type {{ id: string, problem: string, fixable: false }[]} */
   const out = [];
   const add = (id, problem) => out.push({ id, problem, fixable: false });
-  const topics = new Set(rows.map((r) => r.topic));
+  const topics = new Set([...rows, ...archived].map((r) => r.topic));
+  const inArchive = new Set(archived.map((r) => r.topic));
   const seen = new Set();
   for (const r of rows) {
     if (seen.has(r.topic)) add(r.topic, "has more than one row in the PRD table");
+    else if (inArchive.has(r.topic)) add(r.topic, `has a row in the PRD table and in ${ARCHIVE}`);
     seen.add(r.topic);
     for (const f of r.flags)
       if (!FLAGS.includes(f)) add(r.topic, `has an unknown flag "${f}" (flags: ${FLAGS.join(", ")})`);
@@ -381,7 +439,7 @@ export function findings(rows, items) {
       topic,
       `has ${ids.length} waiting item${ids.length === 1 ? "" : "s"} (${ids.slice(0, 5).join(", ")}${ids.length > 5 ? ", …" : ""}) but no row in the PRD table`,
     );
-  const done = new Set(rows.filter((r) => r.flags.includes("done")).map((r) => r.topic));
+  const done = new Set([...rows.filter((r) => r.flags.includes("done")), ...archived].map((r) => r.topic));
   for (const i of waiting) if (done.has(i.prd)) add(i.id, `is ${i.status}, but its topic ${i.prd} is done`);
   return out;
 }

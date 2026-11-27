@@ -92,7 +92,7 @@ describe("backlog prd", () => {
     expect(r.out).toContain("the PRD table is in the old prose form");
     expect(cliFails(prd, "prd", "set", "beta", "flags=hold").out).toContain("old prose form");
     expect(cliFails(prd, "prd", "migrate").out).toContain(
-      'unknown prd command "migrate" (list, add, set, move)',
+      'unknown prd command "migrate" (list, show, add, set, move, archive)',
     );
     expect(cli(prd, "list")).toContain("B-1");
   });
@@ -230,5 +230,56 @@ describe("backlog prd", () => {
     expect(r.code).toBe(1);
     expect(r.out.trim().split("\n")).toEqual(expected);
     expect(cliFails(main, "doctor", "--fix").out.trim().split("\n")).toEqual(expected);
+  });
+  // The rows are set by hand in one commit (as above): a done row, a done one
+  // with a worktree (beta's), and After cells that name the done ones.
+  it("archives the done rows: list leaves them out, show and add still find them, again is a no-op", () => {
+    const flagsAfter = { beta: ["done", "—"], delta: ["done", "—"], epsilon: ["hold", "`beta`, `alpha`"] };
+    const rows = file().replace(/^\| `([a-z-]+)` \|[^|]*\|[^|]*\|/gm, (r, topic) =>
+      topic in flagsAfter ? `| \`${topic}\` | ${flagsAfter[topic][0]} | ${flagsAfter[topic][1]} |` : r,
+    );
+    writeFileSync(join(main, "plans/backlog.md"), rows);
+    git(main, "commit", "-q", "-am", "chore(backlog): done rows by hand");
+    expect(cli(prd, "prd", "archive").split("\n")).toEqual([
+      "archived 2 done PRD rows to plans/backlog-archive.md: alpha, delta",
+      "kept beta: a prd/ worktree is still there",
+    ]);
+    expect(git(main, "show", "--name-only", "--format=", "HEAD").split("\n").sort()).toEqual([
+      "plans/backlog-archive.md",
+      "plans/backlog.md",
+    ]);
+    const listed = JSON.parse(cli(prd, "prd", "list", "--json"));
+    expect(listed.map((r) => r.topic)).toEqual(["beta", "epsilon", "gamma", "fixes-x"]);
+    expect(listed.find((r) => r.topic === "epsilon").after).toEqual(["beta"]);
+    expect(listed.find((r) => r.topic === "gamma").after).toEqual([]);
+    expect(cli(prd, "prd", "list")).not.toMatch(/^(alpha|delta) /m);
+    const archive = readFileSync(join(main, "plans/backlog-archive.md"), "utf8");
+    expect(archive).toMatch(/^## PRDs$/m);
+    expect(archive).toContain("| `alpha` | done | `ghost` | — | [PRD](alpha-prd.md)");
+
+    expect(cli(prd, "prd", "show", "alpha").split("\n")[0]).toBe(
+      "alpha · done (archived in plans/backlog-archive.md)",
+    );
+    expect(JSON.parse(cli(prd, "prd", "show", "delta", "--json"))).toMatchObject({
+      topic: "delta",
+      state: "done",
+      archived: true,
+    });
+    expect(JSON.parse(cli(prd, "prd", "show", "gamma", "--json")).archived).toBe(false);
+    expect(cliFails(prd, "prd", "add", "alpha").out).toContain(
+      'there\'s already a PRD row "alpha" (archived in plans/backlog-archive.md)',
+    );
+    expect(cliFails(prd, "prd", "show", "ghost").out).toContain('no PRD row "ghost"');
+
+    const head = git(main, "rev-parse", "HEAD");
+    expect(cli(prd, "prd", "archive").split("\n")[0]).toBe("no done PRD rows to archive");
+    expect(git(main, "rev-parse", "HEAD")).toBe(head);
+    // An archived topic is a known, done one: its items are still flagged, its row's findings went with it.
+    expect(cliFails(main, "doctor").out.trim().split("\n")).toEqual([
+      "nowhere  has 1 waiting item (B-4) but no row in the PRD table",
+      "B-1  is triaged, but its topic beta is done",
+      "B-5  is triaged, but its topic alpha is done",
+      "3 findings",
+    ]);
   });
 });
