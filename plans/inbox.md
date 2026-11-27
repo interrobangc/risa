@@ -6,6 +6,9 @@ Agents file each new line into the tracker ([backlog.md](backlog.md)) and add it
 
 ## Bugs/Nits
 
+- Fixes orchestrators keep waiting for new work when they run out
+  They need to clean themselves up so they stop taking a queue spot.
+
 ## Change requests
 
 - Inbox per project, not per machine
