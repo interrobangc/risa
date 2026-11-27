@@ -8,14 +8,14 @@
 
 **Wave 2** (started 2026-11-27): slices 8–13, all opus. Wave 1 landed in main as c4ae22d (PR #5); its table is in the history once trimmed.
 
-| Slice | Wave | Item     | Model | State    | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------- | ----- | -------- | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | checking |                                |
-| 9     | 2    | RISA-681 | opus  | checking |                                |
-| 10    | 2    | RISA-934 | opus  | checking |                                |
-| 11    | 2    | RISA-987 | opus  | checking |                                |
-| 12    | 2    | RISA-989 | opus  | checking |                                |
-| 13    | 2    | RISA-993 | opus  | checking |                                |
+| Slice | Wave | Item     | Model | State      | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------- | ----- | ---------- | ------------------------------ |
+| 8     | 2    | RISA-969 | opus  | checking   |                                |
+| 9     | 2    | RISA-681 | opus  | checking   |                                |
+| 10    | 2    | RISA-934 | opus  | handed off |                                |
+| 11    | 2    | RISA-987 | opus  | checking   |                                |
+| 12    | 2    | RISA-989 | opus  | checking   |                                |
+| 13    | 2    | RISA-993 | opus  | handed off |                                |
 
 **Notes:**
 
