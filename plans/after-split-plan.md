@@ -17,7 +17,7 @@
 
 **Models:** slices 1–6 opus (each has real logic).
 
-**Now:** all six slices merged (tip d660e0b); every item done (RISA-975/979/932/953/970/971/976/977/978/990, RISA-974). One landing for the whole plan. **Blocker:** `risa check`/tier/CI can't run here (no `paths.checkPlanRules`, RISA-988); the backlog session (risa-2a) says hotfix/check-plan-rules lands it on the user's word and will message us; a background loop waits for `risa-check-plan.json` on origin/main. Then: `risa sync`, then one CI gate for the merged tip. Every slice's full `pnpm test` ran under load 24–43 with 12–86 timeouts outside its files; the gate settles them. Filed RISA-991 (stack down errors stackless), RISA-992 (prompt-golden timeout).
+**Now:** all six slices merged (tip d660e0b); every item done (RISA-975/979/932/953/970/971/976/977/978/990, RISA-974). One landing for the whole plan. RISA-988 hotfix landed on main (1caec2c); synced with `--force` (56a22bb). Wave gate: `risa ci run unit` started no run (this repo has no CI yet); the gate is the plan's full `risa check` on the merged tip. Every slice's full `pnpm test` ran under load 24–43 with 12–86 timeouts outside its files; the gate settles them. Filed RISA-991 (stack down errors stackless), RISA-992 (prompt-golden timeout).
 
 **Backlog:** claim each slice's items as it starts; `done` them when it merges. Slice 1: RISA-975, RISA-979, RISA-932, RISA-953. Slice 2: RISA-970, RISA-971. Slice 3: RISA-976 (the fixtures' half). Slice 4: RISA-976 (the git floor; `done` it when both 3 and 4 have merged). Slice 5: RISA-978, RISA-977. Slice 6: RISA-974.
 
