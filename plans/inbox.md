@@ -8,4 +8,7 @@ Agents file each new line into the tracker ([backlog.md](backlog.md)) and add it
 
 ## Change requests
 
+- Inbox per project, not per machine
+  Probably move planning (backlog, PRDs, plans, etc.) to gists, GitHub issues or some other mechanism so the same project can be worked on across machines safely, avoiding the git sync problems we keep hitting.
+
 ## Features
