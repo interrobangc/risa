@@ -36,8 +36,9 @@
 //       and its candidate run (candidate.mjs). Exit 6 is a refusal.
 //   prd ci promote
 //       merges the open candidate into staging when the newest candidate verdict on
-//       its exact tip passes (promote.mjs), then deletes its rc/ and ci/ refs. Exit 6
-//       is a refusal; exit 5 means the merge couldn't be confirmed.
+//       its exact tip passes (promote.mjs), deletes its rc/ and ci/ refs and files a
+//       passing flake's tests. Exit 6 is a refusal; exit 5 means the merge couldn't be
+//       confirmed.
 //   prd ci release [--wait <min>] [--rerun]
 //       the main gate: the release tier on the head of the open staging to main PR
 //       (its finished verdict if it has one), written as the release-gate status, and
