@@ -185,7 +185,7 @@ describe("backlog, recovery and hotfix sessions", () => {
       title: "Pike",
       mode: "fresh",
       managed: true,
-      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(RISA_CAPTAIN=Pike loops/prompt.sh backlog)"`,
+      command: `cd /m && ${wrapper} backlog --kind backlog --managed -- --model sonnet --remote-control Pike "$(RISA_CAPTAIN=Pike /o/prompt.sh backlog)"`,
     });
   });
 
@@ -226,7 +226,7 @@ describe("backlog, recovery and hotfix sessions", () => {
         record: { kind: "backlog", model: "sonnet", managed: true, remote: "backlog - x" },
       }).command,
     ).toBe(
-      `cd /m && ${wrapper} backlog-x --kind backlog --managed -- --model sonnet --remote-control 'backlog - x' "$(loops/prompt.sh backlog)"`,
+      `cd /m && ${wrapper} backlog-x --kind backlog --managed -- --model sonnet --remote-control 'backlog - x' "$(/o/prompt.sh backlog)"`,
     );
   });
 
@@ -234,7 +234,7 @@ describe("backlog, recovery and hotfix sessions", () => {
     expect(
       chooseMainCommand({ name: "recover", main: "/m", wrapper, record: { kind: "recovery" } }).command,
     ).toBe(
-      `cd /m && ${wrapper} recover --kind recovery -- --remote-control recover "$(loops/prompt.sh recover)"`,
+      `cd /m && ${wrapper} recover --kind recovery -- --remote-control recover "$(/o/prompt.sh recover)"`,
     );
   });
 
@@ -307,7 +307,7 @@ describe("backlog, recovery and hotfix sessions", () => {
     const fresh = chooseCommand({ ...base, record: { model: "sonnet", rotating: true } });
     expect(fresh.mode).toBe("fresh");
     expect(fresh.command).toBe(
-      `cd /w/hotfix-t && ${wrapper} hotfix-t -- --model sonnet --remote-control hotfix-t "$(loops/prompt.sh hotfix t)"`,
+      `cd /w/hotfix-t && ${wrapper} hotfix-t -- --model sonnet --remote-control hotfix-t "$(/o/prompt.sh hotfix t)"`,
     );
   });
 
@@ -321,7 +321,7 @@ describe("backlog, recovery and hotfix sessions", () => {
     const captain = /^backlog as ([A-Za-z]+) /m.exec(out)?.[1];
     expect(CAPTAINS).toContain(captain);
     expect(out).toContain(
-      `--model sonnet --remote-control ${captain} "$(RISA_CAPTAIN=${captain} loops/prompt.sh backlog)"`,
+      `--model sonnet --remote-control ${captain} "$(RISA_CAPTAIN=${captain} ${join(main, "loops/prompt.sh")} backlog)"`,
     );
     expect(out).not.toContain("--continue");
     rmSync(folder, { recursive: true });
@@ -383,9 +383,11 @@ describe("choosing the command", () => {
         runThrough: auto,
         wrapper: SESSION_SH,
       }).command;
-    expect(fresh(false)).toBe(`${W} -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume)"`);
+    expect(fresh(false)).toBe(
+      `${W} -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume)"`,
+    );
     expect(fresh(true)).toBe(
-      `${W} --auto -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume --auto)"`,
+      `${W} --auto -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume --auto)"`,
     );
   });
 
@@ -401,7 +403,7 @@ describe("choosing the command", () => {
       });
     expect(choose({ auto: true })).toMatchObject({
       auto: true,
-      command: `${W} --auto -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume --auto)"`,
+      command: `${W} --auto -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume --auto)"`,
     });
     expect(choose({ auto: false }).auto).toBe(false);
     expect(choose(null).auto).toBe(false);
@@ -419,7 +421,7 @@ describe("choosing the command", () => {
       }),
     ).toMatchObject({
       mode: "fresh",
-      command: `${W} --auto -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume --auto)"`,
+      command: `${W} --auto -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume --auto)"`,
     });
   });
 
@@ -435,7 +437,7 @@ describe("choosing the command", () => {
     ).toMatchObject({
       session: "plan-u",
       mode: "fresh",
-      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model opus --remote-control plan-u "$(loops/prompt.sh plan u)"`,
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u -- --model opus --remote-control plan-u "$(/o/loops/prompt.sh plan u)"`,
     });
   });
 
@@ -454,12 +456,12 @@ describe("choosing the command", () => {
       command: `${W} --managed -- --continue --remote-control prd-t`,
     });
     expect(choose("prd/t", false, { managed: true, auto: true }).command).toBe(
-      `${W} --auto --managed -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume --auto)"`,
+      `${W} --auto --managed -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume --auto)"`,
     );
     expect(choose("prd/t", false, { auto: true }).managed).toBe(false);
     expect(choose("plan/u", false, { managed: true, auto: true })).toMatchObject({
       managed: true,
-      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u --auto --managed -- --model opus --remote-control plan-u "$(loops/prompt.sh plan u --auto)"`,
+      command: `cd /w/.loops/plan-u && ${SESSION_SH} plan-u --auto --managed -- --model opus --remote-control plan-u "$(/o/loops/prompt.sh plan u --auto)"`,
     });
   });
 
@@ -484,7 +486,7 @@ describe("choosing the command", () => {
       `--continue --remote-control plan-u '${carryOnPrompt("plan", "u")}'`,
     );
     expect(choose("prd/t", false).command).toBe(
-      `${W} --managed -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --resume)"`,
+      `${W} --managed -- --remote-control prd-t "$(/o/loops/prompt.sh orchestrator t --resume)"`,
     );
     expect(choose("prd/t", true, { managed: true, rotating: true }).mode).toBe("fresh");
   });
@@ -541,7 +543,7 @@ describe("pnpm prd open", () => {
       tabLine(
         "auto",
         "prd-auto --auto",
-        '--remote-control prd-auto "$(loops/prompt.sh orchestrator auto --resume --auto)"',
+        `--remote-control prd-auto "$(${join(main, "loops/prompt.sh")} orchestrator auto --resume --auto)"`,
       ),
     );
     const script = tabScript();
@@ -611,14 +613,18 @@ describe("pnpm prd open", () => {
       tabLine(
         "asks",
         "prd-asks --auto",
-        '--remote-control prd-asks "$(loops/prompt.sh orchestrator asks --resume --auto)"',
+        `--remote-control prd-asks "$(${join(main, "loops/prompt.sh")} orchestrator asks --resume --auto)"`,
       ),
     );
     saveConversation("plan-v");
     writeRecord("plan-v", { pid: 1, rotating: true });
     expect(ok(["plan-v"])).toMatch(/a fresh session with the resume prompt/);
     expect(tabCommand()).toBe(
-      tabLine("plan-v", "plan-v", '--model opus --remote-control plan-v "$(loops/prompt.sh plan v)"'),
+      tabLine(
+        "plan-v",
+        "plan-v",
+        `--model opus --remote-control plan-v "$(${join(main, "loops/prompt.sh")} plan v)"`,
+      ),
     );
     rmSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true, force: true });
   });
@@ -630,7 +636,7 @@ describe("pnpm prd open", () => {
       tabLine(
         "plan-v",
         "plan-v --auto --managed",
-        '--model opus --remote-control plan-v "$(loops/prompt.sh plan v --auto)"',
+        `--model opus --remote-control plan-v "$(${join(main, "loops/prompt.sh")} plan v --auto)"`,
       ),
     );
   });
@@ -686,7 +692,11 @@ describe("pnpm prd open", () => {
     mkdirSync(join(projects, projectFolder(join(loops, "plan-v"))), { recursive: true });
     ok(["plan-v"]);
     expect(tabCommand()).toBe(
-      tabLine("plan-v", "plan-v", '--model opus --remote-control plan-v "$(loops/prompt.sh plan v)"'),
+      tabLine(
+        "plan-v",
+        "plan-v",
+        `--model opus --remote-control plan-v "$(${join(main, "loops/prompt.sh")} plan v)"`,
+      ),
     );
   });
 
@@ -694,7 +704,7 @@ describe("pnpm prd open", () => {
     const out = ok(["auto"], { RISA_ITERM_APP: join(root, "no-such-app") });
     expect(out).toMatch(/iTerm2 isn't here/);
     expect(out).toContain(
-      `  cd ${join(loops, "auto")} && ${join(main, "loops/session.sh")} prd-auto --auto -- --remote-control prd-auto "$(loops/prompt.sh orchestrator auto --resume --auto)"`,
+      `  cd ${join(loops, "auto")} && ${join(main, "loops/session.sh")} prd-auto --auto -- --remote-control prd-auto "$(${join(main, "loops/prompt.sh")} orchestrator auto --resume --auto)"`,
     );
     saveConversation("auto");
     expect(ok(["auto", "--print"])).toContain(

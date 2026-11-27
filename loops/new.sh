@@ -133,5 +133,5 @@ fi
 if [[ $kind == prd ]]; then
   echo
   echo "Start its orchestrator in a new terminal:"
-  echo "  cd $dir && loops/session.sh prd-$topic -- --remote-control prd-$topic \"\$(loops/prompt.sh orchestrator $topic)\""
+  echo "  cd $dir && $loops_lib_dir/session.sh prd-$topic -- --remote-control prd-$topic \"\$($loops_lib_dir/prompt.sh orchestrator $topic)\""
 fi

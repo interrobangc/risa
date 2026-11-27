@@ -647,14 +647,14 @@ describe("sessions start through the wrapper", () => {
   it("pnpm prd start prints a command through session.sh", () => {
     const r = run("prd.sh", ["start", "w"]);
     expect(r.stdout).toContain(
-      `cd ${join(loops, "w")} && loops/session.sh prd-w -- --remote-control prd-w "$(loops/prompt.sh orchestrator w)"`,
+      `cd ${join(loops, "w")} && ${scripts("session.sh")} prd-w -- --remote-control prd-w "$(${scripts("prompt.sh")} orchestrator w)"`,
     );
   });
 
   it("pnpm prd plan --open records a planner; without --open it prints the wrapped command", () => {
     const printed = run("prd.sh", ["plan", "v"]);
     expect(printed.stdout).toContain(
-      `cd ${join(loops, "plan-v")} && loops/session.sh plan-v -- --model opus --remote-control plan-v`,
+      `cd ${join(loops, "plan-v")} && ${scripts("session.sh")} plan-v -- --model opus --remote-control plan-v`,
     );
     expect(run("prd.sh", ["plan", "v", "--open", "--model", "opus"]).status).toBe(0);
     expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });
@@ -717,7 +717,7 @@ describe("sessions start through the wrapper", () => {
     git(main, "worktree", "add", "-q", "-b", "hotfix/trim", join(loops, "hotfix-trim"), "dev");
     const printed = run("prd.sh", ["hotfix", "trim"]);
     expect(printed.stdout).toContain(
-      `cd ${join(loops, "hotfix-trim")} && loops/session.sh hotfix-trim -- --model opus --remote-control hotfix-trim`,
+      `cd ${join(loops, "hotfix-trim")} && ${scripts("session.sh")} hotfix-trim -- --model opus --remote-control hotfix-trim`,
     );
     expect(run("prd.sh", ["hotfix", "trim", "--open", "--model", "sonnet"]).status).toBe(0);
     expect(record("hotfix-trim")).toMatchObject({

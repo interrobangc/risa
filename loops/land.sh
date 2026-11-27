@@ -613,14 +613,14 @@ mark_topic_done() {
   plan=$(git -C "$main" show "${tip:-$branch}:plans/$topic-plan.md" 2>/dev/null) || return 0
   left=$(node "$(dirname "$0")/landed.mjs" slices-left /dev/stdin <<< "$plan") || return 0
   [[ -z $left ]] || return 0
-  rows=$(cd "$main" && node "$main/backlog/backlog.mjs" prd list --json 2>/dev/null) || return 0
+  rows=$(cd "$main" && node "$(dirname "$0")/../backlog/backlog.mjs" prd list --json 2>/dev/null) || return 0
   flags=$(node "$(dirname "$0")/landed.mjs" done-flags "$topic" <<< "$rows") || return 0
-  if ! items=$(cd "$main" && node "$main/backlog/backlog.mjs" list --all --prd "$topic" --json 2>/dev/null |
+  if ! items=$(cd "$main" && node "$(dirname "$0")/../backlog/backlog.mjs" list --all --prd "$topic" --json 2>/dev/null |
     node "$(dirname "$0")/landed.mjs" items-left 2>/dev/null); then
     echo "Not marking $topic done: no slice is left, but ${items:-its items (unreadable)} aren't landed"
     return 0
   fi
-  if (cd "$main" && node "$main/backlog/backlog.mjs" prd set "$topic" "flags=$flags" >/dev/null); then
+  if (cd "$main" && node "$(dirname "$0")/../backlog/backlog.mjs" prd set "$topic" "flags=$flags" >/dev/null); then
     echo "Marked $topic done in the PRD registry (its last landing: no slice left, every item landed)"
   else
     echo "warning: couldn't mark $topic done ($(tool_command backlog) prd set $topic flags=$flags)" >&2

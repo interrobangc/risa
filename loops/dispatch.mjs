@@ -212,9 +212,11 @@ export function sessionLine(
 ) {
   const name = `${s.kind}-${s.topic}`;
   const head = `cd ${sh(s.dir)} && ${sh(s.wrapper)} ${name} --auto --managed -- `;
+  // The prompt script beside the wrapper: the tool's own, which the project doesn't have.
+  const prompt = sh(join(dirname(s.wrapper), "prompt.sh"));
   return s.kind === "plan"
-    ? `${head}--model ${sh(s.model ?? "opus")} --remote-control ${name} "$(loops/prompt.sh plan ${sh(s.topic)} --auto)"`
-    : `${head}--remote-control ${name} "$(loops/prompt.sh orchestrator ${sh(s.topic)} --auto)"`;
+    ? `${head}--model ${sh(s.model ?? "opus")} --remote-control ${name} "$(${prompt} plan ${sh(s.topic)} --auto)"`
+    : `${head}--remote-control ${name} "$(${prompt} orchestrator ${sh(s.topic)} --auto)"`;
 }
 
 /** The helper's whole prompt: push LINE, then end. */
@@ -286,7 +288,7 @@ export const staleCode = (
 
 /**
  * The dispatcher's loop: STEP (one tick), then a sleep of EVERY seconds, until
- * stopped. Before each tick but the first, CURRENT (the main checkout's code
+ * stopped. Before each tick but the first, CURRENT (the tool's own code
  * hash) is compared with STARTED: changed, it returns { stale: true } without
  * ticking, so the caller re-execs between ticks. --once ticks once.
  */
@@ -499,7 +501,7 @@ const run = (/** @type {string} */ cmd, /** @type {string[]} */ args, opts = {})
 };
 
 const backlog = (/** @type {string} */ main, /** @type {string[]} */ args) =>
-  run("node", [join(main, "backlog/backlog.mjs"), ...args], { cwd: main });
+  run("node", [join(HERE, "../backlog/backlog.mjs"), ...args], { cwd: main });
 
 /** The .loops worktrees: { name, branch, dir }. */
 export function worktreesOf(/** @type {string} */ main) {
@@ -2028,7 +2030,7 @@ async function main() {
     every: o.every,
     once: o.once,
     started: CODE_AT_START,
-    current: () => codeHash(p.main),
+    current: () => codeHash(join(HERE, "..")),
     step: () => {
       const now = nowOf();
       const quiet = [];
@@ -2042,13 +2044,10 @@ async function main() {
     },
   });
   if (end.stale) {
-    log(
-      [`re-exec: the main checkout's code changed (${end.from} -> ${end.to}); restarting between ticks`],
-      nowOf(),
-    );
-    console.log(`${stamp(nowOf())} re-exec: new code ${end.to} on the main checkout (was ${end.from})`);
+    log([`re-exec: the tool's code changed (${end.from} -> ${end.to}); restarting between ticks`], nowOf());
+    console.log(`${stamp(nowOf())} re-exec: new code ${end.to} in the tool's checkout (was ${end.from})`);
     const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
-    const script = join(p.main, "loops/dispatch.mjs");
+    const script = join(HERE, "dispatch.mjs");
     const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
     const env = process.env;
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.

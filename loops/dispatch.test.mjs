@@ -95,10 +95,10 @@ describe("the pure parts", () => {
 
   it("builds the run-through, managed session lines, with no item ids", () => {
     expect(sessionLine({ kind: "plan", topic: "t", dir: "/l/plan-t", wrapper: "/b/session.sh" })).toBe(
-      `cd /l/plan-t && /b/session.sh plan-t --auto --managed -- --model opus --remote-control plan-t "$(loops/prompt.sh plan t --auto)"`,
+      `cd /l/plan-t && /b/session.sh plan-t --auto --managed -- --model opus --remote-control plan-t "$(/b/prompt.sh plan t --auto)"`,
     );
     expect(sessionLine({ kind: "prd", topic: "t", dir: "/l/t", wrapper: "/b/session.sh" })).toBe(
-      `cd /l/t && /b/session.sh prd-t --auto --managed -- --remote-control prd-t "$(loops/prompt.sh orchestrator t --auto)"`,
+      `cd /l/t && /b/session.sh prd-t --auto --managed -- --remote-control prd-t "$(/b/prompt.sh orchestrator t --auto)"`,
     );
     const h = helperLine({ main: "/m", claude: "claude", line: "a: it's dead" });
     expect(h).toMatch(/^cd \/m && claude --model haiku --remote-control dispatch-push '/);
@@ -441,7 +441,7 @@ describe("one tick per action", () => {
     const [open] = openCalls();
     expect(open).toEqual([
       "--command",
-      `cd ${join(loops, "a")} && ${scripts("session.sh")} prd-a --auto --managed -- --remote-control prd-a "$(loops/prompt.sh orchestrator a --auto)"`,
+      `cd ${join(loops, "a")} && ${scripts("session.sh")} prd-a --auto --managed -- --remote-control prd-a "$(${scripts("prompt.sh")} orchestrator a --auto)"`,
       "--title",
       "prd-a",
       "--background",
@@ -461,7 +461,7 @@ describe("one tick per action", () => {
     expect(calls("new")).toEqual(["plan p"]);
     const [open] = openCalls();
     expect(open[1]).toBe(
-      `cd ${join(loops, "plan-p")} && ${scripts("session.sh")} plan-p --auto --managed -- --model opus --remote-control plan-p "$(loops/prompt.sh plan p --auto)"`,
+      `cd ${join(loops, "plan-p")} && ${scripts("session.sh")} plan-p --auto --managed -- --model opus --remote-control plan-p "$(${scripts("prompt.sh")} plan p --auto)"`,
     );
     expect(open[1]).not.toMatch(/B-\d/);
   });
@@ -796,7 +796,7 @@ describe("re-exec on new code (B-809)", () => {
       const now = dstate().code;
       expect(now).toMatchObject({ hash: codeHash(main), pid: child.pid });
       expect(now.hash).not.toBe(old.hash);
-      expect(logText()).toContain(`re-exec: the main checkout's code changed (${old.hash} -> ${now.hash})`);
+      expect(logText()).toContain(`re-exec: the tool's code changed (${old.hash} -> ${now.hash})`);
       expect(logText()).toContain(`re-exec'd on new code ${now.hash} (was ${old.hash}; pid ${child.pid}`);
       expect(lockHolder(join(loops, ".dispatch.lock"))).toBe(child.pid);
       expect(ok(["--stop"])).toContain(`Stopped the dispatcher (pid ${child.pid})`);
@@ -1089,7 +1089,7 @@ describe("the session-request tick", () => {
     const [open] = opensOf("reminders");
     expect(open).toEqual([
       "--command",
-      `cd ${main} && ${scripts("session.sh")} backlog-reminders --kind backlog --managed -- --model sonnet --remote-control 'backlog - reminders' "$(loops/prompt.sh backlog --brief ${r.brief} || loops/prompt.sh backlog)"`,
+      `cd ${main} && ${scripts("session.sh")} backlog-reminders --kind backlog --managed -- --model sonnet --remote-control 'backlog - reminders' "$(${scripts("prompt.sh")} backlog --brief ${r.brief} || ${scripts("prompt.sh")} backlog)"`,
       "--title",
       "backlog-reminders",
       "--background",

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAsk, settleAsk } from "./asks.mjs";
+import { codeHash } from "./dispatch.mjs";
 import { createRequest } from "./session-requests.mjs";
 import {
   againstUsual,
@@ -19,6 +20,8 @@ import {
 } from "./status-extra.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
+// The tool's own code hash: a running dispatcher that started on it is current.
+const TOOL_HASH = codeHash(join(HERE, ".."));
 const NOW = Date.parse("2026-11-21T12:00:00Z");
 const ago = (ms) => new Date(NOW - ms).toISOString();
 const H = 3600_000;
@@ -202,8 +205,8 @@ describe("the dispatcher's part", () => {
     writeFileSync(files().lock, "999999\n");
     expect(cli()).toMatch(/^DISPATCHER: stopped:/);
     writeFileSync(files().lock, `${process.pid}\n`);
-    writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: process.pid, at: ago(H) } }));
-    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
+    writeFileSync(files().state, JSON.stringify({ code: { hash: TOOL_HASH, pid: process.pid, at: ago(H) } }));
+    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid}), code current\n\n`);
     writeFileSync(
       files().state,
       JSON.stringify({
@@ -211,17 +214,17 @@ describe("the dispatcher's part", () => {
         code: { hash: "abc", pid: process.pid, at: ago(H) },
       }),
     );
-    expect(dispatcherPart(files(), { now: NOW })).toBe(
+    expect(dispatcherPart(files(), { now: NOW, current: () => null })).toBe(
       `DISPATCHER: running (pid ${process.pid}), paused, 2h ago: usage limit (pnpm prd dispatch --resume)\n\n`,
     );
-    expect(dispatcherPart(files(), { now: NOW, holder: () => null })).toBe(
+    expect(dispatcherPart(files(), { now: NOW, holder: () => null, current: () => null })).toBe(
       "DISPATCHER: stopped (and paused, 2h ago: usage limit): start it in a tab of its own with pnpm prd dispatch\n\n",
     );
     writeFileSync(
       files().state,
-      JSON.stringify({ paused: null, code: { hash: "abc", pid: process.pid, at: ago(H) } }),
+      JSON.stringify({ paused: null, code: { hash: TOOL_HASH, pid: process.pid, at: ago(H) } }),
     );
-    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid})\n\n`);
+    expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid}), code current\n\n`);
   });
 
   it("says whether the running dispatcher's code is current or stale (B-809)", () => {
@@ -231,7 +234,7 @@ describe("the dispatcher's part", () => {
       `DISPATCHER: running (pid ${process.pid}), code current\n\n`,
     );
     expect(dispatcherPart(files(), { now: NOW, current: () => "def" })).toBe(
-      `DISPATCHER: running (pid ${process.pid}), code stale (abc; the main checkout has def: it re-execs before its next tick)\n\n`,
+      `DISPATCHER: running (pid ${process.pid}), code stale (abc; the tool's checkout has def: it re-execs before its next tick)\n\n`,
     );
     // A record of another pid, or none: a dispatcher from before the code check.
     writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: 4, at: ago(H) } }));

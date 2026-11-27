@@ -718,7 +718,7 @@ describe("down and recover with the dispatcher", () => {
     // The agent opened only once the new dispatcher held its lock.
     expect(e.at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
     expect(readFileSync(join(state, "tab-line"), "utf8").trim()).toBe(
-      `cd ${main} && exec loops/prd.sh dispatch`,
+      `cd ${main} && exec ${join(main, "loops/prd.sh")} dispatch`,
     );
     const started = readFileSync(join(state, "dispatchers"), "utf8").trim().split("\n").at(-1);
     expect(readFileSync(lock(), "utf8").trim()).toBe(started);

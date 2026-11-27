@@ -18,7 +18,7 @@
 //                              RISA_CHECK_LOG) are beside the sessions folder
 import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten, span } from "./asks.mjs";
 import { contextDirOf, hardLimitFor, limitOf, sizeNote, sizeRecord } from "./context.mjs";
 import { codeHash, lockHolder, mainCheckout, pathsOf, readState, staleCode } from "./dispatch.mjs";
@@ -54,7 +54,7 @@ export function lastEntry(/** @type {string} */ file) {
 }
 
 /**
- * The dispatcher's code against the main checkout's (CURRENT: its hash, null
+ * The dispatcher's code against the tool's checkout's (CURRENT: its hash, null
  * unreadable): "" when unknown, else ", code current" or ", code stale …". A
  * running dispatcher with no code record of its pid started before the check (B-809).
  * @param {import("./dispatch.mjs").DispatchState["code"]} code
@@ -65,7 +65,7 @@ export function codePart(code, pid, current) {
     return `, code unknown (it predates the code check: ${toolCmd.prd} dispatch --stop, then ${toolCmd.prd} dispatch)`;
   if (!current) return "";
   return staleCode(code.hash, current)
-    ? `, code stale (${code.hash}; the main checkout has ${current}: it re-execs before its next tick)`
+    ? `, code stale (${code.hash}; the tool's checkout has ${current}: it re-execs before its next tick)`
     : ", code current";
 }
 
@@ -77,7 +77,11 @@ export function codePart(code, pid, current) {
  */
 export function dispatcherPart(
   files,
-  { now = Date.now(), holder = lockHolder, current = () => (files.main ? codeHash(files.main) : null) } = {},
+  {
+    now = Date.now(),
+    holder = lockHolder,
+    current = () => codeHash(fileURLToPath(new URL("..", import.meta.url))),
+  } = {},
 ) {
   const pid = holder(files.lock);
   const st = readState(files.state);

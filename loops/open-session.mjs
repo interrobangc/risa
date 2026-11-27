@@ -181,12 +181,14 @@ export function chooseCommand({
       managed,
       command: `${wrap}${modelArg}--continue --remote-control ${session}${carryOn && kind !== "hotfix" ? ` ${sh(carryOnPrompt(kind, topic))}` : ""}`,
     };
+  // The prompt script beside the wrapper: the tool's own, which the project doesn't have.
+  const ps = sh(join(dirname(wrapper), "prompt.sh"));
   const prompt =
     kind === "prd"
-      ? `loops/prompt.sh orchestrator ${sh(topic)} --resume${auto ? " --auto" : ""}`
+      ? `${ps} orchestrator ${sh(topic)} --resume${auto ? " --auto" : ""}`
       : kind === "hotfix"
-        ? `loops/prompt.sh hotfix ${sh(topic)}`
-        : `loops/prompt.sh plan ${sh(topic)}${auto ? " --auto" : ""}`;
+        ? `${ps} hotfix ${sh(topic)}`
+        : `${ps} plan ${sh(topic)}${auto ? " --auto" : ""}`;
   return {
     session,
     kind,
@@ -240,7 +242,7 @@ export function chooseMainCommand({ name, main, record, wrapper = ownSessionSh, 
     managed,
     command:
       `cd ${sh(main)} && ${sh(wrapper)} ${sh(name)} --kind ${kind}${managed ? " --managed" : ""} -- ` +
-      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(remote)} "$(${captained ? `RISA_CAPTAIN=${sh(remote)} ` : ""}loops/prompt.sh ${role})"`,
+      `${model ? `--model ${sh(model)} ` : ""}--remote-control ${sh(remote)} "$(${captained ? `RISA_CAPTAIN=${sh(remote)} ` : ""}${sh(join(dirname(wrapper), "prompt.sh"))} ${role})"`,
   };
 }
 

@@ -378,7 +378,7 @@ case $cmd in
     done
     dir=$loops/plan-$topic
     [[ -d $dir ]] || "$bin/new.sh" plan "$topic"
-    cmd_line="cd $dir && loops/session.sh plan-$topic -- --model $(printf %q "$model") --remote-control plan-$topic \"\$(loops/prompt.sh plan $topic ${items[*]:-})\""
+    cmd_line="cd $dir && $bin/session.sh plan-$topic -- --model $(printf %q "$model") --remote-control plan-$topic \"\$($bin/prompt.sh plan $topic ${items[*]:-})\""
     if ((open)); then
       cd "$dir" && exec "$bin/session.sh" "plan-$topic" --kind plan --topic "$topic" -- \
         ${model_args[@]+"${model_args[@]}"} --remote-control "plan-$topic" "$("$bin/prompt.sh" plan "$topic" ${items[@]+"${items[@]}"})"
@@ -447,7 +447,7 @@ case $cmd in
     fi
     echo
     echo "Start its session in a new terminal (or rerun with --open; or carry on in the one that asked for it):"
-    echo "  cd $dir && loops/session.sh hotfix-$name -- --model $(printf %q "$model") --remote-control hotfix-$name \"\$(loops/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
+    echo "  cd $dir && $bin/session.sh hotfix-$name -- --model $(printf %q "$model") --remote-control hotfix-$name \"\$($bin/prompt.sh hotfix $name $(printf %q "${fix:-<the fix>}"))\""
     ;;
   start)
     topic=${1:?topic}
@@ -456,7 +456,7 @@ case $cmd in
       echo "Worktree $topic already exists at $loops/$topic."
       echo
       echo "Open its orchestrator in a new terminal:"
-      echo "  cd $loops/$topic && loops/session.sh prd-$topic -- --remote-control prd-$topic \"\$(loops/prompt.sh orchestrator $topic)\""
+      echo "  cd $loops/$topic && $bin/session.sh prd-$topic -- --remote-control prd-$topic \"\$($bin/prompt.sh orchestrator $topic)\""
     else
       exec "$bin/new.sh" prd "$@"
     fi

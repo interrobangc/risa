@@ -31,7 +31,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
@@ -283,7 +283,8 @@ export function requestLine(
     sh,
   },
 ) {
-  const plain = "loops/prompt.sh backlog";
+  // The prompt script beside the wrapper: the tool's own, which the project doesn't have.
+  const plain = `${sh(join(dirname(wrapper), "prompt.sh"))} backlog`;
   const prompt = r.brief ? `${plain} --brief ${sh(r.brief)} || ${plain}` : plain;
   return `cd ${sh(main)} && ${sh(wrapper)} ${r.session} --kind backlog --managed -- --model ${sh(r.model)} --remote-control ${sh(r.remote)} "$(${prompt})"`;
 }

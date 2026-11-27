@@ -216,7 +216,7 @@ keep_intent() {
 reopen_dispatcher() {
   local limit=${RISA_RECOVER_DISPATCH_SECS:-60} deadline pid
   echo "• the dispatcher (it was running)"
-  "$bin/open-session.sh" --command "cd $(printf %q "$main") && loops/prd.sh dispatch" --title dispatch --background \
+  "$bin/open-session.sh" --command "cd $(printf %q "$main") && $(printf %q "$(cd "$bin" && pwd)/prd.sh") dispatch" --title dispatch --background \
     </dev/null 2>&1 | sed 's/^/  /' || { echo "  couldn't open its tab; its intent is kept" >&2; return 1; }
   deadline=$(($(now_secs) + limit))
   until pid=$(dispatch_pid); do
