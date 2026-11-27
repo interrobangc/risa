@@ -152,15 +152,17 @@ run_hook() {
 # skipped, not failed (RISA-973).
 has_hook() { config_get "hooks.$1" >/dev/null 2>&1; }
 
-# stack_hook NAME [ARG…] → run_hook from the top of the checkout the project's
-# config is in (its main checkout, on the trunk), not the one the shell is in: a
-# worktree made from an older branch may not have the hook's script, and the tool
-# lives outside the project (B-846). ARGs that name a worktree must be absolute.
+# stack_hook NAME [ARG…] → run_hook from the main checkout of the repo the
+# project's config is in (on the trunk), even when the config is a worktree's
+# own, not the checkout the shell is in: a worktree made from an older branch may
+# not have the hook's script, and the tool lives outside the project (B-846,
+# RISA-972); the config's folder when it is in no checkout. ARGs that name a
+# worktree must be absolute.
 stack_hook() {
   local cfg top
   cfg=$(config_get _path) || return 1
-  top=$(git -C "$(dirname "$cfg")" rev-parse --show-toplevel 2>/dev/null) || top=$(dirname "$cfg")
-  hook_top=$top run_hook "$@"
+  top=$(git -C "$(dirname "$cfg")" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
+  hook_top=${top:-$(dirname "$cfg")} run_hook "$@"
 }
 
 # fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else
