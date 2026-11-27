@@ -2,14 +2,16 @@
 // eslint and prettier on the tooling files changed since the trunk (committed
 // since the merge base, staged, unstaged and untracked), so a tooling-only
 // change that needs no `pnpm check` is still linted. Only the changed files,
-// so it stays fast. Exit 1 on an error.
+// so it stays fast. Exit 1 on an error; a tier data or check plan rules file
+// that doesn't load prints one line and exits 2, never a Node stack.
 //   RISA_TOOLING_LINT=off skips it (the check's own static steps lint and
 //   format everything, so its tooling step runs only the tests). TRUNK names the
 //   trunk (default dev).
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { planToolingLint } from "./check-plan.mjs";
+import { TierDataError } from "../ci/tier-data.mjs";
+import { CheckPlanRulesError, planToolingLint } from "./check-plan.mjs";
 
 const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
 const lines = (r) => (r.status === 0 ? r.stdout.split("\n").filter(Boolean) : []);
@@ -30,7 +32,16 @@ const changed = [
   ...lines(git("ls-files", "--others", "--exclude-standard")),
 ].filter((f, i, all) => all.indexOf(f) === i && existsSync(join(root, f)));
 
-const { eslint, prettier } = planToolingLint(changed);
+/** @type {ReturnType<typeof planToolingLint>} */
+let plan;
+try {
+  plan = planToolingLint(changed);
+} catch (e) {
+  if (!(e instanceof TierDataError || e instanceof CheckPlanRulesError)) throw e;
+  console.error(`tooling lint: ${e.problems.join("; ")}`);
+  process.exit(2);
+}
+const { eslint, prettier } = plan;
 if (!prettier.length) process.exit(0);
 console.log(`tooling lint: eslint and prettier on ${prettier.length} changed tooling file(s)`);
 const bin = (name) => join(root, "node_modules/.bin", name);

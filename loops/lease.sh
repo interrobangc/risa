@@ -11,7 +11,7 @@
 #                                                           any other kind in use)
 #   lease.sh wait <kind> [--worktree W] [--timeout S]       block until no live holder or waiter of the
 #                                                           kind is worktree W's (default: this one);
-#                                                           exit 75 after S seconds (default 3600)
+#                                                           exit 75 after S seconds (default 160)
 #
 # Kinds and their limits: browser (RISA_BROWSER_SLOTS, default 2), check
 # (RISA_CHECK_SLOTS, default 2), anything else (RISA_<KIND>_SLOTS,
@@ -483,7 +483,7 @@ lease_usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 lease_main() {
   set -euo pipefail
-  local cmd=${1:-help} kind="" wait="" label="" pid="" watch="" num="" child="" rc worktree="" timeout=3600
+  local cmd=${1:-help} kind="" wait="" label="" pid="" watch="" num="" child="" rc worktree="" timeout=160
   (($#)) && shift
   case $cmd in
     take | release | run | hold | wait)

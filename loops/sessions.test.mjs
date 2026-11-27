@@ -414,7 +414,9 @@ describe("session.sh", () => {
       auto: true,
       managed: true,
     });
-    expect(readFileSync(join(state, "args"), "utf8")).toBe("x\n");
+    expect(readFileSync(join(state, "args"), "utf8")).toBe(
+      `--settings\n${scripts("context-settings.json")}\nx\n`,
+    );
     expect(record("plan-m")).toMatchObject({ managed: true, exit: 0 });
     expect(run("session.sh", ["plan-m", "--", "x"], { STUB_NAME: "plan-m" }).status).toBe(0);
     expect(record("plan-m")).toMatchObject({ managed: false, auto: false });
@@ -505,12 +507,14 @@ describe("liveness", () => {
     ]);
   });
 
-  it("gives a prd session the context hook and a plan session none, whatever it inherited", () => {
+  it("gives prd and plan sessions the context hook and a hotfix none, whatever it inherited", () => {
     const argsOf = () => readFileSync(join(state, "args"), "utf8").trim().split("\n");
     expect(run("session.sh", ["prd-t", "--", "go"]).status).toBe(0);
     expect(argsOf()).toEqual(["--settings", scripts("context-settings.json"), "go"]);
+    expect(run("session.sh", ["plan-t", "--", "go"]).status).toBe(0);
+    expect(argsOf()).toEqual(["--settings", scripts("context-settings.json"), "go"]);
     const inherited = { RISA_SESSION_NAME: "prd-other", RISA_CONTEXT_HOOK: "/elsewhere" };
-    expect(run("session.sh", ["plan-t", "--", "go"], inherited).status).toBe(0);
+    expect(run("session.sh", ["hotfix-t", "--", "go"], inherited).status).toBe(0);
     expect(argsOf()).toEqual(["go"]);
     const shown = join(root, "env-stub");
     writeFileSync(
@@ -518,7 +522,7 @@ describe("liveness", () => {
       `#!/usr/bin/env bash\necho "\${RISA_SESSION_NAME:-none} \${RISA_CONTEXT_HOOK:-none}" > "$STUB_STATE/env"\n`,
     );
     chmodSync(shown, 0o755);
-    expect(run("session.sh", ["plan-t", "--", "go"], { ...inherited, RISA_CLAUDE_BIN: shown }).status).toBe(
+    expect(run("session.sh", ["hotfix-t", "--", "go"], { ...inherited, RISA_CLAUDE_BIN: shown }).status).toBe(
       0,
     );
     expect(readFileSync(join(state, "env"), "utf8").trim()).toBe("none none");
@@ -659,7 +663,14 @@ describe("sessions start through the wrapper", () => {
     expect(run("prd.sh", ["plan", "v", "--open", "--model", "opus"]).status).toBe(0);
     expect(record("plan-v")).toMatchObject({ pid: stubPid(), kind: "plan", topic: "v", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
-    expect(args.slice(0, 4)).toEqual(["--model", "opus", "--remote-control", "plan-v"]);
+    expect(args.slice(0, 6)).toEqual([
+      "--settings",
+      scripts("context-settings.json"),
+      "--model",
+      "opus",
+      "--remote-control",
+      "plan-v",
+    ]);
   });
 
   it("pnpm prd plan runs a design row's planner on Fable, and --model still overrides", () => {
@@ -674,7 +685,7 @@ describe("sessions start through the wrapper", () => {
       );
       expect(run("prd.sh", ["plan", "v", "--open"]).status).toBe(0);
       const args = readFileSync(join(state, "args"), "utf8").split("\n");
-      expect(args.slice(0, 2)).toEqual(["--model", "fable"]);
+      expect(args.slice(0, 4)).toEqual(["--settings", scripts("context-settings.json"), "--model", "fable"]);
     } finally {
       rmSync(join(main, "plans/backlog.md"), { force: true });
     }

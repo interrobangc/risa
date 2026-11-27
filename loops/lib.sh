@@ -645,13 +645,18 @@ pr_seam() {
 # with_backlog_lock CMD… → run CMD in a subshell under backlog's lock (the
 # same directory, taken over after 30 s as backlog.mjs does), so no backlog
 # write moves or amends dev meanwhile. CMD's failures (die) end the subshell
-# and the lock is still dropped.
+# and the lock is still dropped. A stale lock is taken over under a guard
+# (`<lock>.takeover`, made atomically, _take_stale_lock): only the guard's
+# holder re-checks the lock and replaces a still-stale one, so of two waiters on
+# one stale lock exactly one takes it and the other waits again (RISA-367).
 with_backlog_lock() {
-  local lock deadline=$((SECONDS + 20)) age status
+  local lock deadline=$((SECONDS + 20)) status
   lock="$(cd "$main" && cd "$(git rev-parse --git-common-dir)" && pwd)/$project_name-backlog.lock"
   until mkdir "$lock" 2>/dev/null; do
-    age=$(($(date +%s) - $(file_mtime "$lock" || date +%s)))
-    if ((age > 30)); then rm -rf "$lock"; continue; fi
+    if _lock_older "$lock" 30; then
+      _backlog_lock_seen_stale
+      if _take_stale_lock "$lock"; then break; fi
+    fi
     ((SECONDS < deadline)) || die "the backlog is locked ($lock); try again"
     sleep 0.2
   done
@@ -659,6 +664,32 @@ with_backlog_lock() {
   rm -rf "$lock"
   return "$status"
 }
+# _lock_older PATH SECONDS → true when PATH exists and is older than SECONDS.
+_lock_older() {
+  local t
+  t=$(file_mtime "$1") || return 1
+  (($(date +%s) - t > $2))
+}
+# _take_stale_lock LOCK → true when this caller now holds LOCK: under the guard
+# it re-checks LOCK (another waiter may have taken it fresh since) and replaces
+# it only while still stale. A guard older than 10 s is a crashed taker's and
+# is removed; a guard held by another taker means waiting.
+_take_stale_lock() {
+  local lock=$1 guard=$1.takeover taken=1
+  if ! mkdir "$guard" 2>/dev/null; then
+    if _lock_older "$guard" 10; then rmdir "$guard" 2>/dev/null || true; fi
+    return 1
+  fi
+  if _lock_older "$lock" 30; then
+    rm -rf "$lock"
+    if mkdir "$lock" 2>/dev/null; then taken=0; fi
+  fi
+  rmdir "$guard" 2>/dev/null || true
+  return "$taken"
+}
+# _backlog_lock_seen_stale → a seam: runs when a waiter has judged the lock
+# stale, before its takeover (a test redefines it to line two waiters up).
+_backlog_lock_seen_stale() { :; }
 
 # push_trunk → push the main checkout's dev to origin/dev, fast-forward only
 # (never forced), under the backlog lock. When origin/dev has commits dev lacks

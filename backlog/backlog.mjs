@@ -78,6 +78,8 @@
 //   backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
 //   backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
 //   backlog prd set <topic> flags+=hold | flags-=hold   adds or removes flags, keeping the others
+//   backlog prd set <topic> flags+=hold why="<reason>"   a hold with its reason and today's date
+//                                            (list prints it under the row); clearing the hold clears it
 //   backlog prd move <topic> --first|--last|--before T|--after T
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
@@ -1065,6 +1067,7 @@ function prd(pos, opts) {
         waiting: facts.waiting.get(r.topic) ?? 0,
       }));
       if (opts.json) return console.log(JSON.stringify(out));
+      // A held row's reason goes on its own line under it: the columns stay narrow.
       const show = out.map((r) => ({
         prd: r.topic,
         state: r.state,
@@ -1087,19 +1090,24 @@ function prd(pos, opts) {
       );
       const line = (r) => keys.map((k, i) => (i === keys.length - 1 ? r[k] : r[k].padEnd(w[k]))).join("  ");
       console.log(line(head));
-      for (const r of show) console.log(line(r));
+      show.forEach((r, i) => {
+        console.log(line(r));
+        if (out[i].held) console.log(`  on hold since ${reg.heldText(out[i])}`);
+      });
       if (!show.length) console.log("(no PRDs)");
       return;
     }
     case "add": {
       const p = position(opts, { last: true });
-      writeRegistry("prd add", `prd add ${topic}`, (rows) => reg.addRow(rows, topic, pairs, p));
+      writeRegistry("prd add", `prd add ${topic}`, (rows) =>
+        reg.addRow(rows, topic, pairs, p, { today: today() }),
+      );
       return console.log(`added ${topic}`);
     }
     case "set":
       if (!topic) throw new fmt.BacklogError("usage: prd set <topic> key=value…");
       writeRegistry("prd set", `prd set ${topic}: ${pairs.join(", ")}`, (rows) =>
-        reg.updateRow(rows, topic, pairs),
+        reg.updateRow(rows, topic, pairs, { today: today() }),
       );
       return console.log(`updated ${topic}`);
     case "move": {
@@ -1342,6 +1350,14 @@ function main() {
                 ...ctx(),
               }),
             note: (it, text) => fmt.addNote(it, { text, ...ctx() }),
+            hasFix: (it, commit) =>
+              tryGit(
+                mainCheckout,
+                "merge-base",
+                "--is-ancestor",
+                `${it.commit}^{commit}`,
+                `${commit}^{commit}`,
+              ) !== null,
           });
           c.quarantine = r.quarantine;
           return r;
