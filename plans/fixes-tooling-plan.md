@@ -11,7 +11,7 @@
 | Slice | Wave | Item     | Model | State      | Merge into `prd/fixes-tooling` |
 | ----- | ---- | -------- | ----- | ---------- | ------------------------------ |
 | 8     | 2    | RISA-969 | opus  | checking   |                                |
-| 9     | 2    | RISA-681 | opus  | checking   |                                |
+| 9     | 2    | RISA-681 | opus  | handed off |                                |
 | 10    | 2    | RISA-934 | opus  | handed off |                                |
 | 11    | 2    | RISA-987 | opus  | checking   |                                |
 | 12    | 2    | RISA-989 | opus  | checking   |                                |
