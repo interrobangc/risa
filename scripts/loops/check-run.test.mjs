@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseLog } from "./check-times.mjs";
+import { fixtureTierData } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root, logFile, loadFile;
@@ -323,7 +324,6 @@ describe("check-run.sh and the load gate", () => {
 });
 
 describe("check-run.sh and the time gate", () => {
-  const REPO = join(HERE, "../..");
   let armedConfig, stubs, sysload;
   beforeAll(() => {
     // The load the check logs and the gate judges: a stub sysctl reads it from a
@@ -334,11 +334,11 @@ describe("check-run.sh and the time gate", () => {
     writeFileSync(sysload, "1 1 1\n");
     writeFileSync(join(stubs, "sysctl"), `#!/bin/sh\necho "{ $(cat "${sysload}") }"\n`);
     chmodSync(join(stubs, "sysctl"), 0o755);
-    // The repo's config and tier data, with the local measure armed.
+    // The config in RISA_CONFIG and its tier data, with the local measure armed.
     const dir = join(root, "armed");
     mkdirSync(dir, { recursive: true });
-    const config = JSON.parse(readFileSync(join(REPO, "risa.json"), "utf8"));
-    const tiers = JSON.parse(readFileSync(join(REPO, config.paths.tierData), "utf8"));
+    const config = JSON.parse(readFileSync(/** @type {string} */ (process.env.RISA_CONFIG), "utf8"));
+    const tiers = JSON.parse(fixtureTierData().text);
     tiers.gates.measures.quick.armed = true;
     config.paths.tierData = "tiers.json";
     writeFileSync(join(dir, "tiers.json"), JSON.stringify(tiers));

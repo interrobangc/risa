@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
-import { FIXTURE_CONFIG, STUB_HOOK_COPY, stubHookConfig } from "./config-fixture.mjs";
+import { FIXTURE_CONFIG, fixtureTierData, STUB_HOOK_COPY, stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 // The environment without the project's own variables (its NAME_ prefix): a run
@@ -125,8 +125,9 @@ echo "$?" > "$STUB_STATE/code"
   env.RISA_CONFIG = stubHookConfig(main, { copy: true });
   const ciDir = join(HERE, "../ci");
   mkdirSync(join(main, "scripts/ci"), { recursive: true });
-  for (const f of ["outstanding.mjs", "tier-data.mjs", "tiers.json"])
+  for (const f of ["outstanding.mjs", "tier-data.mjs"])
     copyFileSync(join(ciDir, f), join(main, "scripts/ci", f));
+  fixtureTierData(main);
   writeFileSync(join(main, ".gitignore"), ".loops/\n.sample-*\n");
   mkdirSync(join(main, "plans"));
   writeFileSync(join(main, "plans/t-plan.md"), PLAN);

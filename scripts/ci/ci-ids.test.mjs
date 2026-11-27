@@ -3,13 +3,13 @@
 // RISA-772). The modules read the config once, so each case runs in a fresh Node
 // on a throwaway config.
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { FIXTURE_CONFIG } from "../loops/config-fixture.mjs";
+import { fixtureTierData } from "../loops/config-fixture.mjs";
 import { backlogIds } from "../loops/config.mjs";
 import { parseQuarantine } from "./ci-lists.mjs";
 
@@ -19,14 +19,12 @@ let config = "";
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), "ci-ids-"));
-  const raw = JSON.parse(readFileSync(FIXTURE_CONFIG, "utf8"));
+  const raw = JSON.parse(readFileSync(/** @type {string} */ (process.env.RISA_CONFIG), "utf8"));
   Object.assign(raw.backlog, { idPrefix: "RISA", formerIdPrefix: "B", zoneOverflowItem: "RISA-750" });
   config = join(dir, "risa.json");
-  writeFileSync(config, JSON.stringify(raw));
   // Its paths start from its own folder: the tier data goes there too.
-  const tiers = raw.paths.tierData;
-  mkdirSync(dirname(join(dir, tiers)), { recursive: true });
-  cpSync(join(dirname(FIXTURE_CONFIG), tiers), join(dir, tiers));
+  raw.paths.tierData = fixtureTierData(dir).path;
+  writeFileSync(config, JSON.stringify(raw));
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
