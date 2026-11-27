@@ -6,7 +6,9 @@
 // held dev PR into staging is never read, merged, closed or edited. The user's merge
 // by hand on GitHub is the override; agents never merge a candidate any other way.
 // Exit 6 is a refusal, with nothing changed. Exit 5 means the merge can't be confirmed
-// and the refs are kept.
+// and the refs are kept. A passing flake's tests are filed once the merge is
+// confirmed, the way `ci file` files them (filing.mjs): an item per test, or a note on
+// the open item that has it, the run linked.
 import { toolCmd } from "../loops/config.mjs";
 import {
   REFUSED,
@@ -18,6 +20,7 @@ import {
   refuse,
   short,
 } from "./candidate.mjs";
+import { sortFlakes } from "./blame.mjs";
 import { releasePasses } from "./gate.mjs";
 import { ciTiers } from "./tier-data.mjs";
 
@@ -66,6 +69,28 @@ function deleteCiRef(/** @type {Io} */ io, /** @type {Deps} */ deps, /** @type {
   else io.log(`warning: could not delete ${ref}; ${toolCmd.prd} tidy lists it`);
 }
 
+/**
+ * File a merged candidate's flaky tests. The quarantine entries stay in the local
+ * backlog commit, unpushed, as `ci zone-file` leaves them; a failure here is a
+ * warning, since the merge already happened.
+ * @param {Io} io
+ * @param {string} branch
+ * @param {any} verdict
+ * @param {any} run
+ */
+function fileFlakes(io, branch, verdict, run) {
+  const flaky = Array.isArray(verdict.flaky) ? verdict.flaky : [];
+  if (!flaky.length) return;
+  const { findings } = sortFlakes(flaky, [], { branch, ...(run?.url ? { url: run.url } : {}) });
+  const out = io.fileFindings?.(findings, false) ?? null;
+  if (!out) {
+    io.log(`warning: could not file the flaky tests: ${toolCmd.prd} ci file --run ${verdict.runId}`);
+    return;
+  }
+  for (const f of out.filed) io.log(`  ${f.created ? "filed" : "noted on"} ${f.id}`);
+  for (const line of out.removed) io.log(`  left the quarantine: ${line.replaceAll("\t", " ")}`);
+}
+
 function promote(/** @type {Io} */ io, /** @type {Deps} */ deps) {
   fetchRefs(io);
   const open = currentCandidate(io);
@@ -111,6 +136,7 @@ function promote(/** @type {Io} */ io, /** @type {Deps} */ deps) {
     if (state.mergeCommit?.oid) io.log(`merge commit: ${short(state.mergeCommit.oid)}`);
     deleteBranch(io, deps, branch, tip);
     deleteCiRef(io, deps, branch);
+    fileFlakes(io, branch, found.verdict, found.run);
     return 0;
   }
   if (!merged.ok && state?.state === "OPEN")
