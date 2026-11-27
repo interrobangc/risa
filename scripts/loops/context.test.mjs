@@ -355,6 +355,7 @@ afterAll(() => {
 
 const baseEnv = () => ({
   PATH: process.env.PATH,
+  RISA_CONFIG: process.env.RISA_CONFIG,
   RISA_SESSIONS_DIR: sessions,
   RISA_SESSION_NAME: "prd-t",
   RISA_SESSION_PID: String(PID),

@@ -302,7 +302,9 @@ describe("pnpm prd watchdog (stub recover)", () => {
     // Hermetic: nothing from the shell, so a session's own settings (the usage watch off) can't leak in (B-818).
     env = {
       ...Object.fromEntries(
-        ["HOME", "TMPDIR", "TZ"].flatMap((k) => (k in process.env ? [[k, process.env[k]]] : [])),
+        ["HOME", "TMPDIR", "TZ", "RISA_CONFIG"].flatMap((k) =>
+          k in process.env ? [[k, process.env[k]]] : [],
+        ),
       ),
       PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
       RISA_RECOVER_BIN: join(bin, "recover"),

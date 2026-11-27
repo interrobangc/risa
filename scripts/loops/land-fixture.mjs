@@ -142,7 +142,7 @@ export function useLandRepo() {
     git("config", "core.hooksPath", "/dev/null");
     git("remote", "add", "origin", join(root, "origin.git"));
     mkdirSync(join(repo, "scripts"), { recursive: true });
-    for (const dir of ["loops", "ci", "project"])
+    for (const dir of ["loops", "ci"])
       cpSync(join(HERE, "..", dir), join(repo, "scripts", dir), {
         recursive: true,
         filter: (src) => !src.endsWith(".test.mjs"),
