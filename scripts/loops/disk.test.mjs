@@ -101,6 +101,10 @@ beforeAll(() => {
   // The stack hooks (serve among them, which browser.sh calls to start and build
   // the check server) on the sample project's stub, logging to FAKE_LOG.
   env.RISA_CONFIG = stubHookConfig(main);
+  // The checks manifest, which the fixture names none of: this test's own (paths.checksManifest).
+  const raw = JSON.parse(readFileSync(env.RISA_CONFIG, "utf8"));
+  raw.paths.checksManifest = "tools/checks";
+  writeFileSync(env.RISA_CONFIG, `${JSON.stringify(raw, null, 2)}\n`);
   // The manifest, where the config puts it (paths.checksManifest).
   const manifest = join(main, JSON.parse(readFileSync(env.RISA_CONFIG, "utf8")).paths.checksManifest);
   mkdirSync(dirname(manifest), { recursive: true });

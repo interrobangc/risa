@@ -3,14 +3,17 @@
 // them is the project's (release-jobs.test.mjs).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import { MANIFEST, parseManifest } from "../loops/boundary.mjs";
-import { backlogIds, loadConfig } from "../loops/config.mjs";
+import { backlogIds } from "../loops/config.mjs";
 import { applyFindings } from "./filing.mjs";
 import { MAX_ZONE_FILINGS, ciFailureTopic, zoneFindings, zoneOverflowItem } from "./release.mjs";
 
+// The checkout (or a standalone copy) the core's files sit in: the manifest is the core's.
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SHA = "c".repeat(40);
 const ZONE = "Pacific/Auckland";
 const OVERFLOW = /** @type {string} */ (zoneOverflowItem());
@@ -104,14 +107,13 @@ describe("second-zone filing", () => {
 
 describe("the core's CI modules", () => {
   it("name no backlog id: the overflow's item is the config's", () => {
-    const { root } = loadConfig();
-    const { owners } = parseManifest(readFileSync(join(root, MANIFEST), "utf8"));
+    const { owners } = parseManifest(readFileSync(join(ROOT, MANIFEST), "utf8"));
     const core = [...owners]
       .filter(([path, owner]) => owner === "core" && /^scripts\/ci\/[^/]+\.mjs$/.test(path))
       .map(([path]) => path)
       .filter((path) => !path.endsWith(".test.mjs"));
     expect(core).toContain("scripts/ci/release.mjs");
     const id = new RegExp(`\\b${backlogIds().pattern}\\b`);
-    expect(core.filter((path) => id.test(readFileSync(join(root, path), "utf8")))).toEqual([]);
+    expect(core.filter((path) => id.test(readFileSync(join(ROOT, path), "utf8")))).toEqual([]);
   });
 });
