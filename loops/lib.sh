@@ -161,7 +161,7 @@ has_hook() { config_get "hooks.$1" >/dev/null 2>&1; }
 stack_hook() {
   local cfg top
   cfg=$(config_get _path) || return 1
-  top=$(git -C "$(dirname "$cfg")" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
+  top=$(git -C "$(dirname "$cfg")" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p') || top=""
   hook_top=${top:-$(dirname "$cfg")} run_hook "$@"
 }
 
