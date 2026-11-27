@@ -101,7 +101,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-989 | bug | triaged | fixes-tooling |  | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
 | RISA-990 | bug | ready | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
-| RISA-992 | bug | in-progress | after-split | prd/after-split | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
+| RISA-992 | bug | ready | after-split | prd/after-split | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
 | RISA-993 | bug | triaged | fixes-tooling |  | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
 | RISA-994 | bug | triaged | fixes-tooling |  | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 | RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
@@ -701,7 +701,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit: d660e0b
+- commit: ec5ba7d
 
 - 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
 
@@ -863,10 +863,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-992 · bug · loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27)
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: ec5ba7d
 
 - 2026-11-27 (prd/after-split): Failed on time only in both full runs of slice 1; passes alone on base at 19.4 s
 - 2026-11-27 (prd/after-split): Failed after-split's landing check at 20.3 s (only failure of 2221); fixed in after-split by giving the test its own timeout
