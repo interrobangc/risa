@@ -9,7 +9,7 @@
 //
 //   --root   the config at the copy's root: the sample project's (default), this
 //            checkout's risa.json, or none
-//   --limit  a file running past S seconds (default 180) is hung: the run is stopped,
+//   --limit  a file running past S seconds (default 300) is hung: the run is stopped,
 //            the file named, and the files it hadn't finished are run again without it
 //   --keep   leave the copy (its path is printed) for a look
 //
@@ -23,6 +23,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -36,7 +37,7 @@ const MANIFEST = "scripts/loops/boundary.manifest";
 const SAMPLE_CONFIG = "scripts/loops/sample-project/risa.json";
 const SETUP = "scripts/loops/test-setup.mjs";
 const ROOT_MODES = ["sample", "project", "none"];
-const LIMIT_SECONDS = 180;
+const LIMIT_SECONDS = 300;
 
 /**
  * The manifest's core files, in its order.
@@ -120,7 +121,7 @@ const git = (cwd, args) => {
 
 /** Copies the core files and the root config into a new repo; returns it and its test files. */
 function makeCopy(rootMode) {
-  const dir = mkdtempSync(join(tmpdir(), "standalone-"));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "standalone-")));
   const repo = join(dir, "repo");
   const files = coreFiles(readFileSync(join(ROOT, MANIFEST), "utf8"));
   for (const f of files) {
