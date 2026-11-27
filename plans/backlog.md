@@ -590,6 +590,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-27 (Robert Bo Davis): User 2026-11-27: fixes-ui idled about 4 h after wave 19 (01:56) with only B-325, which waits for Capacitor, left; it blocked fixes-nit, fixes-bug and fixes-perf at cap 1 (dispatcher: no free slot)
 - 2026-11-27 (the Risa move, B-543): Was B-952 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): Folded in RISA-982 (inbox 2026-11-27, fixes orchestrators keep waiting for new work when they run out): they need to clean themselves up so they stop taking a queue spot.
+- 2026-11-27 (Robert Bo Davis): User 2026-11-27: wants it as soon as possible. Asked the fixes-tooling orchestrator to plan it first in its next wave, right after wave 2.
 
 ### RISA-968 · feature · Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config)
 
