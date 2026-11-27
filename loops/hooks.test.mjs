@@ -99,6 +99,17 @@ describe("runHook", () => {
     expect(factList("top", both.trim())).toEqual([project, wt]);
   });
 
+  // Under set -euo pipefail, git's failure in no checkout must still fall back.
+  it("runs a stack hook from the config's folder when that is no checkout, under set -euo pipefail", () => {
+    const env = withHooks("strict", { stackStatus: 'echo "top=$PWD"' });
+    const sh = execFileSync(
+      "bash",
+      ["-c", `set -euo pipefail; source "${join(HERE, "lib.sh")}"; stack_hook stackStatus`],
+      { cwd: root, encoding: "utf8", env },
+    );
+    expect(fact("top", sh.trim())).toBe(root);
+  });
+
   it("gives a failing hook's exit status and its stderr", () => {
     const r = runHook("stackReady", [], {
       env: withHooks("fail", { stackReady: "echo half=1; echo boom >&2; exit 3" }),
