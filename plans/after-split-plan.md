@@ -1,6 +1,6 @@
 # Plan: after-split
 
-> Source PRD: [`plans/after-split-prd.md`](after-split-prd.md). User-story numbers (US) refer to it. Items RISA-970, RISA-971, RISA-974, RISA-975, RISA-976, RISA-977, RISA-978, RISA-979, with RISA-932 and RISA-953 moved in from fixes-tooling. RISA-973 landed before the plan (5721c4e). RISA-972 (US 6) went to the follow-on topic `after-split-2`, after this one. Topic `after-split`. **Held** (`hold`) after two skeptic send-backs, until the user lifts it.
+> Source PRD: [`plans/after-split-prd.md`](after-split-prd.md). User-story numbers (US) refer to it. Items RISA-970, RISA-971, RISA-974, RISA-975, RISA-976, RISA-977, RISA-978, RISA-979, with RISA-932 and RISA-953 moved in from fixes-tooling. RISA-973 landed before the plan (5721c4e). RISA-972 (US 6) went to the follow-on topic `after-split-2`, after this one. Topic `after-split`. The user lifted the hold (registry: running).
 
 ## Status
 
@@ -12,6 +12,12 @@
 | 4     | 2    | —     | —                            |
 | 5     | 2    | —     | —                            |
 | 6     | 3    | —     | —                            |
+
+**Landing mode:** run everything through (start every ready slice, land each green wave, ask only real questions). Started 2026-11-27; anchors fixed in the plan at start.
+
+**Models:** slice 1 opus (real logic: env, tests in a session).
+
+**Now:** wave 1, slice 1 starting.
 
 **Backlog:** claim each slice's items as it starts; `done` them when it merges. Slice 1: RISA-975, RISA-979, RISA-932, RISA-953. Slice 2: RISA-970, RISA-971. Slice 3: RISA-976 (the fixtures' half). Slice 4: RISA-976 (the git floor; `done` it when both 3 and 4 have merged). Slice 5: RISA-978, RISA-977. Slice 6: RISA-974.
 
@@ -41,7 +47,7 @@ Stack: no · Reads: loops/docs/loop.md · Tests: unit · Blocked by: none
 
 **Acceptance criteria:**
 
-- Unit test (`loops/test-env.test.mjs`, new): a session's environment (`RISA_CONFIG` at another repo's `risa.json`, `RISA_SESSION_PID`, `RISA_SESSIONS_DIR`, `RISA_USAGE_DIR`, `CLAUDECODE`) comes out with the fixture config and none of them; `RISA_TEST_CONFIG` is kept as the config; unrelated variables (`PATH`, `HOME`) pass through.
+- Unit test in `loops/test-env.test.mjs` (new): a session's environment (`RISA_CONFIG` naming another repo's config, `RISA_SESSION_PID`, `RISA_SESSIONS_DIR`, `RISA_USAGE_DIR`, `CLAUDECODE`) comes out with the fixture config and none of them; `RISA_TEST_CONFIG` is kept as the config; unrelated variables (`PATH`, `HOME`) pass through.
 - `pnpm test` run from the slice's own session (which has `RISA_CONFIG`, `RISA_SESSION_*` and `RISA_SESSIONS_DIR` set: today 217 fail) passes in full, and so does the same run with those unset (`env -u …`); the hand-off names both counts.
 - `risa check --quick "slice hand-off"` passes from the slice's session: the tooling tests run after `lib.sh` has exported the main checkout's `RISA_CONFIG`, and still read the fixture's.
 
@@ -57,7 +63,7 @@ Stack: no · Reads: loops/docs/project-config.md · Tests: unit · Blocked by: 1
 
 **Acceptance criteria:**
 
-- Unit test (`loops/exports.test.mjs`, new), each import in a child `node` process run from the repo root (Node resolves the package's own name there; the planner checked `risa/loops/time-gate.mjs`): `risa/ci/ci-runs.mjs` gives `VERDICT_VERSION` and `isVerdict`; `risa/loops/docs-budget.mjs` gives `BUDGETS`, writes nothing and exits 0; `import.meta.resolve("risa/ci/verdict.fixtures/candidate-green.json")` names a file that exists and `isVerdict` accepts.
+- Unit test in `loops/exports.test.mjs` (new), each import in a child `node` process run from the repo root (Node resolves the package's own name there; the planner checked `import "risa/loops/time-gate.mjs"`): `import "risa/ci/ci-runs.mjs"` gives `VERDICT_VERSION` and `isVerdict`; `import "risa/loops/docs-budget.mjs"` gives `BUDGETS`, writes nothing and exits 0; `import.meta.resolve("risa/ci/verdict.fixtures/candidate-green.json")` names a file that exists and `isVerdict` accepts.
 - Unit test: `overBudget` on a temp folder with a doc over its budget and one with no budget returns both lines; on `loops/docs` it returns none.
 - `pnpm docs:budget` still exits 1 with the lines on an over-budget doc and 0 with its one line otherwise.
 
@@ -84,7 +90,7 @@ Stack: no · Reads: loops/docs/project-config.md · Tests: unit · Blocked by: 1
 
 **User stories:** US 3.
 
-**Build:** a shared floor in `loops/machine.mjs`: `GIT_FLOOR` (2.28) and a pure `gitTooOld(versionText)`. `machine.mjs check` refuses a git under it with one line naming the version and exit 2. A Vitest global setup (`loops/test-global-setup.mjs`, new, named in `vitest.config.mjs` `globalSetup`) runs `git --version` once and throws that line before any file runs. The README's install says git 2.28 or newer.
+**Build:** in `loops/machine.mjs`, a shared floor, the new constant `GIT_FLOOR` (2.28) and a pure `gitTooOld(versionText)`. `machine.mjs check` refuses a git under it with one line naming the version and exit 2. A Vitest global setup in `loops/test-global-setup.mjs` (new), which `vitest.config.mjs` names as its new `globalSetup`, runs `git --version` once and throws that line before any file runs. The README's install says git 2.28 or newer.
 
 **Acceptance criteria:**
 
