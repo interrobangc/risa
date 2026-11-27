@@ -95,7 +95,7 @@ now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # folder this claude gets (its variable set, unset for Claude Code's default,
 # or left as it is when nothing names one), and the settings file its
 # kind runs with. The context watch (context.mjs) comes in through that file:
-# orchestrators, backlog and inbox sessions get its hook, so the user's own
+# orchestrators, planners, backlog and inbox sessions get its hook, so the user's own
 # sessions never run it. Any other kind clears what it could inherit from a
 # session that started it.
 claude_lines=$(node "$bin/host.mjs" claude-session "$kind" "${main:-$(pwd -P)}") || exit 2

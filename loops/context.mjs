@@ -1,7 +1,7 @@
 // The context watch: how large a recorded session has grown, and the reminders
 // past its soft and hard limits.
 //
-// session.sh gives `prd`, `backlog` and inbox sessions their settings file (host.mjs
+// session.sh gives `prd`, `plan`, `backlog` and inbox sessions their settings file (host.mjs
 // settingsFor; claude --settings), hooks that run `context.mjs hook`
 // on PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop and Stop. Every event
 // feeds the heartbeat (heartbeat.mjs); only PostToolUse is sized. The hook reads the transcript
@@ -19,7 +19,11 @@
 // and no answer means keep going. The inbox session has one limit, the soft one
 // (its hard limit equals it): past it, it hands off unasked, at the crossing and
 // every RISA_CONTEXT_REMIND_MIN. The dispatcher's follow-up starts at the hard
-// limit (`hardOverAt`).
+// limit (`hardOverAt`). A planner (kind `plan`: `prd plan <topic> --open`, the
+// dispatcher's) has the soft and hard limits of any kind but an orchestrator, at the
+// same times as an orchestrator's, in a planner's words: past soft, head for landing
+// the plan; past hard, land it if that is the next step, else hand over (commit what
+// is written with a _Hand-over_ note, for a fresh planner on the same worktree).
 //
 // A subagent's call (the hook input has `agent_id`) is sized from that agent's
 // own transcript, and its state is kept apart, so it never counts as the
@@ -46,7 +50,7 @@
 // RISA_CONTEXT_LIMIT (the soft limit for every kind; else 120000 tokens for an
 // orchestrator, 160000 for the others), RISA_CONTEXT_HARD_LIMIT
 // (225000; never below the soft one) and RISA_CONTEXT_REMIND_MIN (10) are for
-// orchestrators, backlog and inbox sessions; a subagent's limits are constants.
+// orchestrators, planners, backlog and inbox sessions; a subagent's limits are constants.
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
@@ -184,6 +188,34 @@ export function backlogNudge(/** @type {number} */ size, /** @type {number} */ s
   return `Context watch, second notice: this session is still at ${kilo(size)} tokens, well past the soft limit of ${kilo(soft)}. Never hand off on your own: at the next pause in the talk, never in the middle of a question, tell the user the size and ask whether to hand off or keep going; if they don't answer, keep going. The dispatcher also asks the user, and with no answer it leaves the session running. Only on the user's word to hand off: write the brief to the path \`${toolCmd.prd} rotate --self --brief-path\` prints and run \`${toolCmd.prd} rotate --self --brief <that file>\`.`;
 }
 
+/** How a planner hands over: by what it commits, for a fresh planner on the same worktree. */
+function plannerHandOver(/** @type {string} */ topic, /** @type {boolean} */ auto) {
+  const commit = `commit the PRD and plan as they stand on ${branchKinds().branch("plan", topic)} (\`docs(${topic}): …\`), with a _Hand-over_ section at the top of the plan: what is done, what was decided and what is left`;
+  const fresh = `\`${toolCmd.prd} plan ${topic} --open\``;
+  if (auto)
+    return `To hand over: ${commit}; file the report with \`${toolCmd.prd} ask --topic ${topic} --report "<text>"\`, giving your size, what is left, and that \`${toolCmd.prd} end plan-${topic}\` then ${fresh} starts a fresh planner on the note; then stop and wait, without ending the session (the dispatcher would reopen this same conversation).`;
+  return `To hand over: ${commit}; tell the user in one line that a fresh planner takes over from the note, started in a new terminal with ${fresh}; then run \`${toolCmd.prd} end\` and say nothing after it.`;
+}
+
+export function plannerSoftReminder(
+  /** @type {number} */ size,
+  /** @type {number} */ soft,
+  /** @type {number} */ hard,
+  /** @type {string} */ topic,
+  auto = false,
+) {
+  return `Context watch: this planning session is at ${kilo(size)} tokens of context, past the soft limit of ${kilo(soft)} (the hard limit is ${kilo(hard)}). Head for landing: explore only what the plan still needs, finish the PRD and plan, run the skeptic pass and land ${branchKinds().branch("plan", topic)} as your prompt says. If that won't fit before the hard limit, hand over at the next natural boundary instead. ${plannerHandOver(topic, auto)} You are reminded again every further ${kilo(SOFT_REPEAT)}.`;
+}
+
+export function plannerReminder(
+  /** @type {number} */ size,
+  /** @type {number} */ hard,
+  /** @type {string} */ topic,
+  auto = false,
+) {
+  return `Context watch: this planning session is at ${kilo(size)} tokens of context, past the hard limit of ${kilo(hard)}. Land the plan only if landing is the next step (the skeptic's go is in and only \`${toolCmd.prd} land\` is left); otherwise hand over now, without asking, starting no new exploring. ${plannerHandOver(topic, auto)}`;
+}
+
 /** The inbox session's hand-off: it runs outside the repository, so by the main checkout's path. */
 export const inboxRotate = (/** @type {string} */ main) => `pnpm -s -C ${main} prd rotate --self`;
 
@@ -245,8 +277,9 @@ function softMessage(/** @type {any} */ record, /** @type {number} */ size, /** 
  * orchestrator's hard one (a backlog session has none).
  * @param {any} current the record, or null
  * @param {{ pid: number, size: number, now: number, limit: number, hard?: number, remindMs: number,
- *   loop?: boolean, backlog?: boolean, inbox?: string }} facts `inbox`: the inbox session's hand-off
- *   command; its one limit is the soft one (`hard` is ignored)
+ *   loop?: boolean, backlog?: boolean, inbox?: string, plan?: { topic: string, auto?: boolean } | null }} facts
+ *   `inbox`: the inbox session's hand-off command; its one limit is the soft one (`hard` is ignored).
+ *   `plan`: a planner's topic and whether it runs unattended; its reminders are a planner's
  * @returns {{ record: any, message: string | null }}
  */
 export function hookDecision(
@@ -261,6 +294,7 @@ export function hookDecision(
     loop = false,
     backlog = false,
     inbox = "",
+    plan = null,
   },
 ) {
   const at = new Date(now).toISOString();
@@ -290,6 +324,7 @@ export function hookDecision(
     record.nudgeDeliveredAt = at;
     record.remindedAt = at;
     if (inbox) return { record, message: inboxNudge(size, limit, inbox) };
+    if (plan) return { record, message: plannerReminder(size, hard, plan.topic, plan.auto) };
     return { record, message: backlog ? backlogNudge(size, limit) : orchestratorNudge(size, hard) };
   }
   if (backlog)
@@ -297,7 +332,11 @@ export function hookDecision(
   if (!overHard)
     return {
       record,
-      message: softMessage(record, size, at) ? orchestratorSoftReminder(size, limit, hard) : null,
+      message: !softMessage(record, size, at)
+        ? null
+        : plan
+          ? plannerSoftReminder(size, limit, hard, plan.topic, plan.auto)
+          : orchestratorSoftReminder(size, limit, hard),
     };
   // Past hard: at the crossing, then every remindMs.
   const crossed = record.hardOverAt === at;
@@ -305,6 +344,7 @@ export function hookDecision(
     return { record, message: null };
   record.remindedAt = at;
   if (inbox) return { record, message: inboxReminder(size, limit, inbox) };
+  if (plan) return { record, message: plannerReminder(size, hard, plan.topic, plan.auto) };
   return { record, message: orchestratorReminder(size, hard) };
 }
 
@@ -388,6 +428,10 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
   const backlog = session.kind === "backlog";
   const inbox = session.kind === "inbox" ? inboxRotate(dirname(dirname(sessions))) : "";
   if (loop && (backlog || inbox)) return "";
+  const plan =
+    session.kind === "plan"
+      ? { topic: session.topic || name.replace(/^plan-/, ""), auto: session.auto === true }
+      : null;
   const transcript = loop ? agentTranscript(input) : c.transcript;
   if (typeof transcript !== "string") return "";
   const size = readSize(transcript, { agent: loop });
@@ -410,6 +454,7 @@ export function runHook(/** @type {string} */ raw, env = process.env, now = Date
       loop,
       backlog,
       inbox,
+      plan,
     });
     message = d.message;
     return d.record;
