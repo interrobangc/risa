@@ -4,14 +4,14 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/after-split` |
-| ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | working | —                          |
-| 2     | 2    | —     | —                            |
-| 3     | 2    | —     | —                            |
-| 4     | 2    | —     | —                            |
-| 5     | 2    | —     | —                            |
-| 6     | 3    | —     | —                            |
+| Slice | Wave | State   | Merge into `prd/after-split` |
+| ----- | ---- | ------- | ---------------------------- |
+| 1     | 1    | working | —                            |
+| 2     | 2    | —       | —                            |
+| 3     | 2    | —       | —                            |
+| 4     | 2    | —       | —                            |
+| 5     | 2    | —       | —                            |
+| 6     | 3    | —       | —                            |
 
 **Landing mode:** run everything through (start every ready slice, land each green wave, ask only real questions). Started 2026-11-27; anchors fixed in the plan at start.
 
