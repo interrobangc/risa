@@ -78,6 +78,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-970 | change | triaged | fixes-tooling |  | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
 | RISA-971 | change | triaged | fixes-tooling |  | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
 | RISA-972 | question | triaged | fixes-tooling |  | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
+| RISA-973 | bug | triaged | fixes-tooling |  | A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it |
+| RISA-974 | chore | triaged | fixes-tooling |  | The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show |
 
 ## Items
 
@@ -628,6 +630,20 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 ### RISA-972 · question · In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+### RISA-973 · bug · A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+### RISA-974 · chore · The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show
 
 - status: triaged
 - prd: fixes-tooling
