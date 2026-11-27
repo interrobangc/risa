@@ -10,18 +10,19 @@
 
 | Slice | Wave | Item     | Model | State    | Merge into `prd/fixes-tooling` |
 | ----- | ---- | -------- | ----- | -------- | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | working  |                                |
-| 9     | 2    | RISA-681 | opus  | working  |                                |
-| 10    | 2    | RISA-934 | opus  | working  |                                |
-| 11    | 2    | RISA-987 | opus  | working  |                                |
-| 12    | 2    | RISA-989 | opus  | working  |                                |
-| 13    | 2    | RISA-993 | opus  | working  |                                |
+| 8     | 2    | RISA-969 | opus  | checking |                                |
+| 9     | 2    | RISA-681 | opus  | checking |                                |
+| 10    | 2    | RISA-934 | opus  | checking |                                |
+| 11    | 2    | RISA-987 | opus  | checking |                                |
+| 12    | 2    | RISA-989 | opus  | checking |                                |
+| 13    | 2    | RISA-993 | opus  | checking |                                |
 
 **Notes:**
 
 - **Gate:** `risa check` inside a session fails ~259 tests on the `RISA_CONFIG` leak until after-split's slice 1 lands; gate with every `RISA_*`, `CLAUDE_CODE_*`, `CLAUDECODE` unset, rerun failing files once (load timeouts). No CI until slice 8's workflow is on main: landing wave 2 needs `--force` (ask the user, `--waits`) unless the workflow runs on the PR.
 - **Waiting:** RISA-994 (may share after-split slice 1's cause: check after it lands); RISA-996 (Codex review of wave 1's landed diff: do it at wave 2's PR); after after-split lands: RISA-813, 915, 926, 927, 952, 882, 886, 881, 883, 889, 986, plus wave 1's docs (loop doc: `wait check` 160 s, RISA-911; machinery: plan sessions get the context hook, RISA-880; backlog doc: `prd set … why=`, RISA-477).
-- Usage at wave start: 5h at 93% (resets 17:40).
+- Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
+- **after-split landed** in main as a6c95e4: `risa sync` at this wave's boundary; RISA-994 and the after-split-blocked items can go in wave 3.
 
 ## How to run this plan
 
