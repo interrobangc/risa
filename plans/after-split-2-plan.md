@@ -6,7 +6,7 @@
 
 | Slice | Wave | State   | Merge into `prd/after-split-2` |
 | ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | working |                                |
+| 1     | 1    | recheck |                                |
 | 2     | 1    | working |                                |
 | 3     | 2    | planned |                                |
 
@@ -15,6 +15,8 @@
 **Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic).
 
 **Now (2026-11-27):** wave 1 running: worktrees `.loops/after-split-2-1` and `-2` (from a2831a5), one background agent each on opus; watch running. No new items at the wave boundary. Slice 3 waits for 1 and 2 merged.
+
+**Slice 1:** handed off at 37d7591 (projectTop and stack_hook take `worktree list`'s first line); slice check failed only on load timeouts (load 26–36, 18 untouched files), sent back to rerun at load ~10.
 
 ## Architectural decisions
 
