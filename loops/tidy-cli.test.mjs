@@ -1,0 +1,503 @@
+// pnpm prd tidy (tidy-cli.mjs) against a throwaway repo and .loops with these
+// scripts copied in, the stack hooks on the sample project's stub, and fake
+// lsof, osascript, pnpm, nvm and backlog: nothing here touches real containers,
+// volumes, sessions, the asks queue, a real claude or GitHub.
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { collectTidyFacts, processCwds, removeLease } from "./tidy-cli.mjs";
+import { tidy as sortFacts } from "./tidy.mjs";
+import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
+
+const HERE = new URL(".", import.meta.url).pathname;
+const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
+
+const PLAN = `# Plan: T
+
+## Slice 1: Merged
+
+Stack: no · Reads: none · Tests: unit
+
+## Slice 2: Merged, then dirty
+
+Stack: no · Reads: none · Tests: unit
+
+## Slice 3: Active
+
+Stack: no · Reads: none · Tests: unit
+`;
+
+// The stub stack hook's state (stack-hook.sh): an orphan test database and the
+// stack's leftovers (one volume, and an image tidy leaves to reclaim).
+const ORPHANS = "sample_test_gone\n";
+const LEFTOVERS =
+  "volume=sample-loop9_data 300 dangling; no worktree uses sample-loop9\nimage=img1 900 dangling image\n";
+// The backlog's list --json and prd list --json: nothing finished, no rows.
+const FAKE_BACKLOG = 'console.log("[]");\n';
+
+let root, main, loops, log, asks, sessions, leases, env;
+const tidy = (args = []) =>
+  spawnSync(process.execPath, [join(main, "loops/tidy-cli.mjs"), ...args], {
+    cwd: main,
+    encoding: "utf8",
+    env,
+  });
+const ok = (args) => {
+  const r = tidy(args);
+  if (r.status !== 0) throw new Error(`tidy ${args.join(" ")} failed:\n${r.stdout}\n${r.stderr}`);
+  return r.stdout;
+};
+const filedAsks = () => (existsSync(asks) ? readdirSync(asks).filter((f) => f.endsWith(".json")) : []);
+const lease = () => join(leases, "check", "1");
+const old = (p) => utimesSync(p, new Date(Date.now() - 3600_000), new Date(Date.now() - 3600_000));
+
+beforeAll(() => {
+  root = realpathSync(mkdtempSync(join(tmpdir(), "tidy-test-")));
+  main = join(root, "repo");
+  loops = join(main, ".loops");
+  log = join(root, "calls.log");
+  asks = join(root, "asks");
+  sessions = join(root, "sessions");
+  leases = join(root, "leases");
+  const bin = join(root, "bin");
+  const nvm = join(root, "nvm");
+  mkdirSync(bin);
+  mkdirSync(nvm);
+  writeFileSync(join(bin, "pnpm"), '#!/usr/bin/env bash\necho "pnpm $*" >> "$FAKE_LOG"\n');
+  writeFileSync(join(bin, "osascript"), '#!/usr/bin/env bash\necho "osascript $*" >> "$FAKE_LOG"\n');
+  writeFileSync(join(bin, "claude"), '#!/usr/bin/env bash\necho "claude $*" >> "$FAKE_LOG"\n');
+  // No process listens or works anywhere.
+  writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
+  for (const f of ["pnpm", "osascript", "claude", "lsof"]) chmodSync(join(bin, f), 0o755);
+  writeFileSync(join(nvm, "nvm.sh"), "nvm() { :; }\n");
+  env = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH}`,
+    NVM_DIR: nvm,
+    FAKE_LOG: log,
+    TRUNK: "dev",
+    RISA_CLAUDE_BIN: join(bin, "claude"),
+    RISA_ASKS_DIR: asks,
+    RISA_ASK_NOTIFY: "",
+    RISA_SESSIONS_DIR: sessions,
+    RISA_SESSION: "",
+    RISA_LEASE_ROOT: leases,
+    SAMPLE_STACK_STATE: join(root, "stack-state"),
+    SAMPLE_STACK_LOG: log,
+  };
+  mkdirSync(env.SAMPLE_STACK_STATE);
+  writeFileSync(join(env.SAMPLE_STACK_STATE, "testdb-orphans"), ORPHANS);
+  writeFileSync(join(env.SAMPLE_STACK_STATE, "leftovers"), LEFTOVERS);
+
+  execFileSync("git", ["init", "-q", "-b", "dev", main]);
+  for (const [k, v] of [
+    ["user.email", "test@example.com"],
+    ["user.name", "Test"],
+    ["commit.gpgsign", "false"],
+  ])
+    git(main, "config", k, v);
+  mkdirSync(join(main, "loops"), { recursive: true });
+  mkdirSync(join(main, "backlog"), { recursive: true });
+  for (const f of readdirSync(HERE).filter((f) => /\.(sh|mjs)$/.test(f) && !f.endsWith(".test.mjs")))
+    copyFileSync(join(HERE, f), join(main, "loops", f));
+  env.RISA_CONFIG = stubHookConfig(main);
+  mkdirSync(join(main, "ci"), { recursive: true });
+  for (const f of ["outstanding.mjs", "tier-data.mjs"])
+    copyFileSync(join(HERE, "../ci", f), join(main, "ci", f));
+  fixtureTierData(main);
+  writeFileSync(join(main, "backlog/backlog.mjs"), FAKE_BACKLOG);
+  writeFileSync(join(main, ".gitignore"), ".loops/\n.env\n.env.*\nnode_modules/\n");
+  mkdirSync(join(main, "plans"));
+  writeFileSync(join(main, "plans/t-plan.md"), PLAN);
+  git(main, "add", ".");
+  git(main, "commit", "-q", "-m", "chore: init");
+  git(main, "branch", "prd/t");
+
+  const run = (...a) => execFileSync("bash", [join(main, "loops/new.sh"), ...a], { env, stdio: "pipe" });
+  for (const n of ["1", "2", "3"]) run("slice", "t", n);
+  // Slices 1 and 2 are merged into prd/t; 2 then picks up uncommitted work.
+  const prd = join(root, "prd-t");
+  git(main, "worktree", "add", "-q", prd, "prd/t");
+  for (const n of ["1", "2"]) {
+    const dir = join(loops, `t-${n}`);
+    writeFileSync(join(dir, `work-${n}.txt`), "done\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", `feat(t): slice ${n}`);
+    git(prd, "merge", "--no-ff", "-q", "-m", `feat(t): merge slice ${n}`, `slice/t/${n}`);
+  }
+  // Their wave has landed, so nothing holds them for a fix.
+  git(main, "merge", "--no-ff", "-q", "-m", "feat(t): land the wave", "prd/t");
+  writeFileSync(join(loops, "t-2", "work-2.txt"), "more, not committed\n");
+  // Slice 3 is active: a commit, not merged.
+  writeFileSync(join(loops, "t-3", "work-3.txt"), "wip\n");
+  git(join(loops, "t-3"), "add", ".");
+  git(join(loops, "t-3"), "commit", "-q", "-m", "feat(t): slice 3 so far");
+  // An unmerged branch with no worktree.
+  git(main, "branch", "slice/t/9", "slice/t/3");
+  // A dead check lease, taken an hour ago.
+  mkdirSync(lease(), { recursive: true });
+  writeFileSync(join(lease(), "name"), "pid=999999\nworktree=t-3\ncheck=pnpm check\n");
+  old(lease());
+  // A browser-hang log from last month.
+  mkdirSync(join(loops, ".browser-hangs"), { recursive: true });
+  writeFileSync(join(loops, ".browser-hangs", "t-ui-1.log"), "hung\n");
+  const month = new Date(Date.now() - 30 * 86400_000);
+  utimesSync(join(loops, ".browser-hangs", "t-ui-1.log"), month, month);
+  // An ended session record whose worktree is gone.
+  mkdirSync(sessions, { recursive: true });
+  writeFileSync(
+    join(sessions, "prd-gone.json"),
+    JSON.stringify({
+      pid: 999998,
+      kind: "prd",
+      topic: "gone",
+      started: "2026-01-01T00:00:00Z",
+      ended: "2026-01-01T01:00:00Z",
+    }),
+  );
+  // An ended backlog session, which never had a worktree.
+  writeFileSync(
+    join(sessions, "backlog.json"),
+    JSON.stringify({
+      pid: 999997,
+      kind: "backlog",
+      started: "2026-01-01T00:00:00Z",
+      ended: "2026-01-01T01:00:00Z",
+    }),
+  );
+});
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+describe("tidy (no --yes)", () => {
+  it("lists the safe, ask and kept findings and changes nothing", () => {
+    const out = ok([]);
+    expect(out).toMatch(/^ {2}worktree +t-1 \(slice\/t\/1 is merged into prd\/t\)$/m);
+    expect(out).toMatch(/^ {2}lease +.*check\/1 \(lease t-3: pnpm check: pid 999999 is gone\)$/m);
+    expect(out).toMatch(/^ {2}record +prd-gone \(ended, and its worktree gone is gone\)$/m);
+    expect(out).toMatch(
+      /^ {2}branch +slice\/t\/9 \(no worktree, not merged into prd\/t: kept, never deleted\)$/m,
+    );
+    expect(out).toMatch(/^Kept:\n {2}worktree +t-2 \(.*uncommitted changes\)$/m);
+    expect(out).toMatch(/^ {2}test-db +sample_test_gone \(no worktree owns it\)$/m);
+    expect(out).toMatch(/^ {2}volume +sample-loop9_data \(dangling; no worktree uses sample-loop9\)$/m);
+    expect(out).toMatch(/^ {2}hang-log +.*t-ui-1\.log \(30 days old\)$/m);
+    expect(out).not.toMatch(/t-3 \(|img1/);
+    expect(out).toMatch(/Nothing changed\. pnpm prd tidy --yes removes the safe ones\./);
+
+    for (const n of ["t-1", "t-2", "t-3"]) expect(existsSync(join(loops, n))).toBe(true);
+    expect(existsSync(lease())).toBe(true);
+    expect(existsSync(join(sessions, "prd-gone.json"))).toBe(true);
+    expect(filedAsks()).toEqual([]);
+    expect(existsSync(join(loops, ".browser-hangs", "t-ui-1.log"))).toBe(true);
+    // The hooks were asked with every worktree's name; nothing was removed.
+    expect(readFileSync(log, "utf8")).toMatch(/^test-db orphans t-1 t-2 t-3$/m);
+    expect(readFileSync(log, "utf8")).not.toMatch(/drop-db|leftovers remove/);
+  });
+
+  it("--json gives the same lists", () => {
+    const { safe, ask, kept } = JSON.parse(ok(["--json"]));
+    expect(safe.map((f) => f.kind)).toEqual([
+      "worktree",
+      "record",
+      "record",
+      "lease",
+      "test-db",
+      "volume",
+      "hang-log",
+    ]);
+    expect(ask.map((f) => f.target)).toEqual(["slice/t/9"]);
+    expect(kept.map((f) => f.target)).toEqual(["t-2"]);
+  });
+});
+
+describe("a failed process inspection", () => {
+  const facts = (lsof) => collectTidyFacts({ main, env, lsof });
+  const t1 = (lists) => [...lists.safe, ...lists.kept].find((f) => f.target === "t-1");
+
+  it("reads lsof's output, and its empty nothing-found exit as none", () => {
+    const out = "p11\nfcwd\nn/a/b\np12\nfcwd\nn/c\n";
+    expect(processCwds({ status: 0, stdout: out, stderr: "" })).toEqual([
+      { pid: 11, cwd: "/a/b" },
+      { pid: 12, cwd: "/c" },
+    ]);
+    // Exit 1 with output: some processes couldn't be read; the rest still count.
+    expect(processCwds({ status: 1, stdout: out, stderr: "lsof: WARNING: can't stat" })).toHaveLength(2);
+    expect(processCwds({ status: 1, stdout: "", stderr: "" })).toEqual([]);
+  });
+
+  it("is unknown: missing, killed, an odd exit, or an error with nothing printed", () => {
+    const enoent = Object.assign(new Error("spawnSync lsof ENOENT"), { code: "ENOENT" });
+    expect(processCwds({ error: enoent, status: null })).toBeNull();
+    expect(processCwds({ status: null, signal: "SIGKILL", stdout: "" })).toBeNull();
+    expect(processCwds({ status: 2, stdout: "p11\nn/a\n", stderr: "" })).toBeNull();
+    expect(processCwds({ status: 1, stdout: "", stderr: "lsof: illegal option" })).toBeNull();
+  });
+
+  it("keeps every worktree tidy would remove as idle, and says why", () => {
+    const enoent = Object.assign(new Error("spawnSync lsof ENOENT"), { code: "ENOENT" });
+    for (const [lsof, why] of [
+      [{ error: enoent, status: null, stdout: "", stderr: "" }, /lsof couldn't run: spawnSync lsof ENOENT/],
+      [{ status: 2, stdout: "", stderr: "lsof: boom\nmore" }, /lsof failed, exit 2: lsof: boom\)/],
+      [{ status: null, signal: "SIGTERM", stdout: "", stderr: "" }, /lsof was killed \(SIGTERM\)/],
+    ]) {
+      const lists = sortFacts(facts(lsof));
+      expect(lists.safe.some((f) => f.kind === "worktree")).toBe(false);
+      expect(t1(lists)?.why).toMatch(/^slice\/t\/1 is merged into prd\/t, but its processes are unknown \(/);
+      expect(t1(lists)?.why).toMatch(why);
+    }
+  });
+
+  it("keeps a merged slice while its topic's run has no verdict or GitHub can't say", () => {
+    const none = { status: 1, stdout: "", stderr: "" };
+    const out = [{ ref: "ci/full/prd-t", name: "prd-t", sha: "a", run: 7, url: "https://ci.example/7" }];
+    let lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => out }));
+    expect(lists.safe.some((f) => f.target === "t-1")).toBe(false);
+    expect(t1(lists)?.why).toBe(
+      "slice/t/1 is merged into prd/t, but its topic's run has no verdict: ci/full/prd-t (https://ci.example/7)",
+    );
+    lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => null }));
+    expect(t1(lists)?.why).toMatch(/GitHub can't be read/);
+    const other = [{ ...out[0], ref: "ci/full/prd-other", name: "prd-other" }];
+    lists = sortFacts(collectTidyFacts({ main, env, lsof: none, outstanding: () => other }));
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "worktree", target: "t-1" }));
+  });
+
+  it("an empty successful inspection still lets a merged worktree go", () => {
+    const lists = sortFacts(facts({ status: 1, stdout: "", stderr: "" }));
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "worktree", target: "t-1" }));
+  });
+
+  it("through the CLI: a failing lsof keeps t-1 and names why", () => {
+    const bin = join(root, "bin");
+    writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\necho 'lsof: kernel says no' >&2\nexit 3\n");
+    try {
+      const out = ok([]);
+      expect(out).toMatch(
+        /^ {2}worktree +t-1 \(slice\/t\/1 is merged .*, but its processes are unknown \(lsof failed, exit 3: lsof: kernel says no\)\)$/m,
+      );
+      expect(out).not.toMatch(/^ {2}worktree +t-1 \(slice\/t\/1 is merged into prd\/t\)$/m);
+    } finally {
+      writeFileSync(join(bin, "lsof"), "#!/usr/bin/env bash\nexit 1\n");
+    }
+  });
+});
+
+describe("a failed stack hook", () => {
+  it("skips the stack's leftovers, keeps them as unchecked and lists the rest", () => {
+    const before = existsSync(log) ? readFileSync(log, "utf8").length : 0;
+    const facts = collectTidyFacts({ main, env: { ...env, SAMPLE_STACK_FAIL: "ready:t-3" } });
+    expect(facts.volumes).toEqual([]);
+    expect(facts.volumesSkipped).toMatch(/the stackReady hook failed for t-3/);
+    const lists = sortFacts(facts);
+    expect(lists.safe.some((f) => f.kind === "volume")).toBe(false);
+    expect(lists.kept).toContainEqual(
+      expect.objectContaining({ kind: "volume", why: expect.stringMatching(/^not checked: /) }),
+    );
+    // The leftovers weren't even asked for: nothing could be removed on their word.
+    const calls = readFileSync(log, "utf8").slice(before);
+    expect(calls).toMatch(/^stack status t-3$/m);
+    expect(calls).not.toMatch(/^stack leftovers/m);
+    expect(lists.safe).toContainEqual(expect.objectContaining({ kind: "test-db" }));
+  });
+
+  it("a failed leftovers listing gives none, and says so", () => {
+    const facts = collectTidyFacts({ main, env: { ...env, SAMPLE_STACK_FAIL: "leftovers:." } });
+    expect(facts.volumes).toEqual([]);
+    expect(facts.volumesSkipped).toMatch(/the stackLeftovers hook failed \(stack-hook\.sh: leftovers failed/);
+  });
+});
+
+describe("tidy --yes", () => {
+  it("removes the merged slice worktree, the dead lease and the ended record; keeps the rest; files one report", () => {
+    const out = ok(["--yes"]);
+    expect(out).toMatch(/^removed worktree t-1$/m);
+    expect(existsSync(join(loops, "t-1"))).toBe(false);
+    expect(git(main, "branch", "--list", "slice/t/1")).toBe("");
+    expect(existsSync(lease())).toBe(false);
+    expect(existsSync(join(sessions, "prd-gone.json"))).toBe(false);
+    expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
+
+    // The dirty worktree, the active one and the unmerged branch stay.
+    expect(readFileSync(join(loops, "t-2", "work-2.txt"), "utf8")).toMatch(/not committed/);
+    expect(existsSync(join(loops, "t-3"))).toBe(true);
+    expect(git(main, "branch", "--list", "slice/t/9")).toMatch(/slice\/t\/9/);
+
+    // One report ask, with no PushNotification line (only questions push).
+    const filed = filedAsks();
+    expect(filed).toHaveLength(1);
+    const ask = JSON.parse(readFileSync(join(asks, filed[0]), "utf8"));
+    expect(ask.kind).toBe("report");
+    expect(ask.topic).toBe("tidy");
+    expect(ask.text).toMatch(/branch slice\/t\/9: no worktree, not merged/);
+    expect(out).not.toMatch(/^Now send a PushNotification/m);
+
+    // Through the (stub) hooks: the orphan database and the dangling volume only.
+    const calls = readFileSync(log, "utf8");
+    expect(calls.match(/^test-db drop-db .*/gm)).toEqual(["test-db drop-db sample_test_gone"]);
+    expect(calls.match(/^stack leftovers remove .*/gm)).toEqual([
+      "stack leftovers remove volume sample-loop9_data",
+    ]);
+    expect(existsSync(join(loops, ".browser-hangs", "t-ui-1.log"))).toBe(false);
+    expect(calls).not.toMatch(/^claude /m);
+  });
+
+  it("files no report when nothing is left to ask about", () => {
+    git(main, "branch", "-D", "slice/t/9");
+    rmSync(asks, { recursive: true, force: true });
+    const out = ok(["--yes"]);
+    expect(out).toMatch(/Nothing to ask about: no report filed\./);
+    expect(filedAsks()).toEqual([]);
+    expect(existsSync(join(loops, "t-2"))).toBe(true);
+  });
+});
+
+describe("tidy removes a dead lease only through lease.sh's takeover", () => {
+  const second = () => join(leases, "browser", "2");
+  const take = (pid) => {
+    mkdirSync(second(), { recursive: true });
+    writeFileSync(join(second(), "name"), `pid=${pid}\nworktree=t-3\ncheck=pnpm prd browser\n`);
+    old(second());
+  };
+  const listed = () =>
+    JSON.parse(ok(["--json"])).safe.some((/** @type {{ target: string }} */ f) => f.target === second());
+
+  it("keeps a lease that was dead at the snapshot but taken again before the delete", () => {
+    take(999999);
+    expect(listed()).toBe(true);
+    // Retaken in between, by a running process (this one, which has no cmd= to match).
+    take(process.pid);
+    expect(removeLease(second(), { env })).toBe("kept");
+    expect(readFileSync(join(second(), "name"), "utf8")).toMatch(`pid=${process.pid}`);
+  });
+
+  it("removes one still dead at the delete, and leaves no takeover mutex", () => {
+    take(999999);
+    expect(listed()).toBe(true);
+    expect(removeLease(second(), { env })).toBe("removed");
+    expect(existsSync(second())).toBe(false);
+    expect(existsSync(join(leases, "browser", ".takeover"))).toBe(false);
+  });
+
+  it("keeps a dead lease while another taker holds the takeover mutex", () => {
+    take(999999);
+    mkdirSync(join(leases, "browser", ".takeover"));
+    try {
+      expect(removeLease(second(), { env })).toBe("kept");
+      expect(existsSync(second())).toBe(true);
+    } finally {
+      rmSync(join(leases, "browser", ".takeover"), { recursive: true, force: true });
+      rmSync(second(), { recursive: true, force: true });
+    }
+  });
+});
+
+// Four items: B-1 (the running topic t) and B-2 (another topic) landed at sha,
+// B-3 dropped, B-4 still waiting.
+const backlogFixture = (sha) => {
+  const items = [
+    ["B-1", "Running topic landed", "landed", "t", sha],
+    ["B-2", "Finished elsewhere", "landed", "other", sha],
+    ["B-3", "Dropped from the running topic", "dropped", "t", ""],
+    ["B-4", "Still waiting", "triaged", "other", ""],
+  ];
+  const row = ([id, title, status, prd]) => `| ${id} | bug | ${status} | ${prd} |  | ${title} |`;
+  const item = ([id, title, status, prd, commit]) =>
+    `### ${id} · bug · ${title}\n\n- status: ${status}\n- prd: ${prd}\n- owner:\n- commit:${commit ? ` ${commit}` : ""}\n`;
+  return [
+    "# Backlog\n\n## Summary\n",
+    "<!-- Generated by `pnpm backlog` on every write: don't edit this table by hand. -->\n",
+    [
+      "| Id | Type | Status | PRD | Owner | Title |",
+      "| -- | ---- | ------ | --- | ----- | ----- |",
+      ...items.map(row),
+    ].join("\n") + "\n",
+    "## Items\n",
+    items.map(item).join("\n"),
+  ].join("\n");
+};
+
+// Last: it swaps the fake backlog for the real one.
+describe("tidy archives finished items", () => {
+  const backlogFile = () => join(main, "plans/backlog.md");
+  const archiveFile = () => join(main, "plans/backlog-archive.md");
+  const real = (...a) =>
+    execFileSync(process.execPath, [join(main, "backlog/backlog.mjs"), ...a], {
+      cwd: main,
+      encoding: "utf8",
+      env,
+    }).trim();
+
+  // The backlog is written as the real CLI leaves it, in one commit, not built
+  // with six CLI writes: each is a node start and about twenty git processes
+  // (about 0.5 s alone, several seconds at load 40), which pushed this hook past
+  // its 10 s (B-461, B-732). The tests below still run the real backlog.mjs.
+  beforeAll(() => {
+    for (const f of [
+      "backlog.mjs",
+      "amend.mjs",
+      "format.mjs",
+      "inbox-edit.mjs",
+      "inbox-merge.mjs",
+      "origin.mjs",
+      "registry.mjs",
+    ])
+      copyFileSync(join(HERE, "../backlog", f), join(main, "backlog", f));
+    const sha = git(main, "rev-parse", "--short", "HEAD");
+    writeFileSync(backlogFile(), backlogFixture(sha));
+    git(main, "add", "backlog", "plans/backlog.md");
+    git(main, "commit", "-q", "-m", "chore: the real backlog");
+  });
+
+  it("the fixture is what the backlog tool would write", () => {
+    // Its own normalised copy, with the statuses it works out from git.
+    expect(real("doctor")).toBe("backlog ok");
+    expect(JSON.parse(real("list", "--all", "--json")).map((i) => [i.id, i.status, i.prd])).toEqual([
+      ["B-1", "landed", "t"],
+      ["B-2", "landed", "other"],
+      ["B-3", "dropped", "t"],
+      ["B-4", "triaged", "other"],
+    ]);
+  });
+
+  it("--json only lists: the running topic's item kept, nothing written", () => {
+    const head = git(main, "rev-parse", "HEAD");
+    const { safe, kept } = JSON.parse(ok(["--json"]));
+    expect(safe.find((f) => f.kind === "archive")?.ids).toEqual(["B-2", "B-3"]);
+    expect(kept.find((f) => f.kind === "archive")).toMatchObject({
+      target: "t: 1 item",
+      why: "finished, but prd/t still has a worktree (B-1)",
+    });
+    expect(git(main, "rev-parse", "HEAD")).toBe(head);
+    expect(existsSync(archiveFile())).toBe(false);
+  });
+
+  it("--yes archives them in one backlog commit and reports the count", () => {
+    const before = Number(git(main, "rev-list", "--count", "HEAD"));
+    const out = ok(["--yes"]);
+    expect(out).toMatch(/^archived 2 items$/m);
+    const archive = readFileSync(archiveFile(), "utf8");
+    expect(archive).toMatch(/### B-2 /);
+    expect(archive).toMatch(/### B-3 /);
+    const left = readFileSync(backlogFile(), "utf8");
+    expect(left).toMatch(/### B-1 /);
+    expect(left).toMatch(/### B-4 /);
+    expect(left).not.toMatch(/### B-2 |### B-3 /);
+    // One write: a new commit, or folded into the backlog commit before it.
+    expect(Number(git(main, "rev-list", "--count", "HEAD")) - before).toBeLessThanOrEqual(1);
+    expect(git(main, "log", "-1", "--format=%B")).toContain("Backlog-Tool: archive");
+  });
+});

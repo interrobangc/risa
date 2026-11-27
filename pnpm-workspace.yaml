@@ -1,0 +1,6 @@
+# pnpm settings live here only (no .npmrc; unknown keys fail).
+allowBuilds:
+  esbuild: true
+
+# Wait a day before installing a newly published package.
+minimumReleaseAge: 1440

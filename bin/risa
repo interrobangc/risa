@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# risa: the tool's one command. `risa backlog …` is the backlog (backlog/backlog.mjs);
+# every other `risa …` is the orchestration command (loops/prd.sh). The repo it acts
+# on is the one the current directory is in, as the machine config lists it.
+set -euo pipefail
+self=$(readlink -f "${BASH_SOURCE[0]}")
+root=$(cd "$(dirname "$self")/.." && pwd)
+if [[ ${1:-} == backlog ]]; then
+  shift
+  # prd.sh finds the repo through lib.sh; the backlog takes its config from here.
+  machine=${RISA_MACHINE_CONFIG-$HOME/.risa/machine.json}
+  if [[ -z ${RISA_CONFIG:-} && -n $machine && -f $machine ]]; then
+    rc=0
+    listed=$(node "$root/loops/machine.mjs" repo --cwd "$PWD") || rc=$?
+    case $rc in
+      0) RISA_CONFIG=$(sed -n 2p <<< "$listed") && export RISA_CONFIG ;;
+      1) ;;
+      *) exit 2 ;;
+    esac
+  fi
+  exec node "$root/backlog/backlog.mjs" "$@"
+fi
+exec bash "$root/loops/prd.sh" "$@"

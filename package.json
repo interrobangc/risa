@@ -1,0 +1,35 @@
+{
+  "name": "risa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Runs Claude sessions (orchestrators, slices, planners, a backlog) in the repos a machine config names.",
+  "type": "module",
+  "bin": {
+    "risa": "bin/risa"
+  },
+  "exports": {
+    "./loops/time-gate.mjs": "./loops/time-gate.mjs",
+    "./ci/tier-data.mjs": "./ci/tier-data.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@12.21.0",
+  "scripts": {
+    "test": "vitest run --project core:unit --project tooling:unit",
+    "test:browser-harness": "vitest run --project tooling:browser",
+    "test:tooling": "node loops/tooling-lint.mjs && node loops/tooling-tests.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:budget": "node loops/docs-budget.mjs",
+    "check": "pnpm format:check && pnpm lint && pnpm docs:budget && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "vitest": "5.1.0"
+  }
+}

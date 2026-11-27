@@ -1,0 +1,4 @@
+pnpm-lock.yaml
+loops/codex-review.fixtures/
+ci/verdict.fixtures/
+loops/sample-project/prompt-golden.txt
