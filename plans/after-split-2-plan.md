@@ -20,7 +20,7 @@
 
 **Slice 2:** merged at 57736ed (from a415761): rm re-points RISA_CONFIG and the mark at `$main/risa.json` when the config is under the removed worktree. Same load-timeout story in its slice check; stack.test passes 22/22 alone.
 
-**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip (running).
+**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip: 9 failures in 5 files, all load timeouts (load ~25); the 5 files pass alone (174/174) at load ~6: green. Filed RISA-1000 (fixes-tooling) for the suite timing out under load. `risa sync`: no merge needed. PR https://github.com/interrobangc/risa/pull/8 open; Codex review waiting.
 
 **Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
 
