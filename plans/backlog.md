@@ -78,15 +78,15 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-953 | bug | ready | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
 | RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | triaged | fixes-tooling |  | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
-| RISA-970 | change | in-progress | after-split | prd/after-split | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
-| RISA-971 | change | in-progress | after-split | prd/after-split | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
+| RISA-970 | change | ready | after-split | prd/after-split | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
+| RISA-971 | change | ready | after-split | prd/after-split | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
 | RISA-972 | question | triaged | after-split-2 |  | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
 | RISA-973 | bug | live | after-split |  | A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it |
-| RISA-974 | chore | triaged | after-split |  | The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show |
+| RISA-974 | chore | ready | after-split | prd/after-split | The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show |
 | RISA-975 | bug | ready | after-split | prd/after-split | 217 tests fail on main since the move into Risa's own repo (B-543): many read Risa's own risa.json instead of the fixture (no paths.tierData, no backlog.ciFailureTopic, no item RISA-1) or expect 'pnpm prd' where output now says 'risa'; same set on untouched main at c11e0d6 |
-| RISA-976 | bug | in-progress | after-split | prd/after-split | A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28 |
-| RISA-977 | bug | in-progress | after-split | prd/after-split | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
-| RISA-978 | change | in-progress | after-split | prd/after-split | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
+| RISA-976 | bug | ready | after-split | prd/after-split | A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28 |
+| RISA-977 | bug | ready | after-split | prd/after-split | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
+| RISA-978 | change | ready | after-split | prd/after-split | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
 | RISA-979 | bug | ready | after-split | prd/after-split | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
 | RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | triaged | fixes-bug |  | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
@@ -98,11 +98,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-987 | bug | triaged | fixes-tooling |  | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
 | RISA-988 | bug | inbox |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
 | RISA-989 | bug | triaged | fixes-tooling |  | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
-| RISA-990 | bug | in-progress | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
+| RISA-990 | bug | ready | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-992 | bug | triaged | fixes-tooling |  | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
 | RISA-993 | bug | triaged | fixes-tooling |  | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
 | RISA-994 | bug | triaged | fixes-tooling |  | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
+| RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
 
 ## Items
 
@@ -651,19 +652,19 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-970 · change · Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today)
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 - 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
 
 ### RISA-971 · change · docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 - 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
 
@@ -688,10 +689,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-974 · chore · The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show
 
-- status: triaged
+- status: ready
 - prd: after-split
-- owner:
-- commit:
+- owner: prd/after-split
+- commit: d660e0b
 
 - 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
 
@@ -707,26 +708,26 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-976 · bug · A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 - 2026-11-27 (Robert Bo Davis): Index rebuilt with git reset; nothing lost
 
 ### RISA-977 · bug · risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 ### RISA-978 · change · On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 ### RISA-979 · bug · 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab
 
@@ -832,10 +833,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-990 · bug · dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in
 
-- status: in-progress
+- status: ready
 - prd: after-split
 - owner: prd/after-split
-- commit:
+- commit: b5cef69
 
 - 2026-11-27 (prd/fixes-tooling): Seen 2026-11-27 by fixes-tooling's wave 1 gate; fails the same on main in a detached worktree, so pre-existing. loops/dispatch* is after-split's hot file.
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: moved from fixes-tooling to after-split; after-split slice 1 (the hermetic test run) fixes it.
@@ -876,3 +877,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
+
+### RISA-995 · chore · Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command
+
+- status: triaged
+- prd: fixes-nit
+- owner:
+- commit:
+
+- 2026-11-27 (prd/after-split): Seen by after-split slice 6 (2026-11-27), which changed only the generic docs
