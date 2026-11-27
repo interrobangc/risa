@@ -63,6 +63,7 @@ const ok = (args) => {
 };
 const filedAsks = () => (existsSync(asks) ? readdirSync(asks).filter((f) => f.endsWith(".json")) : []);
 const lease = () => join(leases, "check", "1");
+const waiter = () => join(leases, "check", ".waiting", "999995");
 const old = (p) => utimesSync(p, new Date(Date.now() - 3600_000), new Date(Date.now() - 3600_000));
 
 beforeAll(() => {
@@ -152,6 +153,11 @@ beforeAll(() => {
   mkdirSync(lease(), { recursive: true });
   writeFileSync(join(lease(), "name"), "pid=999999\nworktree=t-3\ncheck=pnpm check\n");
   old(lease());
+  // A taker that died while queued for a check lease: lease.sh's own record, not a lease.
+  mkdirSync(waiter(), { recursive: true });
+  writeFileSync(join(waiter(), "name"), "pid=999995\nworktree=t-3\ncheck=pnpm check (waiting for a lease)\n");
+  old(waiter());
+  old(join(leases, "check", ".waiting"));
   // A browser-hang log from last month.
   mkdirSync(join(loops, ".browser-hangs"), { recursive: true });
   writeFileSync(join(loops, ".browser-hangs", "t-ui-1.log"), "hung\n");
@@ -196,6 +202,7 @@ describe("tidy (no --yes)", () => {
     expect(out).toMatch(/^ {2}volume +sample-loop9_data \(dangling; no worktree uses sample-loop9\)$/m);
     expect(out).toMatch(/^ {2}hang-log +.*t-ui-1\.log \(30 days old\)$/m);
     expect(out).not.toMatch(/t-3 \(|img1/);
+    expect(out).not.toMatch(/\.waiting/);
     expect(out).toMatch(/Nothing changed\. pnpm prd tidy --yes removes the safe ones\./);
 
     for (const n of ["t-1", "t-2", "t-3"]) expect(existsSync(join(loops, n))).toBe(true);
@@ -328,6 +335,9 @@ describe("tidy --yes", () => {
     expect(existsSync(join(loops, "t-1"))).toBe(false);
     expect(git(main, "branch", "--list", "slice/t/1")).toBe("");
     expect(existsSync(lease())).toBe(false);
+    // The stale waiter was never listed, so --yes leaves it to lease.sh (and exits 0).
+    expect(out).not.toMatch(/\.waiting|isn't a lease/);
+    expect(existsSync(waiter())).toBe(true);
     expect(existsSync(join(sessions, "prd-gone.json"))).toBe(false);
     expect(existsSync(join(sessions, "backlog.json"))).toBe(false);
 
