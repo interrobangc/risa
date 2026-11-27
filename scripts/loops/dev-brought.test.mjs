@@ -1,6 +1,6 @@
 // What dev brought since the last sync (dev-brought.mjs), over throwaway repositories,
-// with the sample project's check plan rules (this repo's risky kinds:
-// scripts/project/check-plan-rules.test.mjs).
+// with the sample project's check plan rules, its command line on the fixture project's
+// (a project's own risky kinds: scripts/project/check-plan-rules.test.mjs).
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -244,8 +244,10 @@ describe("devBrought", () => {
 });
 
 describe("the command line", () => {
+  // On the fixture project's config and rules, never the checkout's.
+  const env = { ...process.env, RISA_CONFIG: join(HERE, "fixture-project/risa.json") };
   const cli = (...args) =>
-    spawnSync(process.execPath, [join(HERE, "dev-brought.mjs"), ...args], { encoding: "utf8" });
+    spawnSync(process.execPath, [join(HERE, "dev-brought.mjs"), ...args], { encoding: "utf8", env });
 
   it("prints the verdict as JSON and exits 0, a refusal included", () => {
     on("branch");

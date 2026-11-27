@@ -1,17 +1,12 @@
 // The check plan's engine on the sample project's rules (sample-project/tools/):
-// this repo's own rules are its data, tested beside it (scripts/project/).
+// the fixture project's rules for today's answers; a project's own rules are its data,
+// tested beside it (scripts/project/) and by the project-data check.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  CheckPlanRulesError,
-  checkPlan,
-  checkPlanFor,
-  checkPlanRulesProblems,
-  parseArgs,
-} from "./check-plan.mjs";
+import { CheckPlanRulesError, checkPlanFor, checkPlanRulesProblems, parseArgs } from "./check-plan.mjs";
 import { CONFIG_NAME, loadConfig } from "./config.mjs";
 import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 
@@ -20,6 +15,8 @@ const CLI = join(HERE, "check-plan.mjs");
 const SAMPLE = loadConfig({ path: SAMPLE_CONFIG });
 const RULES = JSON.parse(readFileSync(join(SAMPLE.root, SAMPLE.config.paths.checkPlanRules), "utf8"));
 const plan = checkPlanFor(SAMPLE);
+/** The fixture project's plan: today's names, its own rules. */
+const fixture = checkPlanFor(loadConfig({ path: join(HERE, "fixture-project/risa.json") }));
 const { planCheck, proposeTier, keepsVerdict, syncTier, declaredStatus, planToolingLint, riskyKind } = plan;
 
 /** The sample with CI's two lists set, as a project with them has. */
@@ -37,14 +34,14 @@ describe("the sample's rules", () => {
     expect(plan.PROPOSED_TIERS).toEqual(["none", "lint", "test", "e2e"]);
   });
 
-  it("change the answers from this repo's", () => {
+  it("change the answers from the fixture project's", () => {
     // The same diffs, another project's rules: its tiers, its paths, its reasons.
     expect(proposeTier(["web/a.js"])).toEqual({ tier: "test", reason: "web code (web/a.js)" });
-    expect(checkPlan().proposeTier(["web/a.js"]).reason).toBe("a file no rule covers (web/a.js)");
+    expect(fixture.proposeTier(["web/a.js"]).reason).toBe("a file no rule covers (web/a.js)");
     expect(proposeTier(["lock.json"]).tier).toBe("e2e");
-    expect(checkPlan().proposeTier(["lock.json"]).tier).toBe("full");
+    expect(fixture.proposeTier(["lock.json"]).tier).toBe("full");
     expect(planCheck(["web/a.slow.test.js"], "slice").ownTests).toEqual(["web/a.slow.test.js"]);
-    expect(checkPlan().planCheck(["web/a.slow.test.js"], "slice").ownTests).toEqual([]);
+    expect(fixture.planCheck(["web/a.slow.test.js"], "slice").ownTests).toEqual([]);
   });
 });
 
