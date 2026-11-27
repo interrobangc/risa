@@ -13,7 +13,7 @@
 | 3     | 1    | RISA-367 | opus  | started 2026-11-27 (worktree `.loops/fixes-tooling-3`, agent spawned)                                                                                | —                              |
 | 4     | 1    | RISA-477 | opus  | handed off (e959760; `prd status` and dispatch `--dry-run` printing the reason left for later: `loops/ls.sh`, `loops/dispatch*` are after-split hot) | —                              |
 | 5     | 1    | RISA-911 | opus  | handed off (adcb902); merges after 2 to 4                                                                                                            | —                              |
-| 6     | 1    | RISA-880 | opus  | started 2026-11-27 (worktree `.loops/fixes-tooling-6`, agent spawned)                                                                                | —                              |
+| 6     | 1    | RISA-880 | opus  | handed off (68b19a0; planner soft limit 160k, hard 225k)                                                                                             | —                              |
 | 7     | 1    | RISA-721 | opus  | handed off (e7d50a2; also edits `backlog/backlog.mjs`, like slice 4: watch the merge)                                                                | —                              |
 
 **Wave 1** (2026-11-27): slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
