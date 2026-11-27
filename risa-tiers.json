@@ -1,0 +1,18 @@
+{
+  "tiers": ["unit"],
+  "jobs": {
+    "unit": ["check"]
+  },
+  "fileGroups": [
+    {
+      "group": "unit",
+      "pattern": "*",
+      "tier": "unit"
+    }
+  ],
+  "narrowedTiers": ["unit"],
+  "browserCheck": "e2e/*.spec.mjs",
+  "narrowedFile": ".ci-narrowed.json",
+  "forcedFlakeFile": ".github/ci-force-flake.json",
+  "refPrefix": "ci/"
+}

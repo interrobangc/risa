@@ -13,10 +13,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | — | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | — | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
+| `fixes-tooling` | standing | — | `loops/tidy`, `loops/tooling-lint`, `loops/lib.sh`, `loops/pr`, `loops/ready`, `backlog/registry`, `loops/prd.sh`, `loops/lease`, `loops/check-run.sh`, `loops/wait`, `loops/hooks`, `loops/context`, `loops/prompts`, `ci/ci-file`, `ci/filing` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
 | `fixes-bug` | standing | — | — | Small fixes for wrong behaviour or data (plans/fixes-rules.md) |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | To write. Ship dev to staging in one command, Codex findings filed by tool, a staging to-test report (B-404, B-430, B-436). Cut from orchestration-3; doesn't need the dispatcher |
-| `self-recovery-2` | — | — | `loops/session`, `loops/open-session`, `loops/dispatch`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Cost record and headless sessions, cut from self-recovery to keep it at six slices |
+| `self-recovery-2` | hold | — | `loops/session`, `loops/open-session`, `loops/dispatch`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Cost record and headless sessions, cut from self-recovery to keep it at six slices |
 | `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Also moved to the bottom of the queue by the user 2026-11-24. Released 2026-11-23 by the user. The backlog session as go-between for every agent's questions, and asks queue hygiene. Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic) |
 | `risa-next` | hold | — | — | — |
 | `usage-aware-drain` | hold | — | — | Plan-aware drain line, after the orchestrator split |
@@ -29,7 +29,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | Id | Type | Status | PRD | Owner | Title |
 | -- | ---- | ------ | --- | ----- | ----- |
 | RISA-241 | bug | triaged | staging-ship |  | codex-review: PR_QUERY reads only the first 100 review threads (and 50 comments each), so a PR with more could read as clean |
-| RISA-367 | chore | triaged | fixes-tooling |  | Agent tooling: tests for the merge path (land.sh, pr.sh, ready.sh, review.sh: 465 lines, none), and with_backlog_lock removes a stale lock without re-checking, so two waiters can both take it |
+| RISA-367 | chore | in-progress | fixes-tooling | prd/fixes-tooling | Agent tooling: tests for the merge path (land.sh, pr.sh, ready.sh, review.sh: 465 lines, none), and with_backlog_lock removes a stale lock without re-checking, so two waiters can both take it |
 | RISA-404 | feature | triaged | staging-ship |  | One command to ship dev to staging: push dev, open the dev into staging PR, wait for Codex's review, triage its findings into the backlog (verified against the code, duplicates noted on the existing item), merge the PR when nothing is a blocker, and notify the user only when something is |
 | RISA-429 | change | triaged | asks-relay |  | Asks queue hygiene: reports that go stale are re-checked or expire, answered asks are archived, and an ask whose session has died still reaches the user |
 | RISA-430 | feature | triaged | staging-ship |  | Codex findings on a PRD pull request become backlog items by tool: verified against the code, duplicates noted on the existing item, as B-404 does for the staging PR |
@@ -37,12 +37,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-438 | plan | triaged | self-recovery-2 |  | Headless orchestrator sessions: runs that need no terminal tab, so a helper cannot outlive or die with its window |
 | RISA-459 | chore | triaged | fixes-tooling |  | Backlog: 151 items read 'live' because the dev-into-staging-into-main release merge (cc3e1d8b, B-33) put their commits on origin/main, though production hasn't launched; give live a real meaning (a production marker such as a tag or a recorded deploy) or show main as staging until launch |
 | RISA-467 | feature | triaged | asks-relay |  | The backlog session is the go-between for every agent's questions: agents file to the asks queue and wait, the backlog session ranks them by how soon an answer blocks real work, asks the user itself and decides which ones ping the phone |
-| RISA-477 | change | triaged | fixes-tooling |  | PRD registry: a hold carries its reason |
+| RISA-477 | change | in-progress | fixes-tooling | prd/fixes-tooling | PRD registry: a hold carries its reason |
 | RISA-560 | feature | triaged | self-recovery-2 |  | A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost |
 | RISA-584 | chore | triaged | staging-ship |  | Backlog prompt: "deploy staging" trigger that promotes dev and notifies my phone |
 | RISA-681 | bug | triaged | fixes-tooling |  | Promotion prints a passing flake's tests but doesn't file them in the backlog |
-| RISA-720 | chore | triaged | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
-| RISA-721 | bug | triaged | fixes-tooling |  | Second-zone filing opens a new item when a zone item was landed or dropped but staging still lacks the fix |
+| RISA-720 | chore | dropped | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
+| RISA-721 | bug | in-progress | fixes-tooling | prd/fixes-tooling | Second-zone filing opens a new item when a zone item was landed or dropped but staging still lacks the fix |
 | RISA-722 | bug | triaged | fixes-tooling |  | A release run after a recorded override replaces the override's release-gate status, so a failing run blocks main again |
 | RISA-780 | change | triaged | fixes-tooling |  | CI warns when a branch's quarantine or brake list trails dev's (follow-up of B-771 sync brings dev's CI lists) |
 | RISA-789 | change | triaged | self-recovery-2 |  | A landing journal (even one whose pid is dead) holds a session's resume after a usage limit with only a waits line each tick; file one report so the user runs pnpm prd land --resume |
@@ -57,43 +57,46 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-816 | question | triaged | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
 | RISA-820 | feature | triaged | risa-next |  | Risa: cross-repo topics: a Risa topic can change a configured subproject's code (Caretook), each side passing its own repo's checks |
 | RISA-841 | change | triaged | risa-next |  | Risa: one inbox session for every configured project, lines kept in a private inbox repo |
-| RISA-880 | chore | triaged | fixes-tooling |  | Planners get the context watch: add plan sessions to the context hook (data-rights peaked 256k, onboarding-2 214k) |
+| RISA-880 | chore | in-progress | fixes-tooling | prd/fixes-tooling | Planners get the context watch: add plan sessions to the context hook (data-rights peaked 256k, onboarding-2 214k) |
 | RISA-881 | chore | triaged | fixes-tooling |  | Slice small at planning (elephant carpaccio): a per-slice budget (about 4 files, one test file, expected context under ~100k), each slice names its own narrow check command and runs only that, full pnpm check once at the wave's landing; no two slices in a wave share a test file; the orchestrator splits only a slice that comes back over budget |
 | RISA-882 | chore | triaged | fixes-tooling |  | Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now) |
 | RISA-883 | chore | triaged | fixes-tooling |  | Token use measured by price: a price-weighted before/after (cache writes ~3% of tokens but ~30% of cost) to judge B-873, B-875, B-876 |
 | RISA-886 | change | triaged | fixes-tooling |  | Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call |
 | RISA-889 | feature | triaged | fixes-tooling |  | Backlog agent can hand off with instructions the next agent actually follows, continuing the work… |
-| RISA-911 | chore | triaged | fixes-tooling |  | pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc) |
+| RISA-911 | chore | in-progress | fixes-tooling | prd/fixes-tooling | pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc) |
 | RISA-912 | plan | triaged | self-recovery-2 |  | Slices as their own headless sessions: started by a prd command, hand-offs to a file the orchestrator watches, so a slice survives an orchestrator rotation and can rotate or resume mid-slice itself |
 | RISA-913 | plan | triaged | self-recovery-2 |  | Any role's long work runs as a job the machinery owns, so a hand-off never interrupts it: commands (check, land, CI waits, deploys, dev servers), watchers with a follow-up action (durable triggers the dispatcher fires), side-work subagents (headless sessions); each writes a result file, the hand-off records job ids, and the next session re-attaches instead of rerunning or re-arming |
 | RISA-914 | plan | triaged |  |  | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
 | RISA-915 | bug | triaged | fixes-tooling |  | A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time |
 | RISA-926 | bug | triaged | fixes-tooling |  | The dispatcher's keep-alive and session requests ignore the machine config's work switch: a repo with work off still gets its backlog and inbox sessions opened |
 | RISA-927 | bug | triaged | fixes-tooling |  | The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers |
-| RISA-932 | bug | triaged | after-split |  | rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*) |
-| RISA-933 | chore | triaged | fixes-tooling |  | test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line |
+| RISA-932 | bug | in-progress | after-split | prd/after-split | rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*) |
+| RISA-933 | chore | ready | fixes-tooling | prd/fixes-tooling | test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line |
 | RISA-934 | chore | triaged | fixes-tooling |  | Archive finished rows out of the PRD registry table (75 done rows clutter it) |
-| RISA-935 | bug | triaged | fixes-tooling |  | prd tidy lists lease .waiting files as safe to remove, then refuses them as not a lease |
+| RISA-935 | bug | ready | fixes-tooling | prd/fixes-tooling | prd tidy lists lease .waiting files as safe to remove, then refuses them as not a lease |
 | RISA-952 | chore | triaged | fixes-tooling |  | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
-| RISA-953 | bug | triaged | after-split |  | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
-| RISA-968 | feature | triaged | fixes-tooling |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
+| RISA-953 | bug | in-progress | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
+| RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | triaged | fixes-tooling |  | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
 | RISA-970 | change | triaged | after-split |  | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
 | RISA-971 | change | triaged | after-split |  | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
 | RISA-972 | question | triaged | after-split-2 |  | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
 | RISA-973 | bug | live | after-split |  | A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it |
 | RISA-974 | chore | triaged | after-split |  | The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show |
-| RISA-975 | bug | triaged | after-split |  | 217 tests fail on main since the move into Risa's own repo (B-543): many read Risa's own risa.json instead of the fixture (no paths.tierData, no backlog.ciFailureTopic, no item RISA-1) or expect 'pnpm prd' where output now says 'risa'; same set on untouched main at c11e0d6 |
+| RISA-975 | bug | in-progress | after-split | prd/after-split | 217 tests fail on main since the move into Risa's own repo (B-543): many read Risa's own risa.json instead of the fixture (no paths.tierData, no backlog.ciFailureTopic, no item RISA-1) or expect 'pnpm prd' where output now says 'risa'; same set on untouched main at c11e0d6 |
 | RISA-976 | bug | triaged | after-split |  | A test fixture whose temp repo fails to init runs its git commands in the real checkout: with git 2.24 (no 'git init -b') the suite emptied the main checkout's index. Fixtures should stop on a failed init, and risa should refuse or warn on git older than 2.28 |
 | RISA-977 | bug | triaged | after-split |  | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
 | RISA-978 | change | triaged | after-split |  | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
-| RISA-979 | bug | triaged | after-split |  | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
+| RISA-979 | bug | in-progress | after-split | prd/after-split | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
 | RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | triaged | fixes-bug |  | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
 | RISA-982 | bug | dropped | fixes-bug |  | Fixes orchestrators keep waiting for new work when they run out |
 | RISA-983 | change | dropped | risa-next |  | Inbox per project, not per machine |
 | RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
 | RISA-985 | bug | triaged | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
+| RISA-986 | change | triaged | fixes-tooling |  | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
+| RISA-987 | bug | triaged | fixes-tooling |  | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
+| RISA-988 | bug | inbox |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
 
 ## Items
 
@@ -113,9 +116,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-367 · chore · Agent tooling: tests for the merge path (land.sh, pr.sh, ready.sh, review.sh: 465 lines, none), and with_backlog_lock removes a stale lock without re-checking, so two waiters can both take it
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-21 (Robert Bo Davis): Code review 2026-11-21, from a reviewer's reading, not re-verified by the backlog session. scripts/loops/lib.sh:329. Also: lease.sh still carries the old .loops/.browser path; 22 of 34 CARETOOK_* knobs are undocumented. Goes with B-239 to B-242.
@@ -207,9 +210,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-477 · change · PRD registry: a hold carries its reason
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-21 (Robert Bo Davis): User, 2026-11-21 (backlog session): "we probably need a 'hold reason' field for some of these holds to make them easier to manage in another session that doesn't have this context." Backlog session's sketch, not the user's words: pnpm backlog prd set <topic> flags=hold takes a reason (and a date), prd list, prd status and dispatch --dry-run print it beside 'on hold', and clearing the hold clears it; dispatch --pause already takes a <why>. Reasons for the holds set in this session, to fill in when the field exists: planner-3 (a note can carry a todo) is held because its landed plan must be revised to the user's design first, see the note on B-245; contract-migrations, asks-relay, sync-safety-2, ui-kit-3, code-health-2 and code-health-3 are held only to stop planning from burning model usage (user's pick, 2026-11-21), not for any problem with the topics: release them when the user wants planning to resume.
@@ -253,7 +256,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-720 · chore · Confirm dev syncs that share no files with a branch no longer trigger a second CI run
 
-- status: triaged
+- status: dropped
 - prd: fixes-tooling
 - owner:
 - commit:
@@ -262,12 +265,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-24 (prd/fixes-tooling): Proposed by the fixes-tooling orchestrator 2026-11-24. This item: wave 7 (landing, Codex, cleanup).
 - 2026-11-24 (Robert Bo Davis): 2026-11-24 evidence: not clean. Single-slice and small waves still ran twice: test-health-2 slice 5 full x3 (83cadbcf, ec1c138e, e4effb6a), slice 6 full x2 (841ce494, 24218d92); sync-safety slice 3 components x2 (4a3a9550, b004ec55); symptom-catalog components 2a821ccc, 6a246c1e, f47cc0a2; fixes-bug 9d3f2e2c, 82a3cf1b. Most syncs brought risky files (migrations, scripts/ci, package.json, workflow, apps/), so unsynced_safe rightly refused. The waste has other causes, filed separately: the recheck runs the wave's tier when dev brought only tooling (fixes-bug 82a3cf1b, 9m components); the PRD's own plan file counts as a shared file (plans/fixes-bug-plan.md was the only overlap); the wave runs before the sync, so every synced wave pays twice.
 - 2026-11-27 (the Risa move, B-543): Was B-720 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: dropped. A check on Caretook's CI; its causes are filed separately, and Risa has no dev branch.
 
 ### RISA-721 · bug · Second-zone filing opens a new item when a zone item was landed or dropped but staging still lacks the fix
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-23 (prd/test-gates-2): From test-gates-2 slice 6: zone-file matches open items only, so the next release run refiles that file.
@@ -423,9 +427,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-880 · chore · Planners get the context watch: add plan sessions to the context hook (data-rights peaked 256k, onboarding-2 214k)
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-26 (Robert Bo Davis): 2026-11-26: from the token-use skeptic (s57), filed on the user's word. machinery.md: hooks only for prd, backlog, inbox.
@@ -443,6 +447,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-27 (the Risa move, B-543): Was B-881 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: widened from 'split a 200k+ slice' to a planner slicing rule. The planner owns the breakdown; the orchestrator's split is the fallback. The budget figures are a starting point, judged with RISA-883 (cost by price). Needs hermetic tests first (after-split slice 1); pairs with RISA-882 (Sonnet for tightly specified slices). The floor: a slice's fixed cost (worktree, session start, prompt, check, review, merge) must stay a small share of it.
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: projects get the rule from Risa's generic planner and orchestrator docs once they move to the release that has it. What each project supplies: a command that runs one test file, set in its risa.json (the narrow check differs per runner, so the rule has to name a config key, not hard-code vitest), and its own role-doc additions checked so they don't contradict the rule.
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: stays in fixes-tooling, though it's a feature rather than a fix.
 
 ### RISA-882 · chore · Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now)
 
@@ -463,6 +468,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-26 (Robert Bo Davis): 2026-11-26: from the token-use skeptic (s57), filed on the user's word. Scripts in .loops/token-analysis/.
 - 2026-11-27 (the Risa move, B-543): Was B-883 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: stays in fixes-tooling, though it's a feature rather than a fix.
 
 ### RISA-886 · change · Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call
 
@@ -473,6 +479,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-26 (Robert Bo Davis): Triage: backlog-session hand-off behaviour (guide and rotate --brief); B-889 may outgrow a fix wave, for the user's review.
 - 2026-11-27 (the Risa move, B-543): Was B-886 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: stays in fixes-tooling, though it's a feature rather than a fix.
 
 ### RISA-889 · feature · Backlog agent can hand off with instructions the next agent actually follows, continuing the work…
 
@@ -484,12 +491,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-26 (Robert Bo Davis): From the inbox: Backlog agent can hand off with instructions the next agent actually follows, continuing the work without asking its first question, when the user asked for a handoff that way
 - 2026-11-26 (Robert Bo Davis): Triage: backlog-session hand-off behaviour (guide and rotate --brief); B-889 may outgrow a fix wave, for the user's review.
 - 2026-11-27 (the Risa move, B-543): Was B-889 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: stays in fixes-tooling, though it's a feature rather than a fix.
 
 ### RISA-911 · chore · pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc)
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-26 (prd/fixes-tooling): Found in fixes-tooling slice 86 (B-903, 2026-11-26): a foreground wait --timeout 590 went to the background at 180 s; --timeout 160 rerun on each 75 worked.
@@ -557,9 +565,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-932 · bug · rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*)
 
-- status: triaged
+- status: in-progress
 - prd: after-split
-- owner:
+- owner: prd/after-split
 - commit:
 
 - 2026-11-26 (prd/fixes-nit): Found by fixes-nit's orchestrator 2026-11-26 running pnpm test:tooling inside its session: 'rm.sh from inside the worktree it removes (B-812)' > 'ends its own orchestrator's session…' (expected null to be 'SIGTERM') and '…refuses another caller inside it…' fail 2/2 runs; with RISA_SESSIONS_DIR, RISA_SESSION_PID, RISA_SESSION_NAME, RISA_CONTEXT_HOOK unset they pass (3/3). Fix: the test clears or sets those vars for its child processes.
@@ -568,10 +576,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-933 · chore · test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line
 
-- status: triaged
+- status: ready
 - prd: fixes-tooling
-- owner:
-- commit:
+- owner: prd/fixes-tooling
+- commit: 9ed410c
 
 - 2026-11-26 (prd/orchestration-split-4): Found in orchestration-split-4 slice 2: run project-check before tooling-lint in package.json's test:tooling, or have the lint catch TierDataError
 - 2026-11-27 (the Risa move, B-543): Was B-933 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -588,10 +596,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-935 · bug · prd tidy lists lease .waiting files as safe to remove, then refuses them as not a lease
 
-- status: triaged
+- status: ready
 - prd: fixes-tooling
-- owner:
-- commit:
+- owner: prd/fixes-tooling
+- commit: 182c26b
 
 - 2026-11-26 (Robert Bo Davis): Seen 2026-11-26: tidy listed .loops/.lease/browser/.waiting and check/.waiting (pid ? is gone); --yes failed with 'isn't a lease (<root>/<kind>/<N>)' and exit 1. The preview and the remover disagree.
 - 2026-11-27 (the Risa move, B-543): Was B-935 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -609,9 +617,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-953 · bug · Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null)
 
-- status: triaged
+- status: in-progress
 - prd: after-split
-- owner:
+- owner: prd/after-split
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Backlog session 2026-11-27 ~06:05, dev 48de4b6f+: failed 4 of 4 runs of that file alone at low load, the same with the session's prompt edit stashed, so not caused by it. Run from inside a Claude Code session; may depend on that environment. Both tests: 'ends its own orchestrator's session once the worktree is gone', 'refuses another caller inside it'
@@ -622,9 +630,11 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 ### RISA-968 · feature · Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config)
 
 - status: triaged
-- prd: fixes-tooling
+- prd:
 - owner:
 - commit:
+
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: out of fixes-tooling (a feature, not a fix), unassigned until it's better understood.
 
 ### RISA-969 · chore · CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main
 
@@ -681,9 +691,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-975 · bug · 217 tests fail on main since the move into Risa's own repo (B-543): many read Risa's own risa.json instead of the fixture (no paths.tierData, no backlog.ciFailureTopic, no item RISA-1) or expect 'pnpm prd' where output now says 'risa'; same set on untouched main at c11e0d6
 
-- status: triaged
+- status: in-progress
 - prd: after-split
-- owner:
+- owner: prd/after-split
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Found on the second machine, 2026-11-27, with git 2.39
@@ -714,9 +724,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-979 · bug · 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab
 
-- status: triaged
+- status: in-progress
 - prd: after-split
-- owner:
+- owner: prd/after-split
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Shelby's run, 2026-11-27: 2185 of 2195 pass, prettier/eslint/docs budget pass. Usage got 'Usage: unknown: no current reading' for 'Usage, read 1m ago from 1 session'. Guessed cause (unchecked): the machine's live dispatcher, sessions and usage readings leak into the tests. Log on that machine: /private/tmp/claude-501/-Users-bo-git-caretook-caretook-com/7d3733d4-a8b2-4aaa-8c54-c653f5760b8f/scratchpad/risa-check.log. Separate from RISA-975 (217 fail on the second machine).
@@ -777,3 +787,30 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - prd: fixes-bug
 - owner:
 - commit:
+
+### RISA-986 · change · PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 4 (2026-11-27): left out because loops/ls.sh and loops/dispatch* are after-split's hot files.
+
+### RISA-987 · bug · tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 2 (2026-11-27).
+
+### RISA-988 · bug · risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181)
+
+- status: inbox
+- prd:
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): 2026-11-27: from the fixes-tooling orchestrator; two slices couldn't run their hand-off check. The user's word: a hotfix now (hotfix/check-plan-rules).
