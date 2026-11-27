@@ -240,6 +240,23 @@ describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", 
     expect(cli(["wait", "check", "--worktree", "wt-a", "--timeout", "1"]).status).toBe(0);
   });
 
+  it("defaults to a 160 s timeout, under the harness's foreground limit, and exits 75 at it", async () => {
+    // The wait's clock is its polls: a `sleep` that returns at once runs it out
+    // without the real 160 s.
+    const bin = join(root, "fast-sleep");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "sleep"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const h = await hold("check", "held by a", wt);
+    const w = prdWait([], { PATH: `${bin}:${process.env.PATH}`, RISA_LEASE_POLL: "5" });
+    expect(await w.exit).toBe(75);
+    expect(w.out).toMatch(/Waiting \(up to 2m40s\) for wt-a's check:/);
+    expect(w.err).toMatch(/Gave up after 2m40s: wt-a's check is still running/);
+    h.child.stdin.end();
+    await h.exit;
+    const help = spawnSync("bash", [PRD_SH, "help"], { env, encoding: "utf8" }).stdout;
+    expect(help).toMatch(/\(default 160 s,\s+under the harness's ~170 s foreground limit\)/);
+  });
+
   it("counts a check still queued for a lease, and forgets it once it takes one or is killed", async () => {
     const extra = { RISA_QUEUE_SLOTS: "1" };
     const first = await hold("queue", "first", { ...extra, lease_worktree: "wt-other" });

@@ -131,6 +131,61 @@ describe("edits", () => {
   });
 });
 
+describe("a hold's reason", () => {
+  const today = "2026-11-21";
+
+  it("is set with the hold and the date, written in the Flags cell, and read back", () => {
+    const held = reg.setRow(
+      row("s", { flags: ["standing"] }),
+      ["flags+=hold", "why=waits on (the user), for now"],
+      {
+        today,
+      },
+    );
+    expect(held).toEqual(
+      row("s", { flags: ["standing", "hold"], held: { date: today, why: "waits on (the user), for now" } }),
+    );
+    expect(reg.heldText(held)).toBe("2026-11-21: waits on (the user), for now");
+    const preamble = reg.withRows(NEW, [
+      held,
+      row("t", { flags: ["hold", "design"], held: { date: today, why: "a|b" } }),
+    ]);
+    expect(preamble).toContain(
+      "| `s` | standing, hold (2026-11-21: waits on (the user), for now) | — | — | — |",
+    );
+    expect(preamble).toContain("| `t` | hold (2026-11-21: a\\|b), design | — | — | — |");
+    const back = reg.rowsOf(preamble);
+    expect(back[0]).toEqual(held);
+    expect(back[1].flags).toEqual(["hold", "design"]);
+    expect(back[1].held).toEqual({ date: today, why: "a|b" });
+    expect(reg.withRows(preamble, back)).toBe(preamble);
+  });
+
+  it("stays while the hold does, and goes when it's cleared", () => {
+    const held = reg.setRow(row("s"), ["flags=hold", "why=later"], { today });
+    expect(reg.setRow(held, ["flags+=standing", "notes=x"]).held).toEqual({ date: today, why: "later" });
+    expect(reg.setRow(held, ["flags-=hold"])).toEqual(row("s"));
+    expect(reg.setRow(held, ["flags=—"])).toEqual(row("s"));
+    expect(reg.setRow(held, ["why=—"])).toEqual(row("s", { flags: ["hold"] }));
+    expect(reg.setRow(held, ["why=sooner"], { today: "2026-11-22" }).held).toEqual({
+      date: "2026-11-22",
+      why: "sooner",
+    });
+    expect(() => reg.setRow(row("s"), ["why=no hold"])).toThrow(/isn't held/);
+  });
+
+  it("is absent from an old row's bare hold, which still parses", () => {
+    const [r] = reg.rowsOf(NEW.replace("| `x` | — |", "| `x` | standing, hold |"));
+    expect(r).toEqual(row("x", { flags: ["standing", "hold"] }));
+    expect("held" in r).toBe(false);
+    expect(reg.heldText(r)).toBe("");
+    expect(reg.parseFlags("hold (2026-01-02)")).toEqual({
+      flags: ["hold"],
+      held: { date: "2026-01-02", why: "" },
+    });
+  });
+});
+
 describe("stateOf", () => {
   const facts = {
     plans: new Set(["planned", "held", "running"]),

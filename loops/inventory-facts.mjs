@@ -279,9 +279,12 @@ export function collectFacts({ main, env = process.env, now = Date.now() }) {
     }
   }
   // Machine-wide leases (lease.sh): reported; a dead holder is taken over by the next taker.
+  // Only <kind>/<N> is a lease: the kind's dot directories are lease.sh's own
+  // (.waiting holds queued takers, which lease.sh clears itself once their pid
+  // is gone; .take and .takeover are mutexes), never a lease to report or remove.
   const leaseRoot = env.RISA_LEASE_ROOT || join(loops, ".lease");
   for (const kind of dirs(leaseRoot))
-    for (const n of dirs(join(leaseRoot, kind))) {
+    for (const n of dirs(join(leaseRoot, kind)).filter((d) => /^\d+$/.test(d))) {
       const info = leaseInfo(join(leaseRoot, kind, n, "name"));
       const pid = Number(info.pid) || null;
       const alive = pidAlive(pid);

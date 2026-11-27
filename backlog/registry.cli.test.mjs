@@ -147,6 +147,29 @@ describe("backlog prd", () => {
     expect(flags()).toEqual(["standing"]);
   });
 
+  it("holds with a reason and the date, lists it, and clearing the hold clears it", () => {
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const fixes = () => JSON.parse(cli(prd, "prd", "list", "--json")).find((r) => r.topic === "fixes-x");
+    cli(prd, "prd", "set", "fixes-x", "flags+=hold", "why=waits on the user's call, see B-3");
+    expect(fixes()).toMatchObject({
+      flags: ["standing", "hold"],
+      state: "hold",
+      held: { date, why: "waits on the user's call, see B-3" },
+    });
+    expect(file()).toContain(`| \`fixes-x\` | standing, hold (${date}: waits on the user's call, see B-3) |`);
+    const text = cli(prd, "prd", "list").split("\n");
+    const at = text.findIndex((l) => l.startsWith("fixes-x "));
+    expect(text[at]).toMatch(/^fixes-x\s+hold\s+standing,hold\s/);
+    expect(text[at + 1]).toBe(`  on hold since ${date}: waits on the user's call, see B-3`);
+    expect(cliFails(prd, "prd", "set", "beta", "why=nothing").out).toContain("beta isn't held");
+    cli(prd, "prd", "set", "fixes-x", "flags-=hold");
+    expect(fixes().flags).toEqual(["standing"]);
+    expect(fixes().held).toBeUndefined();
+    expect(file()).toMatch(/^\| `fixes-x` \| standing \|/m);
+    expect(cli(prd, "prd", "list")).not.toContain("on hold since");
+  });
+
   it("adds rows where it's told", () => {
     cli(prd, "prd", "add", "delta");
     cli(
