@@ -24,7 +24,7 @@
 - Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
 - RISA-997 filed (slice 8): the workflow writes no verdict artifact, so `risa ci run --wait` reads its runs as unknown.
 - Context past the soft limit (120k): rotate at this wave's boundary.
-- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
+- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). Gate run 1 (load 75): 18 failures, mostly timeouts. Rerun of 4 files on main vs the branch: `loops/land-unsynced.test.mjs` times out on both (pre-existing, noted on RISA-994); `loops/tidy-cli.test.mjs` fails only on the branch (its fixture doesn't copy slice 12's new `backlog/lock.mjs`): **sent back to slice 12**. Then a second merge of 12 and the gate again. after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
 
 ## How to run this plan
 
