@@ -75,6 +75,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-953 | bug | triaged | fixes-tooling |  | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
 | RISA-968 | feature | triaged | fixes-tooling |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | triaged | fixes-tooling |  | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
+| RISA-970 | change | triaged | fixes-tooling |  | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
+| RISA-971 | change | triaged | fixes-tooling |  | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
+| RISA-972 | question | triaged | fixes-tooling |  | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
 
 ## Items
 
@@ -604,6 +607,27 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 ### RISA-969 · chore · CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+### RISA-970 · change · Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+### RISA-971 · change · docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+### RISA-972 · question · In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile
 
 - status: triaged
 - prd: fixes-tooling
