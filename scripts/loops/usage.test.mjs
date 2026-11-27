@@ -299,7 +299,7 @@ describe("the commands", () => {
     spawnSync(process.execPath, [join(HERE, "usage.mjs"), ...args], {
       input: stdin,
       encoding: "utf8",
-      env: { PATH: process.env.PATH, HOME: root, TZ: "UTC", ...env },
+      env: { PATH: process.env.PATH, RISA_CONFIG: process.env.RISA_CONFIG, HOME: root, TZ: "UTC", ...env },
     });
   const prd = (args, env) =>
     spawnSync("bash", [join(HERE, "prd.sh"), ...args], {

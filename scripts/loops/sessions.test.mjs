@@ -169,7 +169,10 @@ describe("the pure part", () => {
     const main = execFileSync("git", ["-C", HERE, "worktree", "list", "--porcelain"], { encoding: "utf8" })
       .split("\n")[0]
       .replace(/^worktree /, "");
-    const real = join(main, ".loops", ".sessions");
+    // A checkout that is itself in the temp dir (the standalone run's copy) stands
+    // in for one outside it: the guard goes by the path, and refuses before writing.
+    const inTmp = main.startsWith(realpathSync(tmpdir()));
+    const real = join(inTmp ? "/risa-not-tmp/checkout" : main, ".loops", ".sessions");
     const probe = "b871-guard-probe";
     expect(liveDirRefusal(real)).toMatch(
       /refusing to write session records into .*\.loops\/\.sessions under Vitest/,
