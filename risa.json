@@ -1,0 +1,54 @@
+{
+  "name": "risa",
+  "tool": {
+    "prd": "risa",
+    "backlog": "risa backlog",
+    "self": true
+  },
+  "paths": {
+    "backlog": "plans/backlog.md",
+    "inbox": "plans/inbox.md",
+    "archive": "plans/backlog-archive.md",
+    "plans": "plans",
+    "docs": "loops/docs",
+    "agentsDoc": "AGENTS.md",
+    "preferences": "docs/preferences.md",
+    "tooling": ["bin"]
+  },
+  "roles": {
+    "planner": {
+      "additions": "docs/planner.md"
+    }
+  },
+  "branches": {
+    "trunk": "main",
+    "prefixes": {
+      "prd": "prd/",
+      "slice": "slice/",
+      "plan": "plan/",
+      "hotfix": "hotfix/"
+    }
+  },
+  "backlog": {
+    "prdsHeading": "## PRDs",
+    "idPrefix": "RISA",
+    "formerIdPrefix": "B"
+  },
+  "commands": {
+    "install": "pnpm install",
+    "check": "pnpm check",
+    "typecheck": "true",
+    "typegen": "true",
+    "toolingTests": "pnpm test",
+    "log": "git log --oneline",
+    "docBudget": "pnpm docs:budget",
+    "format": "pnpm exec prettier --write",
+    "datastoreStart": "true",
+    "datastoreReset": "true",
+    "datastoreSeed": "true"
+  },
+  "testProjects": {
+    "tooling": ["core:unit", "tooling:unit"],
+    "browserHarness": "tooling:browser"
+  }
+}

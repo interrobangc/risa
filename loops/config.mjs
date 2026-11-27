@@ -119,7 +119,8 @@ export const SHAPE = [
   ["roles.*.replacement", "path?"],
   // Branches.
   ["branches.trunk", "branch"],
-  ["branches.protected", "branch[]"],
+  // Long-lived branches besides the trunk (none: the trunk is the only one, as in Risa's own repo).
+  ["branches.protected", "branch[]?"],
   ["branches.prefixes.prd", "prefix"],
   ["branches.prefixes.slice", "prefix"],
   ["branches.prefixes.plan", "prefix"],
@@ -491,7 +492,7 @@ function makeBranches(config) {
       return s ? `${prefixes.prd}${s.topic}` : trunk;
     },
     /** The trunk and the protected branches: never removed, never landed on by hand. */
-    kept: [trunk, .../** @type {string[]} */ (config.branches.protected)],
+    kept: [trunk, .../** @type {string[]} */ (config.branches.protected ?? [])],
   };
 }
 

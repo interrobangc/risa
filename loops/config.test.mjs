@@ -344,6 +344,11 @@ describe("branchKinds", () => {
     expect([other.nameOf("quick/a/b", "hotfix"), other.nameOf("topic/a", "hotfix")]).toEqual(["a/b", null]);
     expect(other.kept).toEqual(["trunk", "live"]);
   });
+
+  it("keeps only the trunk when the config protects no other branch", () => {
+    const only = branchKinds(changed((c) => delete c.branches.protected));
+    expect(only.kept).toEqual([only.trunk]);
+  });
 });
 
 describe("config get", () => {
