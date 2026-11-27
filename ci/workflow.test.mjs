@@ -47,7 +47,7 @@ describe("the CI workflow", () => {
 
   it("asks no dispatch inputs: ci run sends none", () => {
     const on = block(workflow, "on") ?? "";
-    expect(on).toMatch(/^  workflow_dispatch:\s*$/m);
+    expect(on).toMatch(/^ {2}workflow_dispatch:\s*$/m);
     expect(block(on, "workflow_dispatch", "  ") ?? "").not.toMatch(/inputs:/);
   });
 
