@@ -13,7 +13,7 @@
 | 8     | 2    | RISA-969 | opus  | checking   |                                |
 | 9     | 2    | RISA-681 | opus  | handed off |                                |
 | 10    | 2    | RISA-934 | opus  | handed off |                                |
-| 11    | 2    | RISA-987 | opus  | checking   |                                |
+| 11    | 2    | RISA-987 | opus  | handed off |                                |
 | 12    | 2    | RISA-989 | opus  | checking   |                                |
 | 13    | 2    | RISA-993 | opus  | handed off |                                |
 
