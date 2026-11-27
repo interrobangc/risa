@@ -20,7 +20,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAsk, getAsk } from "./asks.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
@@ -161,9 +161,12 @@ describe("the code check between ticks (B-809)", () => {
       process.env.RISA_MAIN = "/fictional/project";
       expect(mainCheckout()).toBe("/fictional/project");
       delete process.env.RISA_MAIN;
-      expect(mainCheckout()).toBe(
-        execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: HERE, encoding: "utf8" }).trim(),
-      );
+      // The main checkout, even from a linked worktree (a slice's): its common git dir's folder.
+      const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+        cwd: HERE,
+        encoding: "utf8",
+      }).trim();
+      expect(mainCheckout()).toBe(dirname(common));
     } finally {
       if (was === undefined) delete process.env.RISA_MAIN;
       else process.env.RISA_MAIN = was;
