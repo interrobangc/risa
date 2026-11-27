@@ -6,11 +6,15 @@
 
 | Slice | Wave | State   | Merge into `prd/after-split-2` |
 | ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | planned |                                |
-| 2     | 1    | planned |                                |
+| 1     | 1    | working |                                |
+| 2     | 1    | working |                                |
 | 3     | 2    | planned |                                |
 
-**Backlog:** claim RISA-972 when slice 1 starts; `done` it when slice 3 merges.
+**Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
+
+**Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic).
+
+**Now (2026-11-27):** wave 1 running: worktrees `.loops/after-split-2-1` and `-2` (from a2831a5), one background agent each on opus; watch running. No new items at the wave boundary. Slice 3 waits for 1 and 2 merged.
 
 ## Architectural decisions
 
