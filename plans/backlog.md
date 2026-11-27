@@ -41,7 +41,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-477 | change | live | fixes-tooling | prd/fixes-tooling | PRD registry: a hold carries its reason |
 | RISA-560 | feature | triaged | self-recovery-2 |  | A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost |
 | RISA-584 | chore | triaged | staging-ship |  | Backlog prompt: "deploy staging" trigger that promotes dev and notifies my phone |
-| RISA-681 | bug | in-progress | fixes-tooling | prd/fixes-tooling | Promotion prints a passing flake's tests but doesn't file them in the backlog |
+| RISA-681 | bug | ready | fixes-tooling | prd/fixes-tooling | Promotion prints a passing flake's tests but doesn't file them in the backlog |
 | RISA-720 | chore | dropped | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
 | RISA-721 | bug | live | fixes-tooling | prd/fixes-tooling | Second-zone filing opens a new item when a zone item was landed or dropped but staging still lacks the fix |
 | RISA-722 | bug | triaged | — |  | A release run after a recorded override replaces the override's release-gate status, so a failing run blocks main again |
@@ -78,7 +78,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-952 | chore | triaged | fixes-tooling |  | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
 | RISA-953 | bug | live | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
 | RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
-| RISA-969 | chore | in-progress | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
+| RISA-969 | chore | ready | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
 | RISA-970 | change | live | after-split | prd/after-split | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
 | RISA-971 | change | live | after-split | prd/after-split | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
 | RISA-972 | question | triaged | after-split-2 |  | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
@@ -255,10 +255,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-681 · bug · Promotion prints a passing flake's tests but doesn't file them in the backlog
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 00269bb
 
 - 2026-11-23 (prd/test-gates-2): From slice 4's hand-off: pnpm prd ci promote merges on a passing flake and only prints the flaky tests, while the PRD says browser flakes are filed. The plan assigned the filing to no slice. Proposed for a later wave of test-gates-2; the user reviews.
 - 2026-11-23 (prd/test-gates-2): Moved from test-gates-2 when its last wave landed (2026-11-23); that topic is closing.
@@ -653,10 +653,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-969 · chore · CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 00269bb
 
 - 2026-11-27 (prd/fixes-tooling): The user, 2026-11-27 (ask a5): yes, add the workflow in a later fixes-tooling wave (pnpm check on push and PRs to main, node and pnpm pinned exactly; AGENTS.md's 'no CI yet' updated).
 
