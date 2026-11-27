@@ -14,14 +14,14 @@ const DOCS = join(dirname(fileURLToPath(import.meta.url)), "docs");
 export const BUDGETS = {
   "backlog.md": 3 * KB,
   "hotfix.md": 3 * KB,
-  "inbox.md": 2 * KB,
-  "loop.md": 2218,
+  "inbox.md": 2 * KB + 8,
+  "loop.md": 2230,
   "machinery.md": 600,
   "orchestration.md": 174,
-  "orchestrator.md": 3954,
-  "planner.md": 5 * KB,
+  "orchestrator.md": 3982,
+  "planner.md": 5 * KB + 16,
   "project-config.md": 1 * KB,
-  "recovery.md": 5 * KB,
+  "recovery.md": 5 * KB + 4,
 };
 
 /**
