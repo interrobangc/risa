@@ -1,0 +1,80 @@
+{
+  "name": "fixture",
+  "tool": {
+    "prd": "pnpm prd",
+    "backlog": "pnpm backlog"
+  },
+  "paths": {
+    "backlog": "plans/backlog.md",
+    "inbox": "plans/inbox.md",
+    "archive": "plans/backlog-archive.md",
+    "plans": "plans",
+    "docs": "docs",
+    "agentsDoc": "AGENTS.md",
+    "preferences": "docs/preferences.md",
+    "brakeList": "brake-list.txt",
+    "quarantine": "quarantine.txt",
+    "tierData": "tiers.json",
+    "checkPlanRules": "check-plan-rules.json",
+    "tooling": ["risa.json"]
+  },
+  "roles": {
+    "planner": {
+      "additions": "docs/planner.md"
+    }
+  },
+  "branches": {
+    "trunk": "dev",
+    "protected": ["main", "staging"],
+    "prefixes": {
+      "prd": "prd/",
+      "slice": "slice/",
+      "plan": "plan/",
+      "hotfix": "hotfix/"
+    }
+  },
+  "backlog": {
+    "prdsHeading": "## PRDs",
+    "idPrefix": "B",
+    "zoneOverflowItem": "B-750",
+    "ciFailureTopic": "fixes-bug"
+  },
+  "commands": {
+    "install": "pnpm install --frozen-lockfile",
+    "check": "pnpm check",
+    "typecheck": "pnpm typecheck",
+    "typegen": "pnpm typegen",
+    "toolingTests": "pnpm test:tooling",
+    "log": "pnpm log",
+    "docBudget": "pnpm docs:budget",
+    "format": "pnpm exec prettier --write --ignore-unknown",
+    "datastoreStart": "pnpm datastore:start",
+    "datastoreReset": "pnpm datastore:reset",
+    "datastoreSeed": "pnpm datastore:seed",
+    "hooksInstall": "git config core.hooksPath tools/hooks"
+  },
+  "stack": {
+    "portEnv": "app/.env",
+    "checkBuild": "app/build"
+  },
+  "testProjects": {
+    "tooling": ["tooling:unit", "core:unit", "project:unit", "project:tooling"],
+    "browserHarness": "tooling:browser"
+  },
+  "hooks": {
+    "check": "bash scripts/loops/sample-project/tools/check.sh",
+    "checkAreas": "bash scripts/loops/sample-project/tools/check-areas.sh",
+    "stackUp": "bash scripts/loops/sample-project/tools/stack-hook.sh stack up",
+    "stackDown": "bash scripts/loops/sample-project/tools/stack-hook.sh stack down",
+    "stackStatus": "bash scripts/loops/sample-project/tools/stack-hook.sh stack status",
+    "stackReady": "bash scripts/loops/sample-project/tools/stack-hook.sh stack ready",
+    "stackStop": "bash scripts/loops/sample-project/tools/stack-hook.sh stack stop",
+    "stackStart": "bash scripts/loops/sample-project/tools/stack-hook.sh stack start",
+    "stackEngine": "bash scripts/loops/sample-project/tools/stack-hook.sh stack engine",
+    "stackLeftovers": "bash scripts/loops/sample-project/tools/stack-hook.sh stack leftovers",
+    "serve": "bash scripts/loops/sample-project/tools/stack-hook.sh serve",
+    "browser": "bash scripts/loops/sample-project/tools/browser-hook.sh",
+    "testDb": "bash scripts/loops/sample-project/tools/stack-hook.sh test-db",
+    "lease": "bash scripts/loops/lease.sh hold"
+  }
+}

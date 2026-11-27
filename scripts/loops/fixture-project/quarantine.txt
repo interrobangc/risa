@@ -1,0 +1,6 @@
+# The fixture project's quarantine: flaky tests, skipped everywhere except a CI
+# run's quarantine step. The core's tests' own data, not a real project's.
+#
+# One test per line, three tab-separated fields:
+# <repo-relative test file><TAB><full test name><TAB><backlog item>
+app/routes/sample.browser.test.tsx	the sample screen shows its list	B-1

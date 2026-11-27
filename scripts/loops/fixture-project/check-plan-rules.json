@@ -1,0 +1,68 @@
+{
+  "ownTests": "\\.(int\\.test\\.ts|browser\\.test\\.tsx)$",
+  "suite": {
+    "tier": "full",
+    "rules": [
+      {
+        "match": "^api/migrations/",
+        "why": "a migration"
+      },
+      {
+        "match": "^api/.*seed",
+        "flags": "i",
+        "why": "seeds"
+      },
+      {
+        "match": "^pnpm-lock\\.yaml$",
+        "why": "the lockfile"
+      },
+      {
+        "match": "(^|/)package\\.json$",
+        "why": "a package.json"
+      },
+      {
+        "match": "^vitest\\.config\\.ts$",
+        "why": "the Vitest config"
+      },
+      {
+        "match": "^\\.github/(workflows|actions)/",
+        "why": "the CI workflow"
+      },
+      {
+        "match": "^scripts/ci/",
+        "why": "scripts/ci"
+      }
+    ]
+  },
+  "byPath": [
+    {
+      "match": "^app/",
+      "tier": "components",
+      "why": "app code"
+    },
+    {
+      "match": "^api/",
+      "tier": "integration",
+      "why": "server code"
+    }
+  ],
+  "browserHarness": {
+    "tier": "integration",
+    "paths": ["tools/serve.sh", "tools/browser-run.sh", "tools/browser-run.test.mjs", "e2e"]
+  },
+  "tooling": ["tools/hooks.test.mjs"],
+  "reachesCode": [
+    {
+      "match": "^(api|app)/test/",
+      "why": "test setup"
+    },
+    {
+      "match": "(^|/)tsconfig[^/]*\\.json$",
+      "why": "a TypeScript config"
+    },
+    {
+      "match": "(^|/)eslint\\.config\\.[^/]+$",
+      "why": "the ESLint config"
+    }
+  ]
+}

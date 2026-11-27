@@ -1,10 +1,11 @@
 // project-check.mjs, the project-data check, on the sample project: a repo with
 // every file the sample config names passes; with one thing broken, it names that
-// one thing on one line, its file first.
+// one thing on one line, its file first. The fixture project passes it as it is.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
 import { projectProblems } from "./project-check.mjs";
@@ -14,6 +15,7 @@ const tmp = realpathSync(mkdtempSync(join(tmpdir(), "project-check-")));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
 const SAMPLE = JSON.parse(readFileSync(SAMPLE_CONFIG, "utf8"));
+const FIXTURE_PROJECT = fileURLToPath(new URL("./fixture-project/risa.json", import.meta.url));
 const TIERS = JSON.parse(readFileSync(join(SAMPLE_CONFIG, "../tools/tiers.json"), "utf8"));
 
 /**
@@ -36,6 +38,10 @@ const withPaths = (/** @type {Record<string, string>} */ paths) =>
 describe("the project-data check", () => {
   it("passes on a sample repo with every file its config names", () => {
     expect(problems(repo())).toEqual([]);
+  });
+
+  it("passes on the fixture project (today's names, its own data)", () => {
+    expect(projectProblems(loadConfig({ path: FIXTURE_PROJECT }))).toEqual([]);
   });
 
   it("names a path the config names that is missing", () => {

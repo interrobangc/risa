@@ -16,7 +16,8 @@
 //                    session settings files) or reading its hook and status line
 //                    input's fields (transcript_path, rate_limits, …) in code
 //   tool-command     the tool's own commands by this repo's names (pnpm, then prd or
-//                    backlog) anywhere in a core file but a test or fixture: a hint,
+//                    backlog) anywhere in a core file but a test or fixture (the
+//                    fixture project, sample-project's twin, has them): a hint,
 //                    prompt or usage line names them through config.mjs's toolCmd or
 //                    lib.sh's prd_cmd and backlog_cmd, and a generic doc through
 //                    `{{prd}}` and `{{backlog}}`, which the doc command fills in
@@ -103,7 +104,8 @@ const callsHost = (/** @type {string} */ path) =>
   path !== HOST && path !== SELF && !/(\.test\.[a-z]+|-fixture\.mjs)$/.test(path);
 /** The tool's own commands by this repo's names, which a core file never spells out. */
 const TOOL_COMMAND = /(?<![\w.-])pnpm (?:prd|backlog)(?![\w-])/g;
-const isTest = (/** @type {string} */ path) => /(\.test\.[a-z]+|-fixture\.mjs)$|\.fixtures\//.test(path);
+const isTest = (/** @type {string} */ path) =>
+  /(\.test\.[a-z]+|-fixture\.mjs)$|\.fixtures\/|\/fixture-project\//.test(path);
 
 const inRoots = (path) => ROOTS.some((root) => path.startsWith(`${root}/`));
 const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);

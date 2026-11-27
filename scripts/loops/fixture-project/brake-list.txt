@@ -1,0 +1,9 @@
+# The fixture project's brake list: test files whose failure blocks a landing. The
+# core's tests' own data, not a real project's.
+#
+# One repo-relative glob per line: `*` stays inside a directory, `**` crosses them.
+# `check:<name>` is a browser check, as a whole.
+
+app/lib/sync/**
+api/router.int.test.ts
+check:roundtrip
