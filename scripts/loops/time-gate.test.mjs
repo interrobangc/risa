@@ -7,6 +7,7 @@ import { DEFAULT_LIMITS, gatesFrom, gatesProblems, measureForMode } from "../ci/
 import { parseTimed, runCli, timeGate } from "./time-gate.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
+const FIXTURE_PROJECT = `${HERE}fixture-project/risa.json`;
 
 const armed = { aim: 300, cutoff: 360, armed: true };
 const unarmed = { ...armed, armed: false };
@@ -277,9 +278,10 @@ describe("the CLI", () => {
     expect(r.err).toBe("time-gate: gates.measures.unit.aim: 999 s is above its cutoff (360 s)\n");
   });
 
-  it("runs as a command on this repo's gates' data", () => {
+  it("runs as a command on the fixture project's gates' data", () => {
     const r = spawnSync("node", [HERE + "time-gate.mjs", "--measure", "unit", "--seconds", "100"], {
       encoding: "utf8",
+      env: { ...process.env, RISA_CONFIG: FIXTURE_PROJECT },
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/^ok\nTime gate unit: 1m40s \(100 s\); aim 5m00s, cutoff 6m00s: ok\.\n$/);

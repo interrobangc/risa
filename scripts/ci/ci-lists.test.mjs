@@ -1,13 +1,16 @@
 // The core's copy of the lists parser: the quarantine, with the project's backlog
-// ids, and the project's real list (paths.quarantine) through it.
+// ids, and the fixture project's list (paths.quarantine) through it; the configured
+// project's own list is the project-data check's (project-check.mjs).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import { backlogIds, loadConfig } from "../loops/config.mjs";
 import { isQuarantined, parseQuarantine } from "./ci-lists.mjs";
 
+const FIXTURE_PROJECT = fileURLToPath(new URL("../loops/fixture-project/risa.json", import.meta.url));
 const id = backlogIds().id(1);
 const entry = { file: "a/b.test.ts", name: "suite breaks", item: id };
 
@@ -34,8 +37,8 @@ describe("the quarantine", () => {
     expect(isQuarantined([entry], "a/b.test.ts", "suite other")).toBe(false);
   });
 
-  it("reads the project's list", () => {
-    const { root, config } = loadConfig();
+  it("reads the fixture project's list", () => {
+    const { root, config } = loadConfig({ path: FIXTURE_PROJECT });
     const text = readFileSync(join(root, config.paths.quarantine), "utf8");
     expect(() => parseQuarantine(text)).not.toThrow();
   });

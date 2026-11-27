@@ -32,6 +32,8 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const FILE = join(ROOT, CONFIG_NAME);
+/** The fixture project: today's names, every path it names its own. */
+const FIXTURE_PROJECT = join(HERE, "fixture-project", CONFIG_NAME);
 const tmp = mkdtempSync(join(tmpdir(), "config-test-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -52,9 +54,10 @@ const bash = (script, extra) =>
   });
 
 describe("the loader", () => {
-  it("accepts this repo's config, and every path in it exists", () => {
-    const { config, root, path } = loadConfig({ path: FILE });
-    expect(path).toBe(FILE);
+  it("accepts the fixture project's config, and every path in it exists", () => {
+    // The configured project's own paths are the project-data check's.
+    const { config, root, path } = loadConfig({ path: FIXTURE_PROJECT });
+    expect(path).toBe(FIXTURE_PROJECT);
     expect(config.name).toMatch(/^[a-z]/);
     expect(config.branches.trunk).toBe("dev");
     const paths = [...Object.values(config.paths).flat(), ...(config.boundary?.appPaths ?? [])];

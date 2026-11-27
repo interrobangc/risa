@@ -4,15 +4,18 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { CONFIG_NAME, configPath } from "../loops/config.mjs";
+import { CONFIG_NAME, configPath, loadConfig } from "../loops/config.mjs";
 import { TierDataError, tierData, tierDataProblems, tiersFrom } from "./tier-data.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 /** This repo's config, whose tier data path a test points at a broken file. */
 const FIXTURE_CONFIG = configPath();
+/** The fixture project: today's names, its own tier data. */
+const FIXTURE_PROJECT = fileURLToPath(new URL("../loops/fixture-project/risa.json", import.meta.url));
 
 /** A sample project's tiers: three, other names, another ref prefix. */
 const SAMPLE = {
@@ -213,10 +216,12 @@ describe("tierData", () => {
     );
   });
 
-  it("reads this repo's, through its config", () => {
-    expect(tierData().TIERS.length).toBeGreaterThan(0);
+  it("reads the fixture project's, through its config", () => {
+    // The configured project's own tier data is the project-data check's.
+    const fixture = tierData(loadConfig({ path: FIXTURE_PROJECT }));
+    expect(fixture.TIERS.length).toBeGreaterThan(0);
     // Its gates: the three measures, each with its aim under its cutoff.
-    const { measures } = tierData().GATES;
+    const { measures } = fixture.GATES;
     expect(Object.keys(measures)).toEqual(["unit", "components", "quick"]);
     for (const m of Object.values(measures)) expect(m.aim).toBeLessThanOrEqual(m.cutoff);
   });
