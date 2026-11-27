@@ -68,6 +68,8 @@ describe("names and process lines", () => {
   it("reads a claude process's backlog Remote Control name", () => {
     expect(backlogRemoteOf("claude --remote-control backlog You are")).toBe("backlog");
     expect(backlogRemoteOf("claude --remote-control backlog - tasks You are")).toBe("backlog-tasks");
+    expect(backlogRemoteOf("claude --remote-control NA-backlog - tasks You are")).toBe("backlog-tasks");
+    expect(backlogRemoteOf("claude --remote-control NA-Garrett You are")).toBe("backlog");
     expect(backlogRemoteOf("claude --remote-control=backlog-tasks You are")).toBe("backlog-tasks");
     expect(backlogRemoteOf("claude --remote-control prd-a You are")).toBeNull();
     expect(backlogRemoteOf("vim --remote-control backlog")).toBeNull();

@@ -704,6 +704,22 @@ describe("sessions start through the wrapper", () => {
     }
   });
 
+  it("tags a backlog or inbox session's Remote Control name and tab with the machine, never its record", () => {
+    const r = run("prd.sh", ["plan"], { RISA_TAB_TITLE: "always", RISA_MACHINE_TAG: "NA" });
+    expect(r.status).toBe(0);
+    const shown = readFileSync(join(state, "args"), "utf8").split("\n")[5];
+    const captain = shown.replace(/^NA-/, "");
+    expect(shown).toBe(`NA-${captain}`);
+    expect(CAPTAINS).toContain(captain);
+    expect(r.stdout).toContain(`\x1b]0;NA-${captain}\x07`);
+    expect(record("backlog")).toMatchObject({ kind: "backlog", remote: captain });
+    const o = run("session.sh", ["prd-t", "--", "--remote-control", "prd-t", "x"], {
+      RISA_MACHINE_TAG: "NA",
+    });
+    expect(o.status).toBe(0);
+    expect(readFileSync(join(state, "args"), "utf8")).toContain("--remote-control\nprd-t\n");
+  });
+
   it("titles no other session's tab: a backlog-<name> one keeps its name", () => {
     const r = run("session.sh", ["backlog-notes", "--", "--remote-control", "backlog - notes", "x"], {
       RISA_TAB_TITLE: "always",

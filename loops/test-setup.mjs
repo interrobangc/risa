@@ -8,5 +8,7 @@ import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 
 process.env.RISA_CONFIG ??= FIXTURE_CONFIG;
 process.env.RISA_MACHINE_CONFIG ??= "";
+// No machine tag on a session's Remote Control name (session.sh) unless a test sets one.
+process.env.RISA_MACHINE_TAG = "";
 // The repo a parent command found (lib.sh's RISA_MAIN) is never a test's.
 delete process.env.RISA_MAIN;

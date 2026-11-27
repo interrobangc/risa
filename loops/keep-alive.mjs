@@ -24,6 +24,9 @@ import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
 import { CLAUDE } from "./host.mjs";
 
+/** The optional machine tag session.sh puts before a backlog or inbox Remote Control name (`NA-inbox`). */
+export const MACHINE_TAG = "[A-Z]{2}-";
+
 /** The kinds kept alive; each one's session is named after it. */
 export const KEPT_KINDS = ["backlog", "inbox"];
 /** The answers the keep-alive question offers. */
@@ -58,7 +61,9 @@ export function hasRemoteControl(
 ) {
   if (!runs(args, claude)) return false;
   const word = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|\\s)--remote-control[ =]${word}(?=\\s|$)(?!\\s+-\\s)`).test(args);
+  return new RegExp(`(?:^|\\s)--remote-control[ =](?:${MACHINE_TAG})?${word}(?=\\s|$)(?!\\s+-\\s)`).test(
+    args,
+  );
 }
 
 /** The Remote Control names a kept kind's session may run under: its own, and for backlog each captain's. */

@@ -149,6 +149,8 @@ describe("the inbox session", () => {
 describe("hasRemoteControl", () => {
   it("matches a claude process under exactly that name", () => {
     expect(hasRemoteControl("claude --remote-control backlog hi", "backlog")).toBe(true);
+    expect(hasRemoteControl("claude --remote-control NA-inbox hi", "inbox")).toBe(true);
+    expect(hasRemoteControl("claude --remote-control NAinbox hi", "inbox")).toBe(false);
     expect(hasRemoteControl("claude --remote-control=backlog", "backlog")).toBe(true);
     expect(hasRemoteControl("/usr/local/bin/claude --model opus --remote-control backlog", "backlog")).toBe(
       true,
