@@ -59,6 +59,7 @@ export function zoneFindings(verdict, { url, overflowItem = zoneOverflowItem(), 
       title: shortTitle(`CI: ${file} fails in ${z.zone}`),
       prd,
       once,
+      commit: String(verdict.commit),
       note: `${once} Fails in ${z.zone} on ${where}; reported, not blocking.`,
       quarantine: null,
     };
