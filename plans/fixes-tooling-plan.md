@@ -8,20 +8,23 @@
 
 **Wave 2** (started 2026-11-27): slices 8–13, all opus. Wave 1 landed in main as c4ae22d (PR #5); its table is in the history once trimmed.
 
-| Slice | Wave | Item     | Model | State    | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------- | ----- | -------- | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | starting |                                |
-| 9     | 2    | RISA-681 | opus  | starting |                                |
-| 10    | 2    | RISA-934 | opus  | starting |                                |
-| 11    | 2    | RISA-987 | opus  | starting |                                |
-| 12    | 2    | RISA-989 | opus  | starting |                                |
-| 13    | 2    | RISA-993 | opus  | starting |                                |
+| Slice | Wave | Item     | Model | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------- | ----- | ------ | ------------------------------ |
+| 8     | 2    | RISA-969 | opus  | merged | 6202184                        |
+| 9     | 2    | RISA-681 | opus  | merged | 7796fbc                        |
+| 10    | 2    | RISA-934 | opus  | merged | 4c91c61                        |
+| 11    | 2    | RISA-987 | opus  | merged | 00269bb                        |
+| 12    | 2    | RISA-989 | opus  | merged | ee78763                        |
+| 13    | 2    | RISA-993 | opus  | merged | 7451bdd                        |
 
 **Notes:**
 
 - **Gate:** `risa check` inside a session fails ~259 tests on the `RISA_CONFIG` leak until after-split's slice 1 lands; gate with every `RISA_*`, `CLAUDE_CODE_*`, `CLAUDECODE` unset, rerun failing files once (load timeouts). No CI until slice 8's workflow is on main: landing wave 2 needs `--force` (ask the user, `--waits`) unless the workflow runs on the PR.
 - **Waiting:** RISA-994 (may share after-split slice 1's cause: check after it lands); RISA-996 (Codex review of wave 1's landed diff: do it at wave 2's PR); after after-split lands: RISA-813, 915, 926, 927, 952, 882, 886, 881, 883, 889, 986, plus wave 1's docs (loop doc: `wait check` 160 s, RISA-911; machinery: plan sessions get the context hook, RISA-880; backlog doc: `prd set … why=`, RISA-477).
-- Usage at wave start: 5h at 93% (resets 17:40).
+- Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
+- RISA-997 filed (slice 8): the workflow writes no verdict artifact, so `risa ci run --wait` reads its runs as unknown.
+- Context past the soft limit (120k): rotate at this wave's boundary.
+- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
 
 ## How to run this plan
 

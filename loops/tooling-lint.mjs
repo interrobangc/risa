@@ -6,12 +6,13 @@
 // that doesn't load prints one line and exits 2, never a Node stack.
 //   RISA_TOOLING_LINT=off skips it (the check's own static steps lint and
 //   format everything, so its tooling step runs only the tests). TRUNK names the
-//   trunk (default dev).
+//   trunk (default the config's branches.trunk).
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { TierDataError } from "../ci/tier-data.mjs";
 import { CheckPlanRulesError, planToolingLint } from "./check-plan.mjs";
+import { branchKinds, loadConfigOrExit } from "./config.mjs";
 
 const git = (...args) => spawnSync("git", args, { cwd: root, encoding: "utf8" });
 const lines = (r) => (r.status === 0 ? r.stdout.split("\n").filter(Boolean) : []);
@@ -19,7 +20,8 @@ const lines = (r) => (r.status === 0 ? r.stdout.split("\n").filter(Boolean) : []
 const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
 if (process.env.RISA_TOOLING_LINT === "off") process.exit(0);
 
-const trunk = [process.env.TRUNK || "dev", `origin/${process.env.TRUNK || "dev"}`].find(
+const trunkName = process.env.TRUNK || branchKinds(loadConfigOrExit("tooling lint").config).trunk;
+const trunk = [trunkName, `origin/${trunkName}`].find(
   (ref) => git("rev-parse", "--verify", "-q", `${ref}^{commit}`).status === 0,
 );
 const base = trunk && git("merge-base", trunk, "HEAD").stdout.trim();

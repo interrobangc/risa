@@ -88,7 +88,8 @@
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
 // state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
-// keepAlive: each kept kind's quick deaths, last open, open ask and stop),
+// keepAlive: each kept kind's quick deaths, last open, open ask and stop; inboxReported:
+// the untrusted inbox's report filed),
 // .dispatch.log (each acting tick, and each idle one whose lines changed).
 //
 // Env: RISA_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), RISA_MAX_PLANNERS (1), RISA_FIXES_MIN (3):
@@ -363,6 +364,7 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *     sessions?: Record<string, import("./dispatch-stuck.mjs").StuckEntry>, reported?: string[] },
  *   keepAlive?: import("./keep-alive.mjs").KeepState,
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
+ *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
  *   code?: { hash: string | null, pid: number, at: string } }} DispatchState */
 
@@ -1115,6 +1117,56 @@ function requestStep(
   return true;
 }
 
+// ---- the untrusted inbox ------------------------------------------------------------
+
+/**
+ * One report while the inbox session can't open (WHY: inboxUntrusted's line, naming the
+ * folder and the command), recorded as inboxReported; a tick with it trusted clears the
+ * record, so a later untrusted spell reports again. Returns whether it filed one.
+ */
+function inboxReportStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {string | null} */ why,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+) {
+  const reported = readState(p.state).inboxReported === true;
+  if (!why) {
+    if (reported && !dryRun)
+      updateState(p.state, (s) => {
+        delete s.inboxReported;
+      });
+    return false;
+  }
+  if (reported) return false;
+  if (dryRun) {
+    out("keep-alive inbox: would report it can't open");
+    return false;
+  }
+  const r = run(
+    "node",
+    [
+      join(HERE, "ask.mjs"),
+      "ask",
+      "--topic",
+      "dispatch",
+      "--report",
+      `The inbox session can't open: ${why}. Until then the dispatcher doesn't keep it open.`,
+      "--session",
+      KEEP_SESSION,
+    ],
+    { cwd: p.main, env: { ...env, RISA_ASKS_DIR: p.asks } },
+  );
+  if (!r.ok) {
+    out(`keep-alive inbox: filing the report failed: ${(r.err || r.out).split("\n").pop()}`);
+    return false;
+  }
+  updateState(p.state, (s) => {
+    s.inboxReported = true;
+  });
+  out("keep-alive inbox: reported it can't open");
+  return true;
+}
+
 // ---- the drain -------------------------------------------------------------------
 
 /** The `session` of the drain's own reports. */
@@ -1603,6 +1655,11 @@ export function tick(
   if (env.RISA_KEEP_SESSIONS !== "off") {
     const why = inboxUntrusted(inboxDirOf(records.find((r) => r.name === "inbox")?.record, env));
     if (why) unready.inbox = why;
+    try {
+      if (inboxReportStep(p, why, { dryRun, env, out })) watched = true;
+    } catch (e) {
+      out(`keep-alive inbox: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   const keepDecisions = keepAliveDecision({
     unready,

@@ -8,6 +8,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+// Once, before any file: a git under the floor stops the run (loops/test-global-setup.mjs).
+const globalSetup = [fileURLToPath(new URL("./loops/test-global-setup.mjs", import.meta.url))];
 const setupFiles = [fileURLToPath(new URL("./loops/test-setup.mjs", import.meta.url))];
 // Off for every spawned script (they pass process.env on): new.sh and check-run.sh
 // would otherwise poll the real machine's load. The gate's own tests set it back.
@@ -15,6 +17,7 @@ const env = { RISA_LOAD_GATE: "off" };
 
 export default defineConfig({
   test: {
+    globalSetup,
     projects: [
       {
         test: {

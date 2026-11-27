@@ -35,6 +35,12 @@ const ROOT = join(HERE, "..");
 const FIXTURE_PROJECT = join(HERE, "fixture-project", CONFIG_NAME);
 /** The config these tests read: the fixture project's, never this checkout's. */
 const FILE = FIXTURE_PROJECT;
+// Pinned here, whatever the shell running the tests has set: test-setup.mjs keeps
+// a RISA_CONFIG or RISA_MACHINE_CONFIG the shell already has (a session's), and
+// the calls below that read the default config, and lib.sh's find_repo (which
+// starts Node for a machine config), would read that one.
+process.env.RISA_CONFIG = FILE;
+process.env.RISA_MACHINE_CONFIG = "";
 const tmp = mkdtempSync(join(tmpdir(), "config-test-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
