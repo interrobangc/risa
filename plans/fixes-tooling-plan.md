@@ -10,12 +10,12 @@
 
 | Slice | Wave | Item     | Model | State    | Merge into `prd/fixes-tooling` |
 | ----- | ---- | -------- | ----- | -------- | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | starting |                                |
-| 9     | 2    | RISA-681 | opus  | starting |                                |
-| 10    | 2    | RISA-934 | opus  | starting |                                |
-| 11    | 2    | RISA-987 | opus  | starting |                                |
-| 12    | 2    | RISA-989 | opus  | starting |                                |
-| 13    | 2    | RISA-993 | opus  | starting |                                |
+| 8     | 2    | RISA-969 | opus  | working  |                                |
+| 9     | 2    | RISA-681 | opus  | working  |                                |
+| 10    | 2    | RISA-934 | opus  | working  |                                |
+| 11    | 2    | RISA-987 | opus  | working  |                                |
+| 12    | 2    | RISA-989 | opus  | working  |                                |
+| 13    | 2    | RISA-993 | opus  | working  |                                |
 
 **Notes:**
 
