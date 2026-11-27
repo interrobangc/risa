@@ -88,6 +88,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-979 | bug | triaged | after-split |  | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
 | RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | triaged | fixes-bug |  | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
+| RISA-982 | bug | triaged | fixes-bug |  | Fixes orchestrators keep waiting for new work when they run out |
+| RISA-983 | change | triaged | risa-next |  | Inbox per project, not per machine |
+| RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
 
 ## Items
 
@@ -727,3 +730,33 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook after installing v0.1.3: the v0.1.2 dispatcher (pid 16950, started by risa recover) stayed on v0.1.2, started fixes-ui at 18:37:20Z with v0.1.2's session.sh, and was SIGTERMed by hand at 18:39:19Z. Sibling of RISA-980 (both release-install). fixes-bug: wrong behaviour
+
+### RISA-982 · bug · Fixes orchestrators keep waiting for new work when they run out
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): From the inbox: They need to clean themselves up so they stop taking a queue spot.
+- 2026-11-27 (Robert Bo Davis): Triage: fixes-bug. A standing fixes orchestrator with nothing runnable holds a lane; it should close itself out. Near RISA-811 (cleanup of a half-done PRD).
+
+### RISA-983 · change · Inbox per project, not per machine
+
+- status: triaged
+- prd: risa-next
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): From the inbox: Probably move planning (backlog, PRDs, plans, etc.) to gists, GitHub issues or some other mechanism so the same project can be worked on across machines safely, avoiding the git sync problems we keep hitting.
+- 2026-11-27 (Robert Bo Davis): Triage: risa-next. Multi-machine planning store; overlaps RISA-841 (one inbox for every project in a private repo): its PRD should pick one design.
+
+### RISA-984 · change · Tell backlog agents they can communicate with each other
+
+- status: triaged
+- prd: risa-next
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): From the inbox: Example: caretook's backlog agent can file issues with risa's, and risa's can ask caretook's backlog to update risa after a fix is deployed.
+- 2026-11-27 (Robert Bo Davis): Triage: risa-next. Cross-project backlog-to-backlog messaging; goes with RISA-799 (agents findable by name) and RISA-820 (cross-repo topics).
