@@ -87,6 +87,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-978 | change | triaged | after-split |  | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
 | RISA-979 | bug | triaged | after-split |  | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
 | RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
+| RISA-981 | bug | triaged | fixes-bug |  | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
 
 ## Items
 
@@ -717,3 +718,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook's main checkout (on dev) from its backlog session, on v0.1.3 with RISA_CONFIG and RISA_MAIN pointing at Caretook; ingest itself still ran. fixes-bug: wrong behaviour in a released install
+
+### RISA-981 · bug · A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook after installing v0.1.3: the v0.1.2 dispatcher (pid 16950, started by risa recover) stayed on v0.1.2, started fixes-ui at 18:37:20Z with v0.1.2's session.sh, and was SIGTERMed by hand at 18:39:19Z. Sibling of RISA-980 (both release-install). fixes-bug: wrong behaviour
