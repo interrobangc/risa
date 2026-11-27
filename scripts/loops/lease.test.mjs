@@ -115,6 +115,18 @@ describe("taking and waiting", SLOW, () => {
     await h.exit;
   });
 
+  it("stops at once, with the config's line, when the project config doesn't load", () => {
+    const started = Date.now();
+    const r = spawnSync("bash", [LEASE_SH, "take", "solo", "--wait", "30"], {
+      env: { ...env, RISA_CONFIG: join(root, "no-such-risa.json") },
+      encoding: "utf8",
+      timeout: 15_000,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("lib.sh: the project config didn't load");
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
   it("takes over a lease whose holder was killed", async () => {
     const h = await hold("killed", "doomed");
     h.child.kill("SIGKILL");

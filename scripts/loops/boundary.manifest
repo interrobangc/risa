@@ -267,6 +267,8 @@ scripts/loops/slice-fields.test.mjs core
 scripts/loops/stack-lib.sh core
 scripts/loops/stack.sh core
 scripts/loops/stack.test.mjs core
+scripts/loops/standalone.mjs core
+scripts/loops/standalone.test.mjs core
 scripts/loops/status-extra.mjs core
 scripts/loops/status-extra.test.mjs core
 scripts/loops/status-trim.mjs core

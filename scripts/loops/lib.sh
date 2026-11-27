@@ -71,7 +71,9 @@ config_get() {
   done <<< "$_config"
   [[ -n $found ]] || { echo "risa.json: no value for $1" >&2; return 1; }
 }
-config_load || { echo "lib.sh: the project config didn't load" >&2; return 1 2>/dev/null || exit 1; }
+# A config that doesn't load stops the sourcing script, not just this file: a
+# caller run on would have none of the functions below (lease.sh looped forever).
+config_load || { echo "lib.sh: the project config didn't load" >&2; exit 1; }
 trunk=${TRUNK:-$(config_get branches.trunk)}
 # The rest of the project's names, from the config: its name (which the lock and
 # marker files in the git dir carry), the branch kinds' prefixes (prd/, slice/,
