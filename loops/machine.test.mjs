@@ -2,14 +2,16 @@
 // side (lib.sh's find_repo and work_switch, prd.sh's refusals). Every machine
 // config here is a temp file named by RISA_MACHINE_CONFIG; none is the machine's own.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import "./config-fixture.mjs";
 import {
+  GIT_FLOOR,
   MachineConfigError,
   claudeConfigDirOf,
+  gitTooOld,
   loadMachineConfig,
   machineConfigPath,
   machineProblems,
@@ -17,6 +19,7 @@ import {
   workOffLine,
   workSwitch,
 } from "./machine.mjs";
+import { checkGit } from "./test-global-setup.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 /** This repo's main checkout, as lib.sh finds it. */
@@ -231,5 +234,50 @@ describe("the bash side", () => {
     // From this repo's directory, this repo (listed or not), and the fixture's config stays.
     const here = lib('echo "$main"', { RISA_MACHINE_CONFIG: f });
     expect(here.stdout).toBe(`${MAIN}\n`);
+  });
+});
+
+describe("the git floor", () => {
+  /** An environment whose PATH starts at a stub `git` printing VERSION. */
+  const stubGit = (/** @type {string} */ version) => {
+    const dir = join(tmp, `git-${n++}`);
+    mkdirSync(dir);
+    writeFileSync(join(dir, "git"), `#!/bin/sh\necho "git version ${version}"\n`);
+    chmodSync(join(dir, "git"), 0o755);
+    return { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}` };
+  };
+  const OLD = "git: 2.24.3 is older than 2.28; Risa needs git 2.28 or newer (git init -b)";
+
+  it("2.28 is the floor; an older or unreadable version is too old", () => {
+    expect(GIT_FLOOR).toBe("2.28");
+    expect(gitTooOld("git version 2.24.3")).toBe(true);
+    expect(gitTooOld("git version 2.27.9")).toBe(true);
+    expect(gitTooOld("git version 1.99.0")).toBe(true);
+    expect(gitTooOld("git version 2.28.0")).toBe(false);
+    expect(gitTooOld("git version 2.56.1\n")).toBe(false);
+    expect(gitTooOld("git version 2.39.3 (Apple Git-146)")).toBe(false);
+    expect(gitTooOld("git version 3.0.0")).toBe(false);
+    expect(gitTooOld("command not found")).toBe(true);
+    expect(gitTooOld("")).toBe(true);
+  });
+
+  it("machine.mjs check refuses an old git with one line and exit 2, and takes 2.28", () => {
+    const check = (/** @type {string} */ version) =>
+      spawnSync(process.execPath, [join(HERE, "machine.mjs"), "check"], {
+        encoding: "utf8",
+        env: { ...stubGit(version), RISA_MACHINE_CONFIG: "" },
+      });
+    const old = check("2.24.3");
+    expect(old.status).toBe(2);
+    expect(old.stdout).toBe("");
+    expect(old.stderr).toBe(`${OLD}\n`);
+    const ok = check("2.28.0");
+    expect(ok.status).toBe(0);
+    expect(ok.stderr).toBe("");
+  });
+
+  it("the test run's global setup throws the one line on an old git and returns on 2.28", () => {
+    expect(() => checkGit(stubGit("2.24.3"))).toThrow(new Error(OLD));
+    expect(checkGit(stubGit("2.28.0"))).toBeUndefined();
   });
 });
