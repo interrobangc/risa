@@ -8,15 +8,15 @@
 
 | Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
 | ----- | ---- | ---- | ----- | ----- | ------------------------------ |
-| 1     | 1    | RISA-935 | opus | —  | — |
-| 2     | 1    | RISA-933 | opus | —  | — |
-| 3     | 1    | RISA-367 | opus | —  | — |
-| 4     | 1    | RISA-477 | opus | —  | — |
-| 5     | 1    | RISA-911 | opus | —  | — |
-| 6     | 1    | RISA-880 | opus | —  | — |
-| 7     | 1    | RISA-721 | opus | —  | — |
+| 1     | 1    | RISA-935 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-1`, agent spawned) | — |
+| 2     | 1    | RISA-933 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-2`, agent spawned) | — |
+| 3     | 1    | RISA-367 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-3`, agent spawned) | — |
+| 4     | 1    | RISA-477 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-4`, agent spawned) | — |
+| 5     | 1    | RISA-911 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-5`, agent spawned) | — |
+| 6     | 1    | RISA-880 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-6`, agent spawned) | — |
+| 7     | 1    | RISA-721 | opus | started 2026-11-27 (worktree `.loops/fixes-tooling-7`, agent spawned) | — |
 
-**Wave 1** (2026-11-27): slices 1 to 7, no shared file among them.
+**Wave 1** (2026-11-27): slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
 
 **Waiting, later waves:** RISA-681 and RISA-934 (wave 2: they share `ci/ci-file.mjs` and `backlog/registry.mjs` with slices 7 and 4). After-split's hot files (`loops/dispatch*`, `loops/machine*`, `loops/docs/`, `package.json`…): RISA-813, 915, 926, 927, 952, 882, 886. Need a decision: RISA-722 (keep an override?), 780 and 459 (dev/staging assumptions), 969 (a GitHub workflow: AGENTS.md says no CI yet). Look obsolete or too big for a fix: RISA-720 (a Caretook observation), 881, 883, 889, 968.
 
