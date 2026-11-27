@@ -9,7 +9,10 @@
   },
   "exports": {
     "./loops/time-gate.mjs": "./loops/time-gate.mjs",
-    "./ci/tier-data.mjs": "./ci/tier-data.mjs"
+    "./ci/tier-data.mjs": "./ci/tier-data.mjs",
+    "./ci/ci-runs.mjs": "./ci/ci-runs.mjs",
+    "./ci/verdict.fixtures/*": "./ci/verdict.fixtures/*",
+    "./loops/docs-budget.mjs": "./loops/docs-budget.mjs"
   },
   "engines": {
     "node": ">=24"

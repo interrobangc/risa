@@ -1,7 +1,7 @@
 // For tests that run the tooling from a throwaway repo: import this file, and
 // copy config.mjs in beside lib.sh. The scripts they start then read the fixture
 // project's config (fixture-project/risa.json: today's names, its own data files)
-// through RISA_CONFIG, which the core's test setup (test-setup.mjs) defaults to it
+// through RISA_CONFIG, which the core's test setup sets to it (test-env.mjs)
 // and they pass on in process.env, since the throwaway repo has none of its own.
 //
 //   stubHookConfig(dir, { copy })   writes DIR/risa.json: that config with its

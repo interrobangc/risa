@@ -7,6 +7,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { gitInit, withOldGit } from "../loops/git-init.mjs";
 import { REFUSED } from "./candidate.mjs";
 import { EXIT, main } from "./ci.mjs";
 import { GATE_CONTEXT, TEST_STATUS, gateStatus, parseOverrideArgs } from "./release-gate.mjs";
@@ -139,12 +140,13 @@ const flaky = (/** @type {boolean} */ brake) => [
   { job: "browser", file: browserCheckFile("roundtrip"), name: null, brake },
 ];
 
-beforeEach(() => {
+// The fixture: origin a bare repository in a new temp directory, repo beside it.
+function setUp() {
   root = realpathSync(mkdtempSync(join(tmpdir(), "risa-release-gate-")));
   const origin = join(root, "origin.git");
   repo = join(root, "repo");
-  spawnSync("git", ["init", "-q", "--bare", "-b", "main", origin], { env: gitEnv() });
-  spawnSync("git", ["init", "-q", "-b", "main", repo], { env: gitEnv() });
+  gitInit(["-q", "--bare", "-b", "main", origin], { env: gitEnv() });
+  gitInit(["-q", "-b", "main", repo], { env: gitEnv() });
   must(["remote", "add", "origin", origin]);
   mainTip = commit("chore: on main");
   must(["push", "-q", "origin", "main"]);
@@ -170,8 +172,23 @@ beforeEach(() => {
   filings = [];
   world = {};
   clock = 0;
-});
+}
+beforeEach(setUp);
 afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+describe("the fixture", () => {
+  it("stops at a failed git init, before any later git command", () => {
+    const prior = root;
+    try {
+      const { error, calls } = withOldGit(setUp);
+      expect(error?.message).toMatch(/^git init -q --bare -b main .* failed \(exit 129\)/);
+      expect(calls).toEqual([`init -q --bare -b main ${join(root, "origin.git")}`]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      root = prior;
+    }
+  });
+});
 
 describe("the status of a verdict", () => {
   it.each([

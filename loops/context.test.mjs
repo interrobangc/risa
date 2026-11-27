@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { gitInit, withOldGit } from "./git-init.mjs";
 import { agentTranscript, hardLimitFor, hookDecision, limitOf, sizeFromTranscript } from "./context.mjs";
 import { toolCmd } from "./config.mjs";
 import { processOf } from "./sessions.mjs";
@@ -404,6 +405,12 @@ const hook = (input, extra = {}) =>
   });
 const sizeFile = () => JSON.parse(readFileSync(join(context, "prd-t.json"), "utf8"));
 const contextOf = (out) => JSON.parse(out).hookSpecificOutput;
+// A slice's checkout: a git repo on a slice branch, at DIR.
+const sliceRepo = (dir) => {
+  mkdirSync(dir);
+  gitInit(["-q", "-b", "slice/t/1", dir]);
+  return dir;
+};
 
 describe("the hook as a command", () => {
   it("under the limit prints nothing and writes the size", () => {
@@ -620,12 +627,15 @@ describe("pnpm prd context", () => {
 
   it("refuses --keep outside a wrapped session and from a slice branch", () => {
     expect(cli(["--keep", "x"], { RISA_SESSION_NAME: "" }).status).toBe(1);
-    const repo = join(root, "slice");
-    mkdirSync(repo);
-    spawnSync("git", ["init", "-q", "-b", "slice/t/1", repo]);
-    const r = cli(["--keep", "x"], {}, repo);
+    const r = cli(["--keep", "x"], {}, sliceRepo(join(root, "slice")));
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("a loop hands off");
+  });
+
+  it("a failed git init stops the slice fixture before any later git command", () => {
+    const { error, calls } = withOldGit(() => sliceRepo(join(root, "old-git")));
+    expect(error?.message).toMatch(/^git init -q -b slice\/t\/1 .* failed \(exit 129\)/);
+    expect(calls).toEqual([`init -q -b slice/t/1 ${join(root, "old-git")}`]);
   });
 
   it("--all --json lists live sessions only and ignores a stale size record", async () => {

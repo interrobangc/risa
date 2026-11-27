@@ -27,7 +27,12 @@
 // tests use), else ~/.risa/machine.json. lib.sh reads the same variable to see
 // whether the file is there before it starts Node.
 //
-//   node machine.mjs check                  loads it; prints each problem; exit 2 on any
+// The git floor: GIT_FLOOR, which `git init -b` needs. `machine.mjs check` (the
+// install's last step) and the Vitest global setup (test-global-setup.mjs) refuse an
+// older git with gitFloorLine's one line; risa's other commands don't check.
+//
+//   node machine.mjs check                  the git floor, then loads it; prints each
+//                                           problem; exit 2 on any
 //   node machine.mjs repo --cwd <dir>       the main checkout of DIR's repo when the
 //                                           file lists it, then its project config's
 //                                           path; exit 1 when it doesn't
@@ -46,6 +51,45 @@ export const MACHINE_NAME = "machine.json";
 export const MACHINE_DIR = ".risa";
 /** The variable that turns the switch on for one process. */
 export const WORK_VAR = "RISA_WORK_SELF";
+
+/** The oldest git Risa and its tests run on: `git init -b` needs it. */
+export const GIT_FLOOR = "2.28";
+
+/** The major.minor `git --version` printed, or null when it isn't one. @param {string} text */
+const gitVersionOf = (text) => {
+  const m = /^git version (\d+)\.(\d+)/.exec(text.trim());
+  return m ? [Number(m[1]), Number(m[2])] : null;
+};
+
+/**
+ * Whether `git --version`'s output names a git under GIT_FLOOR; an unreadable one is.
+ * @param {string} versionText
+ */
+export function gitTooOld(versionText) {
+  const v = gitVersionOf(versionText);
+  if (!v) return true;
+  const [fMajor, fMinor] = GIT_FLOOR.split(".").map(Number);
+  return v[0] < fMajor || (v[0] === fMajor && v[1] < fMinor);
+}
+
+/**
+ * The one line refusing the git on ENV's PATH, or null when it meets the floor.
+ * @param {Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function gitFloorLine(env = process.env) {
+  let text;
+  try {
+    text = execFileSync("git", ["--version"], { encoding: "utf8", env, stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return `git: no git runs here; Risa needs git ${GIT_FLOOR} or newer`;
+  }
+  if (!gitTooOld(text)) return null;
+  const v = text.trim().split("\n")[0];
+  return gitVersionOf(text)
+    ? `git: ${v.replace(/^git version /, "")} is older than ${GIT_FLOOR}; Risa needs git ${GIT_FLOOR} or newer (git init -b)`
+    : `git: \`git --version\` printed "${v}", not a version; Risa needs git ${GIT_FLOOR} or newer`;
+}
 
 /** A problem with the machine config: `problems` has one line per field. */
 export class MachineConfigError extends Error {
@@ -259,6 +303,11 @@ if (isMain()) {
     process.exit(2);
   };
   if (verb === "check") {
+    const git = gitFloorLine();
+    if (git) {
+      console.error(git);
+      process.exit(2);
+    }
     loadOrExit();
   } else if (verb === "repo") {
     const cwd = opt("--cwd") ?? usage();

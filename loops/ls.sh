@@ -101,7 +101,11 @@ done
 [[ -z $leftovers ]] || printf '\n%s' "$leftovers"
 
 echo
-stack_hook testDb status 2>/dev/null || echo "test database: unknown (the testDb hook failed)"
+if has_hook testDb; then
+  stack_hook testDb status 2>/dev/null || echo "test database: unknown (the testDb hook failed)"
+else
+  echo "test database: none (no testDb hook)"
+fi
 
 echo
 "$(dirname "$0")/lease.sh" holders
