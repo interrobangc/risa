@@ -26,7 +26,7 @@ Each turn costs its whole context:
 - **Long exploration goes to a helper.** Past about 10 reads in unfamiliar code, give the rest to one Explore helper (`model: "haiku"` for a plain search, `"sonnet"` for judgement); take back only its conclusion. Long check output: a haiku helper with the log's path.
 - **Past 175k context** a hook asks you to judge (the watch: `{{prd}} doc machinery "The context watch"`): continue or hand off; say which in the hand-off. **Past 300k** hand off now: commit, start no check, name an unfinished fix.
 - **Format** changed files before each check (your prompt's command); commit.
-- **Background** `{{prd}} check` and anything past 2 min (`run_in_background`); wait with `{{prd}} wait check` (again on 75). Never end your turn before the hand-off.
+- **Background** `{{prd}} check` and all past 2 min (`run_in_background`); wait with `{{prd}} wait check` (160 s; again on 75). Never end your turn before the hand-off.
 - **Hand off** after `{{prd}} stack down`, then wait: the orchestrator may send back a CI failure.
 - **Bye** (just 'bye'): hand-off ready, stack down, then `{{prd}} bye` (it only reports); send your orchestrator what it lists.
 - **A fix request is only:** your prompt's steps, one `--no-ff` merge of `prd/<topic>`, a new commit, `{{prd}} check --quick "slice fix"`, `stack down`, a new hand-off line.
