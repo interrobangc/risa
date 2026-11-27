@@ -96,7 +96,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-985 | bug | triaged | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
 | RISA-986 | change | triaged | fixes-tooling |  | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
 | RISA-987 | bug | triaged | fixes-tooling |  | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
-| RISA-988 | bug | inbox |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
+| RISA-988 | bug | live |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
 | RISA-989 | bug | triaged | fixes-tooling |  | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
 | RISA-990 | bug | ready | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
@@ -815,12 +815,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-988 · bug · risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181)
 
-- status: inbox
+- status: live
 - prd:
 - owner:
-- commit:
+- commit: 1caec2c
 
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: from the fixes-tooling orchestrator; two slices couldn't run their hand-off check. The user's word: a hotfix now (hotfix/check-plan-rules).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27: landed by PR #4 (1caec2c): risa-check-plan.json, risa-tiers.json (one tier, unit) and hooks.check. Opened with gh, because risa pr reads main's config, which lacked the fix.
 
 ### RISA-989 · bug · backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock
 
