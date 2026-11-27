@@ -2,3 +2,6 @@ pnpm-lock.yaml
 loops/codex-review.fixtures/
 ci/verdict.fixtures/
 loops/sample-project/prompt-golden.txt
+# Written by the backlog tool (risa backlog) on every change; formatting it would churn its diffs.
+plans/backlog.md
+plans/backlog-archive.md
