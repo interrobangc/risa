@@ -96,16 +96,18 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
 | RISA-985 | bug | triaged | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
 | RISA-986 | change | triaged | fixes-tooling |  | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
-| RISA-987 | bug | in-progress | fixes-tooling | prd/fixes-tooling | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
+| RISA-987 | bug | ready | fixes-tooling | prd/fixes-tooling | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
 | RISA-988 | bug | live |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
-| RISA-989 | bug | in-progress | fixes-tooling | prd/fixes-tooling | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
+| RISA-989 | bug | ready | fixes-tooling | prd/fixes-tooling | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
 | RISA-990 | bug | live | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-992 | bug | live | after-split | prd/after-split | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
-| RISA-993 | bug | in-progress | fixes-tooling | prd/fixes-tooling | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
+| RISA-993 | bug | ready | fixes-tooling | prd/fixes-tooling | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
 | RISA-994 | bug | triaged | fixes-tooling |  | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 | RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
 | RISA-996 | chore | triaged | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
+| RISA-997 | chore | triaged | fixes-tooling |  | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
+| RISA-998 | feature | triaged | risa-next |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
 
 ## Items
 
@@ -816,10 +818,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-987 · bug · tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 00269bb
 
 - 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 2 (2026-11-27).
 
@@ -835,10 +837,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-989 · bug · backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 7451bdd
 
 - 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 3 (2026-11-27).
 
@@ -874,10 +876,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-993 · bug · config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 7451bdd
 
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
 - 2026-11-27 (slice/fixes-tooling/13): Cause: the test wasn't hermetic. test-setup.mjs's ??= keeps a shell's RISA_MACHINE_CONFIG/RISA_CONFIG, so 'starts Node once' also counted find_repo's machine.mjs start (2 lines), and backlogIds/toolCommands defaults read the checkout's risa.json. Fixed in config.test.mjs (pins both). The ENOENT itself didn't reproduce at load 56.
@@ -908,3 +910,22 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/fixes-tooling): The user, 2026-11-27: 'Land it and review codex later'. Codex hadn't reviewed after two 20-min waits.
+
+### RISA-997 · chore · CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict')
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 8 (RISA-969): .github/workflows/ci.yml runs pnpm check but uploads no verdict.json, so ci run --wait can't judge its runs.
+
+### RISA-998 · feature · A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before…
+
+- status: triaged
+- prd: risa-next
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): From the inbox: A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before it runs or between waves) to replan the whole PRD
+- 2026-11-27 (Robert Bo Davis): Triage: risa-next, the bin for new dispatcher and registry features; the user chose a whole-PRD replan (a registry state), not an item status. Could join self-recovery-3 instead (both touch loops/dispatch).
