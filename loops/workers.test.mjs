@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { gitInit, withOldGit } from "./git-init.mjs";
 import { factsOf, gitProgress, processCwds, readLeases, selfOf, workerFacts } from "./workers.mjs";
 
 const NOW = Date.parse("2026-11-24T12:00:00Z");
@@ -18,15 +19,29 @@ beforeAll(() => {
   sessions = join(loops, ".sessions");
   slice = join(loops, "topic-3");
   mkdirSync(sessions, { recursive: true });
-  spawnSync("git", ["init", "-q", "-b", "slice/topic/3", slice]);
-  git(slice, "config", "user.email", "loop@example.test");
-  git(slice, "config", "user.name", "Fixture Loop");
-  writeFileSync(join(slice, ".gitignore"), "cache/\n*.log\n");
-  writeFileSync(join(slice, "a.mjs"), "export const a = 1;\n");
-  git(slice, "add", ".");
-  git(slice, "commit", "-q", "-m", "chore: start");
+  sliceRepo(slice);
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+// A slice's checkout at DIR: on its slice branch, one commit, a .gitignore.
+function sliceRepo(dir) {
+  gitInit(["-q", "-b", "slice/topic/3", dir]);
+  git(dir, "config", "user.email", "loop@example.test");
+  git(dir, "config", "user.name", "Fixture Loop");
+  writeFileSync(join(dir, ".gitignore"), "cache/\n*.log\n");
+  writeFileSync(join(dir, "a.mjs"), "export const a = 1;\n");
+  git(dir, "add", ".");
+  git(dir, "commit", "-q", "-m", "chore: start");
+}
+
+describe("the slice fixture", () => {
+  it("stops at a failed git init, before any later git command", () => {
+    const dir = join(root, "old-git");
+    const { error, calls } = withOldGit(() => sliceRepo(dir));
+    expect(error?.message).toMatch(/^git init -q -b slice\/topic\/3 .* failed \(exit 129\)/);
+    expect(calls).toEqual([`init -q -b slice/topic/3 ${dir}`]);
+  });
+});
 
 describe("gitProgress", () => {
   it("a change to an ignored file is not progress; a tracked or unignored one is", () => {
