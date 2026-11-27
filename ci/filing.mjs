@@ -2,8 +2,10 @@
 //
 // A finding is one failing test, file or job. Its key is stable across runs and
 // sits in the item's first note as `[ci-key <key>]`, so an open item gets a note
-// on a later find instead of a second item. A finding may carry a quarantine
-// entry; an entry whose item is finished leaves on any write.
+// on a later find instead of a second item. A finding that names its tested commit
+// (a second-zone failure) also notes a finished item whose fix that commit lacks;
+// one whose fix it has is a new failure, filed naming the old item. A finding may
+// carry a quarantine entry; an entry whose item is finished leaves on any write.
 import { createHash } from "node:crypto";
 
 import { isQuarantined, parseQuarantine } from "./ci-lists.mjs";
@@ -15,9 +17,10 @@ const MAX_QUARANTINE_NAME = 299;
 
 /**
  * `item` notes that item instead of filing one; `once` skips the note on an item
- * that already carries that mark, so a rerun of one commit writes nothing new.
- * @typedef {{ key: string, title: string, prd: string, note: string, quarantine?: { file: string, name: string } | null, item?: string, once?: string }} Finding
- * @typedef {{ id: string, title: string, status: string, notes: string }} Item
+ * that already carries that mark, so a rerun of one commit writes nothing new;
+ * `commit` is the commit the run tested (see the header).
+ * @typedef {{ key: string, title: string, prd: string, note: string, quarantine?: { file: string, name: string } | null, item?: string, once?: string, commit?: string }} Finding
+ * @typedef {{ id: string, title: string, status: string, notes: string, commit?: string }} Item
  */
 
 /** The stable key of a failing test, a whole file, or a job. */
@@ -38,6 +41,10 @@ export const canQuarantine = (/** @type {string | null | undefined} */ name) =>
 /** The open item carrying a key, if any. */
 export const openItem = (/** @type {Item[]} */ items, /** @type {string} */ key) =>
   items.find((i) => !FINISHED.has(i.status) && (i.notes ?? "").includes(keyMark(key)));
+
+/** The newest finished item carrying a key, if any. */
+const finishedItem = (/** @type {Item[]} */ items, /** @type {string} */ key) =>
+  items.findLast((i) => FINISHED.has(i.status) && (i.notes ?? "").includes(keyMark(key)));
 
 /**
  * The quarantine text without entries whose item is finished or archived. An
@@ -65,7 +72,8 @@ export function pruneQuarantine(text, items, archived = []) {
  * @param {{ items: Item[], archived?: string[] }} backlog changed in place
  * @param {string | null} quarantineText null when the repo has no list
  * @param {Finding[]} findings
- * @param {{ add: (f: Finding) => Item, note: (item: Item, text: string) => void }} write
+ * @param {{ add: (f: Finding) => Item, note: (item: Item, text: string) => void, hasFix?: (item: Item, commit: string) => boolean }} write
+ *   hasFix: whether a commit contains an item's fix (none given: it doesn't)
  */
 export function applyFindings(backlog, quarantineText, findings, write) {
   /** @type {{ key: string, id: string, created: boolean }[]} */ const filed = [];
@@ -87,9 +95,13 @@ export function applyFindings(backlog, quarantineText, findings, write) {
       }
       continue;
     }
-    const open = openItem(backlog.items, f.key);
-    if (open && !noted(open, f)) write.note(open, f.note);
-    const item = open ?? write.add({ ...f, note: `${keyMark(f.key)} ${f.note}` });
+    const done = f.commit ? finishedItem(backlog.items, f.key) : undefined;
+    const fixed = !!done?.commit && !!write.hasFix?.(done, /** @type {string} */ (f.commit));
+    const open = openItem(backlog.items, f.key) ?? (done && !fixed ? done : undefined);
+    if (open && !noted(open, f))
+      write.note(open, open === done ? `${f.note} Its fix isn't in the tested commit.` : f.note);
+    const again = done && fixed ? ` Fails again with ${done.id}'s fix in.` : "";
+    const item = open ?? write.add({ ...f, note: `${keyMark(f.key)} ${f.note}${again}` });
     filed.push({ key: f.key, id: item.id, created: !open });
     if (text !== null && f.quarantine && canQuarantine(f.quarantine.name)) {
       const { file, name } = f.quarantine;

@@ -1350,6 +1350,14 @@ function main() {
                 ...ctx(),
               }),
             note: (it, text) => fmt.addNote(it, { text, ...ctx() }),
+            hasFix: (it, commit) =>
+              tryGit(
+                mainCheckout,
+                "merge-base",
+                "--is-ancestor",
+                `${it.commit}^{commit}`,
+                `${commit}^{commit}`,
+              ) !== null,
           });
           c.quarantine = r.quarantine;
           return r;
