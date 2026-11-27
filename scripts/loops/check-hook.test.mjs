@@ -2,7 +2,9 @@
 // the project's check (the config's hooks.check, the sample's two-line script)
 // with the mode, the base and the own test files, and then, when the plan says the
 // diff touches the tooling, the tooling tests (check-tooling.mjs) with the
-// check's rerun rules and state files. A stub vitest stands in for the tests.
+// check's rerun rules and state files, after the project-data check
+// (project-check.mjs), which passes on the repo's sample data. A stub vitest
+// stands in for the tests.
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -18,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checkProjects, failedFiles, slowestFiles, unhandledError } from "./check-tooling.mjs";
-import { makeRepo } from "./sample-project/repo.mjs";
+import { makeRepo, sampleData } from "./sample-project/repo.mjs";
 
 let root, repo, calls, state;
 
@@ -58,7 +60,7 @@ beforeAll(() => {
   repo = join(root, "repo");
   calls = join(root, "calls");
   state = join(root, "state");
-  makeRepo(repo);
+  makeRepo(repo, { files: sampleData() });
   mkdirSync(join(repo, "node_modules/.bin"), { recursive: true });
   writeFileSync(join(repo, "node_modules/.bin/vitest"), STUB);
   chmodSync(join(repo, "node_modules/.bin/vitest"), 0o755);
@@ -132,6 +134,22 @@ describe("check-hook.sh", () => {
     expect(r.ran).toEqual([TOOLS]);
     expect(r.step).toBe("tooling");
     expect(hook(["full", "abc123", "2"]).ran).toEqual([`${TOOLS} --project tools:browser`]);
+  });
+
+  it("fails the tooling step on the project-data check, with its lines, before any test", () => {
+    const inbox = join(repo, "work/inbox.md");
+    const text = readFileSync(inbox, "utf8");
+    rmSync(inbox);
+    try {
+      const r = hook(["slice", "abc123", "1"]);
+      expect(r.status).toBe(1);
+      expect(r.out).toContain("work/inbox.md: missing (paths.inbox)\n");
+      expect(r.out).toContain("the project-data check failed");
+      expect(r.step).toBe("tooling");
+      expect(r.ran).toEqual([]);
+    } finally {
+      writeFileSync(inbox, text);
+    }
   });
 
   it("fails with no check hook in the config", () => {

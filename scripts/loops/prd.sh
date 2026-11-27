@@ -116,6 +116,9 @@ ${prd_cmd} <command>
 
     doc <role> [section]      a role's doc as its sessions read it (the generic doc, then the project's
                               additions; or its replacement), or one section of it; no role: the roles
+    project-check             the project's own data through the core's readers (the config's paths, tier
+                              data, check plan rules, CI lists, role docs, never list, gates, boundary);
+                              one line per problem, exit 1 on any; the tooling tests and the check run it first
 
   Asks (questions and reports for the dev keeper, in the main checkout's .loops/.asks)
     ask --topic <t> --question <text> --skeptic <id> [--option <a>]… [--recommend <a|n> --defaults|--waits]
@@ -291,6 +294,7 @@ case $cmd in
   test-db | testdb) stack_hook testDb "$@"; exit $? ;;
   prompt) exec "$bin/prompt.sh" "$@" ;;
   doc) exec node "$bin/doc.mjs" "$@" ;;
+  project-check) exec node "$bin/project-check.mjs" "$@" ;;
   queue) work_switch queue; exec node "$bin/queue.mjs" "$@" ;;
   status-trim)
     t=""
