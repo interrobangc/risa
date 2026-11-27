@@ -18,7 +18,7 @@
 
 **Wave 1** (2026-11-27): slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
 
-**Waiting, later waves:** RISA-681 and RISA-934 (wave 2: they share `ci/ci-file.mjs` and `backlog/registry.mjs` with slices 7 and 4). After-split's hot files (`loops/dispatch*`, `loops/machine*`, `loops/docs/`, `package.json`…): RISA-813, 915, 926, 927, 952, 882, 886. RISA-722, 780, 459: decided for you (ask a6, skeptic s5): fixed here in a later wave (722: an override for a commit holds until a run on a newer commit; 459's meaning of live is its own question when its slice is written). RISA-969 (a GitHub workflow): asked the user, ask a5, waits (money). RISA-720, 881, 883, 886, 889, 968: the backlog session (risa-2a) is asking the user and will move them itself; leave them alone.
+**Waiting, later waves:** RISA-681 and RISA-934 (wave 2: they share `ci/ci-file.mjs` and `backlog/registry.mjs` with slices 7 and 4). After-split's hot files (`loops/dispatch*`, `loops/machine*`, `loops/docs/`, `package.json`…): RISA-813, 915, 926, 927, 952, 882, 886. RISA-722, 780, 459: decided for you (ask a6, skeptic s5): fixed here in a later wave (722: an override for a commit holds until a run on a newer commit; 459's meaning of live is its own question when its slice is written). RISA-969 (a GitHub workflow): asked the user, ask a5, waits (money). From the user via the backlog session: RISA-720 dropped; RISA-968 moved out (no topic); RISA-881, 883, 886, 889 stay here, in a wave after after-split lands (they touch `loops/docs/` and the prompts).
 
 ## How to run this plan
 
