@@ -31,7 +31,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `after-split-2` | done | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
 | `risa-next-5` | — | `risa-next-4` | — | — |
 | `fixes-perf` | standing | — | — | Standing fixes topic for speed and load (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
-| `fixes-nit` | standing | — | `loops/anchors.mjs`, `loops/ask.mjs`, `loops/asks.mjs`, `loops/autostart.mjs`, `loops/browser.sh`, `loops/bye.mjs`, `loops/check-`, `loops/context.mjs`, `loops/doc.mjs`, `loops/down.sh`, `loops/drain.mjs`, `loops/end-session.sh`, `loops/inventory.mjs`, `loops/land.sh`, `loops/landed.mjs`, `loops/lease.sh`, `loops/lib.sh`, `loops/load-gate.mjs`, `loops/ls.sh`, `loops/metrics.mjs`, `loops/new.sh`, `loops/notice`, `loops/open-session.mjs`, `loops/planner-model.mjs`, `loops/pr.sh`, `loops/project-check.mjs`, `loops/queue.mjs`, `loops/rotate.mjs`, `loops/session-`, `loops/sessions.mjs`, `loops/skeptic`, `loops/slice-fields.mjs`, `loops/status-`, `loops/tidy`, `loops/usage.mjs`, `loops/watch`, `loops/workers.mjs`, `loops/flavor`, `loops/sample-project/prompt-golden.txt`, `loops/docs/machinery.md`, `loops/docs/orchestrator.md`, `loops/docs-budget.mjs`, `CHANGELOG.md`, `ci/` | Standing fixes topic for small tidies users won't notice (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
+| `fixes-nit` | standing | — | `loops/anchors.mjs`, `loops/ask.mjs`, `loops/asks.mjs`, `loops/autostart.mjs`, `loops/browser.sh`, `loops/bye.mjs`, `loops/check-`, `loops/context.mjs`, `loops/doc.mjs`, `loops/down.sh`, `loops/drain.mjs`, `loops/end-session.sh`, `loops/inventory.mjs`, `loops/land.sh`, `loops/landed.mjs`, `loops/lease.sh`, `loops/lib.sh`, `loops/load-gate.mjs`, `loops/ls.sh`, `loops/metrics.mjs`, `loops/new.sh`, `loops/notice`, `loops/open-session.mjs`, `loops/planner-model.mjs`, `loops/pr.sh`, `loops/project-check.mjs`, `loops/queue.mjs`, `loops/rotate.mjs`, `loops/session-`, `loops/sessions.mjs`, `loops/skeptic`, `loops/slice-fields.mjs`, `loops/status-`, `loops/tidy`, `loops/usage.mjs`, `loops/watch`, `loops/workers.mjs`, `loops/flavor`, `loops/sample-project/prompt-golden.txt`, `loops/docs/machinery.md`, `loops/docs/orchestrator.md`, `loops/docs/loop.md`, `loops/doc-sections.test.mjs`, `loops/docs-budget.mjs`, `CHANGELOG.md`, `ci/` | Standing fixes topic for small tidies users won't notice (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
 | `fixes-bug-later` | standing | — | — | Fixes in Risa's repo that can wait: real but rare or cosmetic-adjacent, below the planned topics. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
 | `ship` | — | — | `loops/ship`, `loops/config.mjs`, `loops/prd.sh`, `release/`, `risa.json`, `vitest.config.mjs`, `loops/docs/ship.md`, `loops/docs-budget.mjs`, `loops/doc-sections.test.mjs`, `CHANGELOG.md`, `AGENTS.md` | — |
 | `flavor-packs` | — | — | — | Very low priority (the user, 2026-11-28): new flavor packs, data only |
@@ -111,7 +111,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1016 | change | live | fixes-tooling | prd/fixes-tooling | risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014 |
 | RISA-1017 | plan | triaged | risa-next-5 |  | Risa: usable by others: install without a Risa checkout, docs for outsiders, versioning (risaVersion enforced), hosts other than macOS and iTerm2 (cut from RISA-797 by the risa-next-4 planner) |
 | RISA-1018 | bug | live | fixes-tooling | prd/fixes-tooling | check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run) |
-| RISA-1019 | chore | in-progress | fixes-nit | prd/fixes-nit | session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead |
+| RISA-1019 | chore | ready | fixes-nit | prd/fixes-nit | session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead |
 | RISA-1020 | bug | live | fixes-tooling | prd/fixes-tooling | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
 | RISA-1021 | chore | live | fixes-tooling | prd/fixes-tooling | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
 | RISA-1022 | bug | live | fixes-tooling | prd/fixes-tooling | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
@@ -133,7 +133,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1038 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The inbox session finds the wrong project: run from its own directory (~/.risa/inbox, outside any repo), session.sh's find_repo falls back to the release worktree's repo (Risa's checkout), not the project prd.sh inbox ran for, so it misses that project's claudeConfigDir (starts on Claude Code's default account) and writes its session record under Risa's .loops/.sessions (the project's risa status shows it ended while it's live) |
 | RISA-1039 | change | live | fixes-bug | prd/fixes-bug | Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
 | RISA-1040 | feature | triaged | self-recovery-3 |  | An orchestrator that lands and stops without rotating is caught: rotate runs go into .run-log.jsonl, and the dispatcher nudges (then closes) a standing topic whose session sits idle after a land-end with nothing runnable, instead of leaving its lane held |
-| RISA-1041 | change | in-progress | fixes-nit | prd/fixes-nit | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
+| RISA-1041 | change | ready | fixes-nit | prd/fixes-nit | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
 | RISA-1042 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began |
 | RISA-1043 | change | triaged | fixes-bug-later |  | backlog set takes --note TEXT (as add does), so triage is one command and one commit; the standalone backlog note command stays for a note alone |
 | RISA-1044 | feature | triaged | flavor-packs |  | Flavor pack: Battlestar Galactica. User addressed as Admiral; names are callsigns. backlog = Commanders (Adama, Cain, Fisk, Garner), prd = Captains (Starbuck, Apollo), slice = Viper pilot Lieutenants (Helo, Athena, Kat, Racetrack, Hotdog, Narcho), inbox = comms (Dualla, Gaeta), hotfix = deck crew (Chief Tyrol, Cally, Seelix), plan = Colonel (Tigh), recovery = Doctors (Cottle, Salik) |
@@ -143,7 +143,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1048 | bug | triaged | fixes-test |  | pnpm test:tooling runs no tests and exits 0 (a false green) from a project's node_modules: loops/tooling-tests.mjs's main guard compares import.meta.url with file://argv[1], and under pnpm argv[1] is the symlink while import.meta.url is the real .pnpm path; compare realpaths (as session-names.mjs's isMain does) here and in the other entry points with the same guard |
 | RISA-1049 | change | live | fixes-bug | prd/fixes-bug | A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names |
 | RISA-1050 | change | triaged | fixes-bug |  | Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning) |
-| RISA-1051 | bug | in-progress | fixes-nit | prd/fixes-nit | The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one |
+| RISA-1051 | bug | ready | fixes-nit | prd/fixes-nit | The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one |
 | RISA-1052 | bug | triaged | fixes-bug-urgent |  | session.sh resolves its own directory (bin=$(cd "$(dirname "$0")" && pwd)) before sourcing lib.sh, whose unset CDPATH now comes too late: with CDPATH set and a relative $0, cd prints the matched path and bin gets it twice, so source "$bin/lib.sh" fails. Unset CDPATH first |
 | RISA-1053 | feature | triaged | ship |  | A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion) |
 | RISA-1054 | bug | triaged | fixes-tooling |  | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
@@ -153,6 +153,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1058 | bug | triaged | risa-next-2 |  | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
 | RISA-1059 | bug | triaged | risa-next-2 |  | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
 | RISA-1060 | bug | triaged | risa-next-2 |  | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
+| RISA-1061 | bug | triaged | fixes-bug |  | context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo |
+| RISA-1062 | chore | triaged | fixes-tooling |  | Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown) |
+| RISA-1063 | bug | triaged | fixes-bug |  | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
 
 ## Items
 
@@ -680,6 +683,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/after-split): Seen by after-split slice 6 (2026-11-27), which changed only the generic docs
+- 2026-11-28 (prd/fixes-nit): Wave 1 (prd/fixes-nit, slices 1-4) did loops/ and ci/. Left for a later wave: backlog/ and loops/dispatch* (hot for risa-next-2); drain.mjs's ps regex and ask.mjs's prd- session-kind map are behaviour, not wording.
 
 ### RISA-997 · chore · CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict')
 
@@ -875,10 +879,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1019 · chore · session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead
 
-- status: in-progress
+- status: ready
 - prd: fixes-nit
 - owner: prd/fixes-nit
-- commit:
+- commit: c503711
 
 - 2026-11-28 (prd/risa-next): Found merging risa-next slices 2 and 3 (both wrote the rule in parallel); no behaviour difference today
 
@@ -1086,10 +1090,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1041 · change · Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work
 
-- status: in-progress
+- status: ready
 - prd: fixes-nit
 - owner: prd/fixes-nit
-- commit:
+- commit: fdfb876
 
 - 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'When captains are just talking about what they are doing, they should be writing to their captains log so the fleet admiral can review later. Only address fleet admiral when interacting directly with me.' The line is built in loops/flavor.mjs (~182); flavor.test.mjs checks its text.
 - 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'That needs to be configurable when switching color settings.' So the log's name and when to use the title come from the flavor pack, beside pack.address (e.g. a pack.log field: captain's log for the Starfleet pack, its own wording or none for other flavors), never hard-coded in flavorLine; the default flavor and any pack without the field keep a plain report voice.
@@ -1182,10 +1186,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1051 · bug · The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one
 
-- status: in-progress
+- status: ready
 - prd: fixes-nit
 - owner: prd/fixes-nit
-- commit:
+- commit: 941a01a
 
 - 2026-11-28 (prd/fixes-bug-urgent): Found by fixes-bug-urgent at wave 2's docs fold (2026-11-28): the fold went into prd.sh's help instead.
 - 2026-11-28 (Robert Bo Davis): Same gap in the orchestrator doc: 'risa doc orchestrator "Rules across PRDs"' prints 'no section', though the planner prompt and the skeptic brief point at it (seen by both self-recovery-3 skeptics, 2026-11-28).
@@ -1281,3 +1285,31 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:91. Init in a temp folder and rename into place, or tolerate an existing remote with the same URL.
 - 2026-11-28 (prd/risa-next-2): Taken into risa-next-2 (it owns backlog/inbox-store.mjs): fixed with wave 2 (slice 2's brief), freeing fixes-bug's lane.
 - 2026-11-28 (Robert Bo Davis): Moved from fixes-bug to risa-next-2: a Codex finding on its own inbox-store.mjs (PR #28, not in main yet).
+
+### RISA-1061 · bug · context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-nit): Found by fixes-nit slice 1 (2026-11-28); expectations in loops/context.test.mjs (~315, 330, 363, 539)
+
+### RISA-1062 · chore · Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-nit): Hit by fixes-nit slices 1-4 (2026-11-28)
+
+### RISA-1063 · bug · Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains)
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog, quoting the user: 'name overlap is not good'. Seen 2026-11-28: backlog (risa) and backlog (caretook) both Admiral Cartwright; two Captain Saru too (prd-fixes-bug risa, prd-account-security caretook).
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-bug (wrong behaviour). Touches loops/captain.mjs and the live-session list (loops/session-names.mjs or the sessions record); check risa-next-2's hot files before a wave picks it.
