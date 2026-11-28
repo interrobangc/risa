@@ -1,4 +1,4 @@
-// ci-runs.mjs: part of `prd ci` (ci.mjs has the map). Runs on GitHub:
+// ci-runs.mjs: part of `ci` (ci.mjs has the map). Runs on GitHub:
 // requesting one (a push to its ci/ ref), waiting for it (an infra verdict is
 // rerun once), reading its verdict artifact, writing the commit status, and
 // finding a commit's verdict (findVerdict, latestVerdict, findTipVerdict).
