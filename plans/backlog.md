@@ -113,9 +113,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1017 | plan | triaged | risa-next-5 |  | Risa: usable by others: install without a Risa checkout, docs for outsiders, versioning (risaVersion enforced), hosts other than macOS and iTerm2 (cut from RISA-797 by the risa-next-4 planner) |
 | RISA-1018 | bug | live | fixes-tooling | prd/fixes-tooling | check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run) |
 | RISA-1019 | chore | triaged | fixes-nit |  | session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead |
-| RISA-1020 | bug | in-progress | fixes-tooling | prd/fixes-tooling | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
-| RISA-1021 | chore | in-progress | fixes-tooling | prd/fixes-tooling | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
-| RISA-1022 | bug | in-progress | fixes-tooling | prd/fixes-tooling | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
+| RISA-1020 | bug | ready | fixes-tooling | prd/fixes-tooling | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
+| RISA-1021 | chore | ready | fixes-tooling | prd/fixes-tooling | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
+| RISA-1022 | bug | ready | fixes-tooling | prd/fixes-tooling | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
 | RISA-1023 | bug | triaged | fixes-bug |  | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
 | RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 
@@ -959,28 +959,28 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1020 · bug · loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7fd72e
 
 - 2026-11-28 (prd/fixes-tooling): Follow-up noted on RISA-1015 (fixes-tooling wave 6): check-plan reports a bad Model, anchors doesn't.
 
 ### RISA-1021 · chore · In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7fd72e
 
 - 2026-11-28 (prd/fixes-tooling): Follow-up noted on RISA-1015 (fixes-tooling wave 6).
 
 ### RISA-1022 · bug · The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -'
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7fd72e
 
 - 2026-11-28 (prd/fixes-tooling): Found by slice 44 (RISA-1018): keep polling on unread once it has said busy.
 
