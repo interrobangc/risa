@@ -71,3 +71,55 @@ describe("ready.sh", () => {
     expect(r.stdout).toContain("- ✗ no worktree at");
   });
 });
+
+// The Codex line on an open PR (#7): Codex finished clean on $PR_REVIEWED (its
+// summary comment) and the PR's head is $PR_HEAD. A docs-only commit after the
+// approval keeps it clean (lib.sh's docs_re, as land.sh passes it); code doesn't.
+describe("ready.sh's Codex line", () => {
+  const GH_PR = `#!/usr/bin/env bash
+case "$1 $2" in
+  "repo view") echo o/r ;;
+  "pr list") echo 7 ;;
+  "run list") echo "[]" ;;
+  "api graphql") state='{"code_review":{"commit_sha":"'"$PR_REVIEWED"'","status":"completed"}}'
+    comment='{"author":{"login":"chatgpt-codex-connector"},"body":"<!-- codex-review-state:v1 '"\${state//\\"/\\\\\\"}"' -->","createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z"}'
+    printf '{"data":{"repository":{"pullRequest":{"number":7,"url":"https://example.test/pr/7","state":"OPEN","headRefName":"prd/throwaway-x","headRefOid":"%s","reviews":{"nodes":[]},"reviewThreads":{"nodes":[]},"comments":{"nodes":[%s]},"reactions":{"nodes":[]}}}}}' "$PR_HEAD" "$comment" ;;
+  *) echo "unexpected gh $*" >&2; exit 1 ;;
+esac
+`;
+  // prd/throwaway-x reviewed clean on its first commit, then `after` committed on it.
+  const readyAfter = (after) => {
+    git("checkout", "-qb", "prd/throwaway-x");
+    const reviewed = commit({ "web/b.ts": "2" }, "work");
+    const head = commit(after, "after the review");
+    git("checkout", "-q", "dev");
+    appendFileSync(join(repo, ".git", "info", "exclude"), ".loops/\n");
+    git("worktree", "add", "-q", join(repo, ".loops", "throwaway-x"), "prd/throwaway-x");
+    writeFileSync(join(root, "bin", "gh"), GH_PR);
+    const r = spawnSync("bash", ["loops/ready.sh", "throwaway-x"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PR_REVIEWED: reviewed,
+        PR_HEAD: head,
+      },
+    });
+    return { r, reviewed: reviewed.slice(0, 7), head: head.slice(0, 7) };
+  };
+
+  it("reads clean when only a .md file changed since Codex's approval", () => {
+    const { r, reviewed, head } = readyAfter({ "plans/x-plan.md": "## Status\n\nwave 1 landed\n" });
+    expect(r.stdout).toContain("- https://github.com/o/r/pull/7");
+    expect(r.stdout).toContain(
+      `- codex: clean on ${head} (approved on ${reviewed}: only docs changed since)`,
+    );
+  });
+
+  it("isn't clean when a code file changed since", () => {
+    const { r, reviewed, head } = readyAfter({ "web/c.ts": "3" });
+    expect(r.stdout).toContain(`- codex: stale (last reviewed ${reviewed}, head ${head}; not carried: `);
+    expect(r.stdout).not.toContain("codex: clean");
+  });
+});

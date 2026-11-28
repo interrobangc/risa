@@ -608,11 +608,12 @@ pr_state() {
 }
 
 # pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,
-# one line, or the line and the findings); a clean one carries over dev merges.
+# one line, or the line and the findings); a clean one carries over dev merges
+# and over docs-only commits after the approval (docs_re, as land.sh passes it).
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
+  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" --docs="$docs_re" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.
