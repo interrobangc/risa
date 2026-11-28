@@ -11,7 +11,9 @@
 //   4. one trunk commit, built on origin's tip and pushed without force, sets the
 //      `inbox` group in the config and removes the trunk inbox file. A refused push
 //      is fetched and rebuilt, TRIES times (the store write again, which adds only
-//      what is new). `paths.inbox` stays, unread while `inbox` is set.
+//      what is new, and takes back a line an earlier try copied that the new tip's
+//      inbox has filed meanwhile: matched by line key, tag aside). `paths.inbox`
+//      stays, unread while `inbox` is set.
 //
 // It touches no working tree, index or HEAD: the pickup (dev-sync) is the caller's.
 import { execFileSync } from "node:child_process";
@@ -138,6 +140,11 @@ export function moveToRepo(url, o) {
       .filter((e) => e.id)
       .map(fmt.lineKey),
   );
+  /** Keys of the lines this move has put in the store, across its tries. */
+  const copied = new Set();
+  let dropped = 0;
+  /** @type {string | null} */
+  let storeSha = null;
   try {
     for (let tries = 1; tries <= TRIES; tries++) {
       const tip = fetch();
@@ -160,21 +167,40 @@ export function moveToRepo(url, o) {
       const inboxText = show(tip, o.inboxRel);
       const lines = fmt.newInboxEntries(inboxText ?? "").filter((e) => !localTagged.has(fmt.lineKey(e)));
 
-      let added = 0;
-      let storeSha;
+      // The lines earlier tries copied that this tip's trunk inbox has since filed
+      // (tagged: an ingest landed between that try's store write and its refused
+      // push), matched by line key. They leave the store, as a settled store line
+      // does, so no store ingest files them again.
+      const filedHere = new Set(
+        fmt
+          .parseInbox(inboxText ?? "")
+          .filter((e) => e.id)
+          .map(fmt.lineKey),
+      );
+      /** @type {string[]} */ let addedKeys = [];
+      /** @type {string[]} */ let droppedKeys = [];
+      let sha;
       try {
-        storeSha = store.write(
+        sha = store.write(
           file,
           (t) => {
-            added = 0;
-            if (!lines.length) return t;
-            const have = new Set(fmt.newInboxEntries(t ?? "").map(fmt.lineKey));
-            let out = t ?? "# Inbox\n";
+            addedKeys = [];
+            droppedKeys = [];
+            if (t === null && !lines.length) return t;
+            const drop = fmt
+              .newInboxEntries(t ?? "")
+              .filter((e) => copied.has(fmt.lineKey(e)) && filedHere.has(fmt.lineKey(e)));
+            droppedKeys = drop.map(fmt.lineKey);
+            // Bottom up: a removal never moves the lines above it.
+            let out = drop.reduceRight((acc, e) => edits.removeEntry(acc, e.line), t ?? "");
+            if (!lines.length) return out;
+            const have = new Set(fmt.newInboxEntries(out).map(fmt.lineKey));
+            if (t === null) out = "# Inbox\n";
             for (const e of lines) {
               if (have.has(fmt.lineKey(e))) continue;
               out = edits.addEntry(out, e.type, e.text, e.details);
               have.add(fmt.lineKey(e));
-              added++;
+              addedKeys.push(fmt.lineKey(e));
             }
             return out;
           },
@@ -185,6 +211,12 @@ export function moveToRepo(url, o) {
         if (e instanceof Error && e.name === "StoreError")
           throw new fmt.BacklogError(`${e.message}; ${o.configRel} is unchanged`);
         throw e;
+      }
+      if (sha) {
+        storeSha = sha;
+        for (const k of droppedKeys) copied.delete(k);
+        for (const k of addedKeys) copied.add(k);
+        dropped += droppedKeys.length;
       }
 
       const env = { GIT_INDEX_FILE: tmpIndex };
@@ -204,12 +236,18 @@ export function moveToRepo(url, o) {
       }).trim();
       if (tryGit(["push", "--quiet", o.remote, `${commit}:refs/heads/${o.trunk}`]) !== null) {
         tryGit(["update-ref", tracking, commit]);
+        const moved = copied.size;
         return [
-          storeSha
-            ? `moved ${added} inbox line${added === 1 ? "" : "s"} to ${url} ${file} as ${storeSha.slice(0, 7)}`
+          moved
+            ? `moved ${moved} inbox line${moved === 1 ? "" : "s"} to ${url} ${file} as ${/** @type {string} */ (storeSha).slice(0, 7)}`
             : lines.length
               ? `the ${lines.length} unfiled inbox line${lines.length === 1 ? " is" : "s are"} already in ${url} ${file}`
               : `no unfiled inbox lines to move: ${url} ${file} is unchanged`,
+          ...(dropped
+            ? [
+                `took back from ${url} ${file} the ${dropped} line${dropped === 1 ? "" : "s"} ${o.remote}/${o.trunk} filed during the move`,
+              ]
+            : []),
           `${o.configRel} has the inbox group and ${o.inboxRel} is gone, on ${o.remote}/${o.trunk} as ${commit.slice(0, 7)}`,
         ];
       }
