@@ -165,6 +165,7 @@ import {
 } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
+import { heldText } from "../backlog/registry.mjs";
 import {
   DEFAULT_MAX_BACKLOG_SESSIONS,
   readRequests,
@@ -1735,6 +1736,25 @@ export function tick(
         ...choice.reasons,
       ],
     };
+  // A dry run names a hold's date and reason beside it (prd list's rows carry them; a bare hold prints as it was).
+  if (dryRun) {
+    const since = new Map(
+      facts.rows
+        .filter((/** @type {{ held?: unknown }} */ r) => r.held)
+        .map((/** @type {{ topic: string, held?: { date: string, why: string } }} */ r) => [
+          r.topic,
+          heldText(r),
+        ]),
+    );
+    choice = {
+      ...choice,
+      reasons: choice.reasons.map((r) =>
+        r.topic && since.has(r.topic) && r.why.startsWith("on hold")
+          ? { ...r, why: `on hold since ${since.get(r.topic)}${r.why.slice("on hold".length)}` }
+          : r,
+      ),
+    };
+  }
   const head = formatPick(choice);
   if (g.gate.busy)
     head.splice(
