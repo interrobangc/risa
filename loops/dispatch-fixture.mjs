@@ -58,10 +58,14 @@ appendFileSync(process.env.STUB_STATE + "/tidy.calls", process.argv.slice(2).joi
 console.log("removed 0 safe ones");
 `;
 // The backlog: prd list --json prints the rows file; prd set writes flags into it.
+// STUB_BACKLOG_HANG: prd list never answers (its pid in $STUB_STATE/backlog.hang).
 const BACKLOG = `import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 const file = process.env.STUB_ROWS;
 const [a, b, topic, ...kv] = process.argv.slice(2);
-if (a === "prd" && b === "list") console.log(readFileSync(file, "utf8"));
+if (a === "prd" && b === "list" && process.env.STUB_BACKLOG_HANG) {
+  writeFileSync(process.env.STUB_STATE + "/backlog.hang", String(process.pid));
+  setInterval(() => {}, 1000);
+} else if (a === "prd" && b === "list") console.log(readFileSync(file, "utf8"));
 else if (a === "prd" && b === "set") {
   appendFileSync(process.env.STUB_STATE + "/backlog.calls", ["prd set", topic, ...kv].join(" ") + "\\n");
   if (process.env.STUB_BACKLOG_FAIL) {
