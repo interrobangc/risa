@@ -4,6 +4,12 @@
 
 ## Status
 
+**From the user:** (none yet)
+
+**Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
+
+**Now:** wave 1 starting (slice 1, opus). Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
+
 | Slice | Wave | State | Merge into `prd/risa-next-2` |
 | ----- | ---- | ----- | ---------------------------- |
 | 1     | 1    | —     | —                            |
