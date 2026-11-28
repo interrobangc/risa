@@ -11,7 +11,7 @@
 | 51    | 11   | RISA-1066 | opus  | merged (81db42a; check stopped at budget in tooling step, no failure)                | 423f066                        |
 | 52    | 11   | RISA-1068 | opus  | merged (ca5850b; check stopped at 600s budget in tooling step, load ~21; no failure) | 9b04e99                        |
 
-**Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file.
+**Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file. Gate: tier none (tooling only); `pnpm test` green on 4b86c75 (124 files, 2585 tests); sync skipped (main shares no file); slice worktrees removed. Next: PR, Codex review, land.
 
 **Wave 10 landed** 2026-11-28 in main as 8448fee through PR #31: slices 49, 50, opus (RISA-1054, RISA-1062). Synced with main (19a7b50) first; CI unit green on 97836d7 (run 46162434569); Codex clean on 90e51cb. Report filed; to-test/2026-11-28-1104-fixes-tooling.md; slice worktrees removed. CI now checks out full history, so docs:headings bites there too.
 
