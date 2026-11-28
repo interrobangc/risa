@@ -8,7 +8,7 @@
 
 | Slice | Wave | Item      | Model | State                                   | Merge into `prd/fixes-bug-urgent` |
 | ----- | ---- | --------- | ----- | --------------------------------------- | --------------------------------- |
-| 4     | 2    | RISA-1037 | opus  | agent working (spawned 2026-11-28)      | —                                 |
+| 4     | 2    | RISA-1037 | opus  | merged (worktree kept until wave green) | 7db3bce                           |
 | 5     | 2    | RISA-1042 | opus  | merged (worktree kept until wave green) | 42321be                           |
 | 6     | 2    | RISA-1038 | opus  | merged (worktree kept until wave green) | 3fa8ed4                           |
 
@@ -18,6 +18,8 @@
 
 - **Slice 5 hand-off (ba3c5a0):** a browser wait whose results include a fail or timeout now exits 1 (was 0); the name file gains `from=<bytes>`. Fold into the wait docs at landing. Prettier can't parse `.sh`: the slice prompt's format line fails on shell files.
 - **Slice 6 hand-off (d103931):** `session.sh` `cd`s to `RISA_MAIN` to source `lib.sh` when `$PWD` is outside any repo (`find_repo` unchanged); `prd.sh inbox` passes `RISA_MAIN=$main`. Its slice check stopped on this plan's table format (fixed); the rest ran green by hand.
+- **Slice 4 hand-off (4f7ea96):** every exit marks `.dispatch.json` `stopped {pid, stoppedAt, why}` and logs once; SIGHUP and a lost lock are new exits; `--stop`/`--restart` say who; status reads the mark (`stopped (<why>, <age> ago)`, else `dead`). Fold into the machinery doc at landing.
+- **Wave 2 gate:** all three slices merged; CI run requested.
 - **Docs fold owed from wave 1** (deferred: hot files): `prd.sh`'s `wait` help and the orchestrator/loop docs should say `wait check|browser` prints the result and exits 1 with none recorded. The machinery doc should name the stuck watch's `notified` kind (`RISA_STUCK_NOTIFIED_MIN`, 10; it asks at once, since Risa can't wake an idle session).
 - **`risa check` takes no label for a full run** (`--quick "<why>"` only).
 - **Under load (~16–27)** slice and full checks time out in the tooling tests. Rerun just the failed files through the check lease once the load drops.
