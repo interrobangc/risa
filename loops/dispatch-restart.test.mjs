@@ -234,6 +234,28 @@ describe("dispatch --restart (RISA-1009)", () => {
     expect(dstate().keepAlive.inbox).toEqual({ stopped: true });
   }, 60_000);
 
+  it("with no tab to open it refuses and leaves the running one running (RISA-1012)", async () => {
+    const holder = spawn("node", [join(root, "holder.mjs"), "--every", "7"], { env, stdio: "ignore" });
+    started.push(/** @type {number} */ (holder.pid));
+    const end = Date.now() + 10_000;
+    while (lockHolder(lock) !== holder.pid && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    expect(lockHolder(lock)).toBe(holder.pid);
+
+    const headless = { ...env, RISA_ITERM_APP: join(root, "no-iTerm.app") };
+    const r = spawnSync("node", [join(main, "loops/dispatch.mjs"), "--restart"], {
+      cwd: main,
+      encoding: "utf8",
+      env: headless,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("--restart needs iTerm2");
+    expect(r.stderr).toContain(`the running one (pid ${holder.pid}) was left running`);
+    expect(alive(/** @type {number} */ (holder.pid))).toBe(true);
+    expect(lockHolder(lock)).toBe(holder.pid);
+    expect(calls("open")).toEqual([]);
+    expect(calls("pnpm")).toEqual([]);
+  }, 60_000);
+
   it("with none running it starts one", async () => {
     const r = dispatch(["--restart", "--every", "5"]);
     expect(r.stderr).toBe("");
