@@ -4,9 +4,10 @@
 // tool's commands, paths, role docs, the trunk, the branch prefixes (topic/,
 // part/, draft/, quick/), the id prefix, the project's commands).
 //
-//   makeRepo(main, { config, files })   a git repo at `main`: the tool's scripts
+//   makeRepo(main, { config, files, folder })   a git repo at `main`: the tool's scripts
 //     (loops, without its tests, goldens and this checkout's boundary
-//     manifest and allowlist), the config as its risa.json, the data files it names that sit
+//     manifest and allowlist), the config as its risa.json (FOLDER: in the .risa
+//     folder form instead, config.mjs CONFIG_DIR/CONFIG_FILE), the data files it names that sit
 //     beside it (the tier data, the check plan's rules: tools/ here), the scripts its
 //     hooks run when they sit beside it (tools/check.sh, tools/browser-hook.sh…), the files given
 //     (path → text), one commit on the config's trunk. The scripts find the config at its root, so
@@ -18,7 +19,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_NAME } from "../config.mjs";
+import { CONFIG_DIR, CONFIG_FILE, CONFIG_NAME } from "../config.mjs";
 
 const LOOPS = fileURLToPath(new URL("..", import.meta.url));
 
@@ -58,10 +59,11 @@ export function sampleData() {
 
 /**
  * @param {string} main where the repo goes (made if missing)
- * @param {{ config?: string, files?: Record<string, string> }} [opts]
+ * @param {{ config?: string, files?: Record<string, string>, folder?: boolean }} [opts]
+ *   FOLDER: the config goes in the .risa folder form, not risa.json
  * @returns {Record<string, any>} the repo's config
  */
-export function makeRepo(main, { config = SAMPLE_CONFIG, files = {} } = {}) {
+export function makeRepo(main, { config = SAMPLE_CONFIG, files = {}, folder = false } = {}) {
   const parsed = JSON.parse(readFileSync(config, "utf8"));
   mkdirSync(main, { recursive: true });
   // The scripts alone: no tests or prompt goldens, which no copied script reads, and
@@ -73,7 +75,9 @@ export function makeRepo(main, { config = SAMPLE_CONFIG, files = {} } = {}) {
       !src.endsWith("golden.txt") &&
       !/\/boundary\.(manifest|allowlist)$/.test(src),
   });
-  copyFileSync(config, join(main, CONFIG_NAME));
+  const target = folder ? join(main, CONFIG_DIR, CONFIG_FILE) : join(main, CONFIG_NAME);
+  mkdirSync(dirname(target), { recursive: true });
+  copyFileSync(config, target);
   // A hook's script: its command's first word, or the one after bash or node.
   const hookScripts = Object.values(parsed.hooks ?? {}).map((/** @type {string} */ c) => {
     const words = c.split(" ");
