@@ -13,7 +13,7 @@
 | Slice | Wave | State         | Merge into `prd/risa-next-2` |
 | ----- | ---- | ------------- | ---------------------------- |
 | 1     | 1    | landed (opus) | 72d3a64                      |
-| 2     | 2    | started (opus) | —                           |
+| 2     | 2    | agent working (opus), worktree risa-next-2-2 | — |
 | 3     | 3    | —             | —                            |
 | 5     | 3    | —             | —                            |
 | 4     | 4    | —             | —                            |
