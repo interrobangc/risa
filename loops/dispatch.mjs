@@ -109,8 +109,10 @@
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
 // state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop; inboxReported:
-// the untrusted inbox's report filed),
-// .dispatch.log (each acting tick, and each idle one whose lines changed).
+// the untrusted inbox's report filed; stopped: the last end's pid, time and why),
+// .dispatch.log (each acting tick, and each idle one whose lines changed, and one
+// line for every way it ends: a signal, an uncaught error, a lost lock, a re-exec;
+// a gone pid with no stop mark crashed or was SIGKILLed, RISA-1037).
 //
 // Env: RISA_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), RISA_MAX_PLANNERS (1), RISA_FIXES_MIN (3):
 // the pick's caps; RISA_LOAD_* (load-gate.mjs); RISA_SESSIONS_DIR,
@@ -482,7 +484,9 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
  *   finish?: { reported?: string[] },
  *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
- *     every?: number } }} DispatchState */
+ *     every?: number },
+ *   stopped?: { pid: number, stoppedAt: string, why: string } | null,
+ *   stopRequest?: { pid: number, by: string } | null }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -596,10 +600,22 @@ export function takeLock(
 }
 
 /**
- * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free LOCK:
+ * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free the lock:
  * true once it has. It releases the lock on its way out (a zombie still answers kill 0).
+ * BY (--stop, --restart) goes in the state first, for the stop mark's why (RISA-1037).
  */
-async function stopHolder(/** @type {string} */ lock, /** @type {number} */ holder) {
+async function stopHolder(
+  /** @type {{ lock: string, state: string }} */ { lock, state },
+  /** @type {number} */ holder,
+  /** @type {string} */ by,
+) {
+  try {
+    updateState(state, (s) => {
+      s.stopRequest = { pid: holder, by };
+    });
+  } catch {
+    /* the TERM still stops it; its mark just won't say who sent it */
+  }
   process.kill(holder, "SIGTERM");
   const held = () => lockHolder(lock) === holder;
   const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
@@ -615,6 +631,13 @@ export function everyOf(/** @type {number} */ pid, /** @type {DispatchState} */ 
   const m = /(?:^|\s)--every\s+([0-9.]+)(?:\s|$)/.exec(r.stdout ?? "");
   return m && Number(m[1]) > 0 ? Number(m[1]) : null;
 }
+
+/** An error's first line, for a log line or a stop mark: "Error: boom". */
+export const firstLine = (/** @type {unknown} */ e) =>
+  (e instanceof Error ? `${e.name}: ${e.message}` : String(e)).split("\n")[0];
+
+/** The end hook a running dispatcher sets (RISA-1037): main's own rejection reaches it too. */
+let onEnd = /** @type {((why: string) => void) | null} */ (null);
 
 const releaseLock = (/** @type {string} */ lock) => {
   try {
@@ -2408,7 +2431,7 @@ async function main() {
       return;
     }
     console.log(
-      (await stopHolder(p.lock, holder))
+      (await stopHolder(p, holder, "--stop"))
         ? `Stopped the dispatcher (pid ${holder}).`
         : `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`,
     );
@@ -2425,7 +2448,7 @@ async function main() {
       process.exit(1);
     }
     const every = o.everySet ? o.every : (was && everyOf(was, readState(p.state))) || 60;
-    if (was && !(await stopHolder(p.lock, was))) {
+    if (was && !(await stopHolder(p, was, "--restart"))) {
       console.error(
         `${toolCmd.prd}: sent TERM to the dispatcher (pid ${was}); it hasn't exited, so none was started`,
       );
@@ -2484,17 +2507,56 @@ async function main() {
     console.error(`${toolCmd.prd}: a dispatcher is already running (pid ${lock.pid}); --stop ends it`);
     process.exit(1);
   }
-  let stopping = false;
+  // Every way out logs why and marks the state stopped (RISA-1037), once: a gone pid
+  // with no mark is then a crash or a SIGKILL.
+  let ended = false;
+  const markEnd = (
+    /** @type {string} */ why,
+    /** @type {{ line?: string | null, release?: boolean }} */ {
+      line = `stopped (${why})`,
+      release = true,
+    } = {},
+  ) => {
+    if (ended) return;
+    ended = true;
+    const now = nowOf();
+    try {
+      if (line) log([line], now);
+    } catch {
+      /* no log: the mark still says why */
+    }
+    try {
+      updateState(p.state, (s) => {
+        s.stopped = { pid: process.pid, stoppedAt: stamp(now), why };
+        s.stopRequest = null;
+      });
+    } catch {
+      /* an unwritable state: the log line says why */
+    }
+    if (release) releaseLock(p.lock);
+  };
+  onEnd = markEnd;
   const stop = (/** @type {string} */ sig) => {
-    if (stopping) return;
-    stopping = true;
-    log([`stopped (${sig})`], nowOf());
-    releaseLock(p.lock);
+    if (ended) return;
+    const req = readState(p.state).stopRequest;
+    const by = req?.pid === process.pid ? req.by : "";
+    markEnd(by ? `${sig} by ${by}` : sig, { line: `stopped (${sig})${by ? ` by ${by}` : ""}` });
     process.exit(0);
+  };
+  const crash = (/** @type {string} */ what, /** @type {unknown} */ e) => {
+    console.error(e instanceof Error ? (e.stack ?? firstLine(e)) : e);
+    markEnd(`${what}: ${firstLine(e)}`);
+    process.exit(1);
   };
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));
-  process.on("exit", () => releaseLock(p.lock));
+  process.on("SIGHUP", () => stop("SIGHUP"));
+  process.on("uncaughtException", (e) => crash("uncaught exception", e));
+  process.on("unhandledRejection", (e) => crash("unhandled rejection", e));
+  process.on("exit", (code) => {
+    if (!o.once) markEnd(`exit ${code}`);
+    releaseLock(p.lock);
+  });
 
   const reexeced = o.reexec;
   // Whether it follows the `risa` link (a release install) or its own checkout.
@@ -2503,6 +2565,8 @@ async function main() {
     // A start begins again after "stop keeping it alive" (a re-exec or a --restart is no start).
     updateState(p.state, (s) => {
       if (s.keepAlive && !reexeced && o.restarted === null) s.keepAlive = clearKeepStops(s.keepAlive);
+      s.stopped = null;
+      s.stopRequest = null;
       s.code = {
         hash: CODE_AT_START,
         pid: process.pid,
@@ -2531,6 +2595,19 @@ async function main() {
     started: CODE_AT_START,
     current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
     step: () => {
+      // Another took the lock (or it was removed): this one ends rather than tick beside it.
+      let held = null;
+      try {
+        held = readFileSync(p.lock, "utf8").trim();
+      } catch {
+        /* removed */
+      }
+      if (held !== String(process.pid)) {
+        markEnd(`lost its lock (${held ? `it names pid ${held}` : "the lock file is gone"})`, {
+          release: false,
+        });
+        process.exit(1);
+      }
       const now = nowOf();
       const quiet = [];
       const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
@@ -2556,6 +2633,8 @@ async function main() {
     const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
     const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
     const env = process.env;
+    // The re-exec's line is above; the new code's start clears the mark.
+    markEnd(`re-exec onto new code ${end.to}`, { line: null, release: false });
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.
     if (typeof process.execve === "function")
       process.execve(process.execPath, [process.execPath, ...args], env);
@@ -2569,6 +2648,7 @@ async function main() {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main().catch((e) => {
     console.error(`${toolCmd.prd}: ${e instanceof Error ? e.message : String(e)}`);
+    onEnd?.(`error: ${firstLine(e)}`);
     process.exit(1);
   });
 }
