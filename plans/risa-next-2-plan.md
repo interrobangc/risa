@@ -8,14 +8,14 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Next session: wave 4** = slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Sync first (main moved 7 commits, no shared files).
+**Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Wave 4 starting** (session 2026-11-28 ~16:50Z): slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Plan anchor fixed (`loops/home.test.mjs` marked new).
 
 | Slice | Wave | State          | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------- | ---------------------------- |
 | 1     | 1    | landed (opus)  | 72d3a64                      |
 | 2     | 2    | landed (opus)  | 5ff0aae (main)               |
-| 3     | 3    | running (opus) | —                            |
-| 5     | 3    | merged (opus)  | 1aa160b                      |
+| 3     | 3    | landed (opus)  | 0be4983 (main)               |
+| 5     | 3    | landed (opus)  | 0be4983 (main)               |
 | 4     | 4    | —              | —                            |
 | 6     | 4    | —              | —                            |
 
@@ -130,6 +130,6 @@ Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1, 5 �
 - Unit test (`loops/home.test.mjs` (new)), temp store, two machine names by env: the first claim wins and a second machine's is refused; `take` moves it, and after machine B takes a project, machine A's next dry-run tick past the five-minute refetch skips it and files the one report; the first `work: true` repo with `inbox` claims `inbox` on its first tick and keeps the inbox session; the second such repo on one machine skips it; a repo without `inbox` claims nothing and keeps its own inbox session.
 - `loops/dispatch.test.mjs` passes unchanged.
 
-**Also fix:** RISA-1072 (Codex on PR #34: `loops/prd.sh`'s inbox hop rebases an inherited `RISA_SESSIONS_DIR` onto the first project's `.loops/.sessions`, with a case in `loops/inbox-prompt.test.mjs` or `loops/home.test.mjs`).
+**Also fix:** RISA-1072 (Codex on PR #34: `loops/prd.sh`'s inbox hop rebases an inherited `RISA_SESSIONS_DIR` onto the first project's `.loops/.sessions`, with a case in `loops/inbox-prompt.test.mjs` or `loops/home.test.mjs` (new)).
 
 **Blocked by:** 1, 5. **Blocks:** nothing.
