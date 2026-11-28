@@ -250,6 +250,47 @@ USAGE
 }
 
 cmd=${1:-help}; (($#)) && shift
+
+# <command> --help (or -h) as the first argument prints that command's lines
+# from usage(), or the whole text when it has none, and exits 0 before the
+# command runs: nothing made or changed (RISA-1086). The commands whose scripts
+# answer --help themselves keep doing so.
+known_cmds=" status ls status-watch ready watch metrics land serve browser rm stack gc reclaim tidy finish cost ci
+  wait test-db testdb prompt doc project-check queue status-trim anchors dispatch recover down autostart watchdog
+  open end bye rotate context session review pr tier dev-sync plan inbox slice home hotfix start check sync ask asks
+  answer skeptic notice notices usage help "
+self_help=" browser down end open reclaim recover rotate bye dispatch finish queue tidy watchdog doc "
+# cmd_usage <command> → its lines from usage(): each entry that starts with the
+# command's name, and the indented lines that carry it on. None: the whole text.
+cmd_usage() {
+  local name=$1 out
+  case $name in ls) name=status ;; testdb) name=test-db ;; esac
+  out=$(usage | awk -v c="$name" '
+    { match($0, /^ */); ind = RLENGTH }
+    ind >= 2 && ind <= 4 && length($0) > ind { split(substr($0, ind + 1), w, " "); on = (w[1] == c) }
+    /^$/ { on = 0 }
+    on { print }')
+  if [[ -n $out ]]; then printf '%s\n' "$out"; else usage; fi
+}
+if [[ $known_cmds == *" $cmd "* && $self_help != *" $cmd "* && (${1:-} == --help || ${1:-} == -h) ]]; then
+  cmd_usage "$cmd"; exit 0
+fi
+# The commands that wrap new.sh and take a topic or name first refuse an
+# argument that starts with a dash and isn't one of their own flags, before any
+# worktree, branch or session (new.sh's topic rule stays the backstop).
+case $cmd in
+  plan | start | slice | hotfix)
+    skip=0
+    for a in "$@"; do
+      if ((skip)); then skip=0; continue; fi
+      case $cmd:$a in
+        plan:--open | plan:--model=* | hotfix:--open | hotfix:--model=*) ;;
+        plan:--model | hotfix:--model) skip=1 ;;
+        *:-*) { echo "$cmd: unknown flag $a"; cmd_usage "$cmd"; } >&2; exit 1 ;;
+      esac
+    done
+    ;;
+esac
 # The notice board (notice.mjs): other sessions' live notices on stderr, five
 # lines at most, before the commands that touch shared work. It never fails
 # the command (an unreadable board prints nothing).
