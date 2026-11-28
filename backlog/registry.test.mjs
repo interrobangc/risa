@@ -318,4 +318,13 @@ describe("the archive's rows", () => {
       "a: has a row in the PRD table and in plans/backlog-archive.md",
     ]);
   });
+
+  it("reads an After on an archived topic as met, as doctor does (RISA-999)", () => {
+    const live = [row("b", { after: ["a", "d"] }), row("d"), row("f", { after: ["d"] })];
+    const read = reg.withoutAfter(live, new Set(["a"]));
+    expect(read.map((r) => r.after)).toEqual([["d"], [], ["d"]]);
+    expect(read[1]).toBe(live[1]);
+    expect(live[0].after).toEqual(["a", "d"]);
+    expect(reg.findings(live, [], [rows[0]])).toEqual([]);
+  });
 });
