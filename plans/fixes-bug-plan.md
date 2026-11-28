@@ -9,12 +9,12 @@
 | Slice | Wave | Item            | Model | State   | Merge into `prd/fixes-bug` |
 | ----- | ---- | --------------- | ----- | ------- | -------------------------- |
 | 1     | 1    | RISA-241        | opus  | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus  | working | —                          |
+| 2     | 1    | RISA-980        | opus  | merged  | 1e9259e                    |
 | 3     | 1    | RISA-991        | opus  | working | —                          |
 | 4     | 1    | RISA-1001 (1/2) | opus  | working | —                          |
 | 5     | 1    | RISA-1001 (2/2) | opus  | planned | —                          |
 
-**Wave 1** (slices 1–5, all opus; 5 after 4): the plan's first wave, started 2026-11-28. RISA-985 was closed at triage without a slice: a489eef (PR #3) already fixed it. Slices 1–4 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each); 5 waits for 4's merge. Slice 1 handed off (a new `too-long` verdict state, never clean; review.sh exits 3 on it) and merged. Items claimed; hot files set.
+**Wave 1** (slices 1–5, all opus; 5 after 4): the plan's first wave, started 2026-11-28. RISA-985 was closed at triage without a slice: a489eef (PR #3) already fixed it. Slices 1–4 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each); 5 waits for 4's merge. Slice 1 handed off (a new `too-long` verdict state, never clean; review.sh exits 3 on it) and merged. Slice 2 merged (pickup checks the loaded config's and RISA_MAIN's checkout, not lib.sh's; dev_sync runs on the project). Items claimed; hot files set.
 
 **Open issue:** the installed release refuses a slice's `Model:` field ("unknown field", so the prompt drops Reads and Check): leave it out of the fields line until the release that reads it is installed; models live in the table.
 
