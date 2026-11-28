@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd notice | notices: the notice board's command line (the store is notices.mjs).
+// notice | notices: the notice board's command line (the store is notices.mjs).
 //
 //   notice "<text>" [--for <minutes>] [--topic <t>]   post one; prints its id (60 minutes, 24 hours at most)
 //   notices [--json]                                 the live ones, oldest first

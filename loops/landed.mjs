@@ -74,7 +74,7 @@ export function slicesLeft(/** @type {string} */ planText) {
 }
 
 /**
- * @param {{ topic: string, flags: string[] }[]} rows the registry (`prd list --json`)
+ * @param {{ topic: string, flags: string[] }[]} rows the registry (`list --json`)
  * @param {string} topic
  * @returns {{ flags: string[] } | { skip: string }}
  */

@@ -3,12 +3,12 @@
 # it merges into, dirty state, its containers and its dev server link, and the
 # held PRDs (a hold's date and reason beside it). Then the
 # machine's load averages, any stale slot lease, the shared test Postgres,
-# leftovers for `prd gc` (merged slice worktrees and stacks stopped for over
+# leftovers for `gc` (merged slice worktrees and stacks stopped for over
 # a day), and who holds the machine-wide leases (browser checks and prd
 # check: lease.sh holders), and after the worktree table the dispatcher (running,
 # paused and why, or stopped; its last log entry), the recorded sessions (managed
 # or by hand), the open asks, the workers (status-extra.mjs: every lease, prd
-# command and slice agent with its age, usual time and state), the usage limits (usage.mjs) and the live notices. (prd status, and prd status-watch)
+# command and slice agent with its age, usual time and state), the usage limits (usage.mjs) and the live notices. (status, and status-watch)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -60,7 +60,7 @@ done
 [[ -n $found ]] || echo "(no worktrees: ${prd_cmd} start <topic>)"
 echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)}"
 
-# The held PRDs (prd list's rows), each with its hold's date and reason when it has
+# The held PRDs (list's rows), each with its hold's date and reason when it has
 # one (registry.mjs's heldText); nothing, heading included, when none is held.
 holds=$(cd "$main" && backlog_run prd list --json 2>/dev/null |
   RISA_REGISTRY="$loops_lib_dir/../backlog/registry.mjs" node --input-type=module -e '
