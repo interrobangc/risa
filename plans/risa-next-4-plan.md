@@ -6,12 +6,22 @@
 
 | Slice | Wave | State | Merge into `prd/risa-next-4` |
 | ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | —     | —                            |
+| 1     | 1    | started 2026-11-28 (worktree made, agent spawned, opus) | —                            |
 | 2     | 2    | —     | —                            |
 | 4     | 2    | —     | —                            |
 | 3     | 3    | —     | —                            |
 | 5     | 4    | —     | —                            |
 | 6     | 5    | —     | —                            |
+
+**From the user:** nothing yet beyond the start itself.
+
+**Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
+
+**Now (2026-11-28):** wave 1 running: slice 1 in `.loops/risa-next-4-1` on `slice/risa-next-4/1`, agent on opus. Next: merge slice 1, gate with `risa ci run <tier from risa tier> --wait`, PR and Codex review, land, docs, rotate. Other topics: `fixes-bug` is running but its hot files are now `loops/new`, `loops/rotate`, `loops/open-session` (none of this topic's); recheck with `risa backlog prd list` before starting slices 3 and 5. Inbox empty at start; no new item proposed for this topic.
+
+**Slice models:** all six are coding with real logic: opus.
+
+**Open issues:** none.
 
 **Backlog:** claim each slice's item as it starts. Slices 1 to 4: RISA-796. Slice 5: RISA-796 (`done` after it) and RISA-797. Slice 6: RISA-797 (`done` after it).
 
