@@ -8,7 +8,12 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 
 | Id | Type | Status | PRD | Owner | Title |
 | -- | ---- | ------ | --- | ----- | ----- |
+| RISA-241 | bug | live | fixes-bug | prd/fixes-bug | codex-review: PR_QUERY reads only the first 100 review threads (and 50 comments each), so a PR with more could read as clean |
 | RISA-720 | chore | dropped | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
+| RISA-799 | change | live | risa-next | prd/risa-next | Include captain name and backlog agent name so other agents can find it. |
+| RISA-815 | change | live | risa-next | prd/risa-next | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
+| RISA-816 | question | live | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
+| RISA-914 | plan | live | risa-next | prd/risa-next | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
 | RISA-915 | bug | dropped | fixes-tooling |  | A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time |
 | RISA-932 | bug | live | after-split | prd/after-split | rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*) |
 | RISA-953 | bug | live | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
@@ -23,14 +28,35 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 | RISA-977 | bug | live | after-split | prd/after-split | risa status in Risa's own repo prints 'test database: unknown (the testDb hook failed)': a repo with no testDb hook should show none, as RISA-973 asks for the stack hooks |
 | RISA-978 | change | live | after-split | prd/after-split | On a new machine the inbox session never opens until 'risa inbox' is run once by hand to trust its folder, and only 'dispatch --dry-run' says so: the dispatcher should file one ask naming the command |
 | RISA-979 | bug | live | after-split | prd/after-split | 10 tests fail on the main machine (dispatcher drain x6, new.sh slice while draining, rm.sh from inside the worktree B-812 x2, usage status line) with git 2.50.1 at 36125ab |
+| RISA-980 | bug | live | fixes-bug | prd/fixes-bug | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-982 | bug | dropped | fixes-bug |  | Fixes orchestrators keep waiting for new work when they run out |
 | RISA-983 | change | dropped | risa-next |  | Inbox per project, not per machine |
+| RISA-984 | change | live | risa-next | prd/risa-next | Tell backlog agents they can communicate with each other |
+| RISA-985 | bug | live | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
 | RISA-988 | bug | live |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
 | RISA-990 | bug | live | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
+| RISA-991 | bug | live | fixes-bug | prd/fixes-bug | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-992 | bug | live | after-split | prd/after-split | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
 | RISA-996 | chore | dropped | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
+| RISA-1001 | bug | live | fixes-bug | prd/fixes-bug | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
+| RISA-1008 | question | live | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
 
 ## Items
+
+### RISA-241 · bug · codex-review: PR_QUERY reads only the first 100 review threads (and 50 comments each), so a PR with more could read as clean
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 5155c24
+
+- 2026-11-21 (prd/github-review): Codex finding on PR #12 (codex-review.mjs:37), verified. Paginate, or refuse clean when hasNextPage.
+- 2026-11-21 (Robert Bo Davis): Codex raised this again on PR #16 (dev into staging, head 30206f75), P2; still present on dev. Already filed, no new item.
+- 2026-11-21 (Robert Bo Davis): Backlog session 2026-11-21: moved from github-review (done) to the standing tooling fixes topic; each is a small fix to the review tooling.
+- 2026-11-23 (Robert Bo Davis): fixes-tooling wave order (the user, 2026-11-23: keep one topic, organize waves by kind of work; replaces the plan Status list of wave 3 candidates). Order: 3 context, dispatcher, sessions; 4 known flakes by cause; 5 re-measure test flakes; 6 check flow; 7 landing, Codex, cleanup; 8 planning and prompts. This item: wave 7 (landing, Codex, cleanup). After agent-autonomy, which holds the landing scripts.
+- 2026-11-24 (plan/staging-ship): plan/staging-ship (2026-11-24): planned in plans/staging-ship-plan.md (7 slices, held until the user lifts it, a160). B-584 and B-241 moved in from fixes-tooling: B-584 is this feature's trigger and stays open after slice 7 until a real push reaches the phone (B-586); B-241 could make a release PR read as clean.
+- 2026-11-27 (the Risa move, B-543): Was B-241 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (Robert Bo Davis): Moved from staging-ship to fixes-bug 2026-11-28 on the user's word: a Risa bug that doesn't need dev or staging; staging-ship stays held to be rethought.
 
 ### RISA-720 · chore · Confirm dev syncs that share no files with a branch no longer trigger a second CI run
 
@@ -44,6 +70,49 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-24 (Robert Bo Davis): 2026-11-24 evidence: not clean. Single-slice and small waves still ran twice: test-health-2 slice 5 full x3 (83cadbcf, ec1c138e, e4effb6a), slice 6 full x2 (841ce494, 24218d92); sync-safety slice 3 components x2 (4a3a9550, b004ec55); symptom-catalog components 2a821ccc, 6a246c1e, f47cc0a2; fixes-bug 9d3f2e2c, 82a3cf1b. Most syncs brought risky files (migrations, scripts/ci, package.json, workflow, apps/), so unsynced_safe rightly refused. The waste has other causes, filed separately: the recheck runs the wave's tier when dev brought only tooling (fixes-bug 82a3cf1b, 9m components); the PRD's own plan file counts as a shared file (plans/fixes-bug-plan.md was the only overlap); the wave runs before the sync, so every synced wave pays twice.
 - 2026-11-27 (the Risa move, B-543): Was B-720 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: dropped. A check on Caretook's CI; its causes are filed separately, and Risa has no dev branch.
+
+### RISA-799 · change · Include captain name and backlog agent name so other agents can find it.
+
+- status: live
+- prd: risa-next
+- owner: prd/risa-next
+- commit: dadae10
+
+- 2026-11-24 (prd/fixes-ui): From the inbox: The backlog agents are named after Star Trek captains for the user, but not their internal names, so other agents can't find them by captain name.
+- 2026-11-25 (Robert Bo Davis): Triage: name sessions so other agents can find the backlog session; fits the split's session tooling
+- 2026-11-27 (the Risa move, B-543): Was B-799 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
+### RISA-815 · change · Orchestrator summary for backlog handoff should include the ability to pass on directives from the…
+
+- status: live
+- prd: risa-next
+- owner: prd/risa-next
+- commit: 70be61d
+
+- 2026-11-25 (Robert Bo Davis): From the inbox: Orchestrator summary for backlog handoff should include the ability to pass on directives from the user more clearly and directly.
+- 2026-11-25 (Robert Bo Davis): Triage: risa-next, orchestration tooling (hand-off briefs, the PRD queue) that the split moves into Risa.
+- 2026-11-27 (the Risa move, B-543): Was B-815 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
+### RISA-816 · question · Should the orchestrator PRDQ be slice-based instead of PRD-based?
+
+- status: live
+- prd: risa-next
+- owner:
+- commit: 082af3a
+
+- 2026-11-25 (Robert Bo Davis): Triage: risa-next, orchestration tooling (hand-off briefs, the PRD queue) that the split moves into Risa.
+- 2026-11-27 (the Risa move, B-543): Was B-816 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
+### RISA-914 · plan · Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President
+
+- status: live
+- prd: risa-next
+- owner: prd/risa-next
+- commit: dadae10
+
+- 2026-11-26 (Robert Bo Davis): 2026-11-26: the user's word (discussed, not planned deeply). Frame: the user is the Starfleet President on vacation on Risa; the orchestration is Starfleet. Core: roles, ranks and a pack interface (per role: rank, a canon name pool, how to address the President); config flavor: starfleet | none | another pack; default starfleet for now. Canon character names. Names stick for a while: a captain keeps theirs for the PRD, a pilot for the slice (not redrawn each rotation). Flavor only in replies to the user, at most one touch per reply, never in questions, options, commands, commits, backlog, PRs, docs, asks or what another agent reads; bad news may carry it. Push notifications carry the name as a label (Captain Sisko · nested todos: wave 2 landed). Builds on B-733 (scripts/loops/captain.mjs, prompts/backlog.sh); the backlog session moves from Captain to Admiral. After orchestration-split-3; Risa work for the work account.
+- 2026-11-27 (the Risa move, B-543): Was B-914 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (plan/risa-next): User 2026-11-27 (risa-next planning): the user is a high-ranking officer, not the President (the risa-next PRD addresses them as Fleet Admiral, outranking the backlog's Admiral). Folded into risa-next; flavor setting in the machine config; backlog draws canon admirals.
 
 ### RISA-915 · bug · A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time
 
@@ -176,6 +245,16 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 
 - 2026-11-27 (Robert Bo Davis): Shelby's run, 2026-11-27: 2185 of 2195 pass, prettier/eslint/docs budget pass. Usage got 'Usage: unknown: no current reading' for 'Usage, read 1m ago from 1 session'. Guessed cause (unchecked): the machine's live dispatcher, sessions and usage readings leak into the tests. Log on that machine: /private/tmp/claude-501/-Users-bo-git-caretook-caretook-com/7d3733d4-a8b2-4aaa-8c54-c653f5760b8f/scratchpad/risa-check.log. Separate from RISA-975 (217 fail on the second machine).
 
+### RISA-980 · bug · Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 1e9259e
+
+- 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook's main checkout (on dev) from its backlog session, on v0.1.3 with RISA_CONFIG and RISA_MAIN pointing at Caretook; ingest itself still ran. fixes-bug: wrong behaviour in a released install
+- 2026-11-27 (Robert Bo Davis): Still seen 2026-11-28 on v0.1.8 (pin f5ce80a58) in Caretook's main checkout on dev, from its backlog session; the inbox was empty, so nothing was lost.
+
 ### RISA-982 · bug · Fixes orchestrators keep waiting for new work when they run out
 
 - status: dropped
@@ -198,6 +277,25 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-27 (Robert Bo Davis): Triage: risa-next. Multi-machine planning store; overlaps RISA-841 (one inbox for every project in a private repo): its PRD should pick one design.
 - 2026-11-27 (Robert Bo Davis): Dropped: folded into RISA-841 (risa-next).
 
+### RISA-984 · change · Tell backlog agents they can communicate with each other
+
+- status: live
+- prd: risa-next
+- owner: prd/risa-next
+- commit: cf8214f
+
+- 2026-11-27 (Robert Bo Davis): From the inbox: Example: caretook's backlog agent can file issues with risa's, and risa's can ask caretook's backlog to update risa after a fix is deployed.
+- 2026-11-27 (Robert Bo Davis): Triage: risa-next. Cross-project backlog-to-backlog messaging; goes with RISA-799 (agents findable by name) and RISA-820 (cross-repo topics).
+
+### RISA-985 · bug · A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy)
+
+- status: live
+- prd: fixes-bug
+- owner:
+- commit: a489eef
+
+- 2026-11-28 (prd/fixes-bug): fixes-bug triage 2026-11-28: already fixed by a489eef (hotfix/stackless-slots, PR #3): slot_busy returns false with no stackStatus hook; closed without a slice.
+
 ### RISA-988 · bug · risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181)
 
 - status: live
@@ -219,6 +317,15 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: moved from fixes-tooling to after-split; after-split slice 1 (the hermetic test run) fixes it.
 - 2026-11-27 (prd/after-split): Fixed by after-split slice 1 (5341bd5): the case expects the git common dir's folder; proposed into after-split by its orchestrator
 
+### RISA-991 · bug · risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 8316198
+
+- 2026-11-27 (prd/after-split): Seen by after-split slice 1 on 2026-11-27 in Risa's own repo; a slice's hand-off step runs it
+
 ### RISA-992 · bug · loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27)
 
 - status: live
@@ -239,3 +346,22 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-27 (prd/fixes-tooling): The user, 2026-11-27: 'Land it and review codex later'. Codex hadn't reviewed after two 20-min waits.
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27: asked Codex on PR #5 (comment); findings to triage when it answers (fixes-tooling wave 2 orchestrator).
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling wave 3): Codex reviewed c4ae22d1c7 on PR #5: 'Didn't find any major issues.' Nothing to triage.
+
+### RISA-1001 · bug · Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 3697271
+
+- 2026-11-27 (prd/after-split-2): Codex P2 on PR #9 (after-split-2), https://github.com/interrobangc/risa/pull/9#discussion_r4724774993; Codex reproduced it with paths.backlog=plans/new-backlog.md in a worktree
+- 2026-11-28 (prd/fixes-bug): fixes-bug slice 4 merged at c5163aa (part 1: backlog_run helper; pr, ready, lib.sh). Part 2 (land, rm, ls, rotate) is slice 5.
+
+### RISA-1008 · question · Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files?
+
+- status: live
+- prd: risa-next
+- owner:
+- commit: 082af3a
+
+- 2026-11-27 (Robert Bo Davis): User 2026-11-28: the risa-next planner weighs it with RISA-1007 (multi-machine) and RISA-841 (one inbox, private repo) and recommends one. For: one store every machine reaches, no cross-machine lock. Against: an API call per read (dispatch reads every tick; rate limits, offline), items no longer land in the work's commit, the tests need a fake GitHub.
