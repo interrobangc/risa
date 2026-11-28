@@ -10,16 +10,18 @@
 
 **Now (2026-11-28):** wave 1 landed in main through PR 47 (tier none), `main` at `f0bb832`; slice 1 merged as `bde2083`, its Codex fix as `aa46ca1`. A fresh session took over: no landing was cut off, `risa sync` needed no merge, no running topic holds `loops/docs`. **Wave 2 started:** slices 2 and 4, worktrees `ship-2` and `ship-4` made, one background agent each, both on opus; `risa watch ship --wait` runs in the background. Next: merge 2 then 4 as they hand off, gate as below, PR, Codex review, land; then rotate for wave 3 (slice 3, opus).
 
+**Open issue, the hooks in `risa.json`:** the linked install (v0.2.3, `008e6ff`) predates slice 1 and refuses `hooks.ship*` as unknown keys, so with them in this repo's `risa.json` every `risa` command here fails (seen in `ship-2`). Decision: slices 2 and 3 land without the four hook keys; they go into `risa.json` as a last small change once a release containing `f0bb832` or later is installed and `~/.local/bin/risa` links to it (the release and relink aren't ours). Asked the backlog session for advice and for word when that release is linked; no reply yet. Slice 3's brief needs the same: no `hooks.shipSmoke`/`hooks.shipNotify` in `risa.json` until then.
+
 **Gate on this machine:** the local full check can't go green: RISA-1076 (this session sets `CLAUDE_CONFIG_DIR`: dispatch, drain, usage tests fail) and, with it unset, load timeouts (RISA-1096). Wave 1's gate was `ci.yml` on the PR, agreed with the backlog session; its one failure was RISA-1085 (`loops/check-run.test.mjs` on pull-request runs), known, and `risa land` at tier none landed on Codex's clean verdict. Do the same until those land.
 
 **For slices 2 and 3:** facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed; `loops/config.mjs` exports `isVersion`; a lock naming no pid is refused, never taken over. Codex's open finding is RISA-1097 (`fixes-bug`: a killed runner leaves its hook alive and its lock takeable).
 
-| Slice | Wave | State                                                      | Merge into `prd/ship` |
-| ----- | ---- | ---------------------------------------------------------- | --------------------- |
-| 1     | 1    | merged                                                     | `bde2083`             |
-| 2     | 2    | agent working (opus)                                       | —                     |
-| 4     | 2    | handed off (`df52d59`, quick check passed), merges after 2 | —                     |
-| 3     | 3    | —                                                          | —                     |
+| Slice | Wave | State                                                                     | Merge into `prd/ship` |
+| ----- | ---- | ------------------------------------------------------------------------- | --------------------- |
+| 1     | 1    | merged                                                                    | `bde2083`             |
+| 2     | 2    | handed off (`32ddfcc`), back with its agent for the `risa.json` fix below | —                     |
+| 4     | 2    | handed off (`df52d59`, quick check passed), merges after 2                | —                     |
+| 3     | 3    | —                                                                         | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
