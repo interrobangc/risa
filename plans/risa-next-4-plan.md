@@ -4,20 +4,24 @@
 
 ## Status
 
-| Slice | Wave | State                                           | Merge into `prd/risa-next-4` |
-| ----- | ---- | ----------------------------------------------- | ---------------------------- |
-| 1     | 1    | merged 2026-11-28 (handed off at 447be29, opus) | 952927e                      |
-| 2     | 2    | —                                               | —                            |
-| 4     | 2    | —                                               | —                            |
-| 3     | 3    | —                                               | —                            |
-| 5     | 4    | —                                               | —                            |
-| 6     | 5    | —                                               | —                            |
+| Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
+| ----- | ---- | --------------------------------------------- | ---------------------------- |
+| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
+| 2     | 2    | —                                             | —                            |
+| 4     | 2    | —                                             | —                            |
+| 3     | 3    | —                                             | —                            |
+| 5     | 4    | —                                             | —                            |
+| 6     | 5    | —                                             | —                            |
 
 **From the user:** nothing yet beyond the start itself.
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Now (2026-11-28):** wave 1: slice 1 merged at 952927e (worktree `.loops/risa-next-4-1` kept until the gate is green). `risa tier` says none (tooling only), so the gate was the full `risa check` on the tip (main needed no sync): green in effect, 2640 of 2641 with `CLAUDE_CONFIG_DIR` unset (set, RISA-1076 fails 20 more), the one failure a load timeout in `loops/land-unsynced.test.mjs` that passes alone. A full check takes no label (`risa check`, about 8 minutes at load 20+); run it as `env -u CLAUDE_CONFIG_DIR risa check > <log>` to keep the failures. PR https://github.com/interrobangc/risa/pull/38 open; `risa review risa-next-4 --wait` out. Next: triage Codex, `risa land risa-next-4 -m …`, the landing report (`risa ask --report`), `risa rm risa-next-4-1`, docs, `risa status-trim`, rotate into wave 2 (slices 2 and 4). Slice 1's notes for 2 and 4: both forms present throws from `configPath` (callers outside `loadConfig` see a bare `ConfigError`); bash uses `node loops/config.mjs where <dir>` (exit 1 none, 2 both). Other topics: `fixes-bug` is running but its hot files are now `loops/new`, `loops/rotate`, `loops/open-session` (none of this topic's); recheck with `risa backlog prd list` before starting slices 3 and 5. Inbox empty at start; no new item proposed for this topic.
+**Now (2026-11-28):** wave 1 landed in main through PR #38 (main at 9f54654, tier none, Codex clean, report a67, slice 1's worktree removed). Nothing in flight. Next session: `risa backlog ingest` and `list`, `risa sync`, then wave 2: slices 2 and 4 at once (both opus), `risa watch risa-next-4 --wait` in the background. Before slices 3 and 5, check `risa backlog prd list` that no running topic holds `bin/risa`, `loops/rm.sh` or `loops/lib.sh` (`fixes-bug` held `loops/new`, `loops/rotate`, `loops/open-session` on 2026-11-28).
+
+**Lessons for the gate:** a full check takes no label: `env -u CLAUDE_CONFIG_DIR risa check > <log outside the worktree> 2>&1` in the background (about 8 minutes at load 20+), then `risa wait check`; with `CLAUDE_CONFIG_DIR` set, RISA-1076 fails about 20 tests. `loops/land-unsynced.test.mjs` can time out under load and passes alone. Commit _Status_ before `risa pr`: land refuses a local tip the PR's head trails.
+
+**For slices 2 and 4 (from slice 1's hand-off):** both forms present throws from `configPath`, so callers outside `loadConfig` and `loadConfigOrExit` see a bare `ConfigError`; bash uses `node loops/config.mjs where <dir>` (exit 1 none, 2 both); `config get`'s error lines still say `risa.json:` on purpose. Wave 1 folded nothing into the docs: slice 4 writes the folder form into `loops/docs/project-config.md` (have it include the `where` verb).
 
 **Slice models:** all six are coding with real logic: opus.
 
