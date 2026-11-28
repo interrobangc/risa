@@ -142,6 +142,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1072 | bug | ready | risa-next-2 | prd/risa-next-2 | prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop |
 | RISA-1073 | bug | ready | fixes-tooling | prd/fixes-tooling | The slice check's time budget doesn't allow for the tooling step: on a slice touching loops/ it comes from slice runs with a 15s median (705s), so the tooling step that follows the unit run is stopped (exit 124) with no test failed, as both wave-11 slices of fixes-tooling were at load ~21 |
 | RISA-1074 | feature | triaged | usage-aware-drain |  | risa account setup\|use\|status: set up a second Claude config folder, point a repo's sessions at it,… |
+| RISA-1075 | bug | triaged | fixes-test |  | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
+| RISA-1076 | bug | triaged | fixes-tooling |  | Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables |
 
 ## Items
 
@@ -1160,3 +1162,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: risa account setup|use|status: set up a second Claude config folder, point a repo's sessions at it, and show which account each runs on / From Caretook's backlog (the user chose to file it, 2026-11-28). Replaces Caretook's local .local/account-switch/switch-account.sh, which still calls Caretook's old scripts/loops/machine.mjs and host.mjs (moved to Risa in the split), so its use and status fail. setup: mkdir the folder, symlink settings.json, skills, plugins, CLAUDE.md and each projects/<slug>/memory from ~/.claude (skip real files), then tell the user to log in with CLAUDE_CONFIG_DIR=<dir> claude. use: set or drop claudeConfigDir for a repo in ~/.risa/machine.json (machine.mjs, host.mjs claudeChoiceFor), with dispatch pause, hand-offs and resume. status: the folder and login per repo. Usage readings follow the folder: keep every session on one account at a time. Sibling of RISA-1002 (backup account at 99%).
 - 2026-11-28 (Robert Bo Davis): Triaged usage-aware-drain beside RISA-1002 (the user's pick, 2026-11-28).
+
+### RISA-1075 · bug · dispatch-restart test leaves its dispatchers running after it deletes their temp repo
+
+- status: triaged
+- prd: fixes-test
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Two dispatch.mjs --every 1 processes from a dispatch-restart-* temp repo found orphaned (ppid 1) for ~3h47m on 2026-11-28; their repo was already gone. The test should stop the dispatchers it starts, even when it fails.
+
+### RISA-1076 · bug · Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-tooling): Seen 2026-11-28 at wave 12's gate on b60d88c after the account switch: pnpm test 10 failed; env -u CLAUDE_CONFIG_DIR pnpm exec vitest run loops/usage.test.mjs loops/drain.test.mjs: 51 passed. CI has no such variable, so it is green there. Likely fix in loops/test-env* or test-setup.mjs (scrub CLAUDE_CONFIG_DIR), or the fixtures writing readings for the folder the code reads (RISA-927).
