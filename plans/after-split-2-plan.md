@@ -4,25 +4,19 @@
 
 ## Status
 
-| Slice | Wave | State  | Merge into `prd/after-split-2` |
-| ----- | ---- | ------ | ------------------------------ |
-| 1     | 1    | merged | 11b94c5                        |
-| 2     | 1    | merged | 57736ed                        |
-| 3     | 2    | handed |                                |
+| Slice | Wave | State  | Merge into `prd/after-split-2`  |
+| ----- | ---- | ------ | ------------------------------- |
+| 1     | 1    | landed | 11b94c5 (+ fix 6100b8e)         |
+| 2     | 1    | landed | 57736ed                         |
+| 3     | 2    | merged | e32da3c (not landed, not gated) |
 
-**Backlog:** RISA-972 claimed (2026-11-27); `done` it when slice 3 merges.
+**Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic). Models: opus for all three slices.
 
-**Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic).
+**Wave 1 landed** 2026-11-27 in main through PR #8 (https://github.com/interrobangc/risa/pull/8, main 4c8b956; tier none, tooling only; on an unsynced tip, main's 3 commits shared no file). Codex: one P2 (stack_hook under pipefail with a config in no checkout), fixed in 6100b8e, thread replied and resolved; then clean. Report filed; to-test `2026-11-27-1916-after-split-2.md`. Worktrees `-1` and `-2` removed. No docs to fold for wave 1 (no doc names where hooks run; the README sentence comes with slice 3).
 
-**Now (2026-11-27):** wave 1 running: worktrees `.loops/after-split-2-1` and `-2` (from a2831a5), one background agent each on opus; watch running. No new items at the wave boundary. Slice 3 waits for 1 and 2 merged.
+**Next session: gate and land wave 2 (slice 3).** Slice 3 (configFor in machine.mjs, find_repo's RISA_CONFIG_FOUND mark, bin/risa backlog always the main checkout's config, test-env, README sentence) merged at e32da3c from 4b9fed8; its worktree `.loops/after-split-2-3` and agent are kept until the wave is green (`risa rm after-split-2-3` then). Its slice check failed only on 6 load timeouts (land-unsynced, recover, stack; 111/111 alone). Steps: `risa sync`; full `risa check` (tier none) on the tip; `risa pr after-split-2` and `risa review after-split-2 --wait`; land; fold the PRD's decisions into the README sentence as the plan's _Docs at landing_ says; `risa rm after-split-2` last. RISA-972 is `ready` at e32da3c.
 
-**Slice 1:** merged at 11b94c5 (from 37d7591). Its slice check failed twice only on load timeouts in files it doesn't touch (bye, tidy-cli, land-unsynced, recover, rotate, stack); bye and tidy-cli pass alone on its tip at load ~8. The wave's CI run is the gate.
-
-**Slice 2:** merged at 57736ed (from a415761): rm re-points RISA_CONFIG and the mark at `$main/risa.json` when the config is under the removed worktree. Same load-timeout story in its slice check; stack.test passes 22/22 alone.
-
-**Wave 1 gate:** `risa tier` says none (tooling only), so a full `risa check` on the merged tip: 9 failures in 5 files, all load timeouts (load ~25); the 5 files pass alone (174/174) at load ~6: green. Filed RISA-1000 (fixes-tooling) for the suite timing out under load. `risa sync`: no merge needed. PR https://github.com/interrobangc/risa/pull/8 open. Codex round 1: one P2, real (stack_hook's `git worktree list` under pipefail exits before the no-checkout fallback; thread PRRT_kwDOV9ctaM689tXn): fixed (slice 1's f423eef, merged at 6100b8e; hooks+stack tests 30/30), replied and resolved; `review --again` waiting. Context past 120k: after wave 1 lands and its docs, merge slice 3 (drain), commit _Status_, `risa rotate`.
-
-**Slice 3:** started early (1 and 2 merged): worktree `.loops/after-split-2-3`, agent on opus. Handed off at 4b9fed8 (configFor in machine.mjs, find_repo's mark, bin/risa backlog takes line 1 + /risa.json, test-env, README); new tests pass; slice check failed only on 6 load timeouts (land-unsynced, recover, stack), which pass alone (111/111). Reviewed: looks right. Merge it after wave 1 lands (drain), then rotate; the next session gates and lands wave 2. Notices: fixes-tooling (c4ae22d) and after-split (a6c95e4) landed in main: `risa sync` at the wave boundary.
+**Lessons:** this machine runs at load 20–35: the tooling suite times out in a handful of files that pass alone (RISA-1000, fixes-tooling, triaged); judge a red check by rerunning its failing files alone. Every commit on prd/ after `risa pr` makes Codex's verdict stale (a status-only commit too, and Codex doesn't pick it up by itself: `review --again`), so commit _Status_ before the push, not between review and land. `risa check` takes no reason for a full check.
 
 ## Architectural decisions
 
