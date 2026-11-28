@@ -56,7 +56,9 @@
 # The PR path also refuses unless the PR is open, its head is the branch's
 # local tip, and Codex's verdict on it is clean (prd review): a clean
 # verdict on an older head carries over plain dev merges that leave the PR's
-# diff alone (codex-review.mjs), and the merge is still pinned to the tip.
+# diff alone (codex-review.mjs), or over commits that change only Markdown
+# (docs_re: a Status commit after the approval), and the report names the
+# approved commit; the merge is still pinned to the tip.
 # --no-review skips only the verdict. A prd/ branch
 # whose whole diff is Markdown (lib.sh, docs_only) needs no verdict: it still
 # goes through its open PR, and land says it skipped the verdict.
@@ -764,12 +766,12 @@ number=$(pr_for "$branch") || die "gh couldn't list $branch's PRs (gh auth statu
 [[ -n $number ]] || die "no open PR from $branch into $trunk: open it with \`${prd_cmd} pr $what\`"
 tip=$(git -C "$main" rev-parse "$branch")
 raw=$(pr_state "$number") || die "gh couldn't read PR #$number"
-v=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" <<< "$raw")
+v=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" --docs="$docs_re" <<< "$raw")
 field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
 head=$(field headSha) state=$(field state) url=$(field url)
 [[ $head == "$tip" ]] ||
   die "PR #$number's head is ${head:0:7}, not $branch's local tip ${tip:0:7}: push it (\`${prd_cmd} pr $what\`), let Codex review it (\`${prd_cmd} review $what --wait\`), then land"
-line=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" --line <<< "$raw")
+line=$(node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$drift_ref" --docs="$docs_re" --line <<< "$raw")
 if [[ $state != clean && $branch == "$prd_prefix"* ]] && docs_only "$drift_ref" "$branch"; then
   echo "$line: no Codex verdict needed, the diff against $drift_ref is Markdown only (PR #$number is open with the local tip as its head)"
 elif [[ $state != clean ]]; then
