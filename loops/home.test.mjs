@@ -77,6 +77,7 @@ const dispatch = (
   /** @type {string} */ m,
   args = ["--dry-run"],
   rows = args.includes("--dry-run") ? "planned" : "none",
+  extra = {},
 ) => {
   const r = spawnSync("node", [join(tool, "loops/dispatch.mjs"), ...args], {
     cwd: repos[name],
@@ -86,6 +87,7 @@ const dispatch = (
       RISA_MAIN: repos[name],
       RISA_CONFIG: join(repos[name], "risa.json"),
       STUB_ROWS: join(root, `${rows}.json`),
+      ...extra,
     },
   });
   expect(r.stderr).toBe("");
@@ -291,6 +293,48 @@ describe("the dispatcher's home gate", () => {
     });
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain("nope: not a project in the inbox store");
+  });
+
+  it("a machine with the project's work off claims no home; a work-on machine claims or takes it (RISA-1078)", () => {
+    repos.spare = project("spare", { repo: remote });
+    const config = (/** @type {string} */ f, /** @type {object[]} */ list) => {
+      writeFileSync(join(root, f), JSON.stringify({ repos: list }));
+      return { RISA_MACHINE_CONFIG: join(root, f) };
+    };
+    const off = config("machine-off.json", [
+      { path: repos.idle, work: false },
+      { path: repos.spare, work: false },
+    ]);
+    const on = config("machine-on.json", [
+      { path: repos.first, work: true },
+      { path: repos.idle, work: true },
+      { path: repos.spare, work: true },
+    ]);
+    // Work off: no claim, and the line says why; RISA_WORK_SELF doesn't change that.
+    for (const name of ["idle", "spare"]) {
+      const out = dispatch(name, "mac-c", ["--once"], "none", { ...off, RISA_WORK_SELF: "1" });
+      expect(out).toContain(`home: claims no home for ${name}: the work switch is off ("work": false`);
+      expect(out).toContain(`home: ${name}'s home isn't claimed here (the work switch is off`);
+      expect(out).not.toContain("home: claimed");
+      expect(homes()[name]).toBeUndefined();
+    }
+    expect(dispatch("idle", "mac-c", ["--dry-run"], "planned", off)).not.toContain("would claim");
+    // Work on: the first tick claims as before.
+    expect(dispatch("spare", "mac-d", ["--once"], "none", on)).toContain("home: claimed spare for mac-d");
+    expect(homes().spare.machine).toBe("mac-d");
+    // A take by the work-on machine finds no claim in the way.
+    const took = spawnSync("node", [join(tool, "loops/home.mjs"), "take", "idle"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...machine("mac-d"), ...on },
+    });
+    expect(took.stderr).toBe("");
+    expect(took.stdout).toMatch(/^idle's home is now mac-d: on .* homes\.json as [0-9a-f]{7}\n$/);
+    // The work-off machine then reads it as away, like any machine that doesn't hold it.
+    setClock(T0 + (3 * REFETCH_MS) / 1000);
+    expect(dispatch("idle", "mac-c", ["--dry-run"], "planned", off)).toContain(
+      "home: idle's home is mac-d, not mac-c",
+    );
   });
 });
 

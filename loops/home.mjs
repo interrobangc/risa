@@ -15,7 +15,9 @@
 // `inbox` whose work switch is on, RISA_WORK_SELF aside so every shell agrees; prd.sh
 // inbox opens the session from the same repo). Later ticks read the homes file's last
 // fetched copy, and fetch it at most every REFETCH_MS. A name this run couldn't claim
-// (the store can't be reached) is unknown: nothing starts for it until it is.
+// (the store can't be reached) is unknown: nothing starts for it until it is. A project
+// whose work switch is off (read as the keeper's is) claims nothing: its homes read as
+// away or unknown, as on any machine that doesn't hold them (RISA-1078).
 //
 //   node home.mjs                      the claims, one a line: name, machine, since
 //   node home.mjs take <project|inbox> moves that home to this machine
@@ -175,12 +177,17 @@ export function homeTick({
   report,
   config,
 }) {
-  const s = inboxStore(config ?? loadConfig({ env }).config);
+  const cfg = config ?? loadConfig({ env }).config;
+  const s = inboxStore(cfg);
   if (!s) return null;
   const name = s.file.replace(/\.md$/, "");
   const me = machineName(env);
   const store = storeFor(s.repo, { env });
   const keeper = inboxKeeper({ env });
+  // The project's work switch, read as inboxKeeper reads it (RISA_WORK_SELF aside, so a
+  // dispatcher and a shell agree): with it off, this machine claims no home (RISA-1078).
+  const { [WORK_VAR]: _self, ...plain } = env;
+  const work = workSwitch({ main, config: cfg, env: plain });
   const keepsInbox = keeper !== null && real(keeper.main) === real(main);
   const names = keepsInbox ? [name, INBOX_HOME] : [name];
   const fresh = state.pid !== pid;
@@ -189,9 +196,11 @@ export function homeTick({
   /** @type {string[]} */
   const lines = [];
   const takeCmd = `${toolCmd.prd} home take`;
+  const offWhy = work.on ? null : `the work switch is off (${work.why})`;
+  if (offWhy && fresh) lines.push(`home: claims no home for ${name}: ${offWhy}`);
   let reached = false;
   for (const n of names.filter((x) => !claimed.includes(x))) {
-    if (dryRun) continue;
+    if (dryRun || offWhy) continue;
     try {
       const r = claim(store, n, me, { now, log: () => {} });
       claimed.push(n);
@@ -216,12 +225,14 @@ export function homeTick({
     const holder = homes[n]?.machine ?? null;
     if (holder && holder !== me) away[n] = holder;
     else if (!dryRun && !claimed.includes(n)) unknown.push(n);
-    else if (dryRun && !holder) lines.push(`home: would claim ${n} for ${me}`);
+    else if (dryRun && !holder && !offWhy) lines.push(`home: would claim ${n} for ${me}`);
   }
   const blocked = away[name]
     ? `${name}'s home is ${away[name]}, not ${me} (${takeCmd} ${name} moves it here)`
     : unknown.includes(name)
-      ? `${name}'s home isn't known yet (the inbox store can't be reached)`
+      ? offWhy
+        ? `${name}'s home isn't claimed here (${offWhy})`
+        : `${name}'s home isn't known yet (the inbox store can't be reached)`
       : null;
   if (blocked) lines.push(`home: ${blocked}: nothing starts, plans, reopens or is kept alive here`);
   let inboxWhy = null;
