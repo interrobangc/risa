@@ -1082,6 +1082,7 @@ function requestStep(
     max: positive(env.RISA_MAX_BACKLOG_SESSIONS, DEFAULT_MAX_BACKLOG_SESSIONS),
     now,
     claude: claudeName(env),
+    work: g.facts.work,
   });
   if (d.action === "none") {
     if (dryRun && d.why !== "no pending request") out(`session request: waits (${d.why})`);
@@ -1713,6 +1714,7 @@ export function tick(
     off: env.RISA_KEEP_SESSIONS === "off",
     now,
     claude: claudeName(env),
+    work: facts.work,
   });
   for (const d of keepDecisions)
     if (dryRun || d.action !== "none")
