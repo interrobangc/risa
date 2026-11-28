@@ -126,7 +126,14 @@ import {
   stuckDecision,
   stuckSettings,
 } from "./dispatch-stuck.mjs";
-import { LIMITED_ERROR, drainDecision, drainSettings, landingUnder, limitActions } from "./drain.mjs";
+import {
+  LIMITED_ERROR,
+  drainDecision,
+  drainSettings,
+  landingUnder,
+  limitActions,
+  sessionDrains,
+} from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
@@ -135,7 +142,15 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
-import { canOpenTabs, claudeBin, claudeChoiceFor, claudeEnvPrefix, claudeName, itermApp } from "./host.mjs";
+import {
+  canOpenTabs,
+  claudeAccount,
+  claudeBin,
+  claudeChoiceFor,
+  claudeEnvPrefix,
+  claudeName,
+  itermApp,
+} from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
@@ -1188,9 +1203,10 @@ function drainOf(
 }
 
 /**
- * The drain's actions: one report for an unknown reading, and while limited, each managed
- * session ended (marked stalled first) unless it runs a landing, and one report naming the
- * hand-opened ones. Returns whether it did anything.
+ * The drain's actions: one report for an unknown reading, and each managed session whose
+ * own account is limited (sessionDrains: its reading's account) ended (marked stalled first)
+ * unless it runs a landing, and one report naming the hand-opened ones. Returns whether it
+ * did anything.
  */
 function drainStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
@@ -1223,9 +1239,18 @@ function drainStep(
       out("usage: reported an unknown reading");
     }
   }
+  const readings = readReadings(p.usage);
+  const drains = sessionDrains(
+    readings,
+    g.records.map((r) => r.name),
+    { ...drainSettings(env), now, staleMs: staleMsOf(env), account: claudeAccount(env) },
+  );
+  const accountOf = new Map(readings.map((r) => [String(r?.session), r?.account ?? null]));
+  const limited =
+    drain.state === "limited" || g.records.some((r) => r.live && drains[r.name]?.state === "limited");
   /** @type {string[]} */
-  let reported = drain.state === "limited" ? (prev.reported ?? []) : [];
-  if (drain.state === "limited") {
+  let reported = limited ? (prev.reported ?? []) : [];
+  if (limited) {
     /** @type {Map<number, { ppid: number, args: string }> | null} */
     let table = null;
     try {
@@ -1253,8 +1278,8 @@ function drainStep(
       );
       /** @type {Record<string, any>} */
       const stalls = {};
-      for (const r of readReadings(p.usage)) if (r?.stalled) stalls[String(r.session)] = r.stalled;
-      for (const a of limitActions({ sessions, landing, stalls, reported, drain, now })) {
+      for (const r of readings) if (r?.stalled) stalls[String(r.session)] = r.stalled;
+      for (const a of limitActions({ sessions, landing, stalls, reported, drain, drains, now })) {
         if (a.type === "wait") {
           out(`usage limited: ${a.session} left running (${a.why})`);
           continue;
@@ -1277,9 +1302,10 @@ function drainStep(
           try {
             markStalled(p.usage, a.session, {
               error: LIMITED_ERROR,
-              resetsAt: drain.resetsAt,
+              resetsAt: (drains[a.session] ?? drain).resetsAt,
               pid: a.pid,
               now,
+              account: accountOf.get(a.session) ?? claudeAccount(env),
             });
           } catch (e) {
             marked = `its stall mark failed: ${e instanceof Error ? e.message : String(e)}`;
