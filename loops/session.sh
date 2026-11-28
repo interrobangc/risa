@@ -18,11 +18,21 @@
 # The kind and topic default from the name (prd-<topic>, plan-<topic>,
 # hotfix-<name>, backlog, backlog-<name>, inbox, recover: kind recovery). The
 # pid is the claude process itself: a shell that records its own pid, then
-# execs claude.
+# execs claude. Outside any repo, the project is RISA_MAIN's (RISA-1038).
 set -euo pipefail
-# shellcheck source=lib.sh
-source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
+# Outside any repo (the inbox, in its own directory), find_repo would find this
+# script's own checkout, not the session's project: there RISA_MAIN (the
+# project's main checkout; prd.sh inbox passes it) wins, and lib.sh is sourced
+# from it, so the project's machine entry, config and .loops are the session's.
+# Inside a repo the current directory decides, as for every command.
+here=$PWD
+if [[ -n ${RISA_MAIN:-} && -d $RISA_MAIN ]] && ! git -C "$here" rev-parse --git-dir > /dev/null 2>&1; then
+  cd "$RISA_MAIN" > /dev/null || exit 2
+fi
+# shellcheck source=lib.sh
+source "$bin/lib.sh"
+cd "$here" > /dev/null
 export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
 
 name=${1:-}; (($#)) && shift
