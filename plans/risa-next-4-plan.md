@@ -10,14 +10,14 @@
 | 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | dd41acb                      |
 | 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | ca49316                      |
 | 3     | 3    | landed 2026-11-28 (PR 41, main ca063ec; opus) | 32bb4ed                      |
-| 5     | 4    | —                                             | —                            |
+| 5     | 4    | started 2026-11-28 (agent spawned; opus)      | —                            |
 | 6     | 5    | —                                             | —                            |
 
 **From the user:** nothing yet beyond the start itself.
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Now (2026-11-28):** wave 2 (slices 2 and 4) landed in main through PR #39 (main at 34eb47b, tier none, Codex clean, report a69, both slice worktrees removed). **Now (2026-11-28):** wave 3 (slice 3) landed in main through PR #41 (main at ca063ec, tier none, full `risa check` green on the merged tip: 132 files, 2660 tests; Codex clean; slice worktree removed). Land took the unsynced tip (main had 3 commits sharing no file). Nothing in flight. Next session: `risa backlog ingest` and `list`, `risa sync`, then wave 4: slice 5 alone (opus; RISA-796 and RISA-797 claimed as it starts, RISA-796 `done` after it), `risa watch risa-next-4 --wait` in the background. Check `risa backlog prd list` first: slice 5 edits `bin/risa` and `README.md` (`fixes-bug` held only `loops/new`, `loops/rotate`, `loops/open-session` at this landing). Nothing to fold into the docs this wave.
+**Now (2026-11-28):** waves 1 to 3 are landed (wave 3: PR #41, main at ca063ec). **Wave 4 is in flight:** a fresh session took over (no cut-off landing, git matched _Status_), ingested (nothing new, no new item for this topic), `risa sync` needed no merge, RISA-796 and RISA-797 claimed. Slice 5 started: worktree `.loops/risa-next-4-5` on `slice/risa-next-4/5` from a39ca26, one opus agent spawned with `risa prompt slice risa-next-4 5` plus the notes below, `risa watch risa-next-4 --wait` in the background. `fixes-bug` (running) holds neither `bin/risa` nor `README.md`. Next: on its hand-off, merge slice 5, RISA-796 `done`, the gate (`risa tier`; tier none before: a full `risa check` per _Lessons for the gate_), `risa pr`, `risa review`, land, then rotate for wave 5 (slice 6). A takeover with no live agent: `risa prompt slice risa-next-4 5 --continue`.
 
 **From slice 3:** the backlog route's config lookup is in `loops/backlog-config.sh` (`bin/risa` only sources it, so slice 5's `bin/risa` routing is the first edit there); two comments in `loops/lib.sh` (lines 22, 638) still say `risa.json`. **For slice 6:** a `makeRepo` repo's `work/archive.md` has no `## Items` heading, which `backlog prd list` needs; `makeRepo` copies only `loops/`, not `backlog/`.
 
