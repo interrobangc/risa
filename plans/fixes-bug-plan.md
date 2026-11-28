@@ -35,6 +35,10 @@
 | 23    | 6    | RISA-1081       | opus   | merged | 69cd110                    |
 | 24    | 6    | RISA-1086       | opus   | merged | c3324f5                    |
 | 25    | 6    | RISA-1087       | opus   | merged | 4fbc7cf                    |
+| 26    | 7    | RISA-1089       | opus   | merged | a0ca4d7                    |
+| 27    | 7    | RISA-1090       | opus   | merged | 210789d                    |
+| 28    | 7    | RISA-1091       | opus   | merged | 24c2145                    |
+| 29    | 7    | RISA-1094       | opus   | merged | d56c7f4                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
@@ -46,11 +50,11 @@
 
 **Wave 5** (slices 14–15, RISA-1070/1082): landed 2026-11-28 in main as 3aa2773 (PR #40, tier unit, run 46179562703, Codex clean); to-test file `to-test/2026-11-28-1415-fixes-bug.md`.
 
-**Wave 6** (slices 16–25, all opus), 2026-11-28, fresh session: ingest had nothing new; `risa sync` needed no merge. All ten waiting items are in: only risa-next-4 runs and none of its hot files (loops/config, loops/machine.mjs, loops/skeptics.mjs, loops/project-check, loops/sample-project/repo.mjs, bin/risa, loops/rm.sh, loops/lib.sh, loops/setup, loops/second-repo, loops/docs/project-config.md, README.md) is needed; each slice is told to keep off them. Chains, so no two slices edit one function: 16 → 17 → 19 (loops/home.mjs `homeTick`); 18 and 19 → 20, 18 → 21 (loops/dispatch.mjs). Ready at once: 16, 18, 22, 23, 24, 25. Hot set: loops/home, loops/dispatch, loops/ls, loops/prompts/inbox.sh, loops/inbox-prompt, backlog/inbox-move, loops/prd.sh, loops/usage.
+**Wave 6** (slices 16–25, RISA-1050/1077/1078/1079/1080/1081/1083/1084/1086/1087): landed 2026-11-28 in main as 790a082 (PR #43, tier unit, run 46183871215, Codex clean; unsynced tip, main's 5 commits shared no file); to-test file `to-test/2026-11-28-1506-fixes-bug.md`; report a73 filed. Slice 22 needed one fix after the first CI run (inbox prompt tests; its size limit is now 2200 characters). Caretook's backlog session (Adm Marcus) told 790a082 has RISA-1050 and that the warning reads only `risaVersion` in risa.json.
 
-**Wave 6 gate:** all ten slices merged (table). `risa tier`: none, but the gate is `risa ci run unit` (local full checks time out under load). Run 46183281427 on 0ca85c22 failed two inbox-prompt tests in loops/prompt.test.mjs (slice 22's); its fix (93d25b6, merged 31365a0: shorter hand-off line, the tests follow it, and the inbox prompt's size limit raised from 2000 to 2200 characters) made run 46183871215 on 31365a0 **green**. Slice worktrees removed; sync needed no merge. PR #43 open, `risa review fixes-bug --wait` running. Next: triage Codex, `risa land fixes-bug --tier unit`, report, docs, `risa status-trim`, rotate. For the landing report: the 2200 limit; `slice <t> <n> --stack` is now refused (never worked there); a `RISA_WORK_SELF=1` dispatcher on a work-off home-gated project claims no home; a homes.json entry with no machine reads as unreadable (fix by hand); RISA-1050's warning reads only `risaVersion` in risa.json. After landing, tell Caretook's backlog session the commit for RISA-1050.
+**Wave 7** (slices 26–29, RISA-1089/1090/1091/1094), started 2026-11-28 after syncing main: 26, 27 and 29 run at once, each on opus in `.loops/fixes-bug-<n>`; 28 starts once 27 is merged (both edit `initFiles`). RISA-1097 (ship's lock) waits for a later wave: `loops/ship` is hot for the running ship topic. Hot files set: loops/setup, loops/second-repo.test.mjs, loops/dispatch. Risa's backlog session was `Adm Satie · backlog (risa)` at the last hand-over. All four merged; CI green on f83bdb70 (tier unit, run 46191929759); PR opened, Codex review out.
 
-**Notes:** run local checks with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands; past a load of about 15 the local full check times out (RISA-1088), so gate on `risa ci run <tier> --wait`. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). When a tagged release carries RISA-1065 (acb0975) or RISA-1070 (3aa2773), tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
+**Notes:** run local checks with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands; past a load of about 15 the local full check times out (RISA-1088), so gate on `risa ci run <tier> --wait`. When a tagged release carries RISA-1065 (acb0975), RISA-1070 (3aa2773) or RISA-1050 (790a082), tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
 ## How to run this plan
 
@@ -308,3 +312,43 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/usage.test.mjs`): a reading with a `fiveHour` window under account A, then a parse under account B carrying only `sevenDay`, leaves no `fiveHour` and account B; the same account merges windows as before; a stall noted after an account switch doesn't keep the old account's windows.
+
+## Slice 26: config migrate checks every source is tracked before it moves anything
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/setup-migrate.test.mjs
+
+**Build (RISA-1089):** `migrate` (`loops/setup.mjs`) relies on `git status --porcelain` for its dirty preflight, so a rule file that is git-ignored (or untracked with `status.showUntrackedFiles=no`) shows nothing: `risa.json` is moved and staged, `git mv` then fails on the rule file, and the next run refuses because `.risa/` exists. Before any move, check that every source `migratePlan` lists is tracked (`git ls-files --error-unmatch -- <path>`), and refuse with one line naming each untracked or ignored source and what to do (track it, or move it by hand), non-zero, with nothing moved or staged. `--dry-run` reports the same refusal. Keep to `migratePlan`, `migrate` and their helpers: `initFiles` and `init` are slices 27 and 28's. Put the tests in a new `loops/setup-migrate.test.mjs` (a throwaway git repo in the OS temp dir), so `loops/setup.test.mjs` stays free for those slices. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/setup-migrate.test.mjs`): with a git-ignored rule file, and with an untracked one under `status.showUntrackedFiles=no`, migrate exits non-zero naming the file, `risa.json` is still in place and nothing is staged; once the file is tracked the same run migrates as before.
+
+## Slice 27: risa init writes a config whose check can run
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests: unit · Blocked by: none · Check: loops/setup.test.mjs
+
+**Build (RISA-1090):** a repo made by `risa init` can't run `risa check`: the check planner (`loops/check-plan.mjs`) refuses with "the project config sets no paths.checkPlanRules", the tier data is needed next, and `init --check <cmd>` sets `commands.check` while `risa check` runs `hooks.check` (called with `MODE BASE OWN…` appended), so it exits 2 with "sets no check hook". Make `initFiles` (`loops/setup.mjs`) write working defaults: a check-plan rules file and a tiers file in the config folder, named by the config's paths, in the shapes their readers require (check-plan: `ownTests` and `suite`; tiers: `browserCheck`, a non-empty `narrowedTiers`, and a `refPrefix` the CI gate's run rows sit on; read `loops/check-plan.mjs` and the tier readers for the exact shapes, and `loops/second-repo.test.mjs` for what it adds by hand today), and a `hooks.check` that runs the given check command whatever arguments are appended. Then drop from `loops/second-repo.test.mjs` each hand edit this makes unnecessary. If a default can't be made to work for some part, `init` prints the exact step that adds it instead; say which in the hand-off. Keep to `initFiles`, `init` and their tests: `migrate` is slice 26's. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship): read through what they export. If `loops/docs/project-config.md` describes what init writes, bring it in line within its budget, with no `##` heading changed.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/setup.test.mjs`, `loops/second-repo.test.mjs`): in a throwaway repo, after `init --check "<cmd>"` alone, the check planner runs with no "sets no" refusal, the tier data loads, and the check hook runs the given command with the appended arguments ignored; the second-repo proof passes without adding those files or the hook by hand.
+
+## Slice 28: risa init writes a repo that passes the project-data check
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests: unit · Blocked by: 27 · Check: loops/setup.test.mjs
+
+**Build (RISA-1091):** a repo made by `risa init` fails `loops/project-check.mjs`: it needs `paths.preferences` (a doc with a "Default on silence … Never (--waits)" line), a planner role doc with _What to ask_ and _The skeptic pass_, and `<plans>/fixes-rules.md`, and every other `.md` beside the preferences doc must be named by a role. Make `initFiles` (`loops/setup.mjs`, after slice 27's changes) write a working default for each when missing (never over a file that exists), short and generic, with the config naming them, so project-check passes on a fresh init; read `loops/project-check.mjs` for exactly what it requires and `loops/second-repo.test.mjs` for what it adds by hand today, then drop those hand edits from that test. Where a default would be wrong to guess, `init` prints the step instead; say which in the hand-off. Slice 27 made init write `.risa/tiers.json`, `.risa/check-plan.json` and `hooks.check`; README.md's _Start a project_ still says init writes only the config and the plans files: bring that sentence in line with what init writes after both slices. Keep to `initFiles`, `init` and their tests. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship), nor this repo's own `docs/` or `plans/fixes-rules.md`.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/setup.test.mjs`, `loops/second-repo.test.mjs`): in a throwaway repo, project-check passes straight after `init`; a second `init` (or one over an existing preferences doc) overwrites nothing; the second-repo proof passes without adding those files by hand.
+
+## Slice 29: A dispatcher whose backlog command hangs ends the tick and still stops
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-lock.test.mjs
+
+**Build (RISA-1094):** `run()` and `backlog()` (`loops/dispatch.mjs`, around line 723) call `spawnSync` with no timeout, so a backlog command that hangs blocks the tick for good: the event loop never turns and the SIGTERM handler never runs (two test dispatchers ignored SIGTERM for hours). Give `run()` a default timeout (an env override for tests, as the file's other limits have; the pickup call already passes its own, `PICKUP_TIMEOUT_MS`), have the timed-out child killed, and treat a timeout as that call's failure: the tick logs one line naming the command and the limit, does nothing that depended on its output (never reads a timeout as an empty backlog or an empty registry, which could start or close work), and ends, so the next tick retries and a pending stop is honoured. Check the file's other `spawnSync` calls on the tick path for the same gap and give them the same limit; say in the hand-off which calls now time out and what each does on one. Find the dispatch test file that fits (the tests were split: `loops/dispatch-*.test.mjs`, fixture in `loops/dispatch-fixture.mjs`) or add `loops/dispatch-hang.test.mjs`; a test's hanging child must be killed when the test ends. Don't edit `loops/config.mjs` or `loops/prd.sh` (hot for ship).
+
+**Acceptance criteria:**
+
+- Unit test: with a backlog command stubbed to hang past a short limit, the tick ends with a line naming the command and the timeout, starts and closes nothing, and a SIGTERM sent meanwhile stops the dispatcher within a few seconds; a backlog command that answers in time behaves as before.

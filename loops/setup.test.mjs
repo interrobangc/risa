@@ -15,6 +15,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import { tiersFrom } from "../ci/tier-data.mjs";
+import { checkPlanFor } from "./check-plan.mjs";
 import { CONFIG_DIR, CONFIG_FILE, CONFIG_NAME, loadConfig } from "./config.mjs";
 import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 import { initFiles, migratePlan } from "./setup.mjs";
@@ -23,6 +25,9 @@ const HERE = new URL(".", import.meta.url).pathname;
 const RISA = join(HERE, "../bin/risa");
 const CONFIG_CLI = join(HERE, "config.mjs");
 const BACKLOG = join(HERE, "../backlog/backlog.mjs");
+const CHECK_PLAN = join(HERE, "check-plan.mjs");
+const CHECK_HOOK = join(HERE, "check-hook.sh");
+const PROJECT_CHECK = join(HERE, "project-check.mjs");
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), "setup-")));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -206,6 +211,7 @@ describe("risa init", () => {
     expect(config.backlog.idPrefix).toBe("ACME");
     expect(config.branches.trunk).toBe("trunk");
     expect(config.commands.check).toBe("make check");
+    expect(config.hooks.check).toBe("sh -c 'make check' check");
     expect(config.paths.tooling).toEqual([CONFIG_DIR]);
     const backlog = (/** @type {string[]} */ ...a) =>
       spawnSync("node", [BACKLOG, ...a], {
@@ -218,6 +224,110 @@ describe("risa init", () => {
       expect(b.stderr, a.join(" ")).toBe("");
       expect(b.status, a.join(" ")).toBe(0);
     }
+  });
+
+  it("writes a check risa check can run: the planner's rules, the tier data, the check hook", () => {
+    const root = fresh();
+    // The check prints the arguments it got: none, whatever check-hook.sh appends.
+    const check = `node -e 'console.log("args:", JSON.stringify(process.argv.slice(1)))'`;
+    expect(run(root, ["init", "--name", "acme", "--check", check]).status).toBe(0);
+    const at = { ...env, RISA_CONFIG: join(root, CONFIG_DIR) };
+    expect(configCheck(root).status).toBe(0);
+    const project = loadConfig({ path: join(root, CONFIG_DIR, CONFIG_FILE) });
+    expect(project.config.paths.tierData).toBe(`${CONFIG_DIR}/tiers.json`);
+    expect(project.config.paths.checkPlanRules).toBe(`${CONFIG_DIR}/check-plan.json`);
+    const tiers = tiersFrom(JSON.parse(readFileSync(join(root, project.config.paths.tierData), "utf8")));
+    expect(tiers.TIERS).toEqual(["check"]);
+    expect(tiers.narrowedJobs(["src/a.c"])).toEqual(["check"]);
+    expect(tiers.ciRefName("check", "slice/x/1")).toBe("ci/check/slice-x-1");
+    const plan = checkPlanFor(project);
+    expect(plan.proposeTier(["src/a.c"])).toEqual({
+      tier: "check",
+      reason: "a file no rule covers (src/a.c)",
+    });
+    expect(plan.planCheck(["src/a.integration.test.js", "src/a.c"], "slice")).toMatchObject({
+      mode: "slice",
+      ownTests: ["src/a.integration.test.js"],
+    });
+    // The planner's CLI as prd.sh runs it: no "sets no" refusal.
+    const planned = spawnSync("node", [CHECK_PLAN, "--mode", "slice"], {
+      cwd: root,
+      encoding: "utf8",
+      env: at,
+      input: "src/a.c\n",
+    });
+    expect(planned.stderr).toBe("");
+    expect(planned.stdout.split("\n")[0]).toBe("slice");
+    // The check hook as check-hook.sh runs it, mode, base and own test files appended.
+    const hooked = spawnSync("bash", [CHECK_HOOK, "slice", "HEAD", "0", "a.integration.test.js"], {
+      cwd: root,
+      encoding: "utf8",
+      env: at,
+    });
+    expect(hooked.stderr).toBe("");
+    expect(hooked.status).toBe(0);
+    expect(hooked.stdout).toContain("args: []");
+  });
+
+  it("writes a repo the project-data check passes straight after init", () => {
+    const root = fresh();
+    // The repo's own agents doc: init names it, never writes it.
+    writeFileSync(join(root, "AGENTS.md"), "# Acme: agents\n");
+    const r = run(root, args);
+    expect(r.status).toBe(0);
+    for (const rel of ["docs/preferences.md", "docs/planner.md", "plans/fixes-rules.md"])
+      expect(r.stdout).toContain(`wrote ${rel}`);
+    expect(r.stdout).not.toMatch(/kept|no role names|add them/);
+    expect(r.stdout).toContain("git add .risa plans docs");
+    const checked = spawnSync("node", [PROJECT_CHECK], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...env, RISA_CONFIG: join(root, CONFIG_DIR) },
+    });
+    expect(checked.stdout + checked.stderr).toBe("project-check: ok\n");
+    expect(checked.status).toBe(0);
+  });
+
+  it("keeps the brief's docs already there, overwriting nothing, and names the steps they need", () => {
+    const root = fresh();
+    const ours = {
+      "docs/preferences.md": "# Ours\n\nNo never list here.\n",
+      "docs/notes.md": "# Notes\n",
+      "plans/fixes-rules.md": "# Our fixes rules\n",
+    };
+    mkdirSync(join(root, "docs"));
+    mkdirSync(join(root, "plans"));
+    for (const [rel, text] of Object.entries(ours)) writeFileSync(join(root, rel), text);
+    const r = run(root, args);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    for (const [rel, text] of Object.entries(ours)) expect(readFileSync(join(root, rel), "utf8")).toBe(text);
+    expect(r.stdout).toContain("kept docs/preferences.md (already there)");
+    expect(r.stdout).toContain("kept plans/fixes-rules.md (already there)");
+    expect(r.stdout).toContain("wrote docs/planner.md");
+    expect(r.stdout).toMatch(/docs\/preferences\.md \(paths\.preferences\) has no never list/);
+    expect(r.stdout).toMatch(/docs\/notes\.md: no role names it/);
+    // A kept doc that reads for the brief needs no step.
+    const good = fresh();
+    mkdirSync(join(good, "docs"));
+    const prefs = initFiles({ name: "acme", date: "2026-01-02" })["docs/preferences.md"] ?? "";
+    writeFileSync(join(good, "docs/preferences.md"), prefs);
+    const g = run(good, args);
+    expect(g.status).toBe(0);
+    expect(g.stdout).toContain("kept docs/preferences.md (already there)");
+    expect(g.stdout).not.toMatch(/never list|no role names/);
+    expect(readFileSync(join(good, "docs/preferences.md"), "utf8")).toBe(prefs);
+  });
+
+  it("a failing --check fails the check hook", () => {
+    const root = fresh();
+    expect(run(root, ["init", "--name", "acme", "--check", "exit 3"]).status).toBe(0);
+    const hooked = spawnSync("bash", [CHECK_HOOK, "quick", "HEAD", "0"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...env, RISA_CONFIG: join(root, CONFIG_DIR) },
+    });
+    expect(hooked.status).toBe(3);
   });
 
   it.each(

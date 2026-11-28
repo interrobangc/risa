@@ -34,8 +34,11 @@ node ~/.risa/releases/v0.1.0/loops/machine.mjs check
 ## Start a project
 
 In a repo with no config, `risa init --name <slug> [--trunk <branch>] [--check <command>]`
-writes `.risa/config.json` and an empty backlog, inbox and archive under `plans/`, then
-prints the machine config line to add and the commit to make. A repo with a `risa.json`
+writes `.risa/config.json` (with a check hook running `--check`), the folder's tier data
+and check plan rules, an empty backlog, inbox and archive under `plans/`, and, keeping any
+already there, the skeptic brief's docs (`docs/preferences.md`, `docs/planner.md`,
+`plans/fixes-rules.md`), then prints the steps it can't guess, the machine config line to
+add and the commit to make. A repo with a `risa.json`
 moves to the folder with `risa config migrate` (`--dry-run` first): it stages the moves
 and commits nothing.
 

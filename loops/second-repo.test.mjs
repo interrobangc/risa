@@ -8,10 +8,10 @@
 // opens nothing (RISA_CLAUDE_BIN), and the land seam (RISA_PR_THROWAWAY: the
 // topic has "throwaway" in its name), which stops before the merge.
 //
-// The onboarding a user does after init is the test's too: the folder's four rule
-// files (RULE_FILES), the check hook, the preferences doc, the planner's additions
-// and the fixes rules, and the repo's own prefixes. A second case builds the same
-// repo on risa.json, migrates it (`risa config migrate`) and runs the same check.
+// The onboarding a user does after init is the test's too: the folder's two CI
+// lists (init writes the tier data, the check plan's rules, the check hook and the
+// skeptic brief's docs) and the repo's own prefixes. A second case builds the same repo on risa.json, its rule files
+// under tools/, migrates it (`risa config migrate`) and runs the same check.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -42,30 +42,22 @@ const INIT = ["--name", "ledger", "--trunk", TRUNK, "--check", "make check"];
 // Each case runs dozens of git commands, a check and a landing: generous under load.
 const LONG = 240_000;
 
-// The four rule files, by RULE_FILES' default names: the ledger's own tiers and check plan.
-const RULES = {
-  "tiers.json": {
-    tiers: ["lint", "test"],
-    jobs: { lint: ["lint"], test: ["test"] },
-    fileGroups: [{ group: "test", pattern: "*", tier: "test" }],
-    narrowedTiers: ["test"],
-    browserCheck: "tests/*.ui.c",
-    narrowedFile: ".narrowed.json",
-    forcedFlakeFile: ".force-flake.json",
-    refPrefix: "runs/",
-  },
-  "check-plan.json": {
-    ownTests: "_test\\.c$",
-    suite: { tier: "test", rules: [{ match: "^Makefile$", why: "the build" }] },
-    byPath: [{ match: "^src/", tier: "test", why: "the ledger's code" }],
-    tooling: [],
-  },
+// init's own files: the config, its tier data and check plan rules, the backlog's three,
+// the skeptic brief's docs.
+const INIT_FILES = initFiles({ name: "ledger", trunk: TRUNK, check: "make check" });
+const TIERS = JSON.parse(INIT_FILES[`${CONFIG_DIR}/tiers.json`] ?? "{}");
+// The two CI lists init leaves to the user, by RULE_FILES' default names.
+const LISTS = {
   "brake-list.txt": "# The ledger's brake list: one glob or check:<name> a line.\n",
   "quarantine.txt": "# The ledger's quarantine: none yet.\n",
 };
-/** @param {string} name @param {unknown} rule */
-const ruleText = (name, rule) =>
-  name.endsWith(".json") ? `${JSON.stringify(rule, null, 2)}\n` : String(rule);
+/** Each rule file's text by its default name: init's two, then the two lists. */
+const RULES = {
+  ...Object.fromEntries(
+    RULE_FILES.map(([, name]) => [name, INIT_FILES[`${CONFIG_DIR}/${name}`]]).filter(([, t]) => t),
+  ),
+  ...LISTS,
+};
 
 let root, repo, origin, env;
 const prdDir = () => join(repo, ".loops", TOPIC);
@@ -96,17 +88,12 @@ const editJson = (path, change) => {
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`);
 };
 
-/** The user's own edits after init: the repo's prefixes, its check hook, the skeptic's docs. */
+/** The user's own edit after init: the repo's prefixes. */
 const onboard = (/** @type {Record<string, any>} */ c) => {
-  c.paths.preferences = "docs/preferences.md";
-  c.roles = { planner: { additions: "docs/planner.md" } };
   c.branches.prefixes = PREFIXES;
-  // The check hook gets the mode, base and own test files as arguments, which make
-  // would read as targets: sh drops them.
-  c.hooks = { check: "sh -c 'make check' check" };
 };
 
-/** The ledger before Risa: a Makefile project, its docs, one commit on trunk, pushed. */
+/** The ledger before Risa: a Makefile project, its agents doc, one commit on trunk, pushed. */
 function makeLedger() {
   execFileSync("git", ["init", "-q", "--bare", "-b", TRUNK, origin]);
   execFileSync("git", ["init", "-q", "-b", TRUNK, repo]);
@@ -116,12 +103,6 @@ function makeLedger() {
     Makefile: 'check:\n\t@test -f README.md && echo "make check: ok"\n',
     "README.md": "# Ledger\n\nA fictional ledger, kept with make.\n",
     "AGENTS.md": "# Ledger: agents\n\nRun `make check` before handing off.\n",
-    "docs/preferences.md":
-      "# Preferences\n\n- **Default on silence:** a recommendation stands. Never (`--waits`): money, data (2026-01-01)\n",
-    "docs/planner.md":
-      "## What to ask\n\nAsk what changes the plan.\n\n**Unattended** runs take the defaults.\n\n" +
-      "## The skeptic pass\n\nA skeptic reads the plan first.\n",
-    "plans/fixes-rules.md": "# Fixes rules\n\nA fix wave takes small fixes.\n",
   });
   git(repo, "add", "-A");
   git(repo, "commit", "-qm", "chore: start the ledger");
@@ -192,13 +173,11 @@ describe("a second repo, from risa init to a landing", () => {
       makeLedger();
       const init = risa(["init", ...INIT]);
       expect(init).toContain(`wrote ${CONFIG_DIR}/${CONFIG_FILE}`);
-      // The user's part: the rule files, their edits, the commit init names.
-      write(
-        join(repo, CONFIG_DIR),
-        Object.fromEntries(RULE_FILES.map(([, name]) => [name, ruleText(name, RULES[name])])),
-      );
+      for (const rel of Object.keys(INIT_FILES)) expect(init).toContain(`wrote ${rel}`);
+      // The user's part: the two CI lists, their edits, the commit init names.
+      write(join(repo, CONFIG_DIR), LISTS);
       editJson(join(repo, CONFIG_DIR, CONFIG_FILE), onboard);
-      git(repo, "add", CONFIG_DIR, "plans");
+      git(repo, "add", CONFIG_DIR, "plans", "docs");
       git(repo, "commit", "-qm", "chore: start risa");
       git(repo, "push", "-q", "origin", TRUNK);
       checkConfig();
@@ -224,8 +203,8 @@ describe("a second repo, from risa init to a landing", () => {
           version: 1,
           commit: tip,
           runId: "11",
-          tier: "test",
-          ranTier: "test",
+          tier: "check",
+          ranTier: "check",
           kind: "green",
           flaky: [],
           brake: { jobs: [], tests: [], files: [] },
@@ -248,15 +227,15 @@ describe("a second repo, from risa init to a landing", () => {
             updatedAt: "2026-01-01T00:00:00Z",
           },
         ]),
-        GH_RUN_PREFIX: RULES["tiers.json"].refPrefix,
+        GH_RUN_PREFIX: TIERS.refPrefix,
         GH_CI_SHA: tip,
-        GH_CI_TIER: "test",
+        GH_CI_TIER: "check",
         GH_CI_VERDICT: join(root, "verdict.json"),
         GH_LOG: join(root, "gh.log"),
       });
-      expect(out).toContain("tier: tier test (proposed test: the ledger's code (src/export.c))");
+      expect(out).toContain("tier: tier check (proposed check: a file no rule covers (src/export.c))");
       expect(out).toContain(`codex: clean on ${tip.slice(0, 7)}`);
-      expect(out).toContain(`check: CI green at test on ${tip.slice(0, 7)} (run 11)`);
+      expect(out).toContain(`check: CI green at check on ${tip.slice(0, 7)} (run 11)`);
       expect(out).toContain(
         `RISA_PR_THROWAWAY: every refusal passed; stopping before the merge. It would push ${TRUNK}`,
       );
@@ -275,16 +254,15 @@ describe("a second repo, from risa init to a landing", () => {
     () => {
       makeLedger();
       // The same config on risa.json, its rule files under tools/ by paths keys.
-      const files = initFiles({ name: "ledger", trunk: TRUNK, check: "make check" });
-      const { [`${CONFIG_DIR}/${CONFIG_FILE}`]: text, ...data } = files;
-      const raw = JSON.parse(text ?? "{}");
+      const plansFiles = Object.entries(INIT_FILES).filter(([rel]) => !rel.startsWith(`${CONFIG_DIR}/`));
+      const raw = JSON.parse(INIT_FILES[`${CONFIG_DIR}/${CONFIG_FILE}`] ?? "{}");
       onboard(raw);
       raw.paths.tooling = [CONFIG_NAME];
       for (const [key, name] of RULE_FILES) raw.paths[key] = `tools/${name}`;
       write(repo, {
-        ...data,
+        ...Object.fromEntries(plansFiles),
         [CONFIG_NAME]: `${JSON.stringify(raw, null, 2)}\n`,
-        ...Object.fromEntries(RULE_FILES.map(([, name]) => [`tools/${name}`, ruleText(name, RULES[name])])),
+        ...Object.fromEntries(RULE_FILES.map(([, name]) => [`tools/${name}`, RULES[name] ?? ""])),
       });
       git(repo, "add", "-A");
       git(repo, "commit", "-qm", "chore: start risa");
