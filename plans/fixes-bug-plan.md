@@ -29,7 +29,7 @@
 | 17    | 6    | RISA-1080       | opus   | merged  | 57bd232                    |
 | 18    | 6    | RISA-1083       | opus   | merged  | 29020ba                    |
 | 19    | 6    | RISA-1079       | opus   | merged  | 50780f8                    |
-| 20    | 6    | RISA-1084       | opus   | planned |                            |
+| 20    | 6    | RISA-1084       | opus   | started |                            |
 | 21    | 6    | RISA-1050       | opus   | merged  | 2942e27                    |
 | 22    | 6    | RISA-1077       | opus   | merged  | 5a22554                    |
 | 23    | 6    | RISA-1081       | opus   | merged  | 69cd110                    |
