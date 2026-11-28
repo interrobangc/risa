@@ -15,7 +15,7 @@
 | 23    | 4    | RISA-926  | opus   | handed off (e44e8f8; slice check: 13 load timeouts in untouched files); merges after 20, 22 |                                |
 | 24    | 4    | RISA-981  | opus   | started (high priority, the user via the backlog session)                                   |                                |
 | 25    | 4    | RISA-1009 | opus   | started                                                                                     |                                |
-| 26    | 4    | RISA-1010 | sonnet | started (the plan spells the edit out)                                                      |                                |
+| 26    | 4    | RISA-1010 | sonnet | handed off (4ecc5b8, vitest fix after node:test); merges after 20, 22–25                    |                                |
 
 **Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running. Slice 19 also moved `mergedSlices` into slice-fields.mjs and runs the budget in `risa anchors`; its follow-up (plan.sh and skeptics' 'about 8 files') is RISA-1011. Slices 24–26 joined on the backlog session's word (RISA-981 high priority; v0.1.8 is cut once 981 and 1010 land).
 
