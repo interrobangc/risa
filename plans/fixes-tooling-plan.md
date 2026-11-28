@@ -10,9 +10,9 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                                                                                                           | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 53    | 12   | RISA-1073 | opus  | in flight: 91e56b4, 767ccb8 committed, tree clean; agent respawned with --continue after the account switch (2026-11-28 17:30Z) | —                              |
+| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | merged; main synced after it (b60d88c); `pnpm test` gate running. Slice check exit 1 on 10 tests in dispatch/drain/usage test files it does not touch (drain and usage fail on the base too: looks like live usage state leaking in) | a9eb9ec                        |
 
 Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
