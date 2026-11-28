@@ -113,13 +113,15 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1023 | bug | triaged | fixes-bug |  | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
 | RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 | RISA-1025 | change | ready | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically |
-| RISA-1026 | bug | in-progress | fixes-tooling | prd/fixes-tooling | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
+| RISA-1026 | bug | ready | fixes-tooling | prd/fixes-tooling | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
 | RISA-1027 | bug | ready | self-recovery-2 | prd/self-recovery-2 | risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key |
 | RISA-1028 | bug | ready | self-recovery-2 | prd/self-recovery-2 | cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens |
 | RISA-1029 | bug | ready | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs finishStep prefilters candidates with landedTopics/landedWithCode on the configured trunk, ignoring env.TRUNK (gatherFinish and tidy honor it): a topic landed only into an overridden trunk is never auto-finished |
 | RISA-1030 | bug | triaged | fixes-bug-urgent |  | The dispatcher can die silently and nothing notices: Caretook's (v0.1.8, pid 22040) was gone hours after a normal tick with no error in .loops/.dispatch.log and .dispatch.json still naming its pid. Log why it exits, have risa status flag a dead dispatcher pid, and keep it alive (launchd or a watchdog that restarts it and files a report) |
 | RISA-1031 | bug | triaged | fixes-perf |  | risa status hung over 2 minutes in Caretook's main checkout on v0.1.8 at load 2, the morning its dispatcher had died; cause not confirmed |
 | RISA-1032 | change | triaged | fixes-bug |  | Two fixes topics may run at once when their hot files don't overlap: dispatch-pick.mjs's startBlock refuses any standing topic while another runs ('another fixes topic … is running'), so in a repo where one fixes topic (Risa's fixes-tooling) keeps refilling, fixes-bug, fixes-perf and fixes-nit rarely or never get a lane. The hot-file check already guards overlap; keep the lane cap |
+| RISA-1033 | bug | triaged | fixes-bug-urgent |  | A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification |
+| RISA-1034 | bug | triaged | fixes-bug-urgent |  | An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on |
 
 ## Items
 
@@ -901,10 +903,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1026 · bug · lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 46bbadb
 
 - 2026-11-28 (prd/self-recovery-2): Seen in self-recovery-2's full check on a362002 (2026-11-28, load ~13); passes 26/26 alone.
 
@@ -944,6 +946,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): Seen 2026-11-28 by Caretook's backlog session: started by risa dispatch --restart at 03:36Z, last tick 09:13:53Z, gone by 11:34Z; restarted by hand. self-recovery-3: the machinery keeping its own long-running work alive (beside RISA-913), more than a small fix.
 - 2026-11-28 (Robert Bo Davis): Moved to fixes-bug-urgent 2026-11-28 on the user's word: log why the dispatcher exits and have risa status flag a dead pid now; the keep-alive (launchd or a watchdog) may stay for self-recovery-3 if it grows past a fix.
+- 2026-11-28 (Robert Bo Davis): More from Caretook's backlog session 2026-11-28: in the same minutes (09:13-09:18Z) both running orchestrators stalled too. prd-fixes-bug got its CI task notification at 09:18:23Z and never took another turn (3h40m idle, processes alive). prd-sync-safety-3 ended its turn at 09:38Z waiting on a browser check that printed nothing, with no Playwright left running. Likely one machine or network event. With the dispatcher dead, worker-watch's 30-minute quiet-orchestrator check never ran, so nobody noticed for ~3h.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: no Sleep/Wake/DarkWake in pmset -g log 08:00-12:59Z (a MaintenanceWake assertion at 09:02Z; Claude.app's NoIdleSleepAssertion held throughout), so not sleep. System log (OOM, network) not checked yet.
 
 ### RISA-1031 · bug · risa status hung over 2 minutes in Caretook's main checkout on v0.1.8 at load 2, the morning its dispatcher had died; cause not confirmed
 
@@ -963,3 +967,23 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): The user's choice 2026-11-28, over adding rows only or folding everything into fixes-tooling. fixes-nit and fixes-perf still have no registry row, so they need rows to run at all. fixes-tooling: the dispatcher's scripts; one rule in loops/dispatch-pick.mjs plus its test.
 - 2026-11-28 (Robert Bo Davis): Moved from fixes-tooling to fixes-bug 2026-11-28: fixes-tooling is retiring in Risa's repo; normal urgency.
+
+### RISA-1033 · bug · A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification
+
+- status: triaged
+- prd: fixes-bug-urgent
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog session 2026-11-28, beside RISA-1030 (same event). fixes-bug-urgent: lanes stall unseen overnight.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: prd-fixes-bug was alive and took a turn at 11:59:35Z right after a SendMessage nudge, so its 09:18Z task notification simply never triggered a turn. Separate from the dispatcher dying (RISA-1030).
+
+### RISA-1034 · bug · An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on
+
+- status: triaged
+- prd: fixes-bug-urgent
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog session 2026-11-28, beside RISA-1030. Overlaps RISA-913's machinery-owned jobs (self-recovery-3) for the long-term shape; this is the small guard now.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: prd-sync-safety-3 was alive and took a turn at 11:59:35Z right after a nudge; its background wait on the browser check had ended with nothing to wake it. Separate from RISA-1030.
