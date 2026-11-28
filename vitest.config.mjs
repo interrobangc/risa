@@ -5,8 +5,11 @@
 //   tooling:browser  loops/browser.test.mjs alone: the browser gate, which waits on
 //                    checks that hang on purpose
 // Each reads the fixture project's config (loops/test-setup.mjs), never a checkout's.
+// The test (20 s) and hook (10 s) limits grow with the machine's 5-minute load above 15,
+// up to three times, as the check budget does (loops/test-limits.mjs; RISA_TEST_LOAD sets it).
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { testLimits, testLoad } from "./loops/test-limits.mjs";
 
 // Once, before any file: a git under the floor stops the run (loops/test-global-setup.mjs).
 const globalSetup = [fileURLToPath(new URL("./loops/test-global-setup.mjs", import.meta.url))];
@@ -17,6 +20,7 @@ const env = { RISA_LOAD_GATE: "off" };
 // In CI (.github/workflows/ci.yml), a JSON report as well: ci/write-verdict.mjs names its failed tests.
 const report = process.env.RISA_CI_REPORT;
 const reporting = report ? { reporters: ["default", "json"], outputFile: { json: report } } : {};
+const { testTimeout, hookTimeout } = testLimits({ load: testLoad() });
 
 export default defineConfig({
   test: {
@@ -27,7 +31,8 @@ export default defineConfig({
         test: {
           name: "core:unit",
           include: ["loops/check-times.test.mjs", "loops/check-plan.test.mjs", "ci/**/*.test.mjs"],
-          testTimeout: 20_000,
+          testTimeout,
+          hookTimeout,
           setupFiles,
         },
       },
@@ -36,7 +41,8 @@ export default defineConfig({
           name: "tooling:unit",
           include: ["loops/**/*.test.mjs", "backlog/**/*.test.mjs"],
           exclude: ["loops/check-times.test.mjs", "loops/check-plan.test.mjs", "loops/browser.test.mjs"],
-          testTimeout: 20_000,
+          testTimeout,
+          hookTimeout,
           setupFiles,
           env,
         },
@@ -45,7 +51,8 @@ export default defineConfig({
         test: {
           name: "tooling:browser",
           include: ["loops/browser.test.mjs"],
-          testTimeout: 20_000,
+          testTimeout,
+          hookTimeout,
           setupFiles,
           env,
         },
