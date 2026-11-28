@@ -818,7 +818,8 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
 function contextStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
   /** @type {ReturnType<typeof gather>} */ g,
-  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void,
+   *   gates?: import("./dispatch-context.mjs").RotationGates }} */ { dryRun, env, out, gates = {} },
 ) {
   if (env.RISA_CONTEXT_WATCH === "off") return false;
   const now = g.facts.now;
@@ -875,6 +876,7 @@ function contextStep(
     inboxLimit: limitOf(env),
     waitMs,
     now,
+    gates,
   });
 
   const setEntry = (/** @type {string} */ name, /** @type {Record<string, unknown>} */ fields) =>
@@ -898,6 +900,16 @@ function contextStep(
       out(
         `context: ${a.session} waits to rotate: a ${toolCmd.prd} or ${toolCmd.backlog} command is running under it`,
       );
+      continue;
+    }
+    // The home is another machine's: no fresh session here; the line once per reason (RISA-1084).
+    if (a.type === "gated") {
+      const fresh = entries[a.session]?.gated !== a.why;
+      if (dryRun || fresh) out(`context: ${a.session} isn't rotated here: ${a.why}`);
+      if (!dryRun && fresh) {
+        setEntry(a.session, { gated: a.why });
+        acted = true;
+      }
       continue;
     }
     if (dryRun) {
@@ -984,7 +996,7 @@ function contextStep(
               { cwd: p.main },
             );
       const reported = entries[a.session]?.reported === true;
-      setEntry(a.session, { triedAt: now, ...(r.ok ? {} : { reported: true }) });
+      setEntry(a.session, { triedAt: now, gated: undefined, ...(r.ok ? {} : { reported: true }) });
       if (r.ok) out(`context: ${a.session} rotating`);
       else {
         out(`context: rotating ${a.session} was refused: ${lastLine(r)}`);
@@ -1040,12 +1052,8 @@ function watchMarks(/** @type {string} */ file) {
 function stuckStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
   /** @type {ReturnType<typeof gather>} */ g,
-  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void, every: number }} */ {
-    dryRun,
-    env,
-    out,
-    every,
-  },
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void, every: number,
+   *   gates?: import("./dispatch-context.mjs").RotationGates }} */ { dryRun, env, out, every, gates = {} },
 ) {
   if (env.RISA_STUCK_WATCH === "off") return false;
   const now = g.facts.now;
@@ -1111,10 +1119,13 @@ function stuckStep(
     limitMs,
     notifiedMs,
     now,
+    gates,
   });
   if (dryRun) {
     for (const a of actions)
-      if (a.type !== "answered") out(`stuck: would ${a.type} ${a.type === "report" ? a.key : a.session}`);
+      if (a.type === "gated") out(`stuck: ${a.session} isn't rotated here: ${a.why}`);
+      else if (a.type !== "answered")
+        out(`stuck: would ${a.type} ${a.type === "report" ? a.key : a.session}`);
     return false;
   }
   // The clocks: a paused tick writes nothing, so a long pause is a gap too.
@@ -1139,6 +1150,17 @@ function stuckStep(
 
   let acted = false;
   for (const a of actions) {
+    // The home is another machine's: no fresh session here; the line once per reason (RISA-1084).
+    if (a.type === "gated") {
+      if (entries[a.session]?.gated === a.why) continue;
+      setStuck((st) => {
+        const e = st.sessions?.[a.session];
+        if (e) e.gated = a.why;
+      });
+      out(`stuck: ${a.session} isn't rotated here: ${a.why}`);
+      acted = true;
+      continue;
+    }
     acted = true;
     if (a.type === "clear") {
       if (a.askId) dismissAsk(p.asks, a.askId, { now });
@@ -1205,7 +1227,7 @@ function stuckStep(
       const reported = entries[a.session]?.reported === true;
       setStuck((st) => {
         const e = st.sessions?.[a.session];
-        if (e) Object.assign(e, { triedAt: now }, r.ok ? {} : { reported: true });
+        if (e) Object.assign(e, { triedAt: now, gated: undefined }, r.ok ? {} : { reported: true });
       });
       if (r.ok) out(`stuck: ${a.session} rotating`);
       else {
@@ -2116,17 +2138,19 @@ export function tick(
     out(`usage: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // The home's gates hold the automatic rotations too: no fresh session on a machine that lost it (RISA-1084).
+  const gates = { project: homeBlocked, inbox: homeInbox };
   // The context follow-up: apart from the pick, and never in the way of its action.
   // Not while limited: a rotation or its question's helper opens a claude.
   try {
-    if (!limited && contextStep(p, g, { dryRun, env, out })) watched = true;
+    if (!limited && contextStep(p, g, { dryRun, env, out, gates })) watched = true;
   } catch (e) {
     out(`context: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // The stuck orchestrator: apart from the pick, like the context follow-up.
   try {
-    if (!limited && stuckStep(p, g, { dryRun, env, out, every })) watched = true;
+    if (!limited && stuckStep(p, g, { dryRun, env, out, every, gates })) watched = true;
   } catch (e) {
     out(`stuck: ${e instanceof Error ? e.message : String(e)}`);
   }
