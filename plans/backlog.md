@@ -93,6 +93,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-998 | feature | triaged | risa-next |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
 | RISA-999 | bug | ready | fixes-tooling | prd/fixes-tooling | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
 | RISA-1000 | bug | ready | fixes-tooling | prd/fixes-tooling | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
+| RISA-1001 | bug | triaged | fixes-bug |  | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
 
 ## Items
 
@@ -771,3 +772,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-27 (prd/after-split-2): Seen 2026-11-27 by after-split-2: two slice checks and the wave-1 full check failed only on timeouts (ask, bye, tidy-cli, land-unsynced, land-gate, recover, rotate, stack, load-gate, dispatch, sessions…); all pass run alone at load ~7. Fix candidates: scale vitest testTimeout/hookTimeout with load as check-budget does, or lower parallelism under load.
 - 2026-11-27 (Robert Bo Davis): Check log (risa check --times, 2026-11-27): tests failed in 31 of 33 logged runs (full 9/10, slice 22/23; median 6.3 min). The log doesn't record the failing step or test files ('Test failures by step: (not recorded)'), so it can't confirm these were all timeouts.
+
+### RISA-1001 · bug · Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-27 (prd/after-split-2): Codex P2 on PR #9 (after-split-2), https://github.com/interrobangc/risa/pull/9#discussion_r4724774993; Codex reproduced it with paths.backlog=plans/new-backlog.md in a worktree
