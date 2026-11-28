@@ -27,6 +27,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { branchKinds } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
 
 /** The topic of a branch: slice/<t>/<n>, prd/<t>, plan/<t> and hotfix/<t> give <t>; others none. */
 export function topicOfBranch(branch) {
@@ -106,7 +107,7 @@ export function parseFields(args) {
   return fields;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
     if (args.shift() === "append") {
