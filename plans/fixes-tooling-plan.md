@@ -10,7 +10,7 @@
 | ----- | ---- | -------------- | ------ | -------------------- | ------------------------------ |
 | 27    | 5    | RISA-1011      | sonnet | merged               | 5bff9fa                        |
 | 28    | 5    | RISA-882       | opus   | merged               | a99f7d2                        |
-| 29    | 5    | RISA-886, 889  | opus   | agent spawned        | —                              |
+| 29    | 5    | RISA-886, 889  | opus   | merged               | 6645281                        |
 | 30    | 5    | RISA-986       | opus   | merged               | c4654f1                        |
 | 31    | 5    | RISA-994 (1/2) | opus   | merged               | b432f93                        |
 | 32    | 5    | RISA-994 (2/2) | opus   | agent spawned (opus) | —                              |
