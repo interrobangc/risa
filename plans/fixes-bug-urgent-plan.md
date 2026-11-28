@@ -9,15 +9,13 @@
 | Slice | Wave | Item      | Model | State                                      | Merge into `prd/fixes-bug-urgent` |
 | ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
 | 4     | 2    | RISA-1037 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
+| 5     | 2    | RISA-1042 | opus  | starting                                   | —                                 |
+| 6     | 2    | RISA-1038 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
 
 **Wave 1 landed** 2026-11-28 in main as 232b823 through PR #25: slices 1 (RISA-1030, merge ff256da), 2 (RISA-1034, 61be90b), 3 (RISA-1033, 1f81567), all opus. Tooling only, tier none. Gate: full `risa check` on the synced tip; 25 tests in 16 files timed out at load ~27, and those 16 files reran green at load ~8 (533 tests). Codex: one P2 (browser wait misses a suite's earlier results), tracked as RISA-1042, thread resolved; clean on ca79cb4. Report filed; to-test/2026-11-28-0815-fixes-bug-urgent.md; slice worktrees removed.
 
-**For the next session (wave 2):**
+**Wave 2 (session 2026-11-28):** slices 5 and 6 written. Slice 5 (`loops/lease.sh`, not hot) runs at once; slices 4 and 6 wait for **self-recovery-2's PR #23** (`loops/dispatch.mjs`, `loops/prd.sh`; self-recovery-2 will message when it lands): then `risa sync` and start them. Hot files set: `loops/lease`, `loops/session`, `loops/lib.sh`, `loops/status-extra`, `loops/dispatch-restart`.
 
-- **Waiting on self-recovery-2's PR #23** (it changes `loops/dispatch.mjs`; `loops/prd.sh` and `loops/docs/` are its hot files too). self-recovery-2 will message when it lands; then `risa sync`, and start wave 2. Wave 2 is:
-  - Slice 4 (RISA-1037), already written: the dispatcher logs why it exits.
-  - A slice for RISA-1038 (the inbox session finds the wrong project; `loops/session.sh`, `loops/lib.sh`, `loops/prd.sh`; the backlog session's note has the likely fix).
-  - A slice for RISA-1042 (`loops/lease.sh`; not hot: it could start at once).
 - **Docs fold owed from wave 1** (deferred: hot files): `prd.sh`'s `wait` help and the orchestrator/loop docs should say `wait check|browser` prints the result and exits 1 with none recorded. The machinery doc should name the stuck watch's `notified` kind (`RISA_STUCK_NOTIFIED_MIN`, 10; it asks at once, since Risa can't wake an idle session).
 - **`risa check` takes no label for a full run** (`--quick "<why>"` only).
 - **Under load (~16–27)** slice and full checks time out in the tooling tests. Rerun just the failed files through the check lease once the load drops.
@@ -74,3 +72,23 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: self-reco
 **Acceptance criteria:**
 
 - Unit test (`loops/dispatch-restart.test.mjs`): a dispatcher child sent SIGTERM, and one that throws, each leave a log line and a stop mark; status reads `stopped (…)` with a mark and `dead` without one.
+
+## Slice 5: `risa wait browser` reads the whole suite's results
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/lease.test.mjs
+
+**Build (RISA-1042):** `risa wait browser` (`lease_wait` and `lease_results` in `loops/lease.sh`) reads the run log only from the offset where the wait began. `loops/browser.sh` holds one lease for the whole suite and logs each check separately, so a waiter started, or restarted after exit 75, mid-suite misses the earlier checks: an early failing check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken (the lease's own start, recorded where the lease is held), not since the wait began, falling back to the wait's start only when no lease start is known. Check waits (one line per run, at its end) keep working as now. Don't touch `loops/prd.sh`, `loops/docs/` or `loops/dispatch*` (a running topic's hot files).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/lease.test.mjs`): a browser wait started after a suite's first (failing) check was logged, with a passing check logged after, prints both and exits non-zero; a check wait still prints its one result and exits 0.
+
+## Slice 6: The inbox session finds its own project
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: self-recovery-2's PR #23 in main (then `risa sync`; `loops/prd.sh` is its hot file) · Check: loops/session.test.mjs
+
+**Build (RISA-1038):** `prd.sh inbox` opens the inbox session in its own directory (`$RISA_INBOX_DIR`, default `~/.risa/inbox`, outside any repo). `loops/session.sh` sources `loops/lib.sh`, whose `find_repo` from that `$PWD` gets no machine entry, so the main checkout comes from `git -C $loops_lib_dir`: the release worktree, Risa's own checkout. `host.mjs claude-session` then reads Risa's machine entry, so the session misses the project's `claudeConfigDir` (it starts on Claude Code's default account) and its session record goes under Risa's `.loops/.sessions` (the project's `risa status` reads it ended while it's live, and the keep-alive may reopen a live inbox). Reproduce it first in a test (a throwaway project repo and machine config in the OS temp dir, a session run from a directory outside any repo). Fix: `prd.sh inbox` passes the project's main checkout through (`RISA_MAIN`), and `session.sh` (or `find_repo`) prefers it when `$PWD` is outside a repo. Keep the `prd.sh` edit to that one pass-through.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/session.test.mjs`, new if none): a session started from a directory outside any repo with `RISA_MAIN` naming a project resolves that project's main, its `claudeConfigDir`, and writes its record under that project's `.loops/.sessions`; without `RISA_MAIN` inside a repo, it resolves as now.
