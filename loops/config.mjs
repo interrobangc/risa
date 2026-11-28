@@ -143,6 +143,11 @@ export const SHAPE = [
   ["commands.install", "command"],
   ["commands.check", "command"],
   ["commands.quickCheck", "command?"],
+  // A command that runs the test files appended to it, and the project's check without its
+  // tests (typecheck, lint, format; else commands.typecheck): a slice whose plan names its
+  // Check files runs the two as its slice check, not the check hook (check-hook.sh).
+  ["commands.testFile", "command?"],
+  ["commands.staticCheck", "command?"],
   ["commands.projectTests", "command?"],
   ["commands.typecheck", "command"],
   ["commands.typegen", "command"],

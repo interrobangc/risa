@@ -39,6 +39,8 @@
   "commands": {
     "install": "pnpm install",
     "check": "pnpm check",
+    "staticCheck": "pnpm format:check && pnpm lint && pnpm docs:budget",
+    "testFile": "pnpm exec vitest run",
     "typecheck": "true",
     "typegen": "true",
     "toolingTests": "pnpm test",

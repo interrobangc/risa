@@ -3,10 +3,13 @@
 // load: a file the tests write); the budget and the silence limit, and a
 // machine sleep (a fake clock) that counts against neither; the time gate on a
 // finished quick or slice check (a fake clock and load, a fixture config with
-// the local measure armed). And the lease's default of two check slots.
-import { spawn, spawnSync } from "node:child_process";
+// the local measure armed). The slice's own check (check-hook.sh, RISA-1005): on
+// a slice branch of a sample repo whose plan names a slice's Check file, only that
+// file through the config's testFile. And the lease's default of two check slots.
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -19,6 +22,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseLog } from "./check-times.mjs";
 import { fixtureTierData } from "./config-fixture.mjs";
+import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 let root, logFile, loadFile;
@@ -434,6 +438,99 @@ describe("check-run.sh and the time gate", () => {
     expect(failed.status).toBe(1);
     expect(failed.stdout + failed.stderr).not.toMatch(/Time gate/);
     expect(lastRun()).toMatchObject({ mode: "quick", exit: 1, verdict: "" });
+  });
+});
+
+describe("the slice's own check (check-hook.sh)", () => {
+  // A sample repo per config (with or without testFile) on a slice branch, part/t/3;
+  // its plan names Check: a.test.mjs for slice 3 and no Check for slice 4. The
+  // stubs print what ran: the static check, the test-file runner, the check hook.
+  const PLAN =
+    "# T plan\n\n## Slice 3: one file\n\nStack: no · Reads: a · Tests: unit · Check: a.test.mjs\n\n" +
+    "## Slice 4: no field\n\nStack: no · Reads: a · Tests: unit\n";
+  const repoFor = (name, commands) => {
+    const dir = join(root, `own-${name}`);
+    const cfgDir = join(dir, "cfg");
+    mkdirSync(cfgDir, { recursive: true });
+    cpSync(join(HERE, "sample-project/tools"), join(cfgDir, "tools"), { recursive: true });
+    const config = JSON.parse(readFileSync(SAMPLE_CONFIG, "utf8"));
+    Object.assign(config.commands, commands);
+    writeFileSync(join(cfgDir, "risa.json"), JSON.stringify(config));
+    const repo = join(dir, "repo");
+    makeRepo(repo, {
+      config: join(cfgDir, "risa.json"),
+      files: {
+        "work/plans/t-plan.md": PLAN,
+        "tools/static.sh": 'echo "static check"\n',
+        "tools/test-file.sh": 'echo "test file: $*"; exit "${TEST_FILE_EXIT:-0}"\n',
+      },
+    });
+    return repo;
+  };
+  const STUBS = { staticCheck: "sh tools/static.sh", testFile: "sh tools/test-file.sh" };
+  let withKey, withoutKey;
+  beforeAll(() => {
+    withKey = repoFor("key", STUBS);
+    withoutKey = repoFor("nokey", {});
+  });
+  const { RISA_CONFIG: _, ...env } = process.env;
+  const sliceCheck = (repo, n, extra = {}) => {
+    execFileSync("git", ["-C", repo, "checkout", "-q", "-B", `part/t/${n}`]);
+    const loops = join(repo, "loops");
+    return spawnSync(
+      "bash",
+      [
+        join(loops, "check-run.sh"),
+        "slice",
+        "own",
+        "--",
+        "bash",
+        join(loops, "check-hook.sh"),
+        "slice",
+        "HEAD",
+        "0",
+      ],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: {
+          ...env,
+          RISA_MACHINE_CONFIG: "",
+          RISA_CHECK_LOG: join(root, "own-log"),
+          RISA_LOAD_FILE: loadFile,
+          RISA_LOAD_GATE: "",
+          RISA_LEASES: "",
+          RISA_CHECK_LIMIT: "",
+          RISA_CHECK_SILENCE: "",
+          RISA_CHECK_BUDGET_LOAD: "1",
+          RISA_CLOCK_FILE: "",
+          SAMPLE_CHECK_EXIT: "",
+          TEST_FILE_EXIT: "",
+          ...extra,
+        },
+      },
+    );
+  };
+  const ownRuns = () => parseLog(readFileSync(join(root, "own-log"), "utf8")).runs;
+
+  it("runs the static check, then only the slice's Check file through testFile, never the hook", () => {
+    const r = sliceCheck(withKey, 3);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("static check\ntest file: a.test.mjs\n");
+    expect(r.stdout).not.toContain("sample check:");
+  });
+
+  it("fails with the runner's code, naming the file and the unit step", () => {
+    expect(sliceCheck(withKey, 3, { TEST_FILE_EXIT: "4" }).status).toBe(4);
+    expect(ownRuns().at(-1)).toMatchObject({ exit: 4, failedStep: "unit", failedFiles: ["a.test.mjs"] });
+  });
+
+  it("runs the check hook as now for a slice with no Check field, or a config with no testFile", () => {
+    for (const r of [sliceCheck(withKey, 4), sliceCheck(withoutKey, 3)]) {
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("sample check: slice HEAD\n");
+      expect(r.stdout).not.toContain("test file:");
+    }
   });
 });
 
