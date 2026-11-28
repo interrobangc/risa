@@ -21,4 +21,9 @@ if [[ ${1:-} == backlog ]]; then
   backlog_config "$root" || exit 2
   exec node "$root/backlog/backlog.mjs" "$@"
 fi
+# `risa init` and `risa config migrate` run on a repo no config loads for yet
+# (loops/setup.mjs), so they go before prd.sh.
+if [[ ${1:-} == init || ${1:-} == config ]]; then
+  exec node "$root/loops/setup.mjs" "$@"
+fi
 exec bash "$root/loops/prd.sh" "$@"
