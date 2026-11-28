@@ -1,7 +1,8 @@
 // new.sh slice reads the slice's section from the committed plan on the prd/ tip: a
 // slice whose heading is only in the working tree's plan is refused, no branch made
 // (RISA-1015); once committed it starts, and a topic with no plan file starts as
-// before. A throwaway repo with the stub stack hook and fake pnpm, lsof and nvm.
+// before. prd.sh's <command> --help prints that command's usage and its new.sh
+// wrappers refuse an unknown flag, making nothing (RISA-1086). A throwaway repo with the stub stack hook and fake pnpm, lsof and nvm.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -46,6 +47,14 @@ describe("new.sh slice and the committed plan", () => {
     return { status: r.status, out: `${r.stdout}${r.stderr}` };
   };
   const newSlice = (topic, n) => newSh("slice", topic, String(n));
+  const prdSh = (...args) => {
+    const r = spawnSync("bash", [join(main, "loops/prd.sh"), ...args], {
+      cwd: main,
+      env,
+      encoding: "utf8",
+    });
+    return { status: r.status, stdout: r.stdout, out: `${r.stdout}${r.stderr}` };
+  };
   const heads = () => git(main, "for-each-ref", "--format=%(refname:short)", "refs/heads/");
   const loopsDirs = () => (existsSync(loops) ? readdirSync(loops).sort() : []);
   const branch = (b) => git(main, "branch", "--list", b);
@@ -155,5 +164,52 @@ describe("new.sh slice and the committed plan", () => {
     expect(r.status, r.out).toBe(0);
     expect(r.out).toContain("plan: slice 1 says Stack: no");
     expect(existsSync(join(loops, "u-1"))).toBe(true);
+  });
+
+  it("prints a command's usage for <command> --help or -h, making nothing (RISA-1086)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [args, line] of [
+      [["plan", "--help"], /^ {4}plan <topic> \[--open\]/m],
+      [["slice", "-h"], /^ {4}slice <topic> <n> /m],
+      [["land", "--help"], /^ {4}land <topic> \[-m subject\]/m],
+    ]) {
+      const r = prdSh(...args);
+      expect(r.status, r.out).toBe(0);
+      expect(r.stdout).toMatch(line);
+      // Only that command's lines, not the whole text.
+      expect(r.stdout).not.toContain("See what's going on");
+      expect(r.out).not.toContain("refused");
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("refuses an unknown flag to plan, start, slice and hotfix, making nothing (RISA-1086)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [args, flag] of [
+      [["plan", "--bogus", "topic"], "--bogus"],
+      [["start", "-x"], "-x"],
+      [["slice", "t", "3", "--stack"], "--stack"],
+      [["hotfix", "h-1", "--nope"], "--nope"],
+    ]) {
+      const r = prdSh(...args);
+      expect(r.status, r.out).not.toBe(0);
+      expect(r.out).toContain(`${args[0]}: unknown flag ${flag}`);
+      expect(r.out).toMatch(new RegExp(`^ {4}${args[0]} <`, "m"));
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("keeps risa help and a valid plan <topic> as before (RISA-1086)", () => {
+    let r = prdSh("help");
+    expect(r.status, r.out).toBe(0);
+    expect(r.stdout).toContain("See what's going on");
+    expect(r.stdout).toMatch(/^ {4}land <topic>/m);
+    r = prdSh("plan", "w-1");
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain("Start its planning session");
+    expect(branch("plan/w-1")).not.toBe("");
+    expect(existsSync(join(loops, "plan-w-1"))).toBe(true);
   });
 });

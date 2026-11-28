@@ -15,7 +15,10 @@
 // `inbox` whose work switch is on, RISA_WORK_SELF aside so every shell agrees; prd.sh
 // inbox opens the session from the same repo). Later ticks read the homes file's last
 // fetched copy, and fetch it at most every REFETCH_MS. A name this run couldn't claim
-// (the store can't be reached) is unknown: nothing starts for it until it is.
+// (the store can't be reached) is unknown: nothing starts for it until it is; so is every
+// name while the homes file can't be read or parsed (RISA-1080). A project
+// whose work switch is off (read as the keeper's is) claims nothing: its homes read as
+// away or unknown, as on any machine that doesn't hold them (RISA-1078).
 //
 //   node home.mjs                      the claims, one a line: name, machine, since
 //   node home.mjs take <project|inbox> moves that home to this machine
@@ -61,6 +64,11 @@ export function homesOf(text) {
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     throw new StoreError(`${HOMES_FILE}: must hold one JSON object`);
+  // An entry without a machine would read as unclaimed, and a claim would take it as held
+  // here: the file is unreadable then, as a file that isn't JSON is (RISA-1080).
+  for (const [name, entry] of Object.entries(raw))
+    if (typeof entry?.machine !== "string" || !entry.machine)
+      throw new StoreError(`${HOMES_FILE}: ${name} names no machine`);
   return raw;
 }
 
@@ -158,8 +166,9 @@ export function inboxKeeper({ env = process.env } = {}) {
  * One dispatcher tick's home facts for the project at MAIN; null for a project
  * without `inbox` (untouched). `away` names each home another machine holds;
  * `unknown`, each this run couldn't claim; `blocked` is the project's reason to start,
- * plan, reopen and keep alive nothing (null: none); `inboxWhy`, the inbox kind's
- * reason to stay closed (null: this dispatcher keeps it). REPORT files one report
+ * plan, reopen and keep alive nothing but the inbox session (null: none); `inboxWhy`,
+ * the inbox kind's reason to stay closed, from the keeper choice and the inbox home
+ * alone (null: this dispatcher keeps it). REPORT files one report
  * (true: filed); `state` is the next `home` state (dry run: unchanged, nothing written).
  * @param {{ main: string, state?: HomeState, now: number, dryRun?: boolean,
  *   env?: Record<string, string | undefined>, pid?: number,
@@ -175,12 +184,17 @@ export function homeTick({
   report,
   config,
 }) {
-  const s = inboxStore(config ?? loadConfig({ env }).config);
+  const cfg = config ?? loadConfig({ env }).config;
+  const s = inboxStore(cfg);
   if (!s) return null;
   const name = s.file.replace(/\.md$/, "");
   const me = machineName(env);
   const store = storeFor(s.repo, { env });
   const keeper = inboxKeeper({ env });
+  // The project's work switch, read as inboxKeeper reads it (RISA_WORK_SELF aside, so a
+  // dispatcher and a shell agree): with it off, this machine claims no home (RISA-1078).
+  const { [WORK_VAR]: _self, ...plain } = env;
+  const work = workSwitch({ main, config: cfg, env: plain });
   const keepsInbox = keeper !== null && real(keeper.main) === real(main);
   const names = keepsInbox ? [name, INBOX_HOME] : [name];
   const fresh = state.pid !== pid;
@@ -189,9 +203,11 @@ export function homeTick({
   /** @type {string[]} */
   const lines = [];
   const takeCmd = `${toolCmd.prd} home take`;
+  const offWhy = work.on ? null : `the work switch is off (${work.why})`;
+  if (offWhy && fresh) lines.push(`home: claims no home for ${name}: ${offWhy}`);
   let reached = false;
   for (const n of names.filter((x) => !claimed.includes(x))) {
-    if (dryRun) continue;
+    if (dryRun || offWhy) continue;
     try {
       const r = claim(store, n, me, { now, log: () => {} });
       claimed.push(n);
@@ -203,10 +219,16 @@ export function homeTick({
   }
   const due = !reached && (state.fetchedAt === undefined || now - state.fetchedAt >= REFETCH_MS);
   let homes = {};
+  // A homes file that can't be read or parsed leaves every home unknown, not open: what
+  // this run claimed earlier is dropped, so the gate stays shut until a readable file
+  // says this machine holds the home (the next tick's claim reads it) (RISA-1080).
+  /** @type {string | null} */
+  let unreadable = null;
   try {
     homes = homesOf(store.read(HOMES_FILE, { fetch: due }));
   } catch (e) {
-    lines.push(`home: ${e instanceof Error ? e.message : e}`);
+    unreadable = `the homes file is unreadable (${e instanceof Error ? e.message : e})`;
+    for (const n of names) if (claimed.includes(n)) claimed.splice(claimed.indexOf(n), 1);
   }
   /** @type {Record<string, string>} */
   const away = {};
@@ -215,25 +237,36 @@ export function homeTick({
   for (const n of names) {
     const holder = homes[n]?.machine ?? null;
     if (holder && holder !== me) away[n] = holder;
-    else if (!dryRun && !claimed.includes(n)) unknown.push(n);
-    else if (dryRun && !holder) lines.push(`home: would claim ${n} for ${me}`);
+    else if (unreadable || (!dryRun && !claimed.includes(n))) unknown.push(n);
+    else if (dryRun && !holder && !offWhy) lines.push(`home: would claim ${n} for ${me}`);
   }
   const blocked = away[name]
     ? `${name}'s home is ${away[name]}, not ${me} (${takeCmd} ${name} moves it here)`
     : unknown.includes(name)
-      ? `${name}'s home isn't known yet (the inbox store can't be reached)`
+      ? unreadable
+        ? `${name}'s home isn't known (${unreadable})`
+        : offWhy
+          ? `${name}'s home isn't claimed here (${offWhy})`
+          : `${name}'s home isn't known yet (the inbox store can't be reached)`
       : null;
-  if (blocked) lines.push(`home: ${blocked}: nothing starts, plans, reopens or is kept alive here`);
   let inboxWhy = null;
   if (!keepsInbox) {
     inboxWhy = `the inbox keeper is ${keeper ? keeper.main : "no repo"} (the machine config's first \`work: true\` repo with inbox)`;
     if (fresh) lines.push(`home: the inbox session is left to ${keeper ? keeper.main : "no repo here"}`);
-  } else if (blocked) inboxWhy = blocked;
-  else if (away[INBOX_HOME])
+  } else if (away[INBOX_HOME])
+    // The inbox session is the inbox home's alone: the project's home away doesn't close it (RISA-1079).
     inboxWhy = `the inbox home is ${away[INBOX_HOME]}, not ${me} (${takeCmd} ${INBOX_HOME} moves it here)`;
   else if (unknown.includes(INBOX_HOME))
-    inboxWhy = "the inbox home isn't known yet (the inbox store can't be reached)";
-  if (inboxWhy && keepsInbox && !blocked) lines.push(`home: ${inboxWhy}: the inbox session isn't kept here`);
+    inboxWhy = unreadable
+      ? `the inbox home isn't known (${unreadable})`
+      : offWhy
+        ? `the inbox home isn't claimed here (${offWhy})`
+        : "the inbox home isn't known yet (the inbox store can't be reached)";
+  if (blocked)
+    lines.push(
+      `home: ${blocked}: nothing starts, plans, reopens or is kept alive here${keepsInbox && !inboxWhy ? " but the inbox session" : ""}`,
+    );
+  if (inboxWhy && keepsInbox) lines.push(`home: ${inboxWhy}: the inbox session isn't kept here`);
 
   /** @type {Record<string, string>} */
   const reported = {};

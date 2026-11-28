@@ -8,33 +8,33 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | merged  | a04752b                    |
-| 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
-| 14    | 5    | RISA-1070       | opus   | merged  | 9b490d4                    |
-| 15    | 5    | RISA-1082       | opus   | merged  | c8dac71                    |
-| 16    | 6    | RISA-1078       | opus   | planned |                            |
-| 17    | 6    | RISA-1080       | opus   | planned |                            |
-| 18    | 6    | RISA-1083       | opus   | planned |                            |
-| 19    | 6    | RISA-1079       | opus   | planned |                            |
-| 20    | 6    | RISA-1084       | opus   | planned |                            |
-| 21    | 6    | RISA-1050       | opus   | planned |                            |
-| 22    | 6    | RISA-1077       | opus   | planned |                            |
-| 23    | 6    | RISA-1081       | opus   | planned |                            |
-| 24    | 6    | RISA-1086       | opus   | planned |                            |
-| 25    | 6    | RISA-1087       | opus   | planned |                            |
+| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
+| 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | merged | 9b490d4                    |
+| 15    | 5    | RISA-1082       | opus   | merged | c8dac71                    |
+| 16    | 6    | RISA-1078       | opus   | merged | af6ee57                    |
+| 17    | 6    | RISA-1080       | opus   | merged | 57bd232                    |
+| 18    | 6    | RISA-1083       | opus   | merged | 29020ba                    |
+| 19    | 6    | RISA-1079       | opus   | merged | 50780f8                    |
+| 20    | 6    | RISA-1084       | opus   | merged | 1fdb50b                    |
+| 21    | 6    | RISA-1050       | opus   | merged | 2942e27                    |
+| 22    | 6    | RISA-1077       | opus   | merged | 5a22554                    |
+| 23    | 6    | RISA-1081       | opus   | merged | 69cd110                    |
+| 24    | 6    | RISA-1086       | opus   | merged | c3324f5                    |
+| 25    | 6    | RISA-1087       | opus   | merged | 4fbc7cf                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
@@ -47,6 +47,8 @@
 **Wave 5** (slices 14–15, RISA-1070/1082): landed 2026-11-28 in main as 3aa2773 (PR #40, tier unit, run 46179562703, Codex clean); to-test file `to-test/2026-11-28-1415-fixes-bug.md`.
 
 **Wave 6** (slices 16–25, all opus), 2026-11-28, fresh session: ingest had nothing new; `risa sync` needed no merge. All ten waiting items are in: only risa-next-4 runs and none of its hot files (loops/config, loops/machine.mjs, loops/skeptics.mjs, loops/project-check, loops/sample-project/repo.mjs, bin/risa, loops/rm.sh, loops/lib.sh, loops/setup, loops/second-repo, loops/docs/project-config.md, README.md) is needed; each slice is told to keep off them. Chains, so no two slices edit one function: 16 → 17 → 19 (loops/home.mjs `homeTick`); 18 and 19 → 20, 18 → 21 (loops/dispatch.mjs). Ready at once: 16, 18, 22, 23, 24, 25. Hot set: loops/home, loops/dispatch, loops/ls, loops/prompts/inbox.sh, loops/inbox-prompt, backlog/inbox-move, loops/prd.sh, loops/usage.
+
+**Wave 6 gate:** all ten slices merged (table). `risa tier`: none, but the gate is `risa ci run unit` (local full checks time out under load). Run 46183281427 on 0ca85c22: **failed**, two tests in loops/prompt.test.mjs (the inbox prompt's hand-off and "stays short"), both slice 22's; fix request sent to slice 22's agent (worktree `.loops/fixes-bug-22`). Next: merge its fix, rerun the CI gate, then `risa pr fixes-bug`, Codex review, land. For the landing report: `slice <t> <n> --stack` is now refused (never worked there); a `RISA_WORK_SELF=1` dispatcher on a work-off home-gated project claims no home; a homes.json entry with no machine reads as unreadable (fix by hand); RISA-1050's warning reads only `risaVersion` in risa.json.
 
 **Notes:** run local checks with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands; past a load of about 15 the local full check times out (RISA-1088), so gate on `risa ci run <tier> --wait`. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). When a tagged release carries RISA-1065 (acb0975) or RISA-1070 (3aa2773), tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 

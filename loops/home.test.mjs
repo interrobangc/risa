@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { storeFor } from "../backlog/inbox-store.mjs";
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
-import { HOMES_FILE, REFETCH_MS, claim, homeOf, homesOf, machineName, take } from "./home.mjs";
+import { HOMES_FILE, REFETCH_MS, claim, homeOf, homeTick, homesOf, machineName, take } from "./home.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8" }).trim();
@@ -77,6 +77,7 @@ const dispatch = (
   /** @type {string} */ m,
   args = ["--dry-run"],
   rows = args.includes("--dry-run") ? "planned" : "none",
+  extra = {},
 ) => {
   const r = spawnSync("node", [join(tool, "loops/dispatch.mjs"), ...args], {
     cwd: repos[name],
@@ -86,6 +87,7 @@ const dispatch = (
       RISA_MAIN: repos[name],
       RISA_CONFIG: join(repos[name], "risa.json"),
       STUB_ROWS: join(root, `${rows}.json`),
+      ...extra,
     },
   });
   expect(r.stderr).toBe("");
@@ -251,14 +253,16 @@ describe("the dispatcher's home gate", () => {
     // Within five minutes of its last fetch, machine A still reads its own copy.
     setClock(T0 + 60);
     expect(dispatch("first", "mac-a")).toContain("start a:");
-    // Past it, A fetches and stops: nothing starts, nothing is kept alive, one report.
+    // Past it, A fetches and stops: nothing starts and one report, but A still holds the
+    // inbox home, so the inbox session is the only thing it keeps (RISA-1079).
     setClock(T0 + REFETCH_MS / 1000 + 1);
     const dry = dispatch("first", "mac-a");
     expect(dry).toContain(
       "nothing: first's home is mac-b, not mac-a (pnpm prd home take first moves it here)",
     );
     expect(dry).toContain("  a: waits: first's home is mac-b");
-    expect(dry).toContain("keep-alive inbox: first's home is mac-b");
+    expect(dry).toMatch(/^keep-alive inbox: open \(/m);
+    expect(dry).not.toContain("keep-alive inbox: first's home is mac-b");
     expect(dry).toContain("home: would report first is mac-b's");
     expect(reports("first")).toEqual([]);
     const opens = () =>
@@ -272,7 +276,9 @@ describe("the dispatcher's home gate", () => {
     expect(filed[0].text).toContain("mac-a");
     expect(filed[0].text).toContain("`pnpm prd home take first`");
     expect(existsSync(join(root, "state/new.calls"))).toBe(false);
-    expect(opens()).toBe(opened);
+    // Only the kept inbox session opened since (the opener's `<kind> --background`): no start, no backlog.
+    expect(opens().startsWith(opened)).toBe(true);
+    expect(opens().slice(opened.length)).toMatch(/^(inbox --background\n)+$/);
   });
 
   it("`home` lists the claims, this machine's marked", () => {
@@ -291,6 +297,211 @@ describe("the dispatcher's home gate", () => {
     });
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain("nope: not a project in the inbox store");
+  });
+
+  it("a machine with the project's work off claims no home; a work-on machine claims or takes it (RISA-1078)", () => {
+    repos.spare = project("spare", { repo: remote });
+    const config = (/** @type {string} */ f, /** @type {object[]} */ list) => {
+      writeFileSync(join(root, f), JSON.stringify({ repos: list }));
+      return { RISA_MACHINE_CONFIG: join(root, f) };
+    };
+    const off = config("machine-off.json", [
+      { path: repos.idle, work: false },
+      { path: repos.spare, work: false },
+    ]);
+    const on = config("machine-on.json", [
+      { path: repos.first, work: true },
+      { path: repos.idle, work: true },
+      { path: repos.spare, work: true },
+    ]);
+    // Work off: no claim, and the line says why; RISA_WORK_SELF doesn't change that.
+    for (const name of ["idle", "spare"]) {
+      const out = dispatch(name, "mac-c", ["--once"], "none", { ...off, RISA_WORK_SELF: "1" });
+      expect(out).toContain(`home: claims no home for ${name}: the work switch is off ("work": false`);
+      expect(out).toContain(`home: ${name}'s home isn't claimed here (the work switch is off`);
+      expect(out).not.toContain("home: claimed");
+      expect(homes()[name]).toBeUndefined();
+    }
+    expect(dispatch("idle", "mac-c", ["--dry-run"], "planned", off)).not.toContain("would claim");
+    // Work on: the first tick claims as before.
+    expect(dispatch("spare", "mac-d", ["--once"], "none", on)).toContain("home: claimed spare for mac-d");
+    expect(homes().spare.machine).toBe("mac-d");
+    // A take by the work-on machine finds no claim in the way.
+    const took = spawnSync("node", [join(tool, "loops/home.mjs"), "take", "idle"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...machine("mac-d"), ...on },
+    });
+    expect(took.stderr).toBe("");
+    expect(took.stdout).toMatch(/^idle's home is now mac-d: on .* homes\.json as [0-9a-f]{7}\n$/);
+    // The work-off machine then reads it as away, like any machine that doesn't hold it.
+    setClock(T0 + (3 * REFETCH_MS) / 1000);
+    expect(dispatch("idle", "mac-c", ["--dry-run"], "planned", off)).toContain(
+      "home: idle's home is mac-d, not mac-c",
+    );
+  });
+});
+
+describe("an unreadable homes file (RISA-1080)", () => {
+  it("homesOf and homeOf throw on a file that isn't JSON or names no machine; absent is no claims", () => {
+    expect(homesOf(null)).toEqual({});
+    expect(() => homesOf("{ not json")).toThrow(/homes\.json: not JSON/);
+    expect(() => homesOf("[]")).toThrow(/must hold one JSON object/);
+    expect(() => homesOf('{"x": "mac-a"}')).toThrow(/homes\.json: x names no machine/);
+    const lone = join(root, "lone.git");
+    execFileSync("git", ["init", "-q", "--bare", lone]);
+    const s = storeFor(lone, { env: machine("probe") });
+    expect(homeOf(s, "x")).toBeNull();
+    s.write(HOMES_FILE, () => "{ not json", "corrupt", { log: () => {} });
+    expect(() => homeOf(s, "x")).toThrow(/not JSON/);
+  });
+
+  it("a claimed home reads as unknown while the file can't be parsed, claims nothing, and opens once it names this machine", () => {
+    const remote2 = join(root, "unreadable.git");
+    execFileSync("git", ["init", "-q", "--bare", remote2]);
+    const probe = storeFor(remote2, { env: machine("probe") });
+    const config = {
+      ...JSON.parse(readFileSync(join(repos.second, "risa.json"), "utf8")),
+      name: "lone",
+      inbox: { repo: remote2 },
+    };
+    const env = machine("mac-e");
+    const tick = (/** @type {number} */ now, /** @type {any} */ state, pid = 4242) =>
+      homeTick({ main: repos.second, state, now, env, pid, config, report: () => false });
+    const t0 = T0 * 1000;
+    // An absent file in a reached store: the first tick claims, as before.
+    const first = tick(t0, {});
+    expect(first.lines).toContain("home: claimed lone for mac-e");
+    expect(first.blocked).toBeNull();
+    expect(first.state.claimed).toEqual(["lone"]);
+    // The file broken, past the refetch: blocked, named unreadable, the claim dropped, nothing written.
+    probe.write(HOMES_FILE, () => "{ not json", "corrupt", { log: () => {} });
+    const later = t0 + REFETCH_MS;
+    const bad = tick(later, first.state);
+    expect(bad.blocked).toMatch(
+      /^lone's home isn't known \(the homes file is unreadable \(homes\.json: not JSON/,
+    );
+    expect(bad.unknown).toEqual(["lone"]);
+    expect(
+      bad.lines.some((l) => l.startsWith("home: lone's home isn't known (the homes file is unreadable")),
+    ).toBe(true);
+    expect(bad.state.claimed).toEqual([]);
+    // The next tick tries to claim, can't over the broken file, and stays shut.
+    const still = tick(later + 1000, bad.state);
+    expect(still.blocked).toMatch(/the homes file is unreadable/);
+    expect(still.lines.some((l) => l.startsWith("home: couldn't claim lone"))).toBe(true);
+    expect(probe.read(HOMES_FILE)).toBe("{ not json");
+    // A dry run says the same.
+    expect(
+      homeTick({
+        main: repos.second,
+        state: still.state,
+        now: later + 2000,
+        env,
+        pid: 4242,
+        config,
+        dryRun: true,
+      }).blocked,
+    ).toMatch(/unreadable/);
+    // The file readable again and naming this machine: the gate opens.
+    probe.write(HOMES_FILE, () => `${JSON.stringify({ lone: { machine: "mac-e" } })}\n`, "fixed", {
+      log: () => {},
+    });
+    const fixed = tick(later + 3000, still.state);
+    expect(fixed.blocked).toBeNull();
+    expect(fixed.unknown).toEqual([]);
+    expect(fixed.state.claimed).toEqual(["lone"]);
+    expect(fixed.lines).not.toContain("home: claimed lone for mac-e");
+  });
+});
+
+describe("the inbox session is kept by the inbox home alone (RISA-1079)", () => {
+  /** @type {string} */ let store;
+  /** @type {Record<string, string>} */ let only;
+  /** @type {ReturnType<typeof storeFor>} */ let probe;
+  beforeAll(() => {
+    store = join(root, "keeper.git");
+    execFileSync("git", ["init", "-q", "--bare", store]);
+    repos.keeper = project("keeper", { repo: store });
+    writeFileSync(
+      join(root, "machine-keeper.json"),
+      JSON.stringify({ repos: [{ path: repos.keeper, work: true }] }),
+    );
+    // No session live: each kind's keep-alive line says what it would do.
+    writeFileSync(join(root, "no-processes"), "");
+    only = {
+      RISA_MACHINE_CONFIG: join(root, "machine-keeper.json"),
+      RISA_PROCESS_FILE: join(root, "no-processes"),
+    };
+    probe = storeFor(store, { env: machine("probe") });
+  });
+  /** Writes the homes file: the project's home on KEEPER, the inbox home on INBOX (raw text when given). */
+  const set = (/** @type {string} */ keeper, /** @type {string} */ inbox, raw = "") =>
+    probe.write(
+      HOMES_FILE,
+      () =>
+        raw ||
+        `${JSON.stringify({ keeper: { machine: keeper, at: "2026-01-01T00:00:00Z" }, inbox: { machine: inbox, at: "2026-01-01T00:00:00Z" } })}\n`,
+      "set",
+      { log: () => {} },
+    );
+  const tick = () =>
+    homeTick({
+      main: repos.keeper,
+      state: {},
+      now: Date.now(),
+      env: { ...machine("mac-a"), ...only },
+      pid: 7,
+      config: JSON.parse(readFileSync(join(repos.keeper, "risa.json"), "utf8")),
+      report: () => false,
+    });
+  const dry = () => dispatch("keeper", "mac-a", ["--dry-run"], "planned", only);
+  const cases = [
+    {
+      name: "project home away, inbox home here",
+      keeper: "mac-b",
+      inbox: "mac-a",
+      backlog: false,
+      kept: true,
+    },
+    {
+      name: "project home here, inbox home away",
+      keeper: "mac-a",
+      inbox: "mac-b",
+      backlog: true,
+      kept: false,
+    },
+    { name: "both away", keeper: "mac-b", inbox: "mac-b", backlog: false, kept: false },
+  ];
+  for (const c of cases)
+    it(`${c.name}: the inbox session is ${c.kept ? "" : "not "}kept here, the backlog session ${c.backlog ? "is" : "isn't"}`, () => {
+      set(c.keeper, c.inbox);
+      const h = tick();
+      expect(Boolean(h?.blocked)).toBe(!c.backlog);
+      expect(h?.inboxWhy ?? null).toBe(
+        c.kept ? null : "the inbox home is mac-b, not mac-a (pnpm prd home take inbox moves it here)",
+      );
+      const out = dry();
+      const inbox = out.split("\n").find((l) => l.startsWith("keep-alive inbox:"));
+      const backlog = out.split("\n").find((l) => l.startsWith("keep-alive backlog:"));
+      expect(inbox).toBeDefined();
+      expect(backlog).toBeDefined();
+      expect(inbox).toEqual(
+        c.kept ? expect.not.stringMatching(/home/) : expect.stringContaining("the inbox home is mac-b"),
+      );
+      expect(backlog).toEqual(
+        c.backlog ? expect.not.stringMatching(/home/) : expect.stringContaining("keeper's home is mac-b"),
+      );
+    });
+
+  it("an unreadable homes file: neither is kept", () => {
+    set("", "", "{ not json");
+    const h = tick();
+    expect(h?.blocked).toMatch(/keeper's home isn't known \(the homes file is unreadable/);
+    expect(h?.inboxWhy).toMatch(/^the inbox home isn't known \(the homes file is unreadable/);
+    const out = dry();
+    expect(out).toMatch(/^keep-alive inbox: the inbox home isn't known \(the homes file is unreadable/m);
+    expect(out).toMatch(/^keep-alive backlog: keeper's home isn't known \(the homes file is unreadable/m);
   });
 });
 
