@@ -9,7 +9,9 @@
 # .loops/.sessions/<name>.json (sessions.mjs): at start pid, kind, topic,
 # started, the command, the model (claude's --model, if given), remote (its --remote-control, as given;
 # claude gets it qualified, session-names.mjs), dir (where it runs), auto and
-# managed (--managed: the dispatcher started it), clearing rotating, ended and exit; when it exits, ended and exit, but
+# managed (--managed: the dispatcher started it), persona (with a Remote Control
+# name: the one its display name wears when stepped off its hash, else cleared),
+# clearing rotating, ended and exit; when it exits, ended and exit, but
 # only while the record's pid is still this session's (sessions.mjs set
 # --if-pid): a second session opened under the same name keeps its record
 # live, and this one says so on stderr. It exits with the session's code. The
@@ -91,10 +93,16 @@ done
 # backlog's shows `backlog (<project>)` and the admiral it was given. It replaces
 # claude's --remote-control name and goes as its --name too, unless the args carry
 # one. The record's remote keeps the name as given.
-display=""
+# The same draw gives the persona the first record keeps (session-names.mjs start:
+# one stepped off its hash, else none), so the machine's other sessions read the
+# stepped one from the start (RISA-1064).
+display="" persona_field=""
 if [[ -n $remote ]]; then
-  display=$(node "$bin/session-names.mjs" display "$name" "$kind" "$remote" "$project_name") ||
+  named=$(node "$bin/session-names.mjs" start "$name" "$kind" "$remote" "$project_name") ||
     die "session.sh: couldn't name $name for the outside"
+  { read -r display || true; read -r persona || true; } <<< "$named"
+  [[ -n $display ]] || die "session.sh: couldn't name $name for the outside"
+  persona_field="persona=$persona"
   has_name=false
   for a in "$@"; do
     case $a in --name | --name=* | -n) has_name=true ;; esac
@@ -162,9 +170,9 @@ fi
 pidfile=$(mktemp "${TMPDIR:-/tmp}/risa-session.XXXXXX")
 trap 'rm -f "$pidfile"' EXIT
 code=0
-bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" model="$9" remote="${10}" dir="${11}" rotating= ended= exit= &&
-  echo $$ > "${12}" && shift 12 && export RISA_SESSION_PID=$$ && exec "$@"' _ \
-  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$model" "$remote" "$(pwd -P)" "$pidfile" "$claude_bin" "$@" || code=$?
+bash -c 'node "$1" set "$2" pid=$$ kind="$3" topic="$4" started="$5" command="$6" auto="$7" managed="$8" model="$9" remote="${10}" dir="${11}" rotating= ended= exit= ${13:+"${13}"} &&
+  echo $$ > "${12}" && shift 13 && export RISA_SESSION_PID=$$ && exec "$@"' _ \
+  "$bin/sessions.mjs" "$name" "$kind" "$topic" "$(now)" "$command" "$auto" "$managed" "$model" "$remote" "$(pwd -P)" "$pidfile" "$persona_field" "$claude_bin" "$@" || code=$?
 
 pid=$(cat "$pidfile" 2>/dev/null || true)
 if [[ -z $pid ]]; then

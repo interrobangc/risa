@@ -39,7 +39,7 @@
 #
 # The time gate (time-gate.mjs, the gates' data in the tier data): a quick or
 # slice check that passed (the local measure's modes) is judged on its seconds,
-# its load at the start and the end and the machine's core count: ok, warn, fail or unjudged (a busy machine), with
+# its load at the start (the end's is only named) and the machine's core count: ok, warn, fail or unjudged (a busy start), with
 # its lines printed after the check's output, naming the steps and the slowest
 # files. A `fail` (an armed measure past its cutoff) exits 125: a time breach, not
 # a test failure. A full check, a failed or stopped one, or a gate that can't

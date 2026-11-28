@@ -21,6 +21,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
+import { personaFor } from "./flavor.mjs";
+import { processOf, writeRecord } from "./sessions.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
 
 vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
@@ -41,6 +43,7 @@ const SCRIPTS = [
 ];
 const STUB = `#!/usr/bin/env bash
 printf '%s\\n' "\${CLAUDE_CONFIG_DIR-unset}" > "$STUB_STATE/config-dir"
+printf '%s\\n' "$@" > "$STUB_STATE/args"
 `;
 
 let root, tool, project, outside, state, env;
@@ -133,5 +136,36 @@ describe("session.sh's project", () => {
     expect(session(outside).status).toBe(0);
     expect(readFileSync(join(state, "config-dir"), "utf8").trim()).toBe("/acct/tool");
     expect(record(tool)).toMatchObject({ kind: "inbox", dir: outside });
+  });
+});
+
+describe("session.sh's first record (RISA-1064)", () => {
+  it("carries the persona its display name wears when stepped off its hash; one on its hash keeps none", () => {
+    const name = "prd-harbor-docks";
+    const hashed = /** @type {{ name: string }} */ (personaFor("prd", name)).name;
+    // The tool repo's live session of the same name holds the hashed captain.
+    const self = processOf(process.pid);
+    const started = new Date(self?.startedMs ?? Date.now()).toISOString();
+    writeRecord(join(tool, ".loops/.sessions"), name, { kind: "prd", pid: process.pid, started });
+    const run = (/** @type {string} */ n) =>
+      spawnSync("bash", [join(tool, "loops/session.sh"), n, "--", "--remote-control", n, "a prompt"], {
+        cwd: project,
+        encoding: "utf8",
+        env,
+      });
+    const r = run(name);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    const rec = JSON.parse(readFileSync(join(project, ".loops/.sessions", `${name}.json`), "utf8"));
+    expect(rec.persona).toBeTruthy();
+    expect(rec.persona).not.toBe(hashed);
+    expect(readFileSync(join(state, "args"), "utf8")).toContain(`Capt ${rec.persona} · ${name} (project)`);
+    // Nothing held: the hash, and no persona kept.
+    expect(run("prd-lantern-wicks").status).toBe(0);
+    const plain = JSON.parse(readFileSync(join(project, ".loops/.sessions/prd-lantern-wicks.json"), "utf8"));
+    expect(plain.persona).toBeUndefined();
+    expect(readFileSync(join(state, "args"), "utf8")).toContain(
+      `Capt ${personaFor("prd", "prd-lantern-wicks")?.name} · prd-lantern-wicks (project)`,
+    );
   });
 });

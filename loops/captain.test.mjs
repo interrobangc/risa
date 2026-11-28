@@ -8,6 +8,7 @@ import {
   CAPTAINS,
   CAPTAIN_SESSION,
   isCaptain,
+  keptPersona,
   lastCaptain,
   machineHeld,
   machinePersona,
@@ -16,6 +17,7 @@ import {
   wornBy,
 } from "./captain.mjs";
 import { namesOf, personaFor } from "./flavor.mjs";
+import { startName } from "./session-names.mjs";
 import { processOf, readRecord, writeRecord } from "./sessions.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -150,8 +152,11 @@ describe("names held on the machine (RISA-1063)", () => {
   const self = processOf(process.pid);
   const live = { pid: process.pid, started: new Date(self?.startedMs ?? Date.now()).toISOString() };
   const saved = process.env.RISA_MACHINE_CONFIG;
+  const savedSessions = process.env.RISA_SESSIONS_DIR;
   afterEach(() => {
     process.env.RISA_MACHINE_CONFIG = saved;
+    if (savedSessions === undefined) delete process.env.RISA_SESSIONS_DIR;
+    else process.env.RISA_SESSIONS_DIR = savedSessions;
   });
 
   it("are the live records' of every repo the config lists, never SELF's nor an ended one's", () => {
@@ -225,6 +230,71 @@ describe("names held on the machine (RISA-1063)", () => {
     expect(machinePersona("prd", name, "starfleet", { sessions: sessionsOf(repoB), machine })?.name).not.toBe(
       p?.name,
     );
+  });
+
+  it("a fresh session's stepped persona is in its first record, so a third session draws neither (RISA-1064)", () => {
+    const repoC = join(machineRoot, "beacon");
+    const three = {
+      path: join(machineRoot, "machine-three.json"),
+      repos: [...machine.repos, { path: repoC }],
+    };
+    const configThree = join(root, "machine-three.json");
+    writeFileSync(configThree, JSON.stringify({ repos: three.repos }));
+    const name = "prd-harbor-buoys";
+    const hashed = /** @type {{ name: string }} */ (personaFor("prd", name)).name;
+    const mine = sessionsOf(repoA);
+    writeRecord(sessionsOf(repoB), name, { kind: "prd", ...live });
+    // session.sh's draw, before the record exists (session-names.mjs start).
+    process.env.RISA_MACHINE_CONFIG = configThree;
+    process.env.RISA_SESSIONS_DIR = mine;
+    const started = startName({ name, kind: "prd", remote: name, project: "harbor" }, "starfleet");
+    const p = machinePersona("prd", name, "starfleet", { sessions: mine, machine: three });
+    expect(p?.name).not.toBe(hashed);
+    expect(started.persona).toBe(p?.name);
+    expect(started.display).toBe(`Capt ${p?.name} · ${name} (harbor)`);
+    expect(readRecord(mine, name)).toBeNull();
+    // Before RISA-1064 the first record had no persona: a third session drew the stepped one too.
+    writeRecord(mine, name, { kind: "prd", ...live });
+    const without = machinePersona("prd", name, "starfleet", { sessions: sessionsOf(repoC), machine: three });
+    expect(without?.name).toBe(p?.name);
+    // The first record as session.sh writes it now: the stepped persona from the start.
+    writeRecord(mine, name, { kind: "prd", ...live, persona: started.persona });
+    expect(machineHeld({ machine: three })).toEqual(expect.arrayContaining([hashed, started.persona]));
+    const third = machinePersona("prd", name, "starfleet", { sessions: sessionsOf(repoC), machine: three });
+    expect(third?.name).not.toBe(hashed);
+    expect(third?.name).not.toBe(p?.name);
+    // The same session reads it back, with the holder still live and once it ends.
+    expect(machinePersona("prd", name, "starfleet", { sessions: mine, machine: three })).toEqual(p);
+    writeRecord(sessionsOf(repoB), name, { ended: "2026-11-01T00:00:00Z" });
+    expect(machinePersona("prd", name, "starfleet", { sessions: mine, machine: three })).toEqual(p);
+    expect(startName({ name, kind: "prd", remote: name, project: "harbor" }, "starfleet").persona).toBe(
+      p?.name,
+    );
+    // On its hash, nothing to keep; the backlog's admiral and a name off the pool are never kept.
+    expect(keptPersona("prd", name, personaFor("prd", name), "starfleet")).toBeUndefined();
+    expect(keptPersona("backlog", "backlog", { rank: "Admiral", name: "Ross" }, "starfleet")).toBeUndefined();
+    expect(keptPersona("prd", name, { rank: "Captain", name: "Nobody" }, "starfleet")).toBeUndefined();
+    expect(keptPersona("prd", name, p, "starfleet")).toBe(p?.name);
+    writeRecord(mine, name, { ended: "2026-11-01T00:00:00Z" });
+  });
+
+  it("a starting session with a record keeps its persona as before (RISA-1064)", () => {
+    const name = "prd-lantern-oil";
+    const mine = sessionsOf(repoA);
+    const hashed = /** @type {{ name: string }} */ (personaFor("prd", name)).name;
+    const other = /** @type {{ name: string }} */ (namesOf("prd").find((n) => n !== hashed));
+    writeRecord(mine, name, { kind: "prd", persona: other, ended: "2026-11-01T00:00:00Z" });
+    process.env.RISA_MACHINE_CONFIG = join(root, "machine-two.json");
+    process.env.RISA_SESSIONS_DIR = mine;
+    const started = startName({ name, kind: "prd", remote: name, project: "harbor" }, "starfleet");
+    expect(started.persona).toBe(other);
+    expect(started.display).toBe(`Capt ${other} · ${name} (harbor)`);
+    // A plain session on its hash keeps nothing.
+    const plain = startName(
+      { name: "prd-lantern-glass", kind: "prd", remote: "prd-lantern-glass", project: "harbor" },
+      "starfleet",
+    );
+    expect(plain.persona).toBe("");
   });
 
   it("with every captain held, still one; under none, none; with no machine config, the hash", () => {

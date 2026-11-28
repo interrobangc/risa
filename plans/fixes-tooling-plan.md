@@ -4,12 +4,17 @@
 
 ## Status
 
+**From the user:**
+
+- 2026-11-28 (relayed by the backlog session, on the account switch to ~/.claude-personal): "and notify orchesrators"
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                                                                                                                                                                                                                    | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | merged; main synced after it (b60d88c). Gate `pnpm test` on 33b8c3c: 11 failed. One is the slice's (`check-run.test.mjs` "hands the budget the steps", passes only on a slice branch): fix sent back to its agent, second merge to come. The other 10 (dispatch/drain/usage) come from the session's CLAUDE_CONFIG_DIR leaking into tests, pass with it unset: filed RISA-1076; rerun the gate with `env -u CLAUDE_CONFIG_DIR pnpm test` | a9eb9ec                        |
 
-No slice in flight (wave 11 landed; next session plans wave 12 for RISA-1073; RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file).
+Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
 **Wave 11 landed** 2026-11-28 in main as 7c89472 through PR #35: slices 51, 52, opus (RISA-1066, RISA-1068; RISA-1066 cut by test file, dispatch to RISA-1069). Tooling only, tier none; `pnpm test` green on 4b86c75; Codex clean on 96796e9; landed on an unsynced tip (main's 4 new commits share no file). Report filed (a62); to-test/2026-11-28-1153-fixes-tooling.md; slice worktrees removed. Both slice checks stopped at their budget in the tooling step with nothing failed: filed as RISA-1073.
 
