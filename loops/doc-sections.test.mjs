@@ -17,6 +17,7 @@ const LAST = {
   "planner.md": "## The plan's shape",
   "project-config.md": "# The project config and the core's line",
   "recovery.md": "# Recovery",
+  "ship.md": "# Ship",
 };
 
 const lastHeading = (text) => {
