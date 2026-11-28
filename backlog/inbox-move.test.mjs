@@ -204,6 +204,64 @@ describe("backlog inbox to-repo", () => {
     ]);
   });
 
+  it("takes back a moved line an ingest filed on the trunk between the store write and the push", () => {
+    // The ingest's commit, ready on origin: it files the export line as B-2 (tagged).
+    const other = join(root, "other");
+    execFileSync("git", ["clone", "-q", origin, other], { stdio: "pipe" });
+    writeFileSync(join(other, INBOX_REL), INBOX.replace("does nothing\n", "does nothing (B-2)\n"));
+    writeFileSync(
+      join(other, "plans/backlog.md"),
+      `${readFileSync(join(other, "plans/backlog.md"), "utf8")}\n### B-2 · bug · The export button does nothing\n\n- status: inbox\n- prd:\n- owner:\n- commit:\n`,
+    );
+    git(other, "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-am", "ingest");
+    git(other, "push", "-q", "origin", "HEAD:refs/heads/ingest");
+    // The store's first push lands it on origin's dev: the move's trunk push is refused.
+    const mark = join(root, "raced");
+    writeFileSync(
+      join(store, "hooks", "post-receive"),
+      [
+        "#!/bin/sh",
+        `[ -e '${mark}' ] && exit 0`,
+        `touch '${mark}'`,
+        `git --git-dir='${origin}' update-ref refs/heads/dev refs/heads/ingest`,
+      ].join("\n"),
+    );
+    chmodSync(join(store, "hooks", "post-receive"), 0o755);
+    const ingested = git(origin, "rev-parse", "ingest");
+
+    const r = backlog("PRIVATE", "inbox", "to-repo", store);
+    expect(r.status).toBe(0);
+    expect(r.err).toBe("origin/dev moved; building the move on its new tip");
+    const lines = r.out.split("\n");
+    expect(lines[0]).toBe(
+      `moved 1 inbox line to ${store} sample.md as ${git(store, "rev-parse", "main").slice(0, 7)}`,
+    );
+    expect(lines[1]).toBe(`took back from ${store} sample.md the 1 line origin/dev filed during the move`);
+    expect(git(origin, "rev-parse", "dev^")).toBe(ingested);
+    // The filed line is out of the store (its heading stays, as a settled line's does);
+    // the unfiled one stays.
+    expect(git(store, "show", "main:sample.md")).toBe(
+      "# Inbox\n\n## Bugs\n\n## Features\n\n- Dark mode for the dashboard",
+    );
+
+    // A store ingest files only the line nobody filed, and nothing twice.
+    git(dir, "pull", "-q", "--ff-only", "origin", "dev");
+    const ingest = backlog("PRIVATE", "ingest");
+    expect(ingest.status).toBe(0);
+    const tracker = readFileSync(join(dir, "plans/backlog.md"), "utf8");
+    expect(tracker.match(/· The export button does nothing$/gm)).toHaveLength(1);
+    expect(tracker.match(/· Dark mode for the dashboard$/gm)).toHaveLength(1);
+    expect(backlog("PRIVATE", "ingest").out).toBe("nothing new in the inbox");
+
+    // A second move after the success changes nothing.
+    const tip = originTip();
+    const storeTip = git(store, "rev-parse", "main");
+    const again = backlog("PRIVATE", "inbox", "to-repo", store);
+    expect(again.status).toBe(1);
+    expect(originTip()).toBe(tip);
+    expect(git(store, "rev-parse", "main")).toBe(storeTip);
+  });
+
   it("refuses with uncommitted changes to the inbox, writing nothing", () => {
     writeFileSync(join(dir, INBOX_REL), `${INBOX}- A line not committed\n`);
     const r = backlog("PRIVATE", "inbox", "to-repo", store);
