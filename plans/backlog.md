@@ -106,7 +106,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1008 | question | triaged | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
 | RISA-1009 | feature | live | fixes-tooling | prd/fixes-tooling | A command a backlog agent can run to restart the dispatcher on the current release (stop, then start it in its own tab or detached), so a new pin or install doesn't need the user at the terminal |
 | RISA-1010 | bug | live | fixes-tooling | prd/fixes-tooling | machinery.md ends with a stub '## The context watch' after '## Worktrees and leases' (2b02eab, RISA-880), so a project's additions, which continue the generic doc's last section, merge under the stub: Caretook's worktree lines drop out of risa doc machinery 'Worktrees and leases' and its own 'The context watch' heading appears twice |
-| RISA-1011 | chore | in-progress | fixes-tooling | prd/fixes-tooling | The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt |
+| RISA-1011 | chore | ready | fixes-tooling | prd/fixes-tooling | The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt |
 | RISA-1012 | bug | in-progress | fixes-tooling | prd/fixes-tooling | risa dispatch --restart stops the dispatcher and starts none when no tab can open (iTerm2 unavailable, headless): open-session.sh falls back to printing the command and exits 0, so the restart waits out its timeout with dispatching stopped; check a tab can open before stopping, or fall back to a detached process |
 | RISA-1013 | bug | in-progress | fixes-tooling | prd/fixes-tooling | risa status's 'last tick' reads the stuck watch's stuck.lastTickAt, which isn't written while usage-limited, paused or with RISA_STUCK_WATCH=off, so a healthy dispatcher looks stalled; record a heartbeat on every tick and show that |
 | RISA-1014 | change | in-progress | fixes-tooling | prd/fixes-tooling | risa land skips the Codex re-review when the commits after Codex's approval change only docs or plan files, as the test gate does |
@@ -894,10 +894,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1011 · chore · The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 5bff9fa
 
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27: from fixes-tooling slice 19's hand-off (RISA-881); pairs with RISA-882.
 
