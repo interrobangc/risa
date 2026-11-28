@@ -162,6 +162,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1092 | feature | triaged | risa-next-5 |  | risa init: a flag for the branch prefixes (today branches.prefixes is edited by hand after init), and config.mjs check run from a Risa install with RISA_CONFIG unset checks Risa's own checkout config, not the repo in the current directory, which surprises a second repo's user (say which config it checked, or prefer the cwd's repo) |
 | RISA-1093 | bug | triaged | fixes-test |  | Entry points guarded with pathToFileURL(process.argv[1]).href are a silent no-op through a symlink (about 20 in loops/: slice-brief, status-trim, dispatch, finish, context, drain, bye, cost, host and others): run directly they work, through a symlink they print nothing and exit 0; switch them to isMain from loops/is-main.mjs |
 | RISA-1094 | bug | triaged | fixes-bug |  | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
+| RISA-1095 | feature | inbox |  |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
 
 ## Items
 
@@ -1370,3 +1371,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-test): From fixes-test slice 2's hand-off (RISA-1075, 2026-11-28): seen in two test dispatchers whose backlog child was kept alive by a test preload; they ignored SIGTERM for hours.
+
+### RISA-1095 · feature · Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),…
+
+- status: inbox
+- prd:
+- owner:
+- commit:
+
+- 2026-11-28 (plan/cross-machine-messages): From the inbox: Ship's notify hook tells projects on other machines through risa message (cross-machine-messages), not only pinned projects here / Run after ship and cross-machine-messages both land; triage to fixes-tooling (cross-machine-messages planner, 2026-11-28)
