@@ -15,7 +15,7 @@
 | 31 | 5 | RISA-994 (1/2) | opus | agent spawned | — |
 | 32 | 5 | RISA-994 (2/2) | opus | waiting (blocked by 31) | — |
 | 33 | 5 | RISA-1006 | opus | agent spawned | — |
-| 34 | 5 | RISA-1012 | opus | agent spawned | — |
+| 34 | 5 | RISA-1012 | opus | handed off (022a664, 0cdb858): refuses before stopping; slice check red on load timeouts only | — |
 | 35 | 5 | RISA-1013 | opus | agent spawned | — |
 | 36 | 5 | RISA-1014 | opus | agent spawned | — |
 | 37 | 5 | RISA-813 | opus | agent spawned | — |
@@ -25,7 +25,7 @@
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
-**Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. Watch running.
+**Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. Watch running. **Slip:** worktrees were cut before the plan commit (964bfdf), so slice checks ran the full suite (load 107); each agent told to merge prd/fixes-tooling first (filed as a bug).
 
 **Carried over:** a change to Risa's own risa.json needs the release that reads it installed first. Slice checks run red on load timeouts (RISA-994, slices 31–32); the wave's CI run is the gate. machinery.md is at its budget. check-plan's "shares its Check file with slice 25" on 34 is a false wave (25 landed).
 
