@@ -4,13 +4,13 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/risa-next` |
-| ----- | ---- | ----- | -------------------------- |
-| 1     | 1    | merged (opus, 5fd8fdf) | 37fd0e6                    |
+| Slice | Wave | State                                | Merge into `prd/risa-next` |
+| ----- | ---- | ------------------------------------ | -------------------------- |
+| 1     | 1    | merged (opus, 5fd8fdf)               | 37fd0e6                    |
 | 2     | 2    | working (opus, worktree risa-next-2) | —                          |
 | 3     | 2    | working (opus, worktree risa-next-3) | —                          |
-| 4     | 3    | —     | —                          |
-| 5     | 4    | —     | —                          |
+| 4     | 3    | —                                    | —                          |
+| 5     | 4    | —                                    | —                          |
 
 **Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
