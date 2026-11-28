@@ -486,6 +486,11 @@ export function planBudget(planText, { merged = mergedSlices([planText]) } = {})
   return { warnings, errors, wavesFrom };
 }
 
+/** One of planBudget's errors as a line: `error: slice <n>: <text>` (check-plan --plan, anchors.mjs). */
+export function fieldsErrorLine(/** @type {{ slice: number, text: string }} */ e) {
+  return `error: slice ${e.slice}: ${e.text}`;
+}
+
 /** `--plan <file>`: the budget's warnings and errors on stderr, how waves were read; exit 1 on an error. */
 function planCli(/** @type {string} */ file) {
   let text;
@@ -505,7 +510,7 @@ function planCli(/** @type {string} */ file) {
     }
   const { warnings, errors, wavesFrom } = planBudget(text, { merged: mergedSlices([text, historyText]) });
   for (const w of warnings) console.error(`warning: slice ${w.slice}: ${w.text}`);
-  for (const e of errors) console.error(`error: slice ${e.slice}: ${e.text}`);
+  for (const e of errors) console.error(fieldsErrorLine(e));
   console.log(
     warnings.length ? `${warnings.length} budget warning(s); ${wavesFrom}` : `budget ok; ${wavesFrom}`,
   );
