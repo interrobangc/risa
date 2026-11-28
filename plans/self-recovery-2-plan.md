@@ -4,22 +4,22 @@
 
 ## Status
 
-| Slice | Wave | State          | Merge into `prd/self-recovery-2` |
-| ----- | ---- | -------------- | -------------------------------- |
-| 1     | 1    | merged (opus)  | bf18c79                          |
-| 2     | 1    | merged (opus)  | c2f1e25                          |
-| 3     | 2    | working (opus) | —                                |
-| 4     | 2    | working (opus) | —                                |
-| 5     | 2    | working (opus) | —                                |
-| 6     | 3    | —              | —                                |
+| Slice | Wave | State         | Merge into `prd/self-recovery-2` |
+| ----- | ---- | ------------- | -------------------------------- |
+| 1     | 1    | landed (opus) | bf18c79                          |
+| 2     | 1    | landed (opus) | c2f1e25                          |
+| 3     | 2    | merged (opus) | aa0916e                          |
+| 4     | 2    | merged (opus) | 8477e15                          |
+| 5     | 2    | merged (opus) | 3c6214c                          |
+| 6     | 3    | started (opus) | —                               |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 (slices 1, 2) merged (bf18c79, c2f1e25), synced with main (992bc5b), full check green (2469/2469; two earlier runs failed on timeouts at load ~23). Landing it: PR + Codex review. Slices 3, 5 handed off, merge after the landing; slice 4 working (opus). Then drain and rotate; slice 6 starts next session. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
+**Hand-over (2026-11-28):** wave 1 (slices 1, 2) landed in main as 3c11cf9 through PR #20 (tier none, Codex clean; report filed). Wave 2 (slices 3, 4, 5) is merged at 3c6214c and **green**: full `risa check` passed 2487/2487 on 3c6214c (load ~6); slice worktrees 3, 4, 5 removed. Sync skipped (up to date, no recheck); PR #21 open, `risa review --wait` out; then triage, land (tier none), report. Slice 6 (RISA-789, claimed) started early as wave 3 while the review runs: worktree self-recovery-2-6, opus agent spawned, watch running. Check runs at load above ~15 fail on timeouts; rerun when quieter.
 
-**Open:** slices 3 (1f9606b) and 5 (9588490) handed off, merge after the wave check (5's slice check timed out under load; its own test passed). RISA-1025 (fixes-tooling) filed for slice 3's lazy finish.mjs load: **message `fixes-tooling-3e` when the landing carrying slice 3 reaches main.**
+**Open:** **message `fixes-tooling-3e` when the landing carrying slice 3 reaches main** (it holds RISA-1025 on our dispatch/finish files). Codex findings from PR #20, triaged into this PRD: RISA-1027 (the finish CLI re-files reports; no persisted keys) and RISA-1028 (cost counts a `plan-<x>` topic's transcripts as `<x>`'s planning); the user decides whether they join a wave. RISA-1025 and RISA-1026 (lease.test flake) filed under fixes-tooling. The handbook names no _Docs at landing_ section; each slice wrote its own doc bullet.
 
-**Backlog:** claim each slice's items as it starts; `done` them when the last slice naming them merges. Slices 1, 3 and 4: RISA-811 (`done` after 3 and 4). Slices 2 and 5: RISA-560 (`done` after 5). Slice 6: RISA-789.
+**Backlog:** RISA-811 and RISA-560 marked done at 3c6214c (they land with wave 2). Slice 6: RISA-789.
 
 ## Architectural decisions
 

@@ -10,3 +10,4 @@ What runs `{{prd}}` (`loops/`).
 
 - **`{{prd}} tidy`** lists leftovers **safe** or **ask**; `--yes` removes the safe ones. Never dirty worktrees, the main checkout, unmerged branches, sessions.
 - `rm.sh <name>` removes worktree, stack, test database, slot, merged branch; refuses uncommitted work or slice worktrees left, unless `--force`. Rotate runs it for a landed standing topic with nothing runnable.
+- **`{{prd}} cost [<topic>]`**: tokens by model per slice, from transcripts and the ledger `rm` saves first (`.loops/.cost/`).

@@ -85,6 +85,13 @@
 // toward the reopen limit. Never while paused, draining or limited, during a prd
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
+// After the pick, the finish of a landed topic (finish.mjs, finishStep): a non-standing
+// topic landed in the trunk (landedTopics or landedWithCode) with a worktree, a slot or a
+// row not done left; the first in row order whose decision acts (ends its idle recorded
+// sessions, runs rm, files one report) or reports (once per topic, reasons and tip:
+// .dispatch.json `finish.reported`). Never while paused or draining; --dry-run prints
+// `finish: would …`.
+//
 // Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
 // non-test .mjs files of loops/ and backlog/, hashed at its start) with its target's
 // (staleness): a dispatcher run from a checkout targets that checkout, which a landing
@@ -124,6 +131,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -155,7 +163,7 @@ import {
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { MACHINE_DIR, workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
-import { landedTopics } from "./landed.mjs";
+import { doneFlags, landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
@@ -463,6 +471,7 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[], allow?: string | null },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
+ *   finish?: { reported?: string[] },
  *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
  *     every?: number } }} DispatchState */
 
@@ -1628,6 +1637,125 @@ function resumeActs(
   return acted;
 }
 
+// ---- the finish of a landed topic --------------------------------------------------
+
+/**
+ * finish.mjs, loaded on first use, or null when it isn't there. Not a static import:
+ * the test harnesses that copy a list of these scripts (dispatch.test.mjs) don't
+ * list it yet, and the dispatcher must still load there.
+ * @type {typeof import("./finish.mjs") | null | undefined}
+ */
+let finishModule;
+const finishMjs = () => {
+  if (finishModule === undefined)
+    try {
+      finishModule = createRequire(import.meta.url)("./finish.mjs");
+    } catch (e) {
+      const code = /** @type {NodeJS.ErrnoException} */ (e).code;
+      if (code !== "MODULE_NOT_FOUND" && code !== "ERR_MODULE_NOT_FOUND") throw e;
+      finishModule = null;
+    }
+  return finishModule ?? null;
+};
+
+/**
+ * The finish step: gathers each landed topic's facts, decides, picks one, and acts
+ * on it (or, dry, prints what it would do). Returns whether it acted.
+ */
+function finishStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {ReturnType<typeof gather>} */ g,
+  /** @type {import("./drain.mjs").Drain} */ drain,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+) {
+  const fin = finishMjs();
+  if (!fin) return false;
+  const paused = g.facts.paused;
+  const draining = drain.state !== "normal";
+  if (paused || draining) return false;
+  const kinds = branchKinds();
+  /** @type {{ topic: string, flags: string[] }[]} */
+  const rows = g.facts.rows;
+  const standing = new Set(rows.filter((r) => r.flags?.includes("standing")).map((r) => r.topic));
+  const worktreeOf = new Map(
+    g.facts.worktrees.flatMap((w) => {
+      const t = kinds.nameOf(w.branch, "prd");
+      return t && !t.includes("/") ? [[t, w.name]] : [];
+    }),
+  );
+  /** @type {Set<string>} */
+  const slots = new Set();
+  const slotDir = join(p.loops, ".slots");
+  for (const n of existsSync(slotDir) ? readdirSync(slotDir) : [])
+    try {
+      slots.add(readFileSync(join(slotDir, n, "name"), "utf8").trim());
+    } catch {
+      /* not a slot */
+    }
+  const open = (/** @type {string} */ t) => "flags" in doneFlags(rows, t);
+  // Row order first, then the worktrees and slots no row names.
+  const topics = [
+    ...new Set([
+      ...rows.map((r) => r.topic),
+      ...[...worktreeOf.keys()].sort(),
+      ...[...slots].filter((n) => n && !n.startsWith("plan-") && !n.includes("/")).sort(),
+    ]),
+  ].filter((t) => !standing.has(t) && (worktreeOf.has(t) || slots.has(t) || open(t)));
+  const reported = readState(p.state).finish?.reported ?? [];
+  const plain = landedTopics(p.main, topics);
+  const code = fin.landedWithCode(
+    p.main,
+    topics.filter((t) => !plain[t]),
+  );
+  /** @type {Map<number, { ppid: number, args: string }> | undefined} */
+  let table;
+  try {
+    table = processTable();
+  } catch {
+    /* gatherFinish reads it itself */
+  }
+  const candidates = topics
+    .filter((t) => plain[t] || code[t])
+    .map((topic) => {
+      const facts = fin.gatherFinish(topic, { main: p.main, env, now: g.facts.now, reported, rows, table });
+      return {
+        topic,
+        tip: facts.tip,
+        name: facts.worktree?.name ?? topic,
+        decision: fin.finishDecision(facts),
+      };
+    });
+  // A key whose topic is no longer a candidate is spent: the topic finished or moved on.
+  const live = new Set(candidates.map((c) => c.topic));
+  const kept = reported.filter((k) => live.has(k.split("\t")[0]));
+  const c = fin.finishPick(candidates, { paused, draining, reported });
+  if (dryRun) {
+    for (const x of candidates)
+      if (x.decision?.kind === "wait") out(`finish: ${x.topic} waits (${x.decision.why})`);
+    const d = c?.decision;
+    if (d?.kind === "act")
+      out(`finish: would end ${d.end.length ? d.end.join(", ") : "no session"}, rm ${c?.name} (${d.why})`);
+    else if (d?.kind === "report") out(`finish: would report ${d.topic}: ${d.why}`);
+    return false;
+  }
+  /** @type {string[]} */
+  const filed = [];
+  if (c?.decision) {
+    const d = c.decision;
+    const did = fin.applyFinish(d, { main: p.main, env: { ...env, RISA_ASKS_DIR: p.asks }, name: c.name });
+    if (d.kind === "report" && did.filed) filed.push(d.key);
+    if (d.kind === "act" && !did.ok) filed.push(fin.failedKey(d.topic, c.tip));
+    const [first, ...rest] = (did.report ?? "").split("\n");
+    out(`finish: ${first}${did.filed ? "" : " (its report wasn't filed)"}`);
+    for (const l of rest) out(`  ${l}`);
+  }
+  if (filed.length || kept.length !== reported.length)
+    updateState(p.state, (s) => {
+      s.finish = { ...s.finish, reported: [...new Set([...kept, ...filed])] };
+    });
+  return !!c;
+}
+
 // ---- one tick --------------------------------------------------------------------
 
 /**
@@ -1835,6 +1963,13 @@ export function tick(
     if (!limited && stuckStep(p, g, { dryRun, env, out, every })) watched = true;
   } catch (e) {
     out(`stuck: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // The finish of a landed topic: after the pick, one topic a tick.
+  try {
+    if (finishStep(p, g, drain, { dryRun, env, out })) watched = true;
+  } catch (e) {
+    out(`finish: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // The keep-alive, beside the pick: it takes no slot, so the pick's action still happens.

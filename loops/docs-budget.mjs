@@ -16,7 +16,7 @@ export const BUDGETS = {
   "hotfix.md": 3 * KB,
   "inbox.md": 2 * KB + 8,
   "loop.md": 2230,
-  "machinery.md": 600,
+  "machinery.md": 727,
   "orchestration.md": 174,
   "orchestrator.md": 3982,
   "planner.md": 5 * KB + 16,

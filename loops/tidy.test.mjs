@@ -343,6 +343,67 @@ describe("the backlog and the registry", () => {
   });
 });
 
+describe("landed topics with leftovers (RISA-811)", () => {
+  const topic = { topic: "t", worktree: "t", rowDone: false };
+
+  it("a landed topic with a worktree and no dispatcher is one ask naming finish", () => {
+    const { ask, safe, kept } = one({ landed: [topic] });
+    expect(ask).toEqual([
+      {
+        kind: "landed",
+        target: "t",
+        why: "landed with its worktree t and its row not done, and no dispatcher is running (pnpm prd finish t)",
+      },
+    ]);
+    expect([...safe, ...kept]).toEqual([]);
+    expect(one({ landed: [{ ...topic, rowDone: null }] }).ask[0].why).toMatch(/with its worktree t, and/);
+  });
+
+  it("is none while the dispatcher runs", () => {
+    expect(one({ landed: [topic], dispatcherRunning: true }).ask).toEqual([]);
+  });
+
+  it("a code-tail topic is one ask", () => {
+    const { ask } = one({ landed: [{ ...topic, code: true, worktree: null }] });
+    expect(ask.map((a) => [a.kind, a.target])).toEqual([["landed", "t"]]);
+    expect(ask[0].why).toMatch(
+      /^landed, with code past its landing, with its row not done.*pnpm prd finish t\)$/,
+    );
+  });
+
+  it("a standing topic whose wave landed with nothing past it is none; nor one with nothing left", () => {
+    expect(one({ landed: [{ ...topic, standing: true }] }).ask).toEqual([]);
+    expect(one({ landed: [{ topic: "u", worktree: null, rowDone: true }] }).ask).toEqual([]);
+  });
+});
+
+describe("topics with more than one live claude (RISA-811)", () => {
+  it("two live claudes in one topic's worktrees are one ask naming both pids", () => {
+    const { ask } = one({
+      claudes: [
+        { topic: "t", pid: 11, worktree: "t" },
+        { topic: "t", pid: 12, worktree: "t-1" },
+        { topic: "u", pid: 13, worktree: "u" },
+      ],
+    });
+    expect(ask).toEqual([
+      {
+        kind: "sessions",
+        target: "t",
+        why: "2 live claudes across its worktrees (pid 11 in t, pid 12 in t-1): one is enough, end the others",
+      },
+    ]);
+  });
+
+  it("one live claude is none, even seen twice", () => {
+    const claudes = [
+      { topic: "t", pid: 11, worktree: "t" },
+      { topic: "t", pid: 11, worktree: "t" },
+    ];
+    expect(one({ claudes })).toEqual({ safe: [], ask: [], kept: [] });
+  });
+});
+
 describe("output", () => {
   it("formats both lists and the kept ones, and the report names each ask", () => {
     const lists = one({
