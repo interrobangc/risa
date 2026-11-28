@@ -159,7 +159,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1064 | bug | live | fixes-bug | prd/fixes-bug | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
 | RISA-1065 | bug | live | fixes-bug | prd/fixes-bug | The time gate judges the local measure on its start load only (the quiet rule) |
 | RISA-1066 | change | ready | fixes-tooling | prd/fixes-tooling | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
-| RISA-1067 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
+| RISA-1067 | bug | live | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
 | RISA-1068 | change | ready | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 | RISA-1069 | change | triaged | fixes-tooling |  | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 | RISA-1070 | bug | triaged | fixes-bug |  | risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help |
@@ -1356,7 +1356,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1067 · bug · inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting
 
-- status: ready
+- status: live
 - prd: risa-next-2
 - owner: prd/risa-next-2
 - commit: cd7d14c
