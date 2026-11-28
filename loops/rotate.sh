@@ -16,6 +16,11 @@
 # back as a --continue agent that reloads its base and reruns its check. Drain
 # first; past the hard limit (the session's size record) it goes ahead.
 #
+# A standing (fixes) topic with no slice in flight and nothing runnable waiting
+# (rotate.mjs standing-close: the dispatcher's pick, as if the topic were
+# closed) is closed instead: its rm.sh, then its session ends, one line saying
+# why; the dispatcher starts it again once it has work (RISA-952).
+#
 # Then it opens rotate-into.sh in a background iTerm2 tab (the opener's
 # --background) and returns at once, so the calling session can say its last
 # line; the tab ends the old session and starts the fresh one under the same
@@ -48,7 +53,7 @@ while (($#)); do
     --self) self=1 ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
     --brief-path) brief_path=1 ;;
-    -h | --help) sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>, --self, --brief <file>, --brief-path)" ;;
     *) [[ -z $topic ]] || die "rotate: one topic at a time"; topic=$1 ;;
   esac
@@ -146,6 +151,26 @@ elif [[ $here_topic == "$topic" ]]; then
   die "rotate: no session to end: no live record $name, and this shell isn't under a claude process"
 else
   die "rotate: no session to end: no live record $name (without one, run it from $topic's own session)"
+fi
+
+# A standing topic with no slice in flight and nothing runnable waiting closes instead (RISA-952):
+# a fresh session would hold the lane idle. Its rm (from the main checkout, so no shell is left in
+# a removed directory) leaves the row standing, not done; then the session ends here.
+# The registry first: only a standing row loads the dispatcher's facts. No registry: rotate as now.
+if [[ -z $slices ]] && rows=$(cd "$main" && node "$bin/../backlog/backlog.mjs" prd list --json 2>/dev/null); then
+  rc=0
+  why=$(node "$bin/rotate.mjs" standing-close "$topic" "$main" <<<"$rows") || rc=$?
+  case $rc in
+    0)
+      echo "Closing $name instead of rotating: $why (the dispatcher starts it again when it has work)."
+      (cd "$main" && "$bin/rm.sh" "$topic") || die "rotate: closing $topic failed (above); $name was left running"
+      echo "Ending $name (pid $pid): its worktree is gone."
+      end_pid "$pid" "$name"
+      exit 0
+      ;;
+    1) ;;
+    *) echo "rotate: couldn't tell whether $topic has anything runnable ($why): rotating as usual" >&2 ;;
+  esac
 fi
 
 # A context rotation under the hard limit waits for the slices still at work (B-877).
