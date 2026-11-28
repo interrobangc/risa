@@ -8,33 +8,37 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
-| 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
-| 14    | 5    | RISA-1070       | opus   | merged | 9b490d4                    |
-| 15    | 5    | RISA-1082       | opus   | merged | c8dac71                    |
-| 16    | 6    | RISA-1078       | opus   | merged | af6ee57                    |
-| 17    | 6    | RISA-1080       | opus   | merged | 57bd232                    |
-| 18    | 6    | RISA-1083       | opus   | merged | 29020ba                    |
-| 19    | 6    | RISA-1079       | opus   | merged | 50780f8                    |
-| 20    | 6    | RISA-1084       | opus   | merged | 1fdb50b                    |
-| 21    | 6    | RISA-1050       | opus   | merged | 2942e27                    |
-| 22    | 6    | RISA-1077       | opus   | merged | 5a22554                    |
-| 23    | 6    | RISA-1081       | opus   | merged | 69cd110                    |
-| 24    | 6    | RISA-1086       | opus   | merged | c3324f5                    |
-| 25    | 6    | RISA-1087       | opus   | merged | 4fbc7cf                    |
+| Slice | Wave | Item            | Model  | State        | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged       | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged       | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged       | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged       | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged       | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged       | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged       | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged       | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged       | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged       | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged       | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | merged       | a04752b                    |
+| 13    | 4    | RISA-1065       | opus   | merged       | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | merged       | 9b490d4                    |
+| 15    | 5    | RISA-1082       | opus   | merged       | c8dac71                    |
+| 16    | 6    | RISA-1078       | opus   | merged       | af6ee57                    |
+| 17    | 6    | RISA-1080       | opus   | merged       | 57bd232                    |
+| 18    | 6    | RISA-1083       | opus   | merged       | 29020ba                    |
+| 19    | 6    | RISA-1079       | opus   | merged       | 50780f8                    |
+| 20    | 6    | RISA-1084       | opus   | merged       | 1fdb50b                    |
+| 21    | 6    | RISA-1050       | opus   | merged       | 2942e27                    |
+| 22    | 6    | RISA-1077       | opus   | merged       | 5a22554                    |
+| 23    | 6    | RISA-1081       | opus   | merged       | 69cd110                    |
+| 24    | 6    | RISA-1086       | opus   | merged       | c3324f5                    |
+| 25    | 6    | RISA-1087       | opus   | merged       | 4fbc7cf                    |
+| 26    | 7    | RISA-1089       | opus   | started      |                            |
+| 27    | 7    | RISA-1090       | opus   | started      |                            |
+| 28    | 7    | RISA-1091       | opus   | waits for 27 |                            |
+| 29    | 7    | RISA-1094       | opus   | started      |                            |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
@@ -48,7 +52,7 @@
 
 **Wave 6** (slices 16–25, RISA-1050/1077/1078/1079/1080/1081/1083/1084/1086/1087): landed 2026-11-28 in main as 790a082 (PR #43, tier unit, run 46183871215, Codex clean; unsynced tip, main's 5 commits shared no file); to-test file `to-test/2026-11-28-1506-fixes-bug.md`; report a73 filed. Slice 22 needed one fix after the first CI run (inbox prompt tests; its size limit is now 2200 characters). Caretook's backlog session (Adm Marcus) told 790a082 has RISA-1050 and that the warning reads only `risaVersion` in risa.json.
 
-**For the next session:** no slice in flight; wave 7 is yours. RISA-1090 (`risa init` writes a config whose check can't run) waits, triaged; it likely touches loops/setup and loops/config, hot for risa-next-4 while that runs, so check before slicing it. First `risa backlog ingest`, `risa backlog list`, `risa backlog prd list` and `risa sync`. Risa's backlog session is now `Adm Satie · backlog (risa)`.
+**Wave 7** (slices 26–29, RISA-1089/1090/1091/1094), started 2026-11-28 after syncing main: 26, 27 and 29 run at once, each on opus in `.loops/fixes-bug-<n>`; 28 starts once 27 is merged (both edit `initFiles`). RISA-1097 (ship's lock) waits for a later wave: `loops/ship` is hot for the running ship topic. Hot files set: loops/setup, loops/second-repo.test.mjs, loops/dispatch. Risa's backlog session was `Adm Satie · backlog (risa)` at the last hand-over.
 
 **Notes:** run local checks with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands; past a load of about 15 the local full check times out (RISA-1088), so gate on `risa ci run <tier> --wait`. When a tagged release carries RISA-1065 (acb0975), RISA-1070 (3aa2773) or RISA-1050 (790a082), tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
@@ -308,3 +312,43 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/usage.test.mjs`): a reading with a `fiveHour` window under account A, then a parse under account B carrying only `sevenDay`, leaves no `fiveHour` and account B; the same account merges windows as before; a stall noted after an account switch doesn't keep the old account's windows.
+
+## Slice 26: config migrate checks every source is tracked before it moves anything
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/setup-migrate.test.mjs
+
+**Build (RISA-1089):** `migrate` (`loops/setup.mjs`) relies on `git status --porcelain` for its dirty preflight, so a rule file that is git-ignored (or untracked with `status.showUntrackedFiles=no`) shows nothing: `risa.json` is moved and staged, `git mv` then fails on the rule file, and the next run refuses because `.risa/` exists. Before any move, check that every source `migratePlan` lists is tracked (`git ls-files --error-unmatch -- <path>`), and refuse with one line naming each untracked or ignored source and what to do (track it, or move it by hand), non-zero, with nothing moved or staged. `--dry-run` reports the same refusal. Keep to `migratePlan`, `migrate` and their helpers: `initFiles` and `init` are slices 27 and 28's. Put the tests in a new `loops/setup-migrate.test.mjs` (a throwaway git repo in the OS temp dir), so `loops/setup.test.mjs` stays free for those slices. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/setup-migrate.test.mjs`): with a git-ignored rule file, and with an untracked one under `status.showUntrackedFiles=no`, migrate exits non-zero naming the file, `risa.json` is still in place and nothing is staged; once the file is tracked the same run migrates as before.
+
+## Slice 27: risa init writes a config whose check can run
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests: unit · Blocked by: none · Check: loops/setup.test.mjs
+
+**Build (RISA-1090):** a repo made by `risa init` can't run `risa check`: the check planner (`loops/check-plan.mjs`) refuses with "the project config sets no paths.checkPlanRules", the tier data is needed next, and `init --check <cmd>` sets `commands.check` while `risa check` runs `hooks.check` (called with `MODE BASE OWN…` appended), so it exits 2 with "sets no check hook". Make `initFiles` (`loops/setup.mjs`) write working defaults: a check-plan rules file and a tiers file in the config folder, named by the config's paths, in the shapes their readers require (check-plan: `ownTests` and `suite`; tiers: `browserCheck`, a non-empty `narrowedTiers`, and a `refPrefix` the CI gate's run rows sit on; read `loops/check-plan.mjs` and the tier readers for the exact shapes, and `loops/second-repo.test.mjs` for what it adds by hand today), and a `hooks.check` that runs the given check command whatever arguments are appended. Then drop from `loops/second-repo.test.mjs` each hand edit this makes unnecessary. If a default can't be made to work for some part, `init` prints the exact step that adds it instead; say which in the hand-off. Keep to `initFiles`, `init` and their tests: `migrate` is slice 26's. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship): read through what they export. If `loops/docs/project-config.md` describes what init writes, bring it in line within its budget, with no `##` heading changed.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/setup.test.mjs`, `loops/second-repo.test.mjs`): in a throwaway repo, after `init --check "<cmd>"` alone, the check planner runs with no "sets no" refusal, the tier data loads, and the check hook runs the given command with the appended arguments ignored; the second-repo proof passes without adding those files or the hook by hand.
+
+## Slice 28: risa init writes a repo that passes the project-data check
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests: unit · Blocked by: 27 · Check: loops/setup.test.mjs
+
+**Build (RISA-1091):** a repo made by `risa init` fails `loops/project-check.mjs`: it needs `paths.preferences` (a doc with a "Default on silence … Never (--waits)" line), a planner role doc with _What to ask_ and _The skeptic pass_, and `<plans>/fixes-rules.md`, and every other `.md` beside the preferences doc must be named by a role. Make `initFiles` (`loops/setup.mjs`, after slice 27's changes) write a working default for each when missing (never over a file that exists), short and generic, with the config naming them, so project-check passes on a fresh init; read `loops/project-check.mjs` for exactly what it requires and `loops/second-repo.test.mjs` for what it adds by hand today, then drop those hand edits from that test. Where a default would be wrong to guess, `init` prints the step instead; say which in the hand-off. Keep to `initFiles`, `init` and their tests. Don't edit `loops/config.mjs`, `loops/prd.sh`, `risa.json`, `CHANGELOG.md` or `AGENTS.md` (hot for ship), nor this repo's own `docs/` or `plans/fixes-rules.md`.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/setup.test.mjs`, `loops/second-repo.test.mjs`): in a throwaway repo, project-check passes straight after `init`; a second `init` (or one over an existing preferences doc) overwrites nothing; the second-repo proof passes without adding those files by hand.
+
+## Slice 29: A dispatcher whose backlog command hangs ends the tick and still stops
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-lock.test.mjs
+
+**Build (RISA-1094):** `run()` and `backlog()` (`loops/dispatch.mjs`, around line 723) call `spawnSync` with no timeout, so a backlog command that hangs blocks the tick for good: the event loop never turns and the SIGTERM handler never runs (two test dispatchers ignored SIGTERM for hours). Give `run()` a default timeout (an env override for tests, as the file's other limits have; the pickup call already passes its own, `PICKUP_TIMEOUT_MS`), have the timed-out child killed, and treat a timeout as that call's failure: the tick logs one line naming the command and the limit, does nothing that depended on its output (never reads a timeout as an empty backlog or an empty registry, which could start or close work), and ends, so the next tick retries and a pending stop is honoured. Check the file's other `spawnSync` calls on the tick path for the same gap and give them the same limit; say in the hand-off which calls now time out and what each does on one. Find the dispatch test file that fits (the tests were split: `loops/dispatch-*.test.mjs`, fixture in `loops/dispatch-fixture.mjs`) or add `loops/dispatch-hang.test.mjs`; a test's hanging child must be killed when the test ends. Don't edit `loops/config.mjs` or `loops/prd.sh` (hot for ship).
+
+**Acceptance criteria:**
+
+- Unit test: with a backlog command stubbed to hang past a short limit, the tick ends with a line naming the command and the timeout, starts and closes nothing, and a SIGTERM sent meanwhile stops the dispatcher within a few seconds; a backlog command that answers in time behaves as before.
