@@ -1904,6 +1904,8 @@ describe("the stuck tick", () => {
     expect(tryAsks()).toEqual([]);
     // A paused tick writes nothing, its clocks neither.
     expect(dstate().stuck).toEqual({ lastTickAt: T0 * 1000, clockFrom: null });
+    // But the tick's own heartbeat (risa status's last tick) still moves.
+    expect(dstate().lastTickAt).toBe((T0 + 60) * 1000);
   });
 
   it("a tick gap resets the clocks: the stall counts again from the wake", () => {

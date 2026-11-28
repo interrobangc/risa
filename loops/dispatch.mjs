@@ -447,7 +447,8 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
   return fromEnv ? { cap: fromEnv, from: "RISA_MAX_PRDS" } : { cap: 4, from: "default" };
 }
 
-/** @typedef {{ paused?: { at: string, why: string } | null, reopens?: Record<string, number>,
+/** @typedef {{ paused?: { at: string, why: string } | null, lastTickAt?: number,
+ *   reopens?: Record<string, number>,
  *   asked?: Record<string, { id: string, topic: string }>, lastTidy?: number,
  *   context?: Record<string, import("./dispatch-context.mjs").ContextEntry>,
  *   stuck?: { lastTickAt?: number, clockFrom?: number | null,
@@ -1623,6 +1624,9 @@ export function tick(
   const now = facts.now;
 
   if (!dryRun) {
+    // The heartbeat (`risa status`'s last tick): every tick writes it, paused,
+    // limited or not; the stuck watch keeps its own `stuck.lastTickAt`.
+    updateState(p.state, (s) => void (s.lastTickAt = now));
     // Due defaults first, so a question whose session died still settles and
     // its reopened session finds the answer (a dry run writes nothing).
     let settled = [];
