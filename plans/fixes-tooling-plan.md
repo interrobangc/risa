@@ -6,11 +6,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                       | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | --------------------------- | ------------------------------ |
-| 48    | 9    | RISA-1026 | opus  | merged (handed off 172f024) | 46bbadb                        |
+| Slice | Wave | Item      | Model | State                                                                                | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------ |
+| 51    | 11   | RISA-1066 | opus  | merged (81db42a; check stopped at budget in tooling step, no failure)                | 423f066                        |
+| 52    | 11   | RISA-1068 | opus  | merged (ca5850b; check stopped at 600s budget in tooling step, load ~21; no failure) | 9b04e99                        |
 
-Wave 9 green: slice 48 (RISA-1026) merged; tooling only, tier none; `pnpm test` green on fa6a59d (104 files, 2392 tests); PR and Codex review next. Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
+**Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file. Gate: tier none (tooling only); `pnpm test` green on 4b86c75 (124 files, 2585 tests); sync skipped (main shares no file); slice worktrees removed. Next: PR, Codex review, land.
+
+**Wave 10 landed** 2026-11-28 in main as 8448fee through PR #31: slices 49, 50, opus (RISA-1054, RISA-1062). Synced with main (19a7b50) first; CI unit green on 97836d7 (run 46162434569); Codex clean on 90e51cb. Report filed; to-test/2026-11-28-1104-fixes-tooling.md; slice worktrees removed. CI now checks out full history, so docs:headings bites there too.
+
+**Wave 9 landed** 2026-11-28 in main as 85bdff7 through PR #24: slice 48, opus (RISA-1026). Tooling only, tier none; `pnpm test` green on fa6a59d; Codex clean on adab17b; landed on an unsynced tip (main's 11 new commits share no file). Report filed; to-test/2026-11-28-0710-fixes-tooling.md; slice worktree removed. Nothing triaged for fixes-tooling after it, so the topic is closed (`risa rm fixes-tooling`) to free its lane, at the backlog session's request.
 
 **Wave 8 landed** 2026-11-28 in main as 845acf0 through PR #18: slices 45, 46, 47, opus (RISA-1020, RISA-1021, RISA-1022). Tooling only, tier none; `pnpm test` green after a docs-budget fix (104e013); Codex clean on c6043e7; landed on an unsynced tip (main's 5 new commits share no file). Report filed; to-test/2026-11-28-0515-fixes-tooling.md; slice worktrees removed. Docs folded: orchestrator.md (anchors exits 1 on a bad Model).
 
@@ -20,7 +25,7 @@ Wave 9 green: slice 48 (RISA-1026) merged; tooling only, tier none; `pnpm test` 
 
 **For the next session:**
 
-- **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029. After wave 9 lands, if nothing is triaged for fixes-tooling, close the topic out (`risa rm fixes-tooling`) to free the lane, as the backlog session asked.
+- **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029.
 - **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
@@ -514,3 +519,43 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - `loops/lease.test.mjs` passes 20 runs in a row under load (for example, alongside a CPU burner such as `yes > /dev/null` on several cores), and its assertions still check the wait line, the holder line and the done line.
+
+## Slice 49: CI fetches tags so docs:headings checks for real
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: ci/workflow.test.mjs
+
+**Build (RISA-1054):** `.github/workflows/ci.yml`'s `actions/checkout` step is shallow and fetches no tags, so `loops/docs-headings.mjs`'s `unloggedHeadingChanges` finds no `v*` tag in CI and passes vacuously. Give the checkout step what the check needs (`fetch-depth: 0`, which brings the history `git show <tag>:…` reads and the tags; or `fetch-tags: true` with enough depth, if that suffices: say which and why in the hand-off). Keep the workflow's flow-style, line-based shape that `ci/workflow.test.mjs` reads.
+
+**Acceptance criteria:**
+
+- Unit test (`ci/workflow.test.mjs`): the checkout step fetches the full history (or tags with what `git show <tag>:path` needs), so a shallow, tagless checkout fails the test.
+
+## Slice 50: Risa's format command ignores unknown files
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: none · Blocked by: none
+
+**Build (RISA-1062):** `risa.json`'s `commands.format` is `pnpm exec prettier --write`, so the slice brief's format step fails when the diff has a shell script. Make it `pnpm exec prettier --write --ignore-unknown`, as `loops/fixture-project/risa.json` already has. Change only that line.
+
+**Acceptance criteria:**
+
+- `pnpm exec prettier --write --ignore-unknown loops/lib.sh AGENTS.md` exits 0 and leaves `loops/lib.sh` unchanged; `pnpm check` passes.
+
+## Slice 51: recover.test.mjs splits along its describe groups
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1066):** `loops/recover.test.mjs` (about 1,100 lines, five top-level `describe` groups) runs as one slow file. Split it as `land.test.mjs` was: move the shared throwaway repo, fakes (`FAKE_LSOF`, `FAKES`, the stub hook config) and helpers into `loops/recover-fixture.mjs` (a header comment saying what it sets up, a `useRecoverRepo()`-style hook like `land-fixture.mjs`'s `useLandRepo()`), and give each group or pair of groups its own file: `recover.test.mjs` (the dry run), `recover-down.test.mjs` (down and recover, with and without the dispatcher), `recover-down-stuck.test.mjs` (down when the dispatcher won't stop) and `recover-unattended.test.mjs` (the lock, the gated dispatcher, its intent, the migrate marker), or a grouping close to it. Move tests verbatim: no test added, dropped or weakened; only imports and the setup move. Each new file keeps a header comment saying what it covers.
+
+**Acceptance criteria:**
+
+- The same test names pass before and after (`pnpm exec vitest run loops/recover` lists every old test once); no new file is over about 400 lines; `pnpm check` passes.
+
+## Slice 52: rotate.test.mjs splits along its describe groups
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1068):** `loops/rotate.test.mjs` (about 1,300 lines, six top-level `describe` groups) runs as one slow file. Split it as `land.test.mjs` was: the shared throwaway repo, stub claude, `plan()` and the other helpers into `loops/rotate-fixture.mjs` (a header comment saying what it sets up), and the groups into files such as `rotate.test.mjs` (the pure part, `pnpm prd rotate`, its standing-topic run), `rotate-into.test.mjs` (`rotate-into.sh`), `rotate-self.test.mjs` (`--self`, the inbox session) and `rm-done.test.mjs` (`pnpm prd rm` marks a finished PRD done), or a grouping close to it. Every new test file keeps the scaled waits (`import { BASE, scaledWait } from "./test-limits.mjs";` and its `vi.setConfig(…)` line, RISA-994), and `loops/test-limits.test.mjs`'s "scales %s's waits" list names each of them in place of `rotate.test.mjs` alone. Move tests verbatim: no test added, dropped or weakened.
+
+**Acceptance criteria:**
+
+- The same test names pass before and after (`pnpm exec vitest run loops/rotate loops/rm-done` lists every old test once); `loops/test-limits.test.mjs` passes naming each new file; no new file is over about 400 lines; `pnpm check` passes.

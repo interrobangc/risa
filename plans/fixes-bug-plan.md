@@ -4,25 +4,35 @@
 
 ## Status
 
+**From the user:** (none yet)
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
+| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | started |                            |
+| 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
 
-**Wave 1** (slices 1–5, all opus; 5 after 4): the plan's first wave, started 2026-11-28. RISA-985 was closed at triage without a slice: a489eef (PR #3) already fixed it. Slices 1–4 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each); 5 waits for 4's merge. Slice 1 handed off (a new `too-long` verdict state, never clean; review.sh exits 3 on it) and merged. Slice 2 merged (pickup checks the loaded config's and RISA_MAIN's checkout, not lib.sh's; dev_sync runs on the project). Slice 4 merged (helper `backlog_run` in lib.sh over a shared `loops/backlog-config.sh`, which bin/risa now sources); slice 5 started. Slice 3 merged (stack down/status/ready exit 0 with no hooks). Slice 5 merged (kept the `cd "$main"` wrappers: backlog.mjs still takes its checkout and By: from the cwd). All five merged; sync skipped (no shared files); `risa tier`: none (tooling only), so the gate was `risa check`: green on 6d5cfc0 (2377 tests). Slice worktrees removed. PR #13: Codex clean on 83c70a7. **Landed** 2026-11-28 in main as 3598122 (tier none, unsynced tip: main's one commit shared no file); to-test file `to-test/2026-11-28-0223-fixes-bug.md`. The `Model:` rule went into plans/fixes-rules.md.
+**Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
-**Wave 2** (slices 6–9), 2026-11-28: synced main first (19c92dd; fixes-rules.md conflict resolved to main's topic list). RISA-1050 waits for a later wave: it touches the dispatcher (`loops/dispatch`, hot for running risa-next-2). Slice 7 is sonnet (a wording change the plan spells out); the rest opus. Slices 6–9 started (worktrees `.loops/fixes-bug-<n>`, one agent each). Slice 7 handed off (8eb3c96: the header names _Directives_, _From the user_ or both). Slice 6 handed off (e1cc3ac: prettier from the project, then Risa's own, else formatting skipped with a line). Both merged (e29fab7, cf93d26). Slice 8 handed off (5b60cd4: `Adm Morrow · backlog (caretook)`; old-order names still read; also keep-alive.mjs and session-requests.mjs matchers, backlog.md's name sentence) and merged (9f14e04). plans/risa-next-prd.md's note that matchers need no change is now stale. Slice 9 handed off (d362c67: `mergeAdditions` in doc.mjs; `pnpm docs:headings` (loops/docs-headings.mjs) in `pnpm check`; new CHANGELOG.md; the fixture planner's skeptic-pass addition now merges into its section) and merged (c0751bb). CI's shallow checkout fetches no tags, so docs:headings passes vacuously there: filed as RISA-1054 (fixes-tooling). Wave gate: `risa ci run unit` (tier from `risa tier`: ci.yml changed) on 23a6955: **green** (run 46154596385). Slice worktrees removed; sync skipped (up to date). PR #27 opened; Codex review running.
+**Wave 2** (slices 6–9, RISA-1023/1024/1039/1049): landed 2026-11-28 in main as 5767dfb (PR #27, tier unit, run 46154596385); Codex's P2 (CI fetches no tags) is RISA-1054 (fixes-tooling). Caretook's backlog session told 5767dfb has RISA-1049.
 
-**For the next session:** RISA-1050 waits (dispatcher hot for risa-next-2). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
+**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); merged (47c911a). Slice 12 handed off (b7c1d48: session.sh calls the new `session-names.mjs start`, which returns display and persona from one draw, and passes `persona=` to the first record's `sessions.mjs set`; `keptPersona` in captain.mjs) and merged (a04752b). `risa tier`: none, gate `risa check` green on 116704e (2567 tests). Sync: no merge needed. Slice worktrees removed. PR #33 opened; Codex review out. Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3). Slice 11 handed off (7135a2a: `machineHeld` in captain.mjs reads every machine repo's live records; `personaFor`/`drawAdmiral` take `held`; a stepped persona is kept in the session record's `persona`; also edited loops/session-names.mjs `personaOf`, added to hot) and merged (6e331aa). `risa tier`: none (tooling only), so the gate is `risa check`: green on 0d6ee37 (2543 tests). Synced main (4142eb2; session-names.mjs import conflict with fixes-nit's RISA-1019 refactor, kept both); `pnpm test` green on the synced tip. Slice worktrees removed. PR #30: one Codex P2 (a fresh session's stepped persona isn't kept in its first record), tracked as RISA-1064 (fixes-bug, triaged), thread resolved; Codex clean on 9959f75. **Landed** 2026-11-28 in main as 6f1daaa (tier none, unsynced tip: main's 1 commit shared no file); to-test file `to-test/2026-11-28-1045-fixes-bug.md`; report filed.
+
+**Wave 4** (slices 12–13, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1064 (loops/captain, loops/session.sh) and RISA-1065 (loops/time-gate) clear of risa-next-2's hot files; RISA-1050 still waits (`loops/dispatch`). Hot set: loops/captain, loops/session, loops/time-gate, loops/docs. Items claimed; slices 12–13 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); merged (47c911a). Slice 12 handed off (b7c1d48: session.sh calls the new `session-names.mjs start`, which returns display and persona from one draw, and passes `persona=` to the first record's `sessions.mjs set`; `keptPersona` in captain.mjs) and merged (a04752b). `risa tier`: none, gate `risa check` green on 116704e (2567 tests). Sync: no merge needed. Slice worktrees removed. PR #33 opened; Codex review out.
+
+**For the next session:** first run `risa backlog prd list`. RISA-1064 (loops/captain.mjs, loops/session.sh) is the next wave's item if neither is hot. risa-next-2 (2026-11-28): wave 1 landed in main (36eee3e, PR #28); `backlog/` stays hot through its wave 4, `loops/dispatch` hot only in wave 4; its next session will say when each frees (RISA-1050 waits on dispatch). When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
 ## How to run this plan
 
@@ -120,3 +130,43 @@ Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests:
 
 - Unit test (`loops/doc.test.mjs`): an additions `## <Heading>` lands at the end of the matching section; unmatched and headless parts append at the end.
 - Unit test (beside the new check): a heading rename with no CHANGELOG line fails, naming the doc and heading; with the line it passes; no tag passes.
+
+## Slice 10: The inbox session's rotate hint runs from anywhere
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/context.test.mjs
+
+**Build (RISA-1061):** `inboxRotate` (`loops/context.mjs`) hands the inbox session `pnpm -s -C <main> prd rotate --self`, but Risa's `package.json` has no `prd` script, so the hint fails. Build it from the configured command (`toolCmd.prd`, `loops/config.mjs`), the way the other context-watch hints in the file do, and keep it runnable from outside the repo: if the configured command needs the main checkout as its cwd, say so in the hint (`cd <main> && …`) rather than assuming a package script. Update the expectations in `loops/context.test.mjs` (around lines 315, 330, 363, 539). Don't touch `loops/dispatch*` or `loops/prd.sh` (hot for risa-next-2).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/context.test.mjs`): the inbox reminder and nudge name the configured command's `rotate --self`, never `pnpm … prd`; with a project command configured it names that.
+
+## Slice 11: Persona draws don't collide across projects on one machine
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/captain.test.mjs
+
+**Build (RISA-1063):** two projects' backlog sessions both drew Admiral Cartwright, and `prd-fixes-bug` (risa) and `prd-account-security` (caretook) both got Captain Saru: `drawAdmiral` / `nextCaptain` (`loops/flavor.mjs`, `loops/captain.mjs`) skip only this project's last name, and `personaFor` is a hash of the session name alone. Skip names held by any live session on the machine: read the live session records of every repo the machine config lists (reuse the existing record readers in `loops/sessions.mjs` and `loops/machine.mjs`; don't copy them), and draw the admiral from the pool minus those; for a PRD (or other hashed role) persona, keep the hash as the starting point but step to the next pool entry free on the machine, so a name already held keeps its persona. When every name is held, fall back to today's draw. Keep `nextCaptain`'s signature (its caller in `loops/dispatch.mjs` is hot for risa-next-2: don't edit it). Say in the hand-off where the held names are read and how a persona stays stable for a session that already has one.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/captain.test.mjs`, `loops/flavor.test.mjs`): with another project's live backlog session holding an admiral, the draw never returns it; a PRD session whose hashed captain another project's live session holds gets a different one, and the same session name reads back the same persona; with every name held, the draw still returns one; flavor none unchanged.
+
+## Slice 12: A fresh session's stepped persona is kept in its first record
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/captain.test.mjs
+
+**Build (RISA-1064):** a follow-up of slice 11 (Codex P2 on PR #30). `loops/session.sh` computes the display name before the session's record exists, so `machinePersona` (`loops/captain.mjs`) has no record to write the stepped persona into, and `machineHeld` then reads that session as its hashed name: a third session can draw the stepped name too. Carry the persona chosen for the name into the session's first record (pass it to whatever writes the record, or write the record with it), so `machineHeld` reads the stepped persona from the start and the same session name reads it back. Don't touch `loops/dispatch*` or `loops/prd.sh` (hot for risa-next-2). Say in the hand-off where the first record gets its persona.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/captain.test.mjs`, plus a session.sh test if one exists): a fresh session whose hashed captain is held elsewhere gets a stepped one, its first record carries it, and a third session then draws neither the held name nor the stepped one; a session with a record keeps its persona as before.
+
+## Slice 13: The time gate judges the local measure on its start load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/time-gate.test.mjs
+
+**Build (RISA-1065):** `timeGate` (`loops/time-gate.mjs`, around line 77) sets `quiet = calm(start) && calm(end)`, but a local check's end load counts the check's own work, so every Caretook quick check comes out unjudged and its quick gate can't be armed. Judge the local measure when the start load is quiet; the end load stays in the input and in the lines (both the judged and the unjudged lines name both loads) but no longer decides unjudged. CI measures unchanged. If a doc (`loops/docs/*.md`) states the quiet rule, update it in the same words.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/time-gate.test.mjs`): quiet start with a busy end is judged (ok, warn and fail cases); a busy start is unjudged; the lines name both loads; a CI measure is judged as before.

@@ -8,12 +8,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   DEFAULT_FLAVOR,
   FLAVORS,
+  PACKS,
   ROLES,
   drawAdmiral,
   flavorLine,
   flavorOf,
   label,
   namesOf,
+  packLine,
   personaFor,
   personaOfLabel,
   poolOf,
@@ -109,6 +111,23 @@ describe("personaFor", () => {
     }
   });
 
+  it("steps from the hashed one to the next entry HELD doesn't name; the hashed one when it names them all", () => {
+    const pool = namesOf("prd");
+    const hashed = /** @type {{ name: string }} */ (personaFor("prd", "prd-fixes-bug")).name;
+    const next = pool[(pool.indexOf(hashed) + 1) % pool.length];
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", [hashed])).toEqual({
+      rank: "Captain",
+      name: next,
+    });
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", [hashed, next])?.name).toBe(
+      pool[(pool.indexOf(hashed) + 2) % pool.length],
+    );
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", ["Picard"])?.name).toBe(hashed);
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", pool)?.name).toBe(hashed);
+    expect(sessionPersona("prd", "prd-fixes-bug", "starfleet", [hashed])?.name).toBe(next);
+    expect(personaFor("prd", "prd-fixes-bug", "none", [hashed])).toBeNull();
+  });
+
   it("is null under none, and for a role the pack doesn't name", () => {
     for (const role of ROLES) expect(personaFor(role, "prd-x", "none")).toBeNull();
     expect(personaFor("dispatcher", "x")).toBeNull();
@@ -141,7 +160,22 @@ describe("drawAdmiral", () => {
     expect(drawAdmiral(null, fixed(1))).toBe(admirals.at(-1));
   });
 
+  it("never draws one another live session on the machine holds; with every one held, today's draw", () => {
+    const admirals = namesOf("backlog");
+    for (let i = 0; i < admirals.length; i++) {
+      const a = drawAdmiral("Ross", fixed(i / admirals.length), "starfleet", ["Cartwright", "Nogura"]);
+      expect(admirals).toContain(a);
+      expect(["Ross", "Cartwright", "Nogura"]).not.toContain(a);
+    }
+    for (let i = 0; i < admirals.length; i++) {
+      const a = drawAdmiral("Ross", fixed(i / admirals.length), "starfleet", admirals);
+      expect(a).toBe(drawAdmiral("Ross", fixed(i / admirals.length)));
+      expect(a).not.toBe("Ross");
+    }
+  });
+
   it("is the bare backlog under none", () => {
+    expect(drawAdmiral(null, Math.random, "none", ["Ross"])).toBe("backlog");
     expect(drawAdmiral(null, Math.random, "none")).toBe("backlog");
     expect(drawAdmiral("backlog", Math.random, "none")).toBe("backlog");
   });
@@ -159,9 +193,28 @@ describe("label and flavorLine", () => {
     const line = flavorLine("prd", persona);
     expect(line.startsWith(`- You are ${label(persona)}: `)).toBe(true);
     expect(line).toContain("your replies to the user");
-    expect(line).toContain("address the user as Fleet Admiral");
-    expect(line).toContain("never inside questions, options or commands");
+    expect(line).toContain("address the user as Fleet Admiral only when speaking to them directly");
+    expect(line).toContain("never goes inside questions, options or commands");
     expect(line.split("\n")).toHaveLength(1);
+  });
+
+  it("writes the session's own narration to the pack's log, the starfleet captain's log (RISA-1041)", () => {
+    const line = flavorLine("backlog", { rank: "Admiral", name: "Morrow" });
+    expect(line).toContain("narration of your own work as an entry in your captain's log");
+    expect(line).toContain(
+      "address the user as Fleet Admiral only when speaking to them directly (an answer to their message, a question to them)",
+    );
+  });
+
+  it("keeps a plain report voice, no log wording, for a pack with no log", () => {
+    const { log, ...plain } = PACKS.starfleet;
+    expect(log).toBe("captain's log");
+    const persona = { rank: "Captain", name: "Sisko" };
+    const line = packLine(plain, "prd", persona);
+    expect(line.startsWith("- You are Captain Sisko: ")).toBe(true);
+    expect(line).not.toMatch(/\blog\b|narration|entry/);
+    expect(line).toContain("address the user as Fleet Admiral only when speaking to them directly");
+    expect(packLine(PACKS.starfleet, "prd", persona)).toBe(flavorLine("prd", persona));
   });
 
   it("is empty under none, with no persona, or for a role the pack doesn't name", () => {

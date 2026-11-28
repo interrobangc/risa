@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd doc <role> [section]: a role's doc as a session reads it.
+// doc <role> [section]: a role's doc as a session reads it.
 //
 // Each role (loop, orchestrator, planner, …) has one generic doc, the core's, in
 // docs/<role>.md beside this file. A project changes it through its config's
@@ -19,7 +19,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ConfigError, loadConfig } from "./config.mjs";
+import { ConfigError, loadConfig, toolCommands } from "./config.mjs";
 
 /** The core's generic role docs. */
 export const GENERIC_DIR = fileURLToPath(new URL("./docs", import.meta.url));
@@ -213,20 +213,31 @@ export function roleDoc(role, { config, root, section, genericDir = GENERIC_DIR 
   return part;
 }
 
+/** The doc command, as its errors name it: the config's tool name, or the subcommand alone when the config won't load. */
+const docCommand = () => {
+  try {
+    return `${toolCommands().prd} doc`;
+  } catch {
+    return "doc";
+  }
+};
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [role, ...rest] = process.argv.slice(2);
   try {
     const { config, root } = loadConfig();
     if (!role || role === "help" || role === "--help") {
       process.stderr.write(
-        `usage: prd doc <role> [section]\n  the roles: ${knownRoles(config).join(", ")}\n`,
+        `usage: ${toolCommands(config).prd} doc <role> [section]\n  the roles: ${knownRoles(config).join(", ")}\n`,
       );
       process.exit(2);
     }
     process.stdout.write(roleDoc(role, { config, root, section: rest.join(" ") || undefined }));
   } catch (e) {
     if (!(e instanceof DocError || e instanceof ConfigError)) throw e;
-    process.stderr.write(`prd doc: ${e instanceof ConfigError ? e.problems.join("; ") : e.message}\n`);
+    process.stderr.write(
+      `${docCommand()}: ${e instanceof ConfigError ? e.problems.join("; ") : e.message}\n`,
+    );
     process.exit(2);
   }
 }

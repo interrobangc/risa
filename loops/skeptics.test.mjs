@@ -240,6 +240,17 @@ describe("the checker", () => {
     expect(r.reason).toMatch(reason);
   });
 
+  it("names the configured command in a decide's refusal, not a literal one", () => {
+    const saved = process.env.RISA_CONFIG;
+    process.env.RISA_CONFIG = join(FIXTURE, "risa.json");
+    try {
+      expect(check(decide(), wantAsk()).reason).toContain("pnpm prd ask --decided --skeptic");
+    } finally {
+      if (saved === undefined) delete process.env.RISA_CONFIG;
+      else process.env.RISA_CONFIG = saved;
+    }
+  });
+
   it("files a decision only from a matching decide on a defaulting question", () => {
     expect(check(decide(), wantDecided())).toEqual({ ok: true });
     expect(check(ask(), wantDecided()).reason).toMatch(/isn't a decide/);

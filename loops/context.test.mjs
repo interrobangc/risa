@@ -16,7 +16,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { gitInit, withOldGit } from "./git-init.mjs";
-import { agentTranscript, hardLimitFor, hookDecision, limitOf, sizeFromTranscript } from "./context.mjs";
+import {
+  agentTranscript,
+  hardLimitFor,
+  hookDecision,
+  inboxRotate,
+  limitOf,
+  sizeFromTranscript,
+} from "./context.mjs";
 import { toolCmd } from "./config.mjs";
 import { processOf } from "./sessions.mjs";
 
@@ -311,8 +318,15 @@ describe("hookDecision", () => {
     });
   });
 
+  it("builds the inbox session's hand-off from the configured command, run in the main checkout", () => {
+    // The fixture project's command is a package script (`pnpm prd`): it needs main as its cwd.
+    expect(inboxRotate("/m")).toBe(`cd /m && ${toolCmd.prd} rotate --self`);
+    expect(inboxRotate("/m", "acme")).toBe("cd /m && acme rotate --self");
+    expect(inboxRotate("/m", "acme")).not.toMatch(/pnpm|prd/);
+  });
+
   it("gives the inbox session its own words: its hand-off command, no brief", () => {
-    const inbox = "pnpm -s -C /m prd rotate --self";
+    const inbox = inboxRotate("/m");
     const first = hookDecision(null, { ...facts, size: 170_000, inbox });
     expect(first.message).toContain("170k");
     expect(first.message).toContain("never in the middle of a request");
@@ -327,7 +341,7 @@ describe("hookDecision", () => {
   });
 
   it("gives the inbox session its rotate reminder past soft and under the orchestrator's hard limit, never a judge one", () => {
-    const inbox = "pnpm -s -C /m prd rotate --self";
+    const inbox = inboxRotate("/m");
     const first = hookDecision(null, { ...facts, size: 170_000, hard: 225_000, inbox });
     expect(first.message).toContain("fresh inbox session takes over");
     expect(first.message).toContain("past the 160k limit");
@@ -360,7 +374,7 @@ describe("hookDecision", () => {
     const inbox = hookDecision(null, {
       ...at125,
       limit: limitOf({}, "inbox"),
-      inbox: "pnpm -s -C /m prd rotate --self",
+      inbox: inboxRotate("/m"),
     });
     expect(inbox.message).toBeNull();
     expect(hookDecision(null, { ...at125, limit: limitOf({}, "inbox"), loop: true }).message).toBeNull();
@@ -536,7 +550,15 @@ describe("the hook as a command", () => {
     const r = hook({ transcript_path: transcript }, asInbox);
     // The sessions folder is <main>/.loops/.sessions; here <root>/.sessions, so main is root's parent.
     expect(contextOf(r.stdout).additionalContext).toContain(
-      `\`pnpm -s -C ${dirname(root)} prd rotate --self\``,
+      `\`cd ${dirname(root)} && ${toolCmd.prd} rotate --self\``,
+    );
+    expect(contextOf(r.stdout).additionalContext).not.toContain("pnpm -s -C");
+    // A project naming its own command (the sample project's `risa`) is handed that.
+    writeFileSync(join(context, "inbox.json"), "{}");
+    const sample = new URL("./sample-project/risa.json", import.meta.url).pathname;
+    const own = hook({ transcript_path: transcript }, { ...asInbox, RISA_CONFIG: sample });
+    expect(contextOf(own.stdout).additionalContext).toContain(
+      `\`cd ${dirname(root)} && risa rotate --self\``,
     );
     expect(JSON.parse(readFileSync(join(context, "inbox.json"), "utf8"))).toMatchObject({ size: 170_001 });
   });

@@ -18,3 +18,4 @@ For Risa's fix topics (`fixes-bug-urgent`, `fixes-bug`, `fixes-bug-later`, `fixe
 
 - **Before hand-off:** `risa check --quick "slice hand-off"`. Never the browser harness unless the fix touches the browser gate (`pnpm test:browser-harness`).
 - **At landing:** `pnpm check` once on the merged tip. No checks between merges; never rerun a check that passed.
+- **Role-doc headings:** a fix that adds, renames, removes or moves a `##` heading in `loops/docs/*.md`, or changes a doc's last section, adds a line naming the doc and heading under `## Unreleased` in `CHANGELOG.md` (`pnpm docs:headings`): projects' additions target those headings.

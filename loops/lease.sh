@@ -44,7 +44,7 @@
 # RISA_LEASE_ROOT or RISA_BROWSER_LEASES set there is none unless it's
 # set), each one counts against the limit here, and `holders` lists them. An
 # old browser.sh can't see the new directory, so the limit holds only once
-# every worktree has run `prd sync`. Drop this once nothing uses the old path.
+# every worktree has run `sync`. Drop this once nothing uses the old path.
 #
 # Source it for the functions (browser.sh does): lease_take, lease_write,
 # lease_release, lease_holders. Node callers in the core use lease.mjs

@@ -1,7 +1,7 @@
 // Session records: .loops/.sessions/<name>.json, one per session started
 // through session.sh: an orchestrator, planner, backlog, hotfix, recovery or inbox
-// session (pid, kind, topic, started, command, model, remote, dir, auto, managed (the dispatcher started it), rotating, and ended and
-// exit once it has exited). A record
+// session (pid, kind, topic, started, command, model, remote, dir, auto, managed (the dispatcher started it), rotating,
+// persona (one stepped off its hash, captain.mjs's machinePersona), and ended and exit once it has exited). A record
 // stays after its session exits and goes with its worktree (rm.sh), so "no
 // live session" is a pid check.
 //
@@ -13,7 +13,7 @@
 //   - ancestorClaude(pid, table, name): walking parent pids up from PID, the
 //     first process whose command (or its script, for `bash <stub>`) is NAME:
 //     the calling shell's own claude, for a session started before the wrapper.
-//   - endTarget(name, record, facts): the claude process `prd end <name>`
+//   - endTarget(name, record, facts): the claude process `end <name>`
 //     may end (B-810): the record's pid only while it is a claude process of
 //     that session (under `session.sh <name>`, or running in the record's dir),
 //     else the one live claude under `session.sh <name>` in that dir (a reopen
@@ -40,7 +40,7 @@
 //   node sessions.mjs self [<name>]           the calling session: "<pid> record"
 //                                             when NAME's record is live, else
 //                                             "<pid> ancestor" (exit 1: neither)
-//   node sessions.mjs target <name>           the process `prd end <name>` ends
+//   node sessions.mjs target <name>           the process `end <name>` ends
 //                                             (endTarget): "<pid> record", or
 //                                             "<pid> reopened <stale pid>" (the
 //                                             record is set to that pid first);
@@ -84,7 +84,8 @@ export function parseEtime(/** @type {string} */ s) {
 
 /**
  * @typedef {{ pid?: number, kind?: string, topic?: string, started?: string, command?: string, model?: string,
- *   remote?: string, dir?: string, auto?: boolean, managed?: boolean, rotating?: boolean, ended?: string, exit?: number }} SessionRecord
+ *   remote?: string, dir?: string, auto?: boolean, managed?: boolean, rotating?: boolean, ended?: string, exit?: number,
+ *   persona?: string }} SessionRecord
  */
 
 /**
@@ -160,13 +161,13 @@ export function wrappedAs(pid, table, claude) {
 }
 
 /**
- * Which process `prd end <name>` ends (B-810: a reopened session's record
+ * Which process `end <name>` ends (B-810: a reopened session's record
  * once named an older pid, and end killed that instead of the live session).
  *
  * The record's pid only while the record is live and the pid is a claude
  * process of this session: under `session.sh <name>`, running in the
  * record's dir (a session whose wrapper is gone), or the caller's own ancestor
- * claude (a session ending itself, `prd bye`). Otherwise the one live claude
+ * claude (a session ending itself, `bye`). Otherwise the one live claude
  * right under `session.sh <name>` in the record's dir: a reopen whose record
  * still names the old pid. Two such sessions, or a pid that isn't the
  * session's, are refused: it never ends a process it can't tie to the session.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop everything before a planned restart, and record what was running so
-# `prd recover` brings back exactly that. (prd down)
+# `recover` brings back exactly that. (the down command)
 #
 #   down.sh   1. write the down record (.loops/.down.json: the stacks and dev
 #                servers that are up, whether the shared test Postgres is, and

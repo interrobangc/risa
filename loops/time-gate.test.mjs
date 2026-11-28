@@ -81,25 +81,45 @@ describe("timeGate", () => {
     ]);
   });
 
-  it("judges the local measure only when the start and the end are quiet", () => {
+  it("judges the local measure on a quiet start, whatever the end load", () => {
+    const at = (start, end, seconds = 400) =>
+      timeGate({ measure: "quick", seconds, limits: armed, loads: { start, end, cores: 10 } });
+    expect(at(10, 10).verdict).toBe("fail"); // at most the core count is quiet
+    // The end load counts the check's own work: a busy or unread end still judges.
+    for (const end of [25, 99, null, undefined]) {
+      expect(at(4, end, 200)).toMatchObject({ verdict: "ok", quiet: true });
+      expect(at(4, end, 330)).toMatchObject({ verdict: "warn", quiet: true });
+      expect(at(4, end, 400)).toMatchObject({ verdict: "fail", quiet: true });
+    }
+    expect(at(4, 25, 200).lines).toEqual([
+      "Time gate quick: 3m20s (200 s); aim 5m00s, cutoff 6m00s (load 4 at the start, 25 at the end): ok.",
+    ]);
+    expect(at(4, 25, 330).lines[0]).toBe(
+      "Time gate quick: 5m30s (330 s); aim 5m00s, cutoff 6m00s (load 4 at the start, 25 at the end): WARN, 30 s past the aim.",
+    );
+    expect(at(4, null).lines[0]).toContain(
+      "(load 4 at the start, unread at the end): FAIL, 40 s past the cutoff.",
+    );
+  });
+
+  it("doesn't judge the local measure on a busy or unread start, naming both loads", () => {
     const at = (start, end) =>
       timeGate({ measure: "quick", seconds: 400, limits: armed, loads: { start, end, cores: 10 } });
-    expect(at(10, 10).verdict).toBe("fail"); // at most the core count is quiet
     for (const [start, end] of [
       [10.1, 4],
-      [4, 25],
+      [25, 25],
       [null, 4],
-      [4, undefined],
+      [undefined, undefined],
     ]) {
       const r = at(start, end);
       expect(r).toMatchObject({ verdict: "unjudged", quiet: false });
       expect(r.lines).toHaveLength(1);
       expect(r.lines[0]).toMatch(
-        /^Time gate quick: 6m40s \(400 s\).*: not judged \(load .* quiet is at most 10 on 10 cores\)\.$/,
+        /^Time gate quick: 6m40s \(400 s\).*: not judged \(load .* at the start, .* at the end; quiet is a start load of at most 10 on 10 cores\)\.$/,
       );
     }
     expect(at(25, 4).lines[0]).toContain("load 25 at the start, 4 at the end");
-    expect(at(null, 4).lines[0]).toContain("load unread at the start");
+    expect(at(null, 4).lines[0]).toContain("load unread at the start, 4 at the end");
   });
 
   it("is unjudged with no loads at all, and scales the quiet load per core", () => {
@@ -108,10 +128,12 @@ describe("timeGate", () => {
     expect(timeGate({ measure: "quick", seconds: 100, limits: armed, loads }).verdict).toBe("ok");
   });
 
-  it("never judges a CI measure on load", () => {
+  it("never judges a CI measure on load, nor names its loads", () => {
     const loads = { start: 99, end: 99, cores: 2 };
     const r = timeGate({ measure: "unit", seconds: 100, limits: armed, loads });
     expect(r).toMatchObject({ verdict: "ok", quiet: null });
+    expect(r.lines).toEqual(["Time gate unit: 1m40s (100 s); aim 5m00s, cutoff 6m00s: ok."]);
+    expect(timeGate({ measure: "components", seconds: 390, limits: armed, loads }).verdict).toBe("fail");
   });
 });
 
@@ -230,6 +252,8 @@ describe("the CLI", () => {
     const quick = ["--measure", "quick", "--seconds", "200", "--load-start", "7", "--load-end", "8"];
     expect(runCli(quick, io()).out.split("\n")[0]).toBe("ok");
     expect(runCli([...quick, "--cores", "4"], io()).out.split("\n")[0]).toBe("unjudged");
+    const busyEnd = ["--measure", "quick", "--seconds", "200", "--load-start", "2", "--load-end", "30"];
+    expect(runCli(busyEnd, io()).out.split("\n")[0]).toBe("ok");
     expect(runCli(["--measure", "quick", "--seconds", "200"], io()).out).toMatch(/^unjudged\n/);
   });
 

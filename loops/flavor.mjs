@@ -1,5 +1,6 @@
 // The flavor packs (RISA-914): per role a rank and a pool of canon single-word
-// names, and how to address the user. The only code that knows the packs; every
+// names, how to address the user, and the log a session's own narration is written
+// to (RISA-1041). The only code that knows the packs; every
 // other file asks it. `starfleet` is the default; `none` is the empty pack (no
 // persona, no line). The machine config's `flavor` picks one for the machine
 // (machine.mjs validates it against FLAVORS).
@@ -13,8 +14,9 @@
 //   node flavor.mjs persona <role> <name>   `<rank>\t<name>`; nothing under none
 //   node flavor.mjs label <role> <name>     `<Rank> <Name>`; nothing under none
 //   node flavor.mjs line <role> <name>      the prompt's flavor line; nothing under none
-// Each takes the session's persona (sessionPersona): for the backlog role, <name> is
-// its drawn admiral (RISA_CAPTAIN), not a session name to hash.
+// Each takes the session's persona (captain.mjs's machinePersona): for the backlog
+// role, <name> is its drawn admiral (RISA_CAPTAIN), not a session name to hash; any
+// other role's steps past the names other live sessions on the machine wear.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -23,9 +25,10 @@ export const ROLES = Object.freeze(["backlog", "prd", "slice", "inbox", "hotfix"
 
 /** @typedef {{ rank: string, name: string }} Persona */
 /**
- * A pack: how to address the user, each role's pool, and each rank's short form
- * (the session name's, session-names.mjs; written as the name shows it, `Adm`).
- * @typedef {{ address: string, roles: Record<string, readonly Persona[]>, short: Record<string, string> }} Pack
+ * A pack: how to address the user, the log a session's narration of its own work reads
+ * as (none: a plain report voice), each role's pool, and each rank's short form (the
+ * session name's, session-names.mjs; written as the name shows it, `Adm`).
+ * @typedef {{ address: string, log?: string, roles: Record<string, readonly Persona[]>, short: Record<string, string> }} Pack
  */
 
 /** One rank for every name. @param {string} rank @param {string[]} names */
@@ -36,6 +39,8 @@ export const PACKS = Object.freeze({
   starfleet: Object.freeze({
     // A high-ranking officer, not President.
     address: "Fleet Admiral",
+    // Narration of a session's own work is an entry here, for the user to review later.
+    log: "captain's log",
     // Each rank's short form: ADM, CAPT, CMDR, LCDR, LT, ENS, and the usual Yeo and Dr.
     short: Object.freeze({
       Admiral: "Adm",
@@ -140,41 +145,59 @@ function hash(text) {
 }
 
 /**
- * The persona for a ROLE session named SESSIONNAME: the same entry of the role's
- * pool every time (a stable hash of the name); null under none or for a role
- * the pack doesn't name.
+ * The persona for a ROLE session named SESSIONNAME: the role's pool entry a stable
+ * hash of the name picks, or, when HELD (names other live sessions on the machine
+ * wear, RISA-1063: captain.mjs's machineHeld) has it, the next entry after it that
+ * HELD hasn't; the hashed one when HELD has them all. Null under none or for a
+ * role the pack doesn't name.
  * @param {string} role @param {string} sessionName
+ * @param {Iterable<string>} [held]
  * @returns {Persona | null}
  */
-export function personaFor(role, sessionName, flavor = DEFAULT_FLAVOR) {
+export function personaFor(role, sessionName, flavor = DEFAULT_FLAVOR, held = []) {
   const pool = poolOf(role, flavor);
   if (!pool.length) return null;
-  const p = pool[hash(String(sessionName)) % pool.length];
+  const start = hash(String(sessionName)) % pool.length;
+  const taken = new Set(held);
+  let p = pool[start];
+  for (let k = 0; k < pool.length; k++) {
+    const q = pool[(start + k) % pool.length];
+    if (!taken.has(q.name)) {
+      p = q;
+      break;
+    }
+  }
   return { rank: p.rank, name: p.name };
 }
 
 /**
  * The persona of a ROLE session named NAME: the backlog's NAME is its drawn admiral
  * (drawAdmiral; one word, not the bare `backlog`), worn with the pool's rank;
- * every other role's comes from personaFor. Null under none or for no persona.
+ * every other role's comes from personaFor (stepping past HELD). Null under none or for no persona.
  * @param {string} role @param {string} name
+ * @param {Iterable<string>} [held]
  * @returns {Persona | null}
  */
-export function sessionPersona(role, name, flavor = DEFAULT_FLAVOR) {
-  if (role !== "backlog") return personaFor(role, name, flavor);
+export function sessionPersona(role, name, flavor = DEFAULT_FLAVOR, held = []) {
+  if (role !== "backlog") return personaFor(role, name, flavor, held);
   const rank = poolOf(role, flavor)[0]?.rank;
   return rank && /^[A-Za-z]+$/.test(name) && name !== "backlog" ? { rank, name } : null;
 }
 
 /**
  * The main backlog session's name for a new session: an admiral from the pack's
- * backlog pool, never LAST; under none (an empty pool), the bare `backlog`.
- * RANDOM is a source of numbers in [0, 1) (Math.random; tests pass a fixed one).
+ * backlog pool, never LAST, nor one HELD names (admirals other live sessions on the
+ * machine wear, RISA-1063) while one is free; under none (an empty pool), the bare
+ * `backlog`. RANDOM is a source of numbers in [0, 1) (Math.random; tests pass a fixed one).
  * @param {string | null | undefined} last
  * @param {() => number} [random]
+ * @param {Iterable<string>} [held]
  */
-export function drawAdmiral(last, random = Math.random, flavor = DEFAULT_FLAVOR) {
-  const pool = namesOf("backlog", flavor).filter((n) => n !== last);
+export function drawAdmiral(last, random = Math.random, flavor = DEFAULT_FLAVOR, held = []) {
+  const taken = new Set(held);
+  const all = namesOf("backlog", flavor).filter((n) => n !== last);
+  const free = all.filter((n) => !taken.has(n));
+  const pool = free.length ? free : all;
   if (!pool.length) return "backlog";
   const i = Math.floor(random() * pool.length);
   return pool[Math.min(Math.max(i, 0), pool.length - 1)];
@@ -208,18 +231,25 @@ export function personaOfLabel(text, flavor = DEFAULT_FLAVOR) {
 
 /**
  * The one prompt line for ROLE's PERSONA: who the session is, the light touch in
- * replies only, how to address the user, and where the flavor never goes; "" for
- * no persona or a role the pack doesn't name.
+ * replies only, the pack's log its narration of its own work reads as (none without
+ * one), the user's title only when speaking to them, and where the flavor never goes;
+ * "" for no persona or a role the pack doesn't name.
  * @param {string} role @param {Persona | null | undefined} persona
  */
-export function flavorLine(role, persona, flavor = DEFAULT_FLAVOR) {
-  const pack = packOf(flavor);
+export const flavorLine = (role, persona, flavor = DEFAULT_FLAVOR) => packLine(packOf(flavor), role, persona);
+
+/**
+ * flavorLine's line under PACK itself (tests pass a pack the table doesn't hold).
+ * @param {Pack} pack @param {string} role @param {Persona | null | undefined} persona
+ */
+export function packLine(pack, role, persona) {
   if (!persona || !Object.hasOwn(pack.roles, role)) return "";
+  const log = pack.log ? `write narration of your own work as an entry in your ${pack.log}, and ` : "";
   return (
     `- You are ${label(persona)}: let a light touch of their manner color your replies to the user, ` +
-    `at most one per reply, and address the user as ${pack.address}; ` +
-    "never inside questions, options or commands, nor in commits, files or anything an agent reads. " +
-    "Substance, rules and brevity are unchanged."
+    `at most one per reply; ${log}address the user as ${pack.address} only when speaking to them directly ` +
+    "(an answer to their message, a question to them). The flavor never goes inside questions, options " +
+    "or commands, nor in commits, files or anything an agent reads. Substance, rules and brevity are unchanged."
   );
 }
 
@@ -237,16 +267,12 @@ if (isMain()) {
     console.error(`usage: flavor.mjs persona|label|line <role> <name>   (role: ${ROLES.join(", ")})`);
     process.exit(2);
   }
-  // Loaded here, not at the top, and without a top-level await: machine.mjs asks
-  // this module for FLAVORS, and an await here would hold its import forever.
-  import("./machine.mjs").then(({ loadMachineConfig }) => {
-    let flavor = DEFAULT_FLAVOR;
-    try {
-      flavor = flavorOf(loadMachineConfig());
-    } catch {
-      // A machine config that doesn't load: `machine.mjs check` reports it; the default here.
-    }
-    const persona = sessionPersona(/** @type {string} */ (role), name, flavor);
+  // Loaded here, not at the top, and without a top-level await: machine.mjs (which
+  // captain.mjs loads) asks this module for FLAVORS, and an await here would hold
+  // its import forever. machineFlavor: a config that doesn't load reads as the default.
+  import("./captain.mjs").then(({ machineFlavor, machinePersona }) => {
+    const flavor = machineFlavor();
+    const persona = machinePersona(/** @type {string} */ (role), name, flavor);
     const out =
       verb === "persona"
         ? persona && `${persona.rank}\t${persona.name}`

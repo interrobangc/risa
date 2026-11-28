@@ -217,6 +217,14 @@ describe("a display name read back (RISA-1039)", () => {
     expect(readDisplayName("Morrow")).toBeNull();
   });
 
+  it("the main backlog's persona from a bare remote: one word of letters only (RISA-1019)", () => {
+    expect(personaOf({ ...main, remote: "Morrow" })).toEqual({ rank: "Admiral", name: "Morrow" });
+    expect(personaOf({ ...main, remote: "backlog" })).toBeNull();
+    expect(personaOf({ ...main, remote: "Mor row" })).toBeNull();
+    expect(personaOf({ ...main, remote: "Morrow2" })).toBeNull();
+    expect(personaOf({ ...main, remote: null })).toBeNull();
+  });
+
   it("under flavor none, `<name> (<project>)` as before", () => {
     expect(displayName({ ...main, remote: "backlog" }, "none")).toBe("backlog (caretook)");
     expect(displayName({ name: "prd-t", kind: "prd", remote: "prd-t", project: P }, "none")).toBe(
