@@ -13,7 +13,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | done | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | `loops/check-run.test.mjs` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
+| `fixes-tooling` | standing | — | `loops/anchors`, `loops/check-hook`, `loops/lib.sh`, `loops/check-run.test.mjs` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
 | `risa-next` | — | — | `loops/flavor`, `loops/machine.mjs`, `loops/captain`, `loops/session.sh`, `loops/session-names`, `loops/ask.mjs`, `loops/prompt.sh`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/peers`, `loops/docs/backlog.md` | — |
 | `risa-next-2` | — | `risa-next` | — | — |
 | `risa-next-3` | — | `risa-next-2` | — | — |
@@ -81,7 +81,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-969 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
 | RISA-980 | bug | live | fixes-bug | prd/fixes-bug | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | live | fixes-tooling | prd/fixes-tooling | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
-| RISA-984 | change | in-progress | risa-next | prd/risa-next | Tell backlog agents they can communicate with each other |
+| RISA-984 | change | ready | risa-next | prd/risa-next | Tell backlog agents they can communicate with each other |
 | RISA-985 | bug | live | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
 | RISA-986 | change | live | fixes-tooling | prd/fixes-tooling | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
 | RISA-987 | bug | live | fixes-tooling | prd/fixes-tooling | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
@@ -111,11 +111,11 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1015 | bug | live | fixes-tooling | prd/fixes-tooling | risa slice cuts a slice branch from the committed prd/ tip even when the plan's section for that slice is uncommitted: the slice worktree's plan lacks it, so the narrow slice check (Check: field) silently falls back to the full suite; refuse (or warn) when the slice's heading isn't in the committed plan |
 | RISA-1016 | change | live | fixes-tooling | prd/fixes-tooling | risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014 |
 | RISA-1017 | plan | triaged | risa-next-5 |  | Risa: usable by others: install without a Risa checkout, docs for outsiders, versioning (risaVersion enforced), hosts other than macOS and iTerm2 (cut from RISA-797 by the risa-next-4 planner) |
-| RISA-1018 | bug | ready | fixes-tooling | prd/fixes-tooling | check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run) |
+| RISA-1018 | bug | live | fixes-tooling | prd/fixes-tooling | check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run) |
 | RISA-1019 | chore | triaged | fixes-nit |  | session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead |
-| RISA-1020 | bug | triaged | fixes-tooling |  | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
-| RISA-1021 | chore | triaged | fixes-tooling |  | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
-| RISA-1022 | bug | triaged | fixes-tooling |  | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
+| RISA-1020 | bug | in-progress | fixes-tooling | prd/fixes-tooling | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
+| RISA-1021 | chore | in-progress | fixes-tooling | prd/fixes-tooling | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
+| RISA-1022 | bug | in-progress | fixes-tooling | prd/fixes-tooling | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
 | RISA-1023 | bug | triaged | fixes-bug |  | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
 | RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 
@@ -654,10 +654,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-984 · change · Tell backlog agents they can communicate with each other
 
-- status: in-progress
+- status: ready
 - prd: risa-next
 - owner: prd/risa-next
-- commit:
+- commit: cf8214f
 
 - 2026-11-27 (Robert Bo Davis): From the inbox: Example: caretook's backlog agent can file issues with risa's, and risa's can ask caretook's backlog to update risa after a fix is deployed.
 - 2026-11-27 (Robert Bo Davis): Triage: risa-next. Cross-project backlog-to-backlog messaging; goes with RISA-799 (agents findable by name) and RISA-820 (cross-repo topics).
@@ -941,7 +941,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1018 · bug · check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run)
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 92d9344
@@ -959,27 +959,27 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1020 · bug · loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-28 (prd/fixes-tooling): Follow-up noted on RISA-1015 (fixes-tooling wave 6): check-plan reports a bad Model, anchors doesn't.
 
 ### RISA-1021 · chore · In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step)
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-28 (prd/fixes-tooling): Follow-up noted on RISA-1015 (fixes-tooling wave 6).
 
 ### RISA-1022 · bug · The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -'
 
-- status: triaged
+- status: in-progress
 - prd: fixes-tooling
-- owner:
+- owner: prd/fixes-tooling
 - commit:
 
 - 2026-11-28 (prd/fixes-tooling): Found by slice 44 (RISA-1018): keep polling on unread once it has said busy.
