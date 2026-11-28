@@ -6,15 +6,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                                                                      | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------------ | ------------------------------ |
-| 19    | 4    | RISA-881  | opus  | started                                                                                    |                                |
-| 20    | 4    | RISA-1005 | opus  | waits on 19                                                                                |                                |
-| 21    | 4    | RISA-1003 | opus  | handed off (ad28f74; check failed only on the plan format, fixed 95b17c9); merges after 19 |                                |
-| 22    | 4    | RISA-1004 | opus  | started                                                                                    |                                |
-| 23    | 4    | RISA-926  | opus  | started                                                                                    |                                |
-| 24    | 4    | RISA-981  | opus  | started (high priority, the user via the backlog session)                                  |                                |
-| 25    | 4    | RISA-1009 | opus  | started                                                                                    |                                |
+| Slice | Wave | Item      | Model  | State                                                                                      | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ------ | ------------------------------------------------------------------------------------------ | ------------------------------ |
+| 19    | 4    | RISA-881  | opus   | started                                                                                    |                                |
+| 20    | 4    | RISA-1005 | opus   | waits on 19                                                                                |                                |
+| 21    | 4    | RISA-1003 | opus   | handed off (ad28f74; check failed only on the plan format, fixed 95b17c9); merges after 19 |                                |
+| 22    | 4    | RISA-1004 | opus   | started                                                                                    |                                |
+| 23    | 4    | RISA-926  | opus   | started                                                                                    |                                |
+| 24    | 4    | RISA-981  | opus   | started (high priority, the user via the backlog session)                                  |                                |
+| 25    | 4    | RISA-1009 | opus   | started                                                                                    |                                |
+| 26    | 4    | RISA-1010 | sonnet | started (the plan spells the edit out)                                                     |                                |
 
 **Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running.
 
@@ -286,3 +287,13 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (a new `loops/dispatch-restart.test.mjs`): with a fake running dispatcher (a stub process holding the lock), `--restart` ends it and starts one new one detached, keep-alive kept; with none running it starts one.
+
+## Slice 26: machinery.md ends with its worktrees section again
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/doc-sections.test.mjs
+
+**Build (RISA-1010, for the v0.1.8 release with RISA-981):** `loops/docs/machinery.md` ends with a stub `## The context watch` (2b02eab, wave 3's fold-in) after `## Worktrees and leases`, and a project's additions continue the generic doc's last section (`loops/doc.mjs`), so Caretook's worktree lines land under the stub. Move the stub's lines up to sit before `## Worktrees and leases` (or fold them into the section they belong to), leaving `Worktrees and leases` last; nothing else in the doc changes. Then pin each generic role doc's last heading so a fold-in can't move it again: a new `loops/doc-sections.test.mjs` listing, for each `loops/docs/*.md`, the heading it must end with (read today's after the fix), failing with a line that says a project's additions continue that section.
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/doc-sections.test.mjs`): each generic doc ends with its pinned heading; machinery.md's is `## Worktrees and leases`.
