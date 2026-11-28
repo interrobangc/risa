@@ -8,25 +8,21 @@
 
 | Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
 | ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 39    | 6    | RISA-1015 | opus  | merged | 33ad69f                        |
-| 40    | 6    | RISA-1015 | opus  | merged | fc0bfc6                        |
-| 41    | 6    | RISA-1015 | opus  | merged | 798942f                        |
-| 42    | 6    | RISA-1016 | opus  | merged | c856566                        |
-| 43    | 6    | RISA-1016 | opus  | merged | 387b09b                        |
+| 44    | 7    | RISA-1018 | opus  | merged | 92d9344                        |
 
-**Wave 6** (slices 39–43, all opus): RISA-1015 split three ways (slice refuses an uncommitted section; tooling join runs only the Check file; check-plan reports an unknown Model), RISA-1016 two ways (review.sh, lib.sh pr_verdict). Hot files: loops/new, loops/check-hook, loops/check-tooling, loops/check-plan, loops/review, loops/ready, loops/lib.sh. No running topic's hot files touched (risa-next's are elsewhere; staging-ship, which holds lib.sh and review.sh, is on hold).
+**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file). Slice 44 handed off (check passed on 672ba10, 20/20 runs), merged 92d9344; tier none (tooling only); `pnpm test` green on 1c0c740 (2388 tests); sync needed no merge; PR #17 open, Codex review out. Slice 44 found the gate itself reads an unread load mid-wait as dropped: filed RISA-1022.
 
-**Wave 6 gate:** all five merged; RISA-1015, 1016 done. CI unit: first run 46123266140 failed only on an unrelated load-gate flake (filed RISA-1018), rerun 46123678536 green on 177c94b. Synced with main (a8f3cb8); CI unit on the synced tip requested. PR #15 open, Codex review waiting. Slice worktrees kept until landing.
-
-**Wave 5 landed** 2026-11-28 in main through PR #12 (slices 27–38; report a24; to-test/2026-11-28-0105-fixes-tooling.md). Older waves: plans/fixes-tooling-history.md.
+**Wave 6 landed** 2026-11-28 in main as 1b65a5f through PR #15: slices 39–43, all opus (RISA-1015 in three parts, RISA-1016 in two). CI unit: first run 46123266140 red on an unrelated load-gate flake (filed RISA-1018), rerun green; synced with main (a8f3cb8), CI unit green there (run 46124077140). Codex clean on a8f3cb8, then again on ce3fe0b (the installed release doesn't yet carry a review over docs-only commits). Report filed; to-test/2026-11-28-0311-fixes-tooling.md; slice worktrees removed. Handbook gained "commit the plan before `risa slice`".
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
-**Notes carried over:**
+**For the next session:**
 
-- **Commit the plan before `risa slice`** (slice 39 makes it a refusal).
-- **Slice checks under load** often run out of budget; each slice's own test passing directly is enough, the CI run is the gate.
-- **A change to Risa's own risa.json needs the release that reads it installed first.** Releasing needs a tag (v0.1.9 after bumping package.json); the backlog session handles releases.
+- **Ready (triaged, fixes-tooling):** RISA-1018 (check-run.test.mjs "waits while busy, starts when the load drops" flakes on CI: the load-drop line read "-"). Check `risa backlog list` for more.
+- **Follow-ups of RISA-1015 filed** (triaged, for wave 8): RISA-1020 (anchors ignores planBudget's errors), RISA-1021 (the Check file runs twice in this repo's slice check).
+- **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
+- **Slice checks under load** often run out of budget; the CI run is the gate.
+- **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
 
 ## How to run this plan
 
@@ -454,7 +450,7 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit test (`loops/review.test.mjs`, with stubbed `gh`): a PR clean on an earlier commit with only a `.md` commit after it reads clean; a code commit after it still reads stale.
+- Unit test (`loops/review.test.mjs`, with stubbed `gh`): a PR clean on an earlier commit with only a Markdown commit after it reads clean; a code commit after it still reads stale.
 
 ## Slice 43: risa ready's Codex line reads docs-only commits after approval as clean
 
@@ -464,4 +460,15 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit test (`loops/ready.test.mjs`, with stubbed `gh`): ready's Codex line reads clean for a PR clean on an earlier commit with only a `.md` commit after it, and not for a code commit after it.
+- Unit test (`loops/ready.test.mjs`, with stubbed `gh`): ready's Codex line reads clean for a PR clean on an earlier commit with only a Markdown commit after it, and not for a code commit after it.
+
+## Slice 44: check-run's load-drop test doesn't read a half-written load file
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1018):** `loops/check-run.test.mjs`'s "waits while busy, starts when the load drops, and logs the wait" flaked on GitHub Actions (run 46123266140) with "The load dropped to - (threshold 4)". Its `busy()` and `quiet()` stubs rewrite `RISA_LOAD_FILE` with `writeFileSync` (truncate, then write), so the gate in `loops/load-gate.mjs` can read it empty, read no load, and start as if the load had dropped. Make the stubs write atomically (a temp file renamed over it). If the gate itself reads an unreadable load mid-wait as "dropped", say so in the hand-off rather than changing the gate's rule that an unreadable load isn't busy.
+
+**Acceptance criteria:**
+
+- `busy()` and `quiet()` in `loops/check-run.test.mjs` replace the load file by rename, never truncate it in place.
+- The test passes 20 runs in a row locally (`pnpm vitest run loops/check-run.test.mjs` in a loop), noted in the hand-off.
