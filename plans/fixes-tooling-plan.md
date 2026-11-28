@@ -10,10 +10,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------- | ------------------------------ |
+| 54    | 13   | RISA-1076 | opus  | started |                                |
+| 55    | 13   | RISA-1085 | opus  | started |                                |
+| 56    | 13   | RISA-1069 | opus  | started |                                |
 
-No slice in flight (idle hand-over). Waiting, triaged: RISA-1076 (tests read the session's CLAUDE_CONFIG_DIR; likely `loops/test-env*` or `loops/test-setup.mjs`: write it as slice 54, the next wave) and RISA-1069 (waits while `loops/dispatch` is risa-next-2's hot file).
+Wave 13 (2026-11-28): slices 54, 55, 56 written and started, each agent on opus. RISA-1069 runs now: no running topic holds `loops/dispatch`. Waiting: RISA-1095 (until ship and cross-machine-messages land).
 
 **Wave 12 landed** 2026-11-28 in main as c49040a through PR #37: slice 53, opus (RISA-1073; merged twice, a9eb9ec and 68950ed: its steps test passed only on a slice branch). Synced with main (b60d88c) first; tooling only, tier none; `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed; Codex clean on 466ed83. Report filed (a65); to-test/2026-11-28-1254-fixes-tooling.md; slice worktree removed. Takes effect with the next release tag.
 
@@ -576,3 +579,34 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - Unit test (`loops/check-budget.test.mjs`): fast slice runs without the tooling step and slower ones with it; a check that will run the tooling step gets a budget from the slower ones (or their step sums), one without it keeps the fast budget, and too few matching samples falls back as before.
+
+## Slice 54: The test environment clears CLAUDE_CONFIG_DIR
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/test-env.test.mjs
+
+**Build (RISA-1076):** with `CLAUDE_CONFIG_DIR` set in the shell (a session on a second Claude account), `loops/usage.test.mjs`, `loops/drain.test.mjs` and the drain tests in `loops/dispatch.test.mjs` see no usage reading and 10 fail; with it unset they pass. `hermeticEnv` in `loops/test-env.mjs` drops the session's `RISA_*` and `CLAUDE_CODE_*` variables but not this one: add it to the list it clears (`SESSION_VARS`), so no test inherits the session's config folder; a test that needs one sets its own. Confirm the cause first (run the three files with the variable set, before and after). If a test still fails with it cleared, the cause is elsewhere: say so in the hand-off rather than editing `loops/dispatch.test.mjs` (slice 56 moves it).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/test-env.test.mjs`): `hermeticEnv` drops an inherited `CLAUDE_CONFIG_DIR`.
+- `CLAUDE_CONFIG_DIR=/tmp/elsewhere pnpm exec vitest run loops/usage.test.mjs loops/drain.test.mjs` passes, noted in the hand-off.
+
+## Slice 55: check-run's tests pass on a detached checkout
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1085):** `loops/check-run.test.mjs` fails on GitHub's pull_request runs (run 46172609471 on PR #36: `expected '' not to be ''`): a PR run checks out a detached merge commit, so `git branch --show-current` is empty, and the test expects the logged branch not to be empty (`expect(runs[1].branch).not.toBe("")`); the budget test beside it reads the checkout's own branch for its samples and matches `on \w+ branches`. Make the tests independent of the checkout they run in: run the check in a throwaway repo on a named branch (as the file's slice-branch tests do), or assert what `loops/check-run.sh` really logs for a detached checkout; choose, and say why in the hand-off. If `check-run.sh` or `loops/check-budget.mjs` itself misbehaves on a detached checkout (an empty branch kind), say so in the hand-off and fix only what the test shows wrong.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-run.test.mjs`): the file passes in a detached checkout (`git checkout --detach` in a throwaway clone or worktree, noted in the hand-off) and on a named branch.
+
+## Slice 56: dispatch.test.mjs splits along its describe groups
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1069):** `loops/dispatch.test.mjs` (about 2,400 lines, 17 top-level `describe` groups) runs as one slow file. Split it as `land.test.mjs`, `recover.test.mjs` and `rotate.test.mjs` were: move the shared throwaway repo, stubs and helpers into `loops/dispatch-fixture.mjs` (a header comment saying what it sets up, a `useDispatchRepo()`-style hook like `land-fixture.mjs`'s `useLandRepo()`), and give related groups a file each, for example `dispatch.test.mjs` (the pure parts, one tick per action, the load gate and rules), `dispatch-code.test.mjs` (the code check between ticks, re-exec), `dispatch-lock.test.mjs` (the lock, pause, resume, stop, stale lock, tidy), `dispatch-deaths.test.mjs` (deaths and the reopen ask, defaults on silence, the pickup), `dispatch-keep-alive.test.mjs` (the session-request, keep-alive and inbox ticks), `dispatch-stuck-tick.test.mjs` (the stuck decision and tick; `dispatch-stuck.test.mjs` exists already) and `dispatch-drain.test.mjs` (the drain), or a grouping close to it. Move tests verbatim: no test added, dropped or weakened; only imports and the setup move. Each new file keeps a header comment saying what it covers and any `vi.setConfig(…)` or scaled wait (`loops/test-limits.mjs`) the old file had; if `loops/test-limits.test.mjs` or another list names `dispatch.test.mjs`, name each new file there.
+
+**Acceptance criteria:**
+
+- The same test names pass before and after (`pnpm exec vitest run loops/dispatch` lists every old test once); no new file is over about 400 lines (say so in the hand-off where a single group is longer); `pnpm check` passes.
