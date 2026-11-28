@@ -37,6 +37,17 @@ const median = (xs) => {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 };
 
+/**
+ * How much a limit grows for the load: the load against a reference one, never below 1
+ * and at most maxScale times; 1 for a load that is missing or not a positive number.
+ * vitest.config.mjs scales its test and hook limits by it too (test-limits.mjs).
+ */
+export function loadScale(load, ref = DEFAULTS.refLoad, maxScale = DEFAULTS.maxScale) {
+  const l = Number(load);
+  if (load === null || load === undefined || load === "" || !Number.isFinite(l) || l <= 0) return 1;
+  return Math.min(maxScale, Math.max(1, l / ref));
+}
+
 /** test-gates' hard limit for a mode: RISA_CHECK_LIMIT when it's a number, else 1200 (2400 for full). */
 export function hardLimit(mode, env = process.env) {
   const set = Number(env.RISA_CHECK_LIMIT);
@@ -62,8 +73,7 @@ export function checkBudget(runs, query) {
   const secs = samples.map((r) => r.seconds);
   const loads = samples.map((r) => r.loadStart).filter((l) => Number.isFinite(l) && l > 0);
   const ref = median(loads) ?? o.refLoad;
-  const load = Number(o.load);
-  const scale = Number.isFinite(load) && load > 0 ? Math.min(o.maxScale, Math.max(1, load / ref)) : 1;
+  const scale = loadScale(o.load, ref, o.maxScale);
   const silence = Math.round(o.silence * scale);
   const medianSeconds = median(secs);
   const slowestSeconds = secs.length ? Math.max(...secs) : null;
