@@ -31,7 +31,7 @@
 | 19    | 6    | RISA-1079       | opus   | planned |                            |
 | 20    | 6    | RISA-1084       | opus   | planned |                            |
 | 21    | 6    | RISA-1050       | opus   | planned |                            |
-| 22    | 6    | RISA-1077       | opus   | started |                            |
+| 22    | 6    | RISA-1077       | opus   | merged  | 5a22554                    |
 | 23    | 6    | RISA-1081       | opus   | started |                            |
 | 24    | 6    | RISA-1086       | opus   | started |                            |
 | 25    | 6    | RISA-1087       | opus   | merged  | 4fbc7cf                    |
