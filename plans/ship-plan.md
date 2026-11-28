@@ -8,14 +8,14 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Now (2026-11-28):** wave 1 started: slice 1 on opus (real logic). No running topic holds its hot files (`fixes-tooling` holds only test files). Next: watch, merge, CI run, PR, Codex review, land, rotate.
+**Now (2026-11-28):** wave 1: slice 1 (opus) handed off at `937185a` (slice check green, 15 tests) and merged as `bde2083`. `risa tier`: none (tooling only), so the gate is the full check on the synced tip. `risa sync` needed no merge. The local full check can't go green here: run 1 failed 11 tests in dispatch, drain and usage (RISA-1076: this session sets `CLAUDE_CONFIG_DIR`); run 2 with it unset passed those and failed 15 others on timeouts at load 37 to 40 (land-unsynced, recover-down, stack, rotate and others); no file fails in both and `loops/ship.test.mjs` passed in both. So the gate is `ci.yml` on PR 47 (https://github.com/interrobangc/risa/pull/47), told to the backlog session. The backlog session agreed (its advice: a PR run failing only on RISA-1085 counts as green; the load timeouts are RISA-1096). Codex round 1 on `221bff2`: two findings, both verified real and sent to slice 1's agent as one fix (a fix in flight: no rotation): P1 thread `PRRT_kwDOV9ctaM69IG2S` (`.lock` is created empty then written, so a second ship can take over a live lock) and P2 thread `PRRT_kwDOV9ctaM69IG2a` (`--from` saves the rewound record only after its first hook). Next: merge the fix, `risa pr ship`, reply on both threads with the fixing commit, `risa review ship --again`, land on a green PR run and a clean review, docs, `status-trim`, rotate. Slice 1 added `isVersion` to `loops/config.mjs` (outside the plan, additive) and `ship` to `prd.sh`'s `known_cmds`. For slices 2 and 3: facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed.
 
-| Slice | Wave | State          | Merge into `prd/ship` |
-| ----- | ---- | -------------- | --------------------- |
-| 1     | 1    | started (opus) | —                     |
-| 2     | 2    | —              | —                     |
-| 4     | 2    | —              | —                     |
-| 3     | 3    | —              | —                     |
+| Slice | Wave | State  | Merge into `prd/ship` |
+| ----- | ---- | ------ | --------------------- |
+| 1     | 1    | merged | `bde2083`             |
+| 2     | 2    | —      | —                     |
+| 4     | 2    | —      | —                     |
+| 3     | 3    | —      | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
