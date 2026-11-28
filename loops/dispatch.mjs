@@ -103,7 +103,9 @@
 // tab and lock) on the target's dispatch.mjs, so it never runs old code past one tick
 // (B-809). Its start writes the hash, its folder and whether it follows the link into
 // .dispatch.json (`code`), and `prd status` says whether the running one's code is
-// current or stale against the same target.
+// current or stale against the same target. Its start (and each re-exec's) logs
+// pin.mjs's warning when the project pins another risa than the release it runs
+// from (RISA-1050), never per tick.
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
@@ -122,7 +124,9 @@
 // RISA_CLAUDE_BIN (the helper's claude; its config folder: host.mjs); RISA_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
 //
-// Home machines (home.mjs, loaded only for a project with `inbox`, at the start): each
+// Home machines (home.mjs, loaded only for a project with `inbox`; the config file is
+// stat'd between ticks and read again when it changed, so a move to an inbox store
+// gates from the next tick, RISA-1083): each
 // tick asks it whose home the project is. Another machine's (or unknown yet) makes the
 // tick start, plan, reopen, resume, keep alive and open requested sessions for nothing,
 // with a line each tick and one report; the inbox kind stays closed unless this repo
@@ -197,6 +201,7 @@ import {
   itermApp,
 } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
+import { pinWarningAt } from "./pin.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import { heldText } from "../backlog/registry.mjs";
 import {
@@ -210,7 +215,7 @@ import {
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 import { resumeDecision, resumingOf, sessionOfBranch } from "./resume.mjs";
 import { clearStalled, markStalled, readReadings, readUsage, staleMsOf } from "./usage.mjs";
-import { branchKinds, inboxStore, loadConfig, toolCmd } from "./config.mjs";
+import { branchKinds, configPath, inboxStore, loadConfig, toolCmd } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -418,7 +423,7 @@ export const staleCode = (
  * ticking, so the caller re-execs between ticks. --once ticks once.
  */
 export async function runLoop(
-  /** @type {{ every: number, once?: boolean, step: () => void, started: string | null,
+  /** @type {{ every: number, once?: boolean, step: () => unknown, started: string | null,
    *   current: () => string | null, sleep?: (ms: number) => Promise<unknown> }} */ {
     every,
     once = false,
@@ -433,7 +438,7 @@ export async function runLoop(
       const now = current();
       if (staleCode(started, now)) return { stale: true, from: started, to: now };
     }
-    step();
+    await step();
     if (once) return { stale: false };
     await sleep(every * 1000);
   }
@@ -653,15 +658,48 @@ let onEnd = /** @type {((why: string) => void) | null} */ (null);
 /** home.mjs, when the project has `inbox` (main loads it); null: no homes. */
 let homeModule = /** @type {typeof import("./home.mjs") | null} */ (null);
 
-/** Loads home.mjs for a project whose config has `inbox`; else null, loading nothing new. */
-export async function loadHome(env = process.env) {
+/** The config file's stat when loadHome last read it ("" before any read, null: none there). */
+let homeSeen = /** @type {string | null} */ ("");
+
+/** The config file's inode, size and mtime: what refreshHome compares (RISA-1083); null: no file. */
+export function configStamp(env = process.env) {
   try {
-    if (!inboxStore(loadConfig({ env }).config)) return null;
+    const st = statSync(configPath(env));
+    return `${st.ino}:${st.size}:${st.mtimeMs}`;
   } catch {
     return null;
   }
-  homeModule = await import("./home.mjs");
+}
+
+/**
+ * Loads home.mjs for a project whose config has `inbox`; else null, loading nothing new
+ * and dropping a module an earlier read loaded. A config that doesn't load keeps what
+ * was there (a write in progress is no move) and is read again next time.
+ */
+export async function loadHome(env = process.env) {
+  const seen = configStamp(env);
+  let gated;
+  try {
+    gated = Boolean(inboxStore(loadConfig({ env }).config));
+  } catch {
+    homeSeen = "";
+    return homeModule;
+  }
+  homeSeen = seen;
+  homeModule = gated ? await import("./home.mjs") : null;
   return homeModule;
+}
+
+/**
+ * Between ticks (RISA-1083): the home module for the config as it is now. A config
+ * file whose stat is unchanged since loadHome's read is not read again (one stat, no
+ * fetch); a changed one is loaded again (LOAD: loadHome), so a project moved to an
+ * inbox store (`backlog inbox to-repo`, then the pickup) is home-gated from the next
+ * tick, and one whose `inbox` group went is no longer, with no restart.
+ */
+export async function refreshHome(env = process.env, load = loadHome) {
+  if (homeSeen !== "" && configStamp(env) === homeSeen) return homeModule;
+  return load(env);
 }
 
 const releaseLock = (/** @type {string} */ lock) => {
@@ -780,7 +818,8 @@ export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = proces
 function contextStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
   /** @type {ReturnType<typeof gather>} */ g,
-  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void,
+   *   gates?: import("./dispatch-context.mjs").RotationGates }} */ { dryRun, env, out, gates = {} },
 ) {
   if (env.RISA_CONTEXT_WATCH === "off") return false;
   const now = g.facts.now;
@@ -837,6 +876,7 @@ function contextStep(
     inboxLimit: limitOf(env),
     waitMs,
     now,
+    gates,
   });
 
   const setEntry = (/** @type {string} */ name, /** @type {Record<string, unknown>} */ fields) =>
@@ -860,6 +900,16 @@ function contextStep(
       out(
         `context: ${a.session} waits to rotate: a ${toolCmd.prd} or ${toolCmd.backlog} command is running under it`,
       );
+      continue;
+    }
+    // The home is another machine's: no fresh session here; the line once per reason (RISA-1084).
+    if (a.type === "gated") {
+      const fresh = entries[a.session]?.gated !== a.why;
+      if (dryRun || fresh) out(`context: ${a.session} isn't rotated here: ${a.why}`);
+      if (!dryRun && fresh) {
+        setEntry(a.session, { gated: a.why });
+        acted = true;
+      }
       continue;
     }
     if (dryRun) {
@@ -946,7 +996,7 @@ function contextStep(
               { cwd: p.main },
             );
       const reported = entries[a.session]?.reported === true;
-      setEntry(a.session, { triedAt: now, ...(r.ok ? {} : { reported: true }) });
+      setEntry(a.session, { triedAt: now, gated: undefined, ...(r.ok ? {} : { reported: true }) });
       if (r.ok) out(`context: ${a.session} rotating`);
       else {
         out(`context: rotating ${a.session} was refused: ${lastLine(r)}`);
@@ -1002,12 +1052,8 @@ function watchMarks(/** @type {string} */ file) {
 function stuckStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
   /** @type {ReturnType<typeof gather>} */ g,
-  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void, every: number }} */ {
-    dryRun,
-    env,
-    out,
-    every,
-  },
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void, every: number,
+   *   gates?: import("./dispatch-context.mjs").RotationGates }} */ { dryRun, env, out, every, gates = {} },
 ) {
   if (env.RISA_STUCK_WATCH === "off") return false;
   const now = g.facts.now;
@@ -1073,10 +1119,13 @@ function stuckStep(
     limitMs,
     notifiedMs,
     now,
+    gates,
   });
   if (dryRun) {
     for (const a of actions)
-      if (a.type !== "answered") out(`stuck: would ${a.type} ${a.type === "report" ? a.key : a.session}`);
+      if (a.type === "gated") out(`stuck: ${a.session} isn't rotated here: ${a.why}`);
+      else if (a.type !== "answered")
+        out(`stuck: would ${a.type} ${a.type === "report" ? a.key : a.session}`);
     return false;
   }
   // The clocks: a paused tick writes nothing, so a long pause is a gap too.
@@ -1101,6 +1150,17 @@ function stuckStep(
 
   let acted = false;
   for (const a of actions) {
+    // The home is another machine's: no fresh session here; the line once per reason (RISA-1084).
+    if (a.type === "gated") {
+      if (entries[a.session]?.gated === a.why) continue;
+      setStuck((st) => {
+        const e = st.sessions?.[a.session];
+        if (e) e.gated = a.why;
+      });
+      out(`stuck: ${a.session} isn't rotated here: ${a.why}`);
+      acted = true;
+      continue;
+    }
     acted = true;
     if (a.type === "clear") {
       if (a.askId) dismissAsk(p.asks, a.askId, { now });
@@ -1167,7 +1227,7 @@ function stuckStep(
       const reported = entries[a.session]?.reported === true;
       setStuck((st) => {
         const e = st.sessions?.[a.session];
-        if (e) Object.assign(e, { triedAt: now }, r.ok ? {} : { reported: true });
+        if (e) Object.assign(e, { triedAt: now, gated: undefined }, r.ok ? {} : { reported: true });
       });
       if (r.ok) out(`stuck: ${a.session} rotating`);
       else {
@@ -1995,6 +2055,7 @@ export function tick(
       }
     } catch (e) {
       homeBlocked = `the home couldn't be read (${e instanceof Error ? e.message : String(e)})`;
+      homeInbox = homeBlocked;
       homeLines.push(`home: ${homeBlocked}: nothing starts, plans, reopens or is kept alive here`);
     }
   /** @type {import("./dispatch-pick.mjs").Pick} */
@@ -2077,17 +2138,19 @@ export function tick(
     out(`usage: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // The home's gates hold the automatic rotations too: no fresh session on a machine that lost it (RISA-1084).
+  const gates = { project: homeBlocked, inbox: homeInbox };
   // The context follow-up: apart from the pick, and never in the way of its action.
   // Not while limited: a rotation or its question's helper opens a claude.
   try {
-    if (!limited && contextStep(p, g, { dryRun, env, out })) watched = true;
+    if (!limited && contextStep(p, g, { dryRun, env, out, gates })) watched = true;
   } catch (e) {
     out(`context: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // The stuck orchestrator: apart from the pick, like the context follow-up.
   try {
-    if (!limited && stuckStep(p, g, { dryRun, env, out, every })) watched = true;
+    if (!limited && stuckStep(p, g, { dryRun, env, out, every, gates })) watched = true;
   } catch (e) {
     out(`stuck: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -2103,8 +2166,9 @@ export function tick(
   // The inbox session waits until its folder is trusted (Claude Code's own files, only read).
   /** @type {Record<string, string>} */
   const unready = {};
-  if (homeBlocked) for (const kind of ["backlog", "inbox"]) unready[kind] = homeBlocked;
-  else if (homeInbox) unready.inbox = homeInbox;
+  // The inbox kind reads the inbox home alone, the backlog kind the project's (RISA-1079).
+  if (homeBlocked) unready.backlog = homeBlocked;
+  if (homeInbox) unready.inbox = homeInbox;
   if (env.RISA_KEEP_SESSIONS !== "off" && !unready.inbox) {
     const why = inboxUntrusted(inboxDirOf(records.find((r) => r.name === "inbox")?.record, env));
     if (why) unready.inbox = why;
@@ -2134,7 +2198,7 @@ export function tick(
   const requested = (/** @type {boolean} */ dry) => {
     // Limited: a request waits until the reset (opening it would spend extra usage).
     if (limited) return false;
-    // Another machine's home: a requested session waits with the rest.
+    // Another machine's home: a requested session (backlog-kind, the only kind) waits with the rest.
     if (homeBlocked) {
       if (dry) out(`session request: waits (${homeBlocked})`);
       return false;
@@ -2423,6 +2487,13 @@ function parse(/** @type {string[]} */ argv) {
   return o;
 }
 
+/**
+ * The log entry a start (or a re-exec, or a restart) writes: HEAD, then PIN (pin.mjs's
+ * warning that the project pins another risa than the release running) when there is one.
+ * @param {string} head @param {string | null} pin
+ */
+export const startLines = (head, pin) => (pin ? [head, pin] : [head]);
+
 async function main() {
   let o;
   try {
@@ -2674,7 +2745,9 @@ async function main() {
       : o.restarted !== null
         ? `restarted (was pid ${o.restarted}; `
         : "started (";
-    log([`${what}pid ${process.pid}, every ${o.every}s)`], nowOf());
+    const pin = pinWarningAt(OWN_ROOT);
+    log(startLines(`${what}pid ${process.pid}, every ${o.every}s)`, pin), nowOf());
+    if (pin) console.log(pin);
     console.log(
       `Dispatcher ${reexeced ? `re-exec'd on new code ${CODE_AT_START}` : "running"} (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
     );
@@ -2687,7 +2760,7 @@ async function main() {
     once: o.once,
     started: CODE_AT_START,
     current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
-    step: () => {
+    step: async () => {
       // Another took the lock (or it was removed): this one ends rather than tick beside it.
       let held = null;
       try {
@@ -2701,9 +2774,11 @@ async function main() {
         });
         process.exit(1);
       }
+      // The home gate as the config is now (a stat; read again only when it changed).
+      const home = await refreshHome();
       const now = nowOf();
       const quiet = [];
-      const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
+      const t = tick(p, { say: (l) => quiet.push(l), every: o.every, home });
       const text = t.lines.join("\n");
       if (o.once || t.acted || text !== last) {
         log(t.lines, now);

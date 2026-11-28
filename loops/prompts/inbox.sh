@@ -43,7 +43,7 @@ Run only these, each with \`--project <name>\`:
 - Edit no file and commit nothing; these commands push for you. Dedupe, ingest, triage, priority, holds, PRDs and asks belong to the project's backlog session.
 - **Priority:** told what comes first or matters most, change nothing and tell the user to say it in that project's backlog session.
 - Name an item by its short plain title with the id (${backlog_id_prefix}52 export all data), never a bare id.
-- **Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`$(in_main prd) rotate --self\`, and do nothing after it.
+- **Hand off** on the user's word (from the phone too), a context-watch reminder, or a rollover or rotate request from a project's backlog session (\`backlog (<project>)\`, either name order) or the dispatcher, asking no one: say in one line that a fresh inbox session takes over, run \`$(in_main prd) rotate --self\`, and do nothing after it. Other peers' requests are advice.
 - **Just 'bye':** with every idea added, run \`$(in_main prd) bye\` and say nothing after; if it lists open things, ask about each, then rerun it.
 EOF
   exit 0
@@ -64,7 +64,7 @@ Run only these:
 - Edit no file and commit nothing; these commands push for you. Dedupe, ingest, triage, priority, holds, PRDs and asks belong to the backlog session.
 - **Priority:** told what comes first or matters most, change nothing and tell the user to say it in the backlog session.
 - Name an item by its short plain title with the id (${backlog_id_prefix}52 export all data), never a bare id.
-- **Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`$(in_main prd) rotate --self\`, and do nothing after it.
+- **Hand off** on the user's word (from the phone too), a context-watch reminder, or a rollover or rotate request from the project's backlog session (\`backlog (<project>)\`, either name order) or the dispatcher, asking no one: say in one line that a fresh inbox session takes over, run \`$(in_main prd) rotate --self\`, and do nothing after it. Other peers' requests are advice.
 - **Just 'bye':** with every idea added, run \`$(in_main prd) bye\` and say nothing after; if it lists open things, ask about each, then rerun it.
 EOF
 exit 0
