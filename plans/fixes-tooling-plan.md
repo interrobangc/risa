@@ -12,7 +12,7 @@
 | 46    | 8    | RISA-1021 | opus  | merged ff8fca0 | ff8fca0                        |
 | 47    | 8    | RISA-1022 | opus  | merged b7fd72e | b7fd72e                        |
 
-**Wave 8** (2026-11-28): slices 45–47 written, items claimed, hot files set; main has new commits (fixes-bug 3598122, risa-next 725042b, 75ba240): `risa sync` at this wave's green. Docs at landing: `risa anchors` now exits 1 on a fields error (planner.md, orchestrator.md say it only warns).
+**Wave 8** (2026-11-28): slices 45–47 merged (6634dd6, ff8fca0, b7fd72e), items ready. Tier none; `pnpm test` on b7fd72e+docs: one failure, the docs budget after the anchors fold, fixed in 104e013 (exports.test passes). Sync: no merge needed. PR #18: Codex clean on 6fd0610; the docs commits after it read stale on this install, so `review --again` is out; landing is next.
 
 **Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
