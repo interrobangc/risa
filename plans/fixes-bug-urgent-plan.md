@@ -10,11 +10,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                   | Merge into `prd/fixes-bug-urgent` |
-| ----- | ---- | --------- | ----- | --------------------------------------- | --------------------------------- |
-| 4     | 2    | RISA-1037 | opus  | merged (worktree kept until wave green) | 7db3bce                           |
-| 5     | 2    | RISA-1042 | opus  | merged (worktree kept until wave green) | 42321be                           |
-| 6     | 2    | RISA-1038 | opus  | merged (worktree kept until wave green) | 3fa8ed4                           |
+| Slice | Wave | Item      | Model | State               | Merge into `prd/fixes-bug-urgent` |
+| ----- | ---- | --------- | ----- | ------------------- | --------------------------------- |
+| 4     | 2    | RISA-1037 | opus  | merged (wave green) | 7db3bce                           |
+| 5     | 2    | RISA-1042 | opus  | merged (wave green) | 42321be                           |
+| 6     | 2    | RISA-1038 | opus  | merged (wave green) | 3fa8ed4                           |
 
 **Wave 1 landed** 2026-11-28 in main as 232b823 through PR #25: slices 1 (RISA-1030, merge ff256da), 2 (RISA-1034, 61be90b), 3 (RISA-1033, 1f81567), all opus. Tooling only, tier none. Gate: full `risa check` on the synced tip; 25 tests in 16 files timed out at load ~27, and those 16 files reran green at load ~8 (533 tests). Codex: one P2 (browser wait misses a suite's earlier results), tracked as RISA-1042, thread resolved; clean on ca79cb4. Report filed; to-test/2026-11-28-0815-fixes-bug-urgent.md; slice worktrees removed.
 
@@ -23,9 +23,8 @@
 - **Slice 5 hand-off (ba3c5a0):** a browser wait whose results include a fail or timeout now exits 1 (was 0); the name file gains `from=<bytes>`. Fold into the wait docs at landing. Prettier can't parse `.sh`: the slice prompt's format line fails on shell files.
 - **Slice 6 hand-off (d103931):** `session.sh` `cd`s to `RISA_MAIN` to source `lib.sh` when `$PWD` is outside any repo (`find_repo` unchanged); `prd.sh inbox` passes `RISA_MAIN=$main`. Its slice check stopped on this plan's table format (fixed); the rest ran green by hand.
 - **Slice 4 hand-off (4f7ea96):** every exit marks `.dispatch.json` `stopped {pid, stoppedAt, why}` and logs once; SIGHUP and a lost lock are new exits; `--stop`/`--restart` say who; status reads the mark (`stopped (<why>, <age> ago)`, else `dead`). Fold into the machinery doc at landing.
-- **Wave 2 gate:** all three slices merged; full `risa check` running on 7db3bce.
+- **Wave 2 green** 2026-11-28: full `risa check` passed on 3d70a5e (115 files, 2518 tests); synced (up to date); slice worktrees 4–6 removed. Docs fold (waves 1 and 2) went into `prd.sh`'s help (`wait`, `dispatch`): the role docs' budgets have no room, and machinery.md lacks the sections the docs cite (RISA-1051, fixes-nit). Next: PR, Codex review, land.
 - **Wave 3:** RISA-1032 (two fixes topics may run at once when their hot files don't overlap; `loops/dispatch-pick.mjs` plus its test) waits for the next wave: write its slice then.
-- **Docs fold owed from wave 1** (deferred: hot files): `prd.sh`'s `wait` help and the orchestrator/loop docs should say `wait check|browser` prints the result and exits 1 with none recorded. The machinery doc should name the stuck watch's `notified` kind (`RISA_STUCK_NOTIFIED_MIN`, 10; it asks at once, since Risa can't wake an idle session).
 - **`risa check` takes no label for a full run** (`--quick "<why>"` only).
 - **Under load (~16–27)** slice and full checks time out in the tooling tests. Rerun just the failed files through the check lease once the load drops.
 - RISA-1030's keep-alive (launchd or a watchdog) stays with self-recovery-3.
