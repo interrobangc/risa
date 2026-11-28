@@ -2313,6 +2313,19 @@ describe("the drain", () => {
       expect(claimed()).toEqual({});
     });
 
+    it("a dead session whose stall's reset is ahead is held with the watch on; RISA_USAGE_WATCH=off reopens it", () => {
+      reading(10);
+      worktree("a", "prd/a");
+      deadRecord("prd-a", { kind: "prd", topic: "a" });
+      setRows([{ topic: "a", state: "running" }]);
+      stalled("prd-a", { resetsAt: new Date((T0 + 600) * 1000).toISOString() });
+      expect(ok(["--once"], on)).not.toMatch(/^\S+Z reopen prd-a/);
+      expect(openCalls()).toEqual([]);
+      setClock(T0 + 60);
+      expect(ok(["--once"])).toMatch(/^\S+Z reopen prd-a/);
+      expect(openCalls()).toHaveLength(1);
+    });
+
     it("--dry-run claims, clears and opens nothing", () => {
       reading(10);
       worktree("a", "prd/a");

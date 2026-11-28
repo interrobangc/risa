@@ -19,7 +19,9 @@
 // pending request out; dispatch.mjs gathers and acts. The limit
 // (RISA_MAX_BACKLOG_SESSIONS, 4) counts every live backlog-kind session:
 // recorded, rotating within the grace, opened by hand (a claude process under a
-// backlog Remote Control name), or just opened and not up yet.
+// backlog Remote Control name), or just opened and not up yet. With the repo's
+// work switch off (machine.mjs, the dispatcher's facts.work) a pending request
+// is refused, saying so, and nothing opens.
 import { toolCmd } from "./config.mjs";
 import {
   copyFileSync,
@@ -35,7 +37,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
-import { MACHINE_TAG, START_GRACE_MS } from "./keep-alive.mjs";
+import { MACHINE_TAG, START_GRACE_MS, workOffWhy } from "./keep-alive.mjs";
 import { MAX_TEXT, oneLine, raiseSeq, readSeq } from "./notices.mjs";
 import { CLAUDE } from "./host.mjs";
 import {
@@ -248,8 +250,9 @@ function liveBacklog(
 /**
  * What this tick does with the oldest pending request.
  * @param {{ requests?: SessionRequest[], sessions?: RequestSession[], processes?: string[] | null,
- *   starting?: string[], paused?: boolean, max?: number, now: number, claude?: string }} facts
- *   starting: backlog sessions opened moments ago that aren't up yet
+ *   starting?: string[], paused?: boolean, max?: number, now: number, claude?: string,
+ *   work?: { on: boolean, why: string } | null }} facts
+ *   starting: backlog sessions opened moments ago that aren't up yet; work: the repo's work switch
  * @returns {{ action: "none", why: string } | { action: "open", request: SessionRequest, why: string }
  *   | { action: "refuse", request: SessionRequest, why: string }}
  */
@@ -262,9 +265,12 @@ export function requestDecision({
   max = DEFAULT_MAX_BACKLOG_SESSIONS,
   now,
   claude = CLAUDE,
+  work = null,
 }) {
   const pending = requests.filter((r) => r.state === "pending");
   if (!pending.length) return { action: "none", why: "no pending request" };
+  const workOff = workOffWhy(work);
+  if (workOff) return { action: "refuse", request: pending[0], why: workOff };
   if (paused) return { action: "none", why: "the dispatcher is paused" };
   if (processes === null) return { action: "none", why: "the process list can't be read" };
   const request = pending[0];

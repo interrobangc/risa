@@ -6,26 +6,29 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 14    | 3    | RISA-952  | opus  | merged | 2439fe9                        |
-| 15    | 3    | RISA-997  | opus  | merged | ac81b56                        |
-| 16    | 3    | RISA-999  | opus  | merged | 79d6fef                        |
-| 17    | 3    | RISA-1000 | opus  | merged | 6f9f1b0                        |
-| 18    | 3    | RISA-927  | opus  | merged | 10ef985                        |
+| Slice | Wave | Item      | Model  | State                                                                                                 | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)                                   | 4b888b6                        |
+| 20    | 4    | RISA-1005 | opus   | merged (adds commands.testFile and commands.staticCheck, the latter since Risa's typecheck is `true`) | 3626f71                        |
+| 21    | 4    | RISA-1003 | opus   | merged                                                                                                | cf9c3a4                        |
+| 22    | 4    | RISA-1004 | opus   | merged                                                                                                | 0de37c9                        |
+| 23    | 4    | RISA-926  | opus   | merged                                                                                                | b65e587                        |
+| 24    | 4    | RISA-981  | opus   | merged (slice check green on f0dc94b)                                                                 | 2d34ce6                        |
+| 25    | 4    | RISA-1009 | opus   | merged (conflict with 24 resolved on its branch, bfeb925)                                             | 8c34b95                        |
+| 26    | 4    | RISA-1010 | sonnet | merged                                                                                                | 04f2e0f                        |
 
-**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). Merged all five (17's vitest.config conflict with 15 resolved: both kept). Slice checks were red only on load timeouts (RISA-994 notes). CI unit green on b7bb152 (run 46090524277, the first with a real verdict); sync not needed; docs folded; PR #10 open. Codex (on 2b02eab): P1 dispatch.mjs:1308 (a default-account session's null replaced by the dispatcher's account) sent to slice 18's agent; P2 rotate.sh:160 (close path fires before the wave lands) sent to slice 14's agent. Both fixed and re-merged (18: 1134fe0, 14: bbae04a); pushed da64927, threads answered and resolved. Codex round 2: P1 dispatch.mjs:1250 (a session limited on its own account is reopened by pick() before its reset) fixed by slice 18 (5d8aac8) and re-merged. Unit CI green on da64927 (run 46093565648); Unit CI green on 54e571d. Codex round 3: P1 dispatch.mjs:1251 (keep-alive reopens a session stalled on its own account) sent to slice 18, then redirected on the user's word: the drain never ends backlog or inbox sessions (any account), at most reports them (415d749, merged); P2 rotate.mjs:139 (simulated pick omits facts.landed) tracked as RISA-1003, thread answered. Codex round 4 (a9b6f2a): one P2 (watch-off override, dispatch.mjs:1622) tracked as RISA-1004, thread answered. Asking the user (via ask skeptic): land now (recommended) or fix 1003/1004 first. Next: triage, land, then rotate (session past the soft limit). RISA-881 goes in wave 4 (the user wants it before risa-next). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
+**Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running. All of 19–26 merged; wave gate: `risa ci run unit` on a07cdd0 (run 46101459462): failed only doc-sections.test (slice 20's new project-config section sits after slice 26's pinned last heading); sent back to slice 20; its fix (fda8963) merged as 32a0c6e; CI green on 5e836c6 (run 46101944134); synced with main; CI on the synced tip out; synced tip 9f74528 green (run 46102353384); PR #11: Codex's 2 P2s tracked as RISA-1012, RISA-1013, threads replied and resolved, clean on 9f74528. Landing. 22–24 merged ahead of 20 (disjoint files; 981 is urgent). Slice 19 also moved `mergedSlices` into slice-fields.mjs and runs the budget in `risa anchors`; its follow-up (plan.sh and skeptics' 'about 8 files') is RISA-1011. Slices 24–26 joined on the backlog session's word (RISA-981 high priority; v0.1.8 is cut once 981 and 1010 land).
 
-**Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
+**Wave 3 landed** 2026-11-27 in main as a00a846 (PR #10): slices 14–18 (RISA-952, 997, 999, 1000, 927), all opus. CI unit green on a9b6f2a (run 46095529013, the first run with a real verdict: RISA-997 works). Codex went 4 rounds (3 P1s and 1 P2 fixed); landed on the user's word with `--no-review --by-user` (ask a17), its last two P2s tracked as RISA-1003 and RISA-1004. Report filed; slice worktrees removed; backlog session (risa-ee) told 952 landed (its release plan keys off it).
 
-**For the next session (wave 3):**
+**For the next session (wave 4):**
 
-- **First, on the user's word (via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold).
-- **Ready (after-split has landed):** RISA-997 (the workflow writes a verdict artifact, so `risa land`'s unit gate reads its runs: do it early, it removes the `--force`), RISA-999 (an After on an archived PRD topic), RISA-994 (land-unsynced times out on main too; recover), RISA-813, 915, 926, 927, 882, 886, 881, 883, 889, 986. Check hot files first (`risa backlog prd list`).
-- **RISA-996:** Codex asked on merged PR #5 by comment (wave 1's unreviewed diff); triage its findings to the backlog.
-- **Docs still to fold:** machinery doc: plan sessions get the context hook (RISA-880, wave 1).
-- **Gate:** the test env is hermetic now (after-split's RISA-975), so `risa check` works in a session; under load (>25) many tests time out: rerun failing files once at low load. Land skeptics run on Opus (b5c4391).
-- Slice 12's note for later: `backlog/lock.mjs` is new; tests that copy backlog/ files by name must list it.
+- **The user's decision (wave 3):** the drain never ends backlog or inbox sessions on usage, on any account; it reports them at most. Keep it so.
+- **RISA-881 first** (elephant-carpaccio slicing rules): the user wants it before risa-next is unheld; a release follows it (the backlog session handles the tag).
+- **Ready:** RISA-1003 (rotate's simulated pick omits facts.landed), RISA-1004 (watch-off override doesn't release stall-marked sessions), RISA-994 (in-test and script timers don't scale with load: ask, bye, rotate, sessions, land-unsynced; notes list them), 813, 915 (dispatch-pick rule 8 may already cover it: check first), 926 (loops/machine is after-split-2's hot file; check `risa backlog prd list`), 986, 882, 883, 886, 889.
+- **Gate:** slice checks run red on load timeouts at load 15–30 (RISA-994); the wave's CI run is the gate. bye.test's "lists each open thing…" failed under several full checks but passes alone and in CI.
+- `risa pr` pushes local main to origin as it syncs; expected.
+- Docs folded this wave: machinery (context watch, rotate's close), orchestrator rotate line.
 
 ## How to run this plan
 
@@ -212,3 +215,85 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - Unit test (`loops/drain.test.mjs`): two sessions on two config folders, one over the drain line and one under; only the one over drains.
+
+## Slice 19: Plans slice small: a budget the plan check enforces
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/planner.md · Tests: unit · Blocked by: none · Check: loops/check-plan.test.mjs
+
+**Build (RISA-881, first half; the slice check's half is RISA-1005):** give the planner an elephant-carpaccio slicing rule and have the plan check hold plans to it. In `loops/docs/planner.md`, beside the tracer-bullet rule: a slice's budget is about 4 files changed, one test file, and expected context under ~100k (a starting point, judged later with RISA-883); its fields line names that test file in a new `Check: <test file>` field (the narrow check the slice runs, RISA-1005); no two slices in one wave name the same test file; the slice's fixed cost (worktree, session, prompt, check, review, merge) must stay a small share of it, so don't split below a real change. Keep the doc within its budget (`pnpm docs:budget`): trim as much as you add. In `loops/check-plan.mjs`, warn (not fail) on a slice naming more than about 4 files in backticks under Build, a slice with no `Check:` field or with more than one test file in it, and two slices in the same wave sharing a `Check:` file (a slice's wave is the slices sharing an unmerged `Blocked by` chain or, failing that, the plan's _Status_ wave column; if that's unreadable, treat the slices after the last landed one as one wave, and say which you chose). Old plans without `Check:` keep passing, with the warning only. Update the plan template the planner prompt shows (`loops/prompts/plan.sh`) if it spells out the fields line. Teach the fields reader (`loops/slice-fields.mjs`) the `Check` field, so a plan naming it isn't read as incomplete (today `risa prompt slice` says "unknown field Check" and falls back to defaults). Don't touch `loops/docs/orchestrator.md` or the slice prompt (RISA-1005's).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-plan.test.mjs`): a fixture plan with a 6-file slice, a slice with no `Check:`, and two slices in one wave sharing a `Check:` file gets one warning each and still exits 0; a plan within budget gets none.
+- Unit test (`loops/slice-fields.test.mjs`): a fields line with `Check: <file>` parses complete, the file returned.
+
+## Slice 20: The slice check runs only the slice's own check
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md, loops/docs/orchestrator.md · Tests: unit · Blocked by: 19 · Check: loops/check-run.test.mjs
+
+**Build (RISA-1005):** a project config key for a command that runs one test file (`commands.testFile`, the file appended; Risa's `pnpm exec vitest run`; the runner differs per project, so it's config, never hard-coded vitest), documented in `loops/docs/project-config.md` and set in `risa.json`. On a slice branch, `risa check --quick` reads the slice's `Check:` field from the plan (slice 19's) and runs typecheck, lint, format and that file through `commands.testFile` instead of every unit test (`loops/check-run.sh` or `loops/check-hook.sh`, wherever the slice mode picks its tests; reuse the plan reader `check-plan.mjs` or `prompt.sh` already has). No `Check:` field or no `commands.testFile`: the slice check runs as now. The full check stays at the wave's gate. Say so in the slice prompt's check line (`loops/prompts/slice.sh`), and in `loops/docs/orchestrator.md` that the orchestrator splits only a slice that comes back over budget (the planner owns the breakdown; trim as much as you add). Over 12 files, stop and say so.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-run.test.mjs`): on a slice branch of a fixture repo whose plan names `Check: a.test.mjs`, the quick check runs only that file through the configured command; with no `Check:` or no key, it runs the unit tests as now.
+
+## Slice 21: rotate's standing close sees landed topics
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/rotate.test.mjs
+
+**Build (RISA-1003):** `standingClose`'s simulated pick in `loops/rotate.mjs` leaves out `facts.landed`, so a landed-but-planned row can count as runnable work (or not) differently from the dispatcher's own pick: the topic closes, then the dispatcher restarts it. Gather the landed-topic facts the way `loops/dispatch.mjs` does for `pick` (landed.mjs's `landedTopics`; reuse, don't copy) and pass them in, so `landedWhy` (rule 8 in `loops/dispatch-pick.mjs`) applies the same in both.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/rotate.test.mjs`): a standing topic whose only waiting work is a landed-but-planned row decides as the dispatcher's pick would on the same facts.
+
+## Slice 22: The watch-off override releases stall-marked sessions
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch.test.mjs
+
+**Build (RISA-1004):** with `RISA_USAGE_WATCH=off`, a dead session with an outstanding stall mark is still held out of `pick()`'s reopen (the stalled-session lookup in `loops/dispatch.mjs`, `stalledSessions`), and its resume waits for its recorded reset. Apply `drainSettings`' watch-off override to that lookup too, so the watch off releases it.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/dispatch.test.mjs`): a dead stall-marked session is held with the watch on and reopened with `RISA_USAGE_WATCH=off`.
+
+## Slice 23: Keep-alive and session requests obey the work switch
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/keep-alive.test.mjs
+
+**Build (RISA-926):** the machine config's work switch (`loops/machine.mjs`, `facts.work` in the dispatcher, rule 9 in `loops/dispatch-pick.mjs`) gates start, plan and queue only; `loops/keep-alive.mjs` and `loops/session-requests.mjs` don't read it, so a repo with work off still gets its backlog and inbox sessions opened. Have both read the same switch (reuse machine.mjs's reader) and open nothing for a repo whose work is off, saying why in the line they log. Leave `loops/machine*` itself alone unless the reader isn't exported.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/keep-alive.test.mjs`, plus `loops/session-requests.test.mjs` for its half): with work off, neither opens a session and each says why; with work on, both act as now.
+
+## Slice 24: A dispatcher re-execs onto the release risa points to
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-release.test.mjs
+
+**Build (RISA-981, high priority on the user's word):** a dispatcher started from a release install (`~/.risa/releases/<tag>/`) hashes its own frozen release folder at start and each tick (`codeHash`, `CODE_AT_START` in `loops/dispatch.mjs`), so it never sees a new install, while `risa status` (`loops/status-extra.mjs`) compares the current tool's checkout and says "it re-execs before its next tick", an hour on. Between ticks, resolve the code `risa` now points to (the same resolution `bin/risa` uses for the installed release link; reuse it, don't copy) and compare that folder's hash; changed, re-exec into that folder's `dispatch.mjs` (`process.execve`, as now), not its own path. A dispatcher run from a checkout keeps today's behaviour. Have `status-extra.mjs` compare the same target, and print `lastTickAt` beside `last:` (that line is the last logged change, not the last tick). Keep `loops/dispatch.mjs`'s change to the code-staleness path (slice 22 edits its stall lookup; slice 25 its CLI).
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/dispatch-release.test.mjs`): two fake release folders and a link moved from one to the other; the staleness check reads stale and names the new folder's `dispatch.mjs` as the re-exec target; a checkout-run dispatcher reads as now.
+- Unit test (`loops/status-extra.test.mjs`): status names the same target and shows the last tick's time.
+
+## Slice 25: risa dispatch --restart
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-restart.test.mjs
+
+**Build (RISA-1009):** a command a backlog agent can run to restart the dispatcher on the current release, so a new pin or install doesn't need the user at the terminal: `risa dispatch --restart` stops the running one (as `--stop` does: TERM, wait for its lock to free) and starts a new one through `risa` (so on the release it points to now), detached from the caller's shell (or in its own tab the way the dispatcher is started today; find how `risa recover` or `risa start` opens it and reuse that), keeping its `--every` and the keep-alive state a stop would otherwise clear (it isn't the user's stop). No dispatcher running: it starts one. Print one line: old pid, new pid, the code it runs. Add the flag to the usage line and the header comment (`loops/dispatch.mjs`'s CLI; leave its staleness code to slice 24 and its stall lookup to slice 22).
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/dispatch-restart.test.mjs`): with a fake running dispatcher (a stub process holding the lock), `--restart` ends it and starts one new one detached, keep-alive kept; with none running it starts one.
+
+## Slice 26: machinery.md ends with its worktrees section again
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/doc-sections.test.mjs
+
+**Build (RISA-1010, for the v0.1.8 release with RISA-981):** `loops/docs/machinery.md` ends with a stub `## The context watch` (2b02eab, wave 3's fold-in) after `## Worktrees and leases`, and a project's additions continue the generic doc's last section (`loops/doc.mjs`), so Caretook's worktree lines land under the stub. Move the stub's lines up to sit before `## Worktrees and leases` (or fold them into the section they belong to), leaving `Worktrees and leases` last; nothing else in the doc changes. Then pin each generic role doc's last heading so a fold-in can't move it again: a new `loops/doc-sections.test.mjs` listing, for each `loops/docs/*.md`, the heading it must end with (read today's after the fix), failing with a line that says a project's additions continue that section.
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/doc-sections.test.mjs`): each generic doc ends with its pinned heading; machinery.md's is `## Worktrees and leases`.

@@ -18,7 +18,9 @@
 //     nothing waiting; or the pick wouldn't start it even with a lane free (an
 //     After not done, a hot file a running topic shares, another fixes topic
 //     running, `hold`); or it has fewer than caps.fixesMin waiting and the pick
-//     would start another topic in its place. A non-standing topic: null.
+//     would start another topic in its place. A non-standing topic: null. Both
+//     picks take the facts' `landed` (RISA-1003), so a landed-but-planned row
+//     counts as it does in the dispatcher's.
 //
 // CLI:
 //   node rotate.mjs clears-hot <topic>        stdin: `backlog prd list
@@ -117,6 +119,9 @@ export function standingClose(facts, topic, { claimed = [] } = {}) {
   const ours = { ...row, state: row.flags.includes("hold") ? "hold" : "planned" };
   const asks = (facts.asks ?? []).filter((a) => a.topic !== topic);
   const caps = facts.caps ?? {};
+  // The landed guard's facts (rule 8; gather's landedTopics): a landed-but-planned row starts in
+  // neither pick, as in the dispatcher's own (RISA-1003: left out, the topic closed and restarted).
+  const landed = facts.landed ?? {};
   const whyOf = (/** @type {import("./dispatch-pick.mjs").Pick} */ p) =>
     p.reasons.find((r) => r.topic === topic)?.why ?? p.why ?? "not started";
   // Alone, with a lane free: what keeps the pick from starting it, whatever else waits.
@@ -130,13 +135,14 @@ export function standingClose(facts, topic, { claimed = [] } = {}) {
     ),
     worktrees,
     asks,
+    landed,
     caps: { ...caps, prds: Infinity },
   });
   if (!(solo.action === "start" && solo.topic === topic)) return `nothing it could start: ${whyOf(solo)}`;
   // Short of the fixes minimum: the pick prefers another topic, which the lane it frees would start.
   const min = caps.fixesMin ?? DEFAULT_CAPS.fixesMin;
   if (waiting >= min) return null;
-  const all = pick({ rows: rows.map((r) => (r.topic === topic ? ours : r)), worktrees, asks, caps });
+  const all = pick({ rows: rows.map((r) => (r.topic === topic ? ours : r)), worktrees, asks, landed, caps });
   if (all.action === "start" && all.topic !== topic)
     return `${waiting} waiting, under ${min}, and ${all.topic} would start in its lane`;
   return null;
