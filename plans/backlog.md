@@ -64,8 +64,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-881 | chore | live | fixes-tooling | prd/fixes-tooling | Slice small at planning (elephant carpaccio): a per-slice budget (about 4 files, one test file, expected context under ~100k), each slice names its own narrow check command and runs only that, full pnpm check once at the wave's landing; no two slices in a wave share a test file; the orchestrator splits only a slice that comes back over budget |
 | RISA-882 | chore | ready | fixes-tooling | prd/fixes-tooling | Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now) |
 | RISA-883 | chore | ready | fixes-tooling | prd/fixes-tooling | Token use measured by price: a price-weighted before/after (cache writes ~3% of tokens but ~30% of cost) to judge B-873, B-875, B-876 |
-| RISA-886 | change | in-progress | fixes-tooling | prd/fixes-tooling | Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call |
-| RISA-889 | feature | in-progress | fixes-tooling | prd/fixes-tooling | Backlog agent can hand off with instructions the next agent actually follows, continuing the work… |
+| RISA-886 | change | ready | fixes-tooling | prd/fixes-tooling | Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call |
+| RISA-889 | feature | ready | fixes-tooling | prd/fixes-tooling | Backlog agent can hand off with instructions the next agent actually follows, continuing the work… |
 | RISA-911 | chore | live | fixes-tooling | prd/fixes-tooling | pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc) |
 | RISA-912 | plan | triaged | self-recovery-3 |  | Slices as their own headless sessions: started by a prd command, hand-offs to a file the orchestrator watches, so a slice survives an orchestrator rotation and can rotate or resume mid-slice itself |
 | RISA-913 | plan | triaged | self-recovery-3 |  | Any role's long work runs as a job the machinery owns, so a hand-off never interrupts it: commands (check, land, CI waits, deploys, dev servers), watchers with a follow-up action (durable triggers the dispatcher fires), side-work subagents (headless sessions); each writes a result file, the hand-off records job ids, and the next session re-attaches instead of rerunning or re-arming |
@@ -87,7 +87,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-989 | bug | live | fixes-tooling | prd/fixes-tooling | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-993 | bug | live | fixes-tooling | prd/fixes-tooling | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
-| RISA-994 | bug | in-progress | fixes-tooling | prd/fixes-tooling | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
+| RISA-994 | bug | ready | fixes-tooling | prd/fixes-tooling | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 | RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
 | RISA-997 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
 | RISA-998 | feature | triaged | self-recovery-3 |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
@@ -476,10 +476,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-886 · change · Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 6645281
 
 - 2026-11-26 (Robert Bo Davis): Triage: backlog-session hand-off behaviour (guide and rotate --brief); B-889 may outgrow a fix wave, for the user's review.
 - 2026-11-27 (the Risa move, B-543): Was B-886 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -487,10 +487,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-889 · feature · Backlog agent can hand off with instructions the next agent actually follows, continuing the work…
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 6645281
 
 - 2026-11-26 (Robert Bo Davis): From the inbox: Backlog agent can hand off with instructions the next agent actually follows, continuing the work without asking its first question, when the user asked for a handoff that way
 - 2026-11-26 (Robert Bo Davis): Triage: backlog-session hand-off behaviour (guide and rotate --brief); B-889 may outgrow a fix wave, for the user's review.
@@ -706,15 +706,16 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-994 · bug · Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 6973aab
 
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling wave 2 gate): after after-split's RISA-975 hermetic env, loops/land-unsynced.test.mjs still times out (5 tests, 20 s) on main's tip at load ~30, RISA_* unset; ask, stack, recover, rotate, sessions, dispatch, land-gate, land-force-resume failed at load 75 but ask and stack passed on a rerun at load 31.
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling slice 17, RISA-1000 scales vitest limits with load): at load ~30 still failing: land-unsynced (2, vitest timeout at 38.6 s), and in-test/script waits that vitest limits don't cover: ask (3, RISA_ASK_NOTIFY timed out), rotate (helper 'timed out waiting'), sessions ('prd-t isn't running'), bye (hand-off line). Scope for wave 4: scale those inner timers too.
 - 2026-11-28 (prd/fixes-tooling): Slice 31 (b432f93): scaledWait in loops/test-limits.mjs; land-unsynced and rotate use it. Second half is slice 32.
+- 2026-11-28 (slice/fixes-tooling/32): Slice 32 (97707c4, 6865b59): ask, sessions, bye waits use scaledWait; bye's failures were a cross-test race (stub record had no dir, so another prd-w session.sh on the machine blocked prd end), fixed; sessions kills each started stub's process group after its test.
 
 ### RISA-995 · chore · Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command
 
