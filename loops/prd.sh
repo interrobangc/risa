@@ -410,6 +410,20 @@ case $cmd in
     # --dir and --managed are the reopen's and rotation's (open-session.mjs,
     # rotate-into.sh): the recorded directory, and the dispatcher's record. They
     # pass no --model, so a reopen or rotation is always on inbox_model.
+    # With an inbox store (the config's inbox group) it is one session for every
+    # project on this machine: opened from the main checkout of the store's first
+    # project here (inbox-store.mjs projects: the machine config's first repo with
+    # inbox), so its record, name and prompt are the same whichever project runs
+    # this. RISA_INBOX_FROM marks the hop, so it is made once.
+    if [[ -z ${RISA_INBOX_FROM:-} ]] && config_get inbox.repo > /dev/null 2>&1; then
+      listed=$(node "$loops_lib_dir/../backlog/inbox-store.mjs" projects --no-fetch) ||
+        die "inbox: couldn't find the inbox store's projects"
+      home=$(awk -F'\t' '$3 != "" { print $3; exit }' <<< "$listed")
+      if [[ -n $home && $(cd "$home" 2> /dev/null && pwd -P) != "$(cd "$main" && pwd -P)" ]]; then
+        cd "$home" && RISA_INBOX_FROM=$main exec "$loops_lib_dir/prd.sh" inbox "$@"
+      fi
+    fi
+    unset RISA_INBOX_FROM
     model=$inbox_model dir=${RISA_INBOX_DIR:-$HOME/.risa/inbox} managed=()
     while (($#)); do
       case $1 in
