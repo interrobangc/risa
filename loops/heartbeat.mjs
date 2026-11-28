@@ -10,7 +10,7 @@
 //   <session>/session.json     the session itself (no agent_id): worktree from its cwd
 //   <session>/<agent id>.json  one subagent of that session
 // each { session, pid, agent, agentType, worktree, seen, firstAt, lastStart,
-// lastEnd, stoppedAt, running }:
+// lastEnd, stoppedAt, running, transcript }:
 //   pid        the session's pid; a record whose pid isn't the live session's is stale
 //   worktree   the .loops/<name> worktree the agent works in, or null (unknown):
 //              a subagent's hook input carries the session's cwd, not the agent's,
@@ -18,6 +18,8 @@
 //              them: file paths, and the paths in a Bash command)
 //   running    { <tool_use_id>: { tool, at, command? } }, the calls started and
 //              not yet ended (a stop clears them; at most MAX_RUNNING are kept)
+//   transcript the session's transcript file (its own record only; the stuck
+//              watch reads its end for an unanswered notification), or null
 //
 // The hook input is read by the host layer (host.mjs claudeInput): the event, the
 // agent and its type, the cwd, the tool, its input and its call's id.
@@ -66,7 +68,7 @@ function pathsOf(/** @type {any} */ toolInput) {
  * @param {string} loops the main checkout's .loops
  * @returns {{ type: "start" | "end" | "stop", agent: string | null, agentType: string | null,
  *   tool: string | null, id: string | null, command: string | null, worktrees: string[],
- *   cwdWorktree: string | null } | null}
+ *   cwdWorktree: string | null, transcript: string | null } | null}
  */
 export function heartbeatEvent(input, loops) {
   if (!input || typeof input !== "object") return null;
@@ -98,6 +100,7 @@ export function heartbeatEvent(input, loops) {
     command,
     worktrees: type === "stop" ? [] : worktreesIn(pathsOf(toolInput), loops),
     cwdWorktree: worktreeOfCwd(/** @type {string} */ (c.cwd), loops),
+    transcript: rawAgent ? null : (c.transcript ?? null),
   };
 }
 
@@ -130,12 +133,14 @@ export function applyHeartbeat(current, event, { session, pid, now }) {
     lastEnd: base?.lastEnd ?? null,
     stoppedAt: base?.stoppedAt ?? null,
     running: { ...(base?.running ?? {}) },
+    transcript: base?.transcript ?? null,
   };
   if (event.agent) {
     for (const w of event.worktrees) r.seen[w] = (r.seen[w] ?? 0) + 1;
     r.worktree = mostSeen(r.seen);
   } else {
     r.worktree = event.cwdWorktree ?? r.worktree;
+    r.transcript = event.transcript ?? r.transcript;
   }
   if (event.type === "start") {
     r.lastStart = at;

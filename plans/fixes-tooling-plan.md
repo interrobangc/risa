@@ -6,33 +6,25 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item           | Model  | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------------- | ------ | ------ | ------------------------------ |
-| 27    | 5    | RISA-1011      | sonnet | merged | 5bff9fa                        |
-| 28    | 5    | RISA-882       | opus   | merged | a99f7d2                        |
-| 29    | 5    | RISA-886, 889  | opus   | merged | 6645281                        |
-| 30    | 5    | RISA-986       | opus   | merged | c4654f1                        |
-| 31    | 5    | RISA-994 (1/2) | opus   | merged | b432f93                        |
-| 32    | 5    | RISA-994 (2/2) | opus   | merged | 6973aab                        |
-| 33    | 5    | RISA-1006      | opus   | merged | 5cf783f                        |
-| 34    | 5    | RISA-1012      | opus   | merged | 56f901b                        |
-| 35    | 5    | RISA-1013      | opus   | merged | b5c04a7                        |
-| 36    | 5    | RISA-1014      | opus   | merged | d40d249                        |
-| 37    | 5    | RISA-813       | opus   | merged | f200b15                        |
-| 38    | 5    | RISA-883       | opus   | merged | 1573463                        |
+| Slice | Wave | Item      | Model | State                       | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------- | ------------------------------ |
+| 48    | 9    | RISA-1026 | opus  | merged (handed off 172f024) | 46bbadb                        |
 
-**Wave 4 landed** 2026-11-27 in main as 730639e (PR #11), released as v0.1.8: slices 19–26 (RISA-881, 1005, 1003, 1004, 926, 981, 1009, 1010); 26 on sonnet, the rest opus. CI unit green on 9f74528 (run 46102353384). Codex: 2 P2s filed (RISA-1012, 1013), clean on 9f74528; landed on the user's word with `--no-review --by-user` without its re-review of the docs-only tip. The new risa.json keys (commands.testFile, staticCheck) broke v0.1.7 until v0.1.8 was installed: **a change to Risa's own risa.json needs the release that reads it installed first.** Report filed; slice worktrees removed.
+Wave 9 green: slice 48 (RISA-1026) merged; tooling only, tier none; `pnpm test` green on fa6a59d (104 files, 2392 tests); PR and Codex review next. Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
+
+**Wave 8 landed** 2026-11-28 in main as 845acf0 through PR #18: slices 45, 46, 47, opus (RISA-1020, RISA-1021, RISA-1022). Tooling only, tier none; `pnpm test` green after a docs-budget fix (104e013); Codex clean on c6043e7; landed on an unsynced tip (main's 5 new commits share no file). Report filed; to-test/2026-11-28-0515-fixes-tooling.md; slice worktrees removed. Docs folded: orchestrator.md (anchors exits 1 on a bad Model).
+
+**Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
-**Wave 5** (slices 27–38; 27 on sonnet, the rest opus): all merged; CI unit green on 3677558 (run 46112877307); sync skipped (no shared files); slice worktrees removed; PR #12 open, Codex reviewing. Landing next, then `risa rotate` (context past the soft limit).
-
 **For the next session:**
 
-- **Ready (triaged, fixes-tooling):** RISA-1015 (slice branches cut before the plan commit fall back to the full check; the tooling join runs the whole tooling suite on any `loops/` diff, so the narrow check saves nothing here; check-plan ignores a bad `Model:`), RISA-1016 (review.sh and ready's pr_verdict don't pass `--docs` as land now does). Check `risa backlog list` for more.
-- **Commit the plan before `risa slice`:** a slice branch takes the committed plan; an uncommitted section means no `Check:` and a full-suite check (wave 5 ran ten at load ~100 until each merged the plan in).
-- **Slice checks under load:** most wave-5 slice checks ran out of their 1200 s budget or lease wait on other files' timeouts; each slice's own test passed directly. The CI run is the gate.
-- Slice 36 chose `docs_re` (Markdown only) over `exempt_re` for the review carry-over: in this repo `loops/` is code.
+- **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029. After wave 9 lands, if nothing is triaged for fixes-tooling, close the topic out (`risa rm fixes-tooling`) to free the lane, as the backlog session asked.
+- **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
+- **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
+- **Slice checks under load** often run out of budget; the CI run is the gate.
+- **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
 
 ## How to run this plan
 
@@ -421,3 +413,104 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (a new `loops/token-price.test.mjs`, fixture transcripts): the totals match the table's prices by kind, a cache write costs more than the same tokens read, and the before/after split falls at the cutoff.
+
+## Slice 39: risa slice refuses a slice its committed plan lacks
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/new.test.mjs
+
+**Build (RISA-1015, first part):** `risa slice` (`loops/new.sh`, where it reads `plan_text` from the committed `prd/` tip) cuts the slice branch even when that commit's plan has no `## Slice <n>` heading (the section is still uncommitted in the integration worktree), so the slice's `Check:` field is missing on its branch and the slice check silently runs the full suite. Refuse instead, exit 1, with one line saying the slice's section isn't in the committed plan and to commit the plan first; a topic with no plan file at all starts as now.
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/new.test.mjs`, on a throwaway repo): a slice whose heading is only in the working tree's plan is refused with that line and no branch made; once committed, it starts.
+
+## Slice 40: The tooling join runs only the slice's Check file on a slice branch
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-hook.test.mjs
+
+**Build (RISA-1015, second part):** on a slice branch whose slice names a `Check:` file, the quick check still adds the whole tooling suite for any diff under `loops/` (the tooling join after the hook, `loops/check-hook.sh`'s `tooling` step into `check-tooling.mjs`), so in this repo the narrow check saves nothing. On a slice branch with a `Check:` file, the tooling step runs only that file (when it is a tooling test) or nothing more; with no `Check:` field, or off a slice branch, it runs as now. Reuse `slice_check`'s read of the field; don't read the plan twice.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-hook.test.mjs`): a slice branch with `Check:` and a diff under `loops/` runs only that file in the tooling step; without `Check:` the whole tooling suite runs as now.
+
+## Slice 41: check-plan reports an unknown Model value
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-plan.test.mjs
+
+**Build (RISA-1015, third part):** `loops/check-plan.mjs` (`risa check-plan --plan`) passes a fields line with `Model: haiku` or any other unknown value silently, though `loops/slice-fields.mjs` refuses it. Report it as an error naming the slice and the allowed models, taking the parse and its message from `slice-fields.mjs` (reuse; don't list the models a second time).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-plan.test.mjs`): a plan with `Model: haiku` on one slice fails naming that slice and opus and sonnet; `Model: sonnet` and no field pass.
+
+## Slice 42: risa review reads docs-only commits after Codex's approval as clean
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/review.test.mjs
+
+**Build (RISA-1016, first part):** `risa land` passes `codex-review.mjs --docs="$docs_re"` (RISA-1014), so a clean verdict on an earlier commit carries over Markdown-only commits after it; `loops/review.sh` (its calls to `codex-review.mjs`) doesn't, so `risa review` reads such a PR as stale and asks for a re-review. Pass the same `--docs="$docs_re"` (from `loops/lib.sh`; don't define it again).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/review.test.mjs`, with stubbed `gh`): a PR clean on an earlier commit with only a Markdown commit after it reads clean; a code commit after it still reads stale.
+
+## Slice 43: risa ready's Codex line reads docs-only commits after approval as clean
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/ready.test.mjs
+
+**Build (RISA-1016, second part):** `pr_verdict` in `loops/lib.sh`, which `loops/ready.sh` prints as its Codex line, calls `codex-review.mjs` without `--docs`, so `risa ready` reads a PR whose commits after Codex's approval are docs only as not reviewed. Pass `--docs="$docs_re"` there, as `land.sh` does. Change only `pr_verdict` in `lib.sh`.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/ready.test.mjs`, with stubbed `gh`): ready's Codex line reads clean for a PR clean on an earlier commit with only a Markdown commit after it, and not for a code commit after it.
+
+## Slice 44: check-run's load-drop test doesn't read a half-written load file
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1018):** `loops/check-run.test.mjs`'s "waits while busy, starts when the load drops, and logs the wait" flaked on GitHub Actions (run 46123266140) with "The load dropped to - (threshold 4)". Its `busy()` and `quiet()` stubs rewrite `RISA_LOAD_FILE` with `writeFileSync` (truncate, then write), so the gate in `loops/load-gate.mjs` can read it empty, read no load, and start as if the load had dropped. Make the stubs write atomically (a temp file renamed over it). If the gate itself reads an unreadable load mid-wait as "dropped", say so in the hand-off rather than changing the gate's rule that an unreadable load isn't busy.
+
+**Acceptance criteria:**
+
+- `busy()` and `quiet()` in `loops/check-run.test.mjs` replace the load file by rename, never truncate it in place.
+- The test passes 20 runs in a row locally (`pnpm vitest run loops/check-run.test.mjs` in a loop), noted in the hand-off.
+
+## Slice 45: risa anchors reports a bad Model field
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/anchors.test.mjs
+
+**Build (RISA-1020):** `loops/anchors.mjs` prints `planBudget`'s warnings but drops its `errors` (an unknown Model, RISA-1015), so `risa anchors` passes a plan `risa check-plan --plan` refuses. Print each error on stderr as `check-plan.mjs` does (`slice <n>: <text>`, the same wording; reuse, don't restate it) and exit non-zero when there is one, after the anchor lines.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/anchors.test.mjs`): a plan with `Model: haiku` on an unmerged slice prints that slice's error and exits non-zero; `Model: sonnet` passes as now.
+
+## Slice 46: The slice check runs its Check file once in Risa's own repo
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-hook.test.mjs
+
+**Build (RISA-1021):** with `commands.testFile` set and a Check field, `loops/check-hook.sh` runs the Check file through `testFile` (step `unit`), then the tooling step runs the narrowed tooling tests, which in Risa's own repo (`risa.json`) include the same file: it runs twice. Skip in the tooling step any file the `unit` step already ran (passed), and say so in one line. A project whose tooling tests don't overlap runs as now.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-hook.test.mjs`, a sample repo with stub commands): a slice whose Check file is also a tooling test runs it once; a Check file outside the tooling tests leaves the tooling step as now.
+
+## Slice 47: The load gate keeps waiting through an unread load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1022):** `load_gate_wait` in `loops/lib.sh` ends its busy loop on any state but `busy`, so a load file that reads `unread` mid-wait (replaced, or briefly missing) prints "The load dropped to -" and starts the check. Once it has said busy, treat `unread` as still waiting (the same poll and `RISA_LOAD_WAIT` cap); before that, `unread` goes ahead as now. Change only `load_gate_wait` in `lib.sh`.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-run.test.mjs`, as slice 44's load test: the load file through `RISA_LOAD_FILE`, short poll): busy, then unread, then calm: it waits through the unread read and says the load dropped to the calm value; unread from the start doesn't wait.
+
+## Slice 48: The lease wait test no longer flakes under load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1026):** `loops/lease.test.mjs` "returns once the worktree's check lease is released" flakes under load (self-recovery-2's full check at load ~13; 26/26 alone): it waits (`until`) for the `Waiting (up to 0m30s) for wt-a's check:` line, then expects the holder line (`wt-a: pnpm check (quick) (pid …`) at once, but the output it has read so far ends at the wait line. Find whether the wait command writes the two lines separately (then the test should wait for both, or the command should write them in one write) and fix the cause, not the symptom alone; a fixed sleep is no fix. Look for the same wait-then-assert shape in the file's other tests and fix those too. Say in the hand-off which it was.
+
+**Acceptance criteria:**
+
+- `loops/lease.test.mjs` passes 20 runs in a row under load (for example, alongside a CPU burner such as `yes > /dev/null` on several cores), and its assertions still check the wait line, the holder line and the done line.

@@ -25,7 +25,9 @@
 // what prd.sh passes as --here-session) and the topic defaults to --here-topic.
 //
 // Filing one prints its id. A question then prints "Now send a PushNotification:
-// …" for the asking session to push to the keeper's phone; a report prints no
+// …" for the asking session to push to the keeper's phone, led by its label
+// (`Captain Sisko · `, session-names.mjs; none under the none flavor, without a
+// session or for the dispatcher's asks; the ask keeps the bare text); a report prints no
 // such line and is never pushed (the keeper wants pushes for questions only,
 // and only this line). Either kind also shows a macOS notification
 // (the host layer, host.mjs, when osascript is on the PATH), and runs `$RISA_ASK_NOTIFY <id> <kind>
@@ -58,6 +60,9 @@ import {
 } from "./asks.mjs";
 import { loadConfig, toolCmd } from "./config.mjs";
 import { notify, runBounded } from "./host.mjs";
+import { machineFlavor } from "./captain.mjs";
+import { sessionLabel } from "./session-names.mjs";
+import { defaultDir, readRecord } from "./sessions.mjs";
 import { SkepticError, questionHash, useRecord } from "./skeptics.mjs";
 
 const TIMED_OUT = 75;
@@ -114,6 +119,37 @@ async function tell(ask) {
     );
     if (r !== "ok") console.error(`warning: RISA_ASK_NOTIFY ${r} (ignored)`);
   }
+}
+
+/** A session's kind from its name, as session.sh reads it. @type {[RegExp, string][]} */
+const KIND_OF_NAME = [
+  [/^prd-/, "prd"],
+  [/^plan-/, "plan"],
+  [/^hotfix-/, "hotfix"],
+  [/^backlog(-|$)/, "backlog"],
+  [/^inbox$/, "inbox"],
+  [/^recover$/, "recovery"],
+];
+
+/**
+ * The asking session's label for the push (`Captain Sisko · `): from its record
+ * name (RISA_SESSION_NAME) and record, under the machine's flavor; "" under none,
+ * without a session, or for the dispatcher's own asks.
+ */
+function pushLabel(/** @type {string | null} */ session) {
+  const name = process.env.RISA_SESSION_NAME;
+  if (!name || DISPATCHER_SESSIONS.includes(session ?? "") || DISPATCHER_SESSIONS.includes(name)) return "";
+  /** @type {{ kind?: string, remote?: string } | null} */
+  let record = null;
+  try {
+    record = readRecord(defaultDir(), name);
+  } catch {
+    // No records folder to read: the label from the name alone.
+  }
+  const kind = record?.kind || KIND_OF_NAME.find(([re]) => re.test(name))?.[1];
+  if (!kind) return "";
+  const lab = sessionLabel({ name, kind, remote: record?.remote ?? null }, machineFlavor());
+  return lab ? `${lab} · ` : "";
 }
 
 /** RISA_ASK_DEFAULT_MIN: the minutes a defaulting question waits (fractions allowed). */
@@ -174,9 +210,10 @@ async function ask(argv) {
   // Everything that can refuse the question comes first: using the record spends it.
   const { chose } = validateAsk(input);
   const skeptic = kind === "question" ? spendVerdict(opts, input, chose) : null;
+  const session = opts.session || process.env.RISA_SESSION || opts["here-session"] || null;
   const record = createAsk(dir, {
     ...input,
-    session: opts.session || process.env.RISA_SESSION || opts["here-session"] || null,
+    session,
     skeptic,
     now: nowOf(),
   });
@@ -191,7 +228,9 @@ async function ask(argv) {
     const when = record.defaults
       ? ` (takes "${shorten(record.recommended, 40)}" at ${clock(record.defaultAt)} unless answered)`
       : "";
-    console.log(`Now send a PushNotification: ${record.topic}: ${shorten(record.text, 120)}${when}`);
+    console.log(
+      `Now send a PushNotification: ${pushLabel(session)}${record.topic}: ${shorten(record.text, 120)}${when}`,
+    );
     console.log(`Then wait in the background: ${toolCmd.prd} ask --wait ${record.id}`);
   } else console.log("Filed. No PushNotification for a report: only questions are pushed.");
   await tell(record);

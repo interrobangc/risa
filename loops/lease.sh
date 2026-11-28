@@ -11,7 +11,9 @@
 #                                                           any other kind in use)
 #   lease.sh wait <kind> [--worktree W] [--timeout S]       block until no live holder or waiter of the
 #                                                           kind is worktree W's (default: this one);
-#                                                           exit 75 after S seconds (default 160)
+#                                                           exit 75 after S seconds (default 160); for
+#                                                           check and browser, print the result the run
+#                                                           recorded, or exit 1 when it recorded none
 #
 # Kinds and their limits: browser (RISA_BROWSER_SLOTS, default 2), check
 # (RISA_CHECK_SLOTS, default 2), anything else (RISA_<KIND>_SLOTS,
@@ -22,7 +24,9 @@
 # A lease is the directory <dir>/<N> (mkdir is the atomic take), holding a
 # `name` file of key=value lines: kind, worktree, check (what the holder is
 # doing), pid, cmd (a string the holder's command line contains, so a reused pid
-# isn't mistaken for it) and started (epoch seconds). A lease whose holder is
+# isn't mistaken for it), started (epoch seconds) and, for check and browser,
+# from (the result log's size in bytes when the lease was taken, so a wait
+# begun mid-run still reads every result the run recorded). A lease whose holder is
 # gone is taken over by the next waiter, under a short mutex (<dir>/.takeover).
 # A taker waiting for a free lease leaves the same name file in
 # <dir>/.waiting/<pid>/ while it waits, so `wait` sees a check still queued.
@@ -54,7 +58,7 @@ declare -F env_get >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # The lease this process holds (lease_take sets them; lease_release clears them).
 # Callers may set lease_worktree, lease_pid and lease_cmd before taking, and
 # lease_say to a function for chatter (browser.sh: vsay).
-lease_path="" lease_n="" lease_kind="" lease_started=""
+lease_path="" lease_n="" lease_kind="" lease_started="" lease_from=""
 # Tests only: "<marker>" pauses a take between its mkdir and recording the lease
 # (lease_test_pause), "write:<marker>" before it writes the name file
 # (lease_test_write_pause).
@@ -229,9 +233,12 @@ lease_write() {
   local p=$lease_path me=${lease_pid:-$$} tmp ok=""
   tmp=$p/name.tmp.${BASHPID:-$$}
   [[ $lease_test_hook != write:* ]] || lease_test_write_pause "${lease_test_hook#write:}"
-  if printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
-    "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "$me" "${lease_cmd-$(basename "$0")}" \
-    "${lease_started:-$(date +%s)}" 2>/dev/null > "$tmp"; then
+  if {
+    printf 'kind=%s\nworktree=%s\ncheck=%s\npid=%s\ncmd=%s\nstarted=%s\n' "$lease_kind" \
+      "${lease_worktree:-$(lease_here)}" "${1//$'\n'/ }" "$me" "${lease_cmd-$(basename "$0")}" \
+      "${lease_started:-$(date +%s)}"
+    [[ -z $lease_from ]] || printf 'from=%s\n' "$lease_from"
+  } 2>/dev/null > "$tmp"; then
     if [[ ! -f $p/name ]]; then
       ln "$tmp" "$p/name" 2>/dev/null && ok=1
     elif [[ $(lease_field "$p" pid) == "$me" ]]; then
@@ -264,14 +271,16 @@ lease_test_write_pause() {
 # they would have, now with the lease to release.
 lease_deferred=""
 lease_claim() {
-  local saved rc=1
+  local saved rc=1 log
   saved=$(trap -p TERM INT)
   lease_deferred=""
   trap 'lease_deferred=TERM' TERM
   trap 'lease_deferred=INT' INT
   if mkdir "$2/$3" 2>/dev/null; then
     [[ -z $lease_test_hook || $lease_test_hook == write:* ]] || lease_test_pause "$lease_test_hook"
-    lease_kind=$1 lease_path=$2/$3 lease_n=$3 lease_started=$(date +%s)
+    lease_kind=$1 lease_path=$2/$3 lease_n=$3 lease_started=$(date +%s) lease_from=""
+    log=$(lease_result_log "$1")
+    [[ -z $log ]] || lease_from=$(lease_bytes "$log")
     rc=0
   fi
   trap - TERM INT
@@ -367,26 +376,119 @@ lease_mine() {
   return 0
 }
 
+# lease_mine_from KIND WORKTREE → the smallest result-log offset (from) recorded
+# by WORKTREE's live leases of KIND (not its waiters), or nothing when none
+# records one (a lease taken before leases recorded it).
+lease_mine_from() {
+  local dir d f min=""
+  dir=$(lease_dir "$1")
+  for d in "$dir"/*/; do
+    d=${d%/}
+    [[ -f $d/name ]] && lease_alive "$d" "$1" || continue
+    [[ $(lease_field "$d" worktree) == "$2" ]] || continue
+    f=$(lease_field "$d" from)
+    [[ $f =~ ^[0-9]+$ ]] || continue
+    [[ -n $min ]] && ((min <= f)) || min=$f
+  done
+  echo "$min"
+}
+
+# lease_result_log KIND → the file a finished run of KIND records its result in:
+# the check log (check-run.sh) for check, the run log (browser.sh) for browser,
+# nothing for any other kind.
+lease_result_log() {
+  case $1 in
+    check) echo "${RISA_CHECK_LOG:-$loops/.check-times.log}" ;;
+    browser) echo "${RISA_RUN_LOG:-$loops/.run-log.jsonl}" ;;
+  esac
+}
+
+# lease_bytes FILE → its size in bytes, or 0.
+lease_bytes() { if [[ -f $1 ]]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
+
+# lease_results KIND WORKTREE LOG FROM → the results of WORKTREE's runs of KIND
+# that LOG gained past byte FROM (all of it if it's shorter now), each as its
+# outcome and then its line; FROM "last" gives the last one recorded at all.
+lease_results() {
+  local kind=$1 wt=$2 log=$3 from=$4 lines
+  [[ -f $log ]] || return 0
+  if [[ $from == last ]]; then lines=$(tail -n 2000 "$log")
+  elif (($(lease_bytes "$log") < from)); then lines=$(cat "$log")
+  else lines=$(tail -c +"$((from + 1))" "$log"); fi
+  case $kind in
+    check)
+      lines=$(awk -F '\t' -v wt="$wt" -v m="$(basename "$main")" '$2 == wt || (wt == "main" && $2 == m)' <<< "$lines")
+      [[ $from == last ]] && lines=$(tail -n 1 <<< "$lines")
+      [[ -n $lines ]] || return 0
+      awk -F '\t' '{
+        if ($9 == 0) o = "passed"
+        else if ($9 == 124) o = "stopped at its " ($16 == "" ? "limit" : $16) " (a hang)"
+        else if ($9 == 125) o = "a time breach (its tests passed)"
+        else o = "failed (exit " $9 ")"
+        o = o ": the " $4 " check \"" $5 "\", " $6 " s, started " $1
+        if ($13 != "") o = o "; step " $13
+        if ($14 != "") o = o "; failed: " $14
+        if ($15 != "") o = o "; flaky: " $15
+        line = $0; gsub(/\t/, " | ", line)
+        print "  " o; print "    " line
+      }' <<< "$lines"
+      ;;
+    browser)
+      lines=$(grep -F '"kind":"browser"' <<< "$lines" | grep -F "\"worktree\":\"$wt\"")
+      [[ $from == last ]] && lines=$(tail -n 1 <<< "$lines")
+      [[ -n $lines ]] || return 0
+      while IFS= read -r line; do
+        printf '  %s: %s\n    %s\n' "$(sed -n 's/.*"check":"\([^"]*\)".*/\1/p' <<< "$line")" \
+          "$(sed -n 's/.*"result":"\([^"]*\)".*/\1/p' <<< "$line")" "$line"
+      done <<< "$lines"
+      ;;
+  esac
+}
+
 # lease_wait KIND WORKTREE TIMEOUT → return once no live holder or waiter of
 # KIND is WORKTREE's (0), or 75 after TIMEOUT seconds while one still is.
+# For check and browser, a wait that saw the run and outlived it prints the
+# results the run recorded since its lease was taken (the lease's from; since
+# the wait began when no lease records one), so a wait begun or restarted
+# mid-suite still sees the suite's earlier checks (RISA-1042), and the turn it
+# wakes has something to act on; or says none was recorded and returns 1: the
+# run died before recording one, so rerun it (RISA-1034). A browser wait whose
+# results hold a failure (fail, timeout) returns 1 too. With no run to wait
+# for, it prints the last result recorded, if any, and returns 0.
 lease_wait() {
-  local kind=$1 wt=$2 timeout=$3 poll waited=0 mine announced=""
+  local kind=$1 wt=$2 timeout=$3 poll waited=0 mine announced="" log from=0 leased="" results
   poll=$(lease_poll "$kind")
+  log=$(lease_result_log "$kind")
+  [[ -z $log ]] || from=$(lease_bytes "$log")
   while :; do
     mine=$(lease_mine "$kind" "$wt")
     if [[ -z $mine ]]; then
-      if [[ -n $announced ]]; then echo "$wt's $kind is done (waited $(fmt_secs "$waited"))."
-      else echo "$wt holds no $kind lease."; fi
+      if [[ -z $announced ]]; then
+        echo "$wt holds no $kind lease."
+        [[ -z $log ]] || results=$(lease_results "$kind" "$wt" "$log" last)
+        [[ -z ${results:-} ]] || printf '%s\n%s\n' "Its last $kind result, in $log:" "$results"
+        return 0
+      fi
+      echo "$wt's $kind is done (waited $(fmt_secs "$waited"))."
+      [[ -n $log ]] || return 0
+      results=$(lease_results "$kind" "$wt" "$log" "${leased:-$from}")
+      if [[ -z $results ]]; then
+        echo "the $kind ended with no result recorded: rerun it" >&2
+        return 1
+      fi
+      printf '%s\n%s\n' "Its result, in $log:" "$results"
+      if [[ $kind == browser ]] && grep -Eq '^  [^ ].*: (fail|timeout)$' <<< "$results"; then return 1; fi
       return 0
     fi
+    [[ -n $leased || -z $log ]] || leased=$(lease_mine_from "$kind" "$wt")
+    # Each heading goes out with its holders in one write, so a reader never
+    # sees the heading without them (RISA-1026).
     if [[ -z $announced ]]; then
-      echo "Waiting (up to $(fmt_secs "$timeout")) for $wt's $kind:"
-      echo "$mine"
+      printf '%s\n%s\n' "Waiting (up to $(fmt_secs "$timeout")) for $wt's $kind:" "$mine"
       announced=1
     fi
     if ((waited >= timeout)); then
-      echo "Gave up after $(fmt_secs "$waited"): $wt's $kind is still running:" >&2
-      echo "$mine" >&2
+      printf '%s\n%s\n' "Gave up after $(fmt_secs "$waited"): $wt's $kind is still running:" "$mine" >&2
       return 75
     fi
     sleep "$poll"

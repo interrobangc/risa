@@ -145,6 +145,21 @@ describe("the command line", () => {
     expect(r.stdout).toContain("slice 1: `gone` is not in `scripts/a.mjs` on dev\n");
   });
 
+  it("prints an unmerged slice's unknown Model after the anchor lines and exits 1", () => {
+    const withModel = (/** @type {string} */ m) =>
+      plan(`Stack: no · Reads: x.md · Tests: unit · Model: ${m}\n\n\`scripts/a.mjs\` \`here\``);
+    writeFileSync(join(repo, "plans/t-plan.md"), withModel("haiku"));
+    let r = spawnSync("node", [CLI, "t", "--repo", repo], { encoding: "utf8" });
+    expect(r.status).toBe(1);
+    expect(r.stdout).toBe("anchors ok on dev (slices 1)\n");
+    expect(r.stderr).toMatch(/^error: slice 1: .*opus.*sonnet.*"haiku"$/m);
+    writeFileSync(join(repo, "plans/t-plan.md"), withModel("sonnet"));
+    r = spawnSync("node", [CLI, "t", "--repo", repo], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("anchors ok on dev (slices 1)\n");
+    expect(r.stderr).not.toMatch(/error/);
+  });
+
   it("refuses a missing plan or ref with exit 2", () => {
     expect(spawnSync("node", [CLI, "nope", "--repo", repo]).status).toBe(2);
     writeFileSync(join(repo, "plans/t-plan.md"), plan("x"));

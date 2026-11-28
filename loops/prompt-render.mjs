@@ -90,7 +90,14 @@ export const CASES = [
  */
 export function renderPrompts(config) {
   // Only what git and the shells need: no tool knob or RISA_CONFIG from the caller.
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME };
+  // No machine config (RISA_MACHINE_CONFIG empty): the default flavor, whatever this
+  // machine names; the backlog's drawn admiral fixed (its flavor line).
+  const env = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    RISA_MACHINE_CONFIG: "",
+    RISA_CAPTAIN: "Nechayev",
+  };
   const root = realpathSync(mkdtempSync(join(tmpdir(), "prompt-render-")));
   try {
     const main = join(root, "main");

@@ -642,6 +642,7 @@ describe("planBudget", () => {
     const apart = budgetPlan([a, b].join("\n"), "| 3 | 1 | | |\n| 4 | 2 | | |");
     expect(planBudget(apart)).toEqual({
       warnings: [],
+      errors: [],
       wavesFrom: "waves from the Status table's Wave column",
     });
     const together = budgetPlan([a, b].join("\n"), "| 3 | 2 | | |\n| 4 | 2 | | |");
@@ -663,6 +664,38 @@ describe("planBudget", () => {
     );
     expect(planBudget(plan).warnings).toEqual([]);
     expect(planBudget(budgetPlan(noCheck), { merged: new Set([2]) }).warnings).toEqual([]);
+  });
+
+  it("reports an unknown Model as an error naming the slice and the allowed models", () => {
+    const fields = (/** @type {string} */ model) =>
+      budgetPlan(
+        [
+          slice(1, ` · Blocked by: none · Check: web/1.test.js${model}`),
+          slice(2, " · Blocked by: none · Check: web/2.test.js"),
+        ].join("\n"),
+      );
+    const bad = planBudget(fields(" · Model: haiku"));
+    expect(bad.errors).toHaveLength(1);
+    expect(bad.errors[0].slice).toBe(1);
+    expect(bad.errors[0].text).toMatch(/opus/);
+    expect(bad.errors[0].text).toMatch(/sonnet/);
+    expect(bad.errors[0].text).toContain('"haiku"');
+    expect(bad.warnings).toEqual([]);
+    expect(planBudget(fields(" · Model: sonnet")).errors).toEqual([]);
+    expect(planBudget(fields("")).errors).toEqual([]);
+
+    const dir = mkdtempSync(join(tmpdir(), "check-plan-model-"));
+    try {
+      const file = join(dir, "sample-plan.md");
+      writeFileSync(file, fields(" · Model: haiku"));
+      const r = spawnSync("node", [CLI, "--plan", file], { encoding: "utf8" });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/^error: slice 1: .*opus.*sonnet.*"haiku"/m);
+      writeFileSync(file, fields(" · Model: sonnet"));
+      expect(spawnSync("node", [CLI, "--plan", file], { encoding: "utf8" }).status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("counts only the Build paragraph's distinct files", () => {

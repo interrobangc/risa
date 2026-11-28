@@ -25,7 +25,12 @@
 //           (it looks finished: ask it, then the user closes it);
 //         - a local branch with no worktree: merged ones are named for
 //           deletion, unmerged ones are never deleted;
-//         - PRD registry rows that look done (not on hold, standing or running).
+//         - PRD registry rows that look done (not on hold, standing or running);
+//         - a landed topic (landedTopics, or landedWithCode: code past its
+//           landing) with a worktree or a row not done while no dispatcher
+//           runs: `prd finish <topic>` is the fix; never a standing topic;
+//         - a topic with more than one live claude across its worktrees (the
+//           pids and where each works).
 //   kept  a safe candidate held back, with why: a dirty worktree, one with
 //         something running, a plan worktree with a live session, a ticket
 //         just taken, finished items of a topic with a prd/ worktree.
@@ -97,6 +102,10 @@ export const protectedBranches = () => branchKinds().kept;
  * @property {{ id: string, title?: string, status: string, prd?: string }[] | null} [items]   backlog items, archived ones left out
  * @property {string[] | null} [prdWorktrees]   topics with a prd/ worktree; null when unreadable (a topic's finished items stay)
  * @property {{ topic: string, flags: string[], state: string, waiting: number, notes?: string }[] | null} [registry]
+ * @property {{ topic: string, code?: boolean, standing?: boolean, worktree?: string | null, rowDone?: boolean | null }[]} [landed]
+ *   landed topics: in landedTopics, or landedWithCode (code: true); rowDone null when it has no row
+ * @property {boolean} [dispatcherRunning]   the dispatcher's lock names a live pid
+ * @property {{ topic: string, pid: number, worktree: string }[]} [claudes]   live claudes in a topic's worktrees
  *
  * @typedef {{ kind: string, target: string, why: string, how?: string, path?: string, sha?: string, ids?: string[] }} Finding
  */
@@ -274,6 +283,34 @@ export function tidy(facts) {
       why: `${saysDone ? "its notes say done" : "planned, with no waiting items"}, but it isn't flagged done (${toolCmd.backlog} prd set ${r.topic} flags=${[...r.flags, "done"].join(",")})`,
     });
   }
+
+  if (!facts.dispatcherRunning)
+    for (const l of facts.landed ?? []) {
+      if (l.standing) continue;
+      const left = [
+        ...(l.worktree ? [`its worktree ${l.worktree}`] : []),
+        ...(l.rowDone === false ? ["its row not done"] : []),
+      ];
+      if (!left.length) continue;
+      ask.push({
+        kind: "landed",
+        target: l.topic,
+        why: `landed${l.code ? ", with code past its landing," : ""} with ${left.join(" and ")}, and no dispatcher is running (${toolCmd.prd} finish ${l.topic})`,
+      });
+    }
+
+  /** @type {Map<string, { pid: number, worktree: string }[]>} */ const byTopic = new Map();
+  for (const c of facts.claudes ?? []) {
+    const seen = byTopic.get(c.topic) ?? [];
+    if (!seen.some((s) => s.pid === c.pid)) byTopic.set(c.topic, [...seen, c]);
+  }
+  for (const [topic, cs] of byTopic)
+    if (cs.length > 1)
+      ask.push({
+        kind: "sessions",
+        target: topic,
+        why: `${cs.length} live claudes across its worktrees (${cs.map((c) => `pid ${c.pid} in ${c.worktree}`).join(", ")}): one is enough, end the others`,
+      });
 
   return { safe, ask, kept };
 }

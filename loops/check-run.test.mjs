@@ -14,6 +14,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -275,8 +276,14 @@ describe("check-run.sh and the load gate", () => {
     });
   const last = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const busy = () => writeFileSync(loadFile, "9 9 9\n");
-  const quiet = () => writeFileSync(loadFile, "1 1 1\n");
+  // Replace the load file by rename, never truncate it in place: the gate
+  // polls it, and a half-written (empty) file reads as no load (RISA-1018).
+  const setLoad = (text) => {
+    writeFileSync(`${loadFile}.tmp`, text);
+    renameSync(`${loadFile}.tmp`, loadFile);
+  };
+  const busy = () => setLoad("9 9 9\n");
+  const quiet = () => setLoad("1 1 1\n");
 
   it("waits while busy, starts when the load drops, and logs the wait", async () => {
     busy();
@@ -314,6 +321,23 @@ describe("check-run.sh and the load gate", () => {
       expect(last()).toMatchObject({ reason: "no wait", loadWaited: 0 });
     }
     quiet();
+  });
+
+  it("keeps waiting through an unread load once busy, then starts when it drops (RISA-1022)", async () => {
+    busy();
+    const done = runAsync("waits through unread");
+    await sleep(1000);
+    setLoad("not a load\n");
+    await sleep(1000);
+    quiet();
+    const r = await done;
+    expect(r.status).toBe(0);
+    expect(r.out).toMatch(/machine is busy \(5-minute load 9, over 4\)/);
+    expect(r.out).not.toMatch(/load dropped to -/);
+    expect(r.out).toMatch(/load dropped to 1 \(threshold 4\) after \d+s: starting the check/);
+    expect(r.out.indexOf("load dropped")).toBeLessThan(r.out.indexOf("ran"));
+    expect(last()).toMatchObject({ reason: "waits through unread", exit: 0 });
+    expect(last().loadWaited).toBeGreaterThanOrEqual(1);
   });
 
   it("isn't busy when the load can't be read", async () => {

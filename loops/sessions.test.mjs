@@ -19,7 +19,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPTAINS } from "./captain.mjs";
+import { loadConfig } from "./config.mjs";
+import { namesOf } from "./flavor.mjs";
+import { displayName } from "./session-names.mjs";
 import {
   ancestorClaude,
   endTarget,
@@ -37,6 +39,11 @@ import {
 } from "./sessions.mjs";
 import "./config-fixture.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
+/** The name session.sh shows claude for a session (session-names.mjs). */
+const shown = (name, kind, remote) => displayName({ name, kind, remote, project: loadConfig().config.name });
 
 // RISA-994: a busy machine slows every spawned node and shell, so the waits
 // below scale with load (unchanged at a load of 15 or under).
@@ -363,6 +370,9 @@ beforeAll(() => {
     "sessions.mjs",
     "host.mjs",
     "captain.mjs",
+    "flavor.mjs",
+    "session-names.mjs",
+    "machine.mjs",
     "end-session.sh",
     "prompt.sh",
     "planner-model.mjs",
@@ -427,7 +437,7 @@ describe("session.sh", () => {
     expect(atStart).not.toHaveProperty("rotating");
     expect(atStart).not.toHaveProperty("ended");
     expect(readFileSync(join(state, "args"), "utf8")).toBe(
-      `--settings\n${scripts("context-settings.json")}\n--remote-control\nprd-t\na prompt\n`,
+      `--settings\n${scripts("context-settings.json")}\n--remote-control\n${shown("prd-t", "prd", "prd-t")}\n--name\n${shown("prd-t", "prd", "prd-t")}\na prompt\n`,
     );
     const after = record("prd-t");
     expect(after).toMatchObject({ pid: stubPid(), exit: 3, auto: true });
@@ -697,7 +707,7 @@ describe("sessions start through the wrapper", () => {
       "--model",
       "opus",
       "--remote-control",
-      "plan-v",
+      shown("plan-v", "plan", "plan-v"),
     ]);
   });
 
@@ -724,9 +734,10 @@ describe("sessions start through the wrapper", () => {
     expect(record("backlog")).toMatchObject({ pid: stubPid(), kind: "backlog", model: "sonnet", exit: 0 });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
     expect(args.slice(2, 5)).toEqual(["--model", "sonnet", "--remote-control"]);
-    // Its display name is a captain's; the record stays backlog and remembers it.
-    expect(CAPTAINS).toContain(args[5]);
-    expect(record("backlog").remote).toBe(args[5]);
+    // Its display name carries an admiral; the record stays backlog and remembers it.
+    const { remote } = record("backlog");
+    expect(ADMIRALS).toContain(remote);
+    expect(args[5]).toBe(shown("backlog", "backlog", remote));
   });
 
   it("each start of the main backlog session is a new captain, its tab titled the same", () => {
@@ -734,10 +745,13 @@ describe("sessions start through the wrapper", () => {
     for (let i = 0; i < 6; i++) {
       const r = run("prd.sh", ["plan"], { RISA_TAB_TITLE: "always" });
       expect(r.status).toBe(0);
-      const captain = readFileSync(join(state, "args"), "utf8").split("\n")[5];
-      expect(CAPTAINS).toContain(captain);
+      const captain = record("backlog").remote;
+      expect(ADMIRALS).toContain(captain);
       expect(captain).not.toBe(last);
-      expect(r.stdout).toContain(`\x1b]0;${captain}\x07`);
+      expect(readFileSync(join(state, "args"), "utf8").split("\n")[5]).toBe(
+        shown("backlog", "backlog", captain),
+      );
+      expect(r.stdout).toContain(`\x1b]0;${shown("backlog", "backlog", captain)}\x07`);
       expect(record("backlog")).toMatchObject({ kind: "backlog", remote: captain });
       last = captain;
     }
@@ -767,7 +781,12 @@ describe("sessions start through the wrapper", () => {
       exit: 0,
     });
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
-    expect(args.slice(0, 4)).toEqual(["--model", "sonnet", "--remote-control", "hotfix-trim"]);
+    expect(args.slice(0, 4)).toEqual([
+      "--model",
+      "sonnet",
+      "--remote-control",
+      shown("hotfix-trim", "hotfix", "hotfix-trim"),
+    ]);
   });
 });
 
@@ -799,9 +818,10 @@ describe("the inbox session", () => {
       "--model",
       "opus",
       "--remote-control",
-      "inbox",
+      shown("inbox", "inbox", "inbox"),
     ]);
-    expect(args.slice(6).join("\n")).toMatch(/^You are the inbox agent\./);
+    expect(args.slice(6, 8)).toEqual(["--name", shown("inbox", "inbox", "inbox")]);
+    expect(args.slice(8).join("\n")).toMatch(/^You are the inbox agent\./);
     // A second start reuses the directory without the note.
     expect(inbox().stderr).not.toContain("Made ");
   });

@@ -8,9 +8,6 @@ Agents file each new line into the tracker ([backlog.md](backlog.md)) and add it
 
 ## Change requests
 
-- Tell backlog agents they can communicate with each other (RISA-984)
-  Example: caretook's backlog agent can file issues with risa's, and risa's can ask caretook's backlog to update risa after a fix is deployed.
-
 ## Features
 
 - A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before it runs or between waves) to replan the whole PRD (RISA-998)

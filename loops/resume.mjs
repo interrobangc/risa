@@ -15,26 +15,35 @@
 //     on hold, being rotated, with a landing marker (a journal for its branch, or a landing
 //     under it) or, while live, running a `prd` command; a live one is ended (TERM, KILL
 //     END_WAIT_MS later), then resumed on a later tick; a dead one is resumed, the oldest claim
-//     first, one per tick.
+//     first, one per tick;
+//   - a claim held by a landing journal whose pid is dead gets one report (naming the session,
+//     the branch and `land --resume <branch>`) and records it (`journalReported`: the journal's
+//     branch and start), so that journal is never reported again; a live journal only waits, and
+//     a new journal for the branch (another start) reports again.
 import { END_WAIT_MS, drainHolds } from "./drain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { stallHolds, timeOf } from "./usage.mjs";
 import { branchKinds, toolCmd } from "./config.mjs";
 
 /**
+ * @typedef {{ session: string, branch: string, started: string | null, live: boolean }} ResumeJournal
+ *   a landing journal: the session its branch belongs to, its start, whether its pid runs
  * @typedef {{ session: string, stalled: { at?: string | number | null, error?: string,
  *   resetsAt?: string | number | null, pid?: number | null } }} ResumeMark
  * @typedef {{ name: string, live: boolean, managed: boolean, pid?: number | null,
  *   started?: string | null, rotating?: boolean, rotatingAt?: number | string | null }} ResumeSession
  * @typedef {{ at: number, since: number | null, pid: number | null, error: string,
- *   termPid?: number | null, termAt?: number | null }} Claim
+ *   termPid?: number | null, termAt?: number | null,
+ *   journalReported?: { branch: string, started: string | null } }} Claim
  *   at: when it was claimed; since: when it stalled; pid: the stalled session's; termPid,
- *   termAt: the TERM this resume sent a live one
+ *   termAt: the TERM this resume sent a live one; journalReported: the dead landing journal
+ *   already reported for it
  * @typedef {{ type: "end" | "kill", session: string, pid: number }
  *   | { type: "open", session: string, worktree: string, why: string }} ResumeAct
  * @typedef {{ claim: { session: string, claim: Claim }[], clear: string[],
  *   report: { sessions: string[], text: string } | null, drop: { session: string, why: string }[],
- *   acts: ResumeAct[], waits: { session: string, why: string }[] }} ResumeDecision
+ *   acts: ResumeAct[], waits: { session: string, why: string }[],
+ *   reports: { session: string, text: string, journal: { branch: string, started: string | null } }[] }} ResumeDecision
  */
 
 /** prd/<topic> or plan/<topic> → its session (prd-<topic>, plan-<topic>), else null. */
@@ -48,11 +57,12 @@ export const sessionOfBranch = (/** @type {string} */ branch) => {
  * This tick's resume. Pure.
  * @param {{ marks: ResumeMark[], sessions: ResumeSession[], worktrees: { name: string, branch: string }[],
  *   rows?: { topic: string, state?: string, flags?: string[] }[], claimed?: Record<string, Claim>,
- *   landing?: Set<string>, commands?: Set<string> | null,
+ *   landing?: Set<string>, journals?: ResumeJournal[], commands?: Set<string> | null,
  *   drain: { state: "normal" | "draining" | "limited", why: string, allow?: string | null }, paused?: boolean, now: number,
  *   endWaitMs?: number }} facts
  *   landing: sessions with a landing marker or a landing under them; commands: live sessions
- *   running a `prd` command (null: the process table couldn't be read)
+ *   running a `prd` command (null: the process table couldn't be read); journals: the landing
+ *   journals, each with its session and whether its pid runs
  * @returns {ResumeDecision}
  */
 export function resumeDecision({
@@ -62,6 +72,7 @@ export function resumeDecision({
   rows = [],
   claimed = {},
   landing = new Set(),
+  journals = [],
   commands = new Set(),
   drain,
   paused = false,
@@ -69,7 +80,7 @@ export function resumeDecision({
   endWaitMs = END_WAIT_MS,
 }) {
   /** @type {ResumeDecision} */
-  const out = { claim: [], clear: [], report: null, drop: [], acts: [], waits: [] };
+  const out = { claim: [], clear: [], report: null, drop: [], acts: [], waits: [], reports: [] };
   const records = new Map(sessions.map((s) => [s.name, s]));
   /** @type {Map<string, string>} session → its worktree */
   const trees = new Map();
@@ -126,9 +137,20 @@ export function resumeDecision({
     else if (drainHolds(drain, session.replace(/^(prd|plan)-/, "")))
       out.waits.push({ session, why: `usage is ${drain.state}` });
     else if (row?.flags?.includes("hold")) out.waits.push({ session, why: "its topic is on hold" });
-    else if (landing.has(session))
+    else if (landing.has(session) || journals.some((j) => j.session === session)) {
       out.waits.push({ session, why: "it has a landing marker: a landing first" });
-    else if (rec.live) {
+      const mine = journals.filter((j) => j.session === session);
+      const gone = mine.find(
+        (j) =>
+          !j.live && !(c.journalReported?.branch === j.branch && c.journalReported?.started === j.started),
+      );
+      if (gone && !mine.some((j) => j.live))
+        out.reports.push({
+          session,
+          journal: { branch: gone.branch, started: gone.started },
+          text: `${session} stopped on a usage limit that has reset, but its resume waits on a landing journal for ${gone.branch}${gone.started ? ` (started ${gone.started})` : ""} whose landing is no longer running. Run ${toolCmd.prd} land --resume ${gone.branch} from the main checkout to finish or undo that landing; the resume follows on a later tick.`,
+        });
+    } else if (rec.live) {
       const pid = Number(rec.pid);
       if (commands === null) out.waits.push({ session, why: "the process table can't be read" });
       else if (commands.has(session)) out.waits.push({ session, why: `it runs a ${toolCmd.prd} command` });

@@ -217,7 +217,7 @@ describe("the fixture project's roles", () => {
     ["orchestrator", "Recovery", /\*\*Resuming as orchestrator:\*\*/],
     ["planner", "What to ask", /^## What to ask\n[\s\S]*\*\*Unattended\*\*/],
     ["planner", "The skeptic pass", /^## The skeptic pass\n[\s\S]*\*\*A second send-back\*\*/],
-    ["backlog", "Deciding what's next", /Standing priorities:/],
+    ["backlog", "Deciding what's next", /Orchestrators check in with it/],
     ["machinery", "Worktrees and leases", /\*\*`pnpm prd tidy`\*\*/],
   ])("%s's %s section, which prompts and docs name, is in the merged text", (role, heading, want) => {
     expect(roleDoc(role, { config, root, section: heading })).toMatch(want);

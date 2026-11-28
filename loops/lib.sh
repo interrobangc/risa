@@ -511,17 +511,22 @@ load_gate() {
 }
 
 # load_gate_wait WHAT: while the machine is busy, poll (RISA_LOAD_POLL, 15 s)
-# for at most RISA_LOAD_WAIT (600 s), then go ahead and say so. Sets
-# load_waited to the seconds waited. RISA_LOAD_GATE=off or
-# RISA_LEASES=off waits for nothing. Always returns 0.
+# for at most RISA_LOAD_WAIT (600 s), then go ahead and say so. Once it has
+# said busy, an unread load (the file replaced or briefly missing) keeps it
+# waiting (RISA-1022); unread from the start goes ahead. Sets load_waited to
+# the seconds waited. RISA_LOAD_GATE=off or RISA_LEASES=off waits for
+# nothing. Always returns 0.
 load_waited=0
 load_gate_wait() {
   local what=$1 max=${RISA_LOAD_WAIT:-600} poll=${RISA_LOAD_POLL:-15} t0 state l thr _c said=""
+  local bl="" bthr=""
   load_waited=0
   [[ ${RISA_LOAD_GATE:-} == off || ${RISA_LEASES:-} == off ]] && return 0
   [[ $max =~ ^[0-9]+$ ]] || max=600
   t0=$(date +%s)
-  while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy ]]; do
+  while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy || ($state == unread && -n $said) ]]; do
+    # An unread poll keeps the last busy reading for the messages.
+    if [[ $state == busy ]]; then bl=$l bthr=$thr; else l=$bl thr=$bthr; fi
     load_waited=$(($(date +%s) - t0))
     if [[ -z $said ]]; then
       echo "The machine is busy (5-minute load $l, over $thr): waiting up to ${max}s before $what (RISA_LOAD_WAIT)…"
@@ -608,11 +613,12 @@ pr_state() {
 }
 
 # pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,
-# one line, or the line and the findings); a clean one carries over dev merges.
+# one line, or the line and the findings); a clean one carries over dev merges
+# and over docs-only commits after the approval (docs_re, as land.sh passes it).
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
+  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" --docs="$docs_re" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.

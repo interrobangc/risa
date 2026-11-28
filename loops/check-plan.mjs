@@ -10,7 +10,8 @@
 //   → three lines: the proposed tier, why, and ok | below | refused for the declared tier
 //   node check-plan.mjs --plan <plan-file>
 //   → a plan's slice budget (planBudget, below): a warning per slice over it on
-//     stderr, then how its waves were read; always exits 0 (`prd anchors` runs it too)
+//     stderr, then how its waves were read; exits 0, or 1 when a slice's fields
+//     have an error (an unknown Model, from slice-fields.mjs) (`prd anchors` runs it too)
 // The three modes (the project's check hook runs them, through check-hook.sh):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
 //          the integration and component test files the slice added or edited.
@@ -385,7 +386,8 @@ export const planToolingLint = (changed) => checkPlan().planToolingLint(changed)
 
 // A plan's slice budget (`prd doc planner`, The plan's shape): about 4 files, one
 // test file named by the slice's Check field, and no Check file shared by two
-// slices of one wave. It only warns: an old plan without Check still passes.
+// slices of one wave. It only warns: an old plan without Check still passes. A
+// fields line slice-fields.mjs refuses (an unknown Model) is an error.
 
 /** Build files past this many warn. */
 export const BUILD_FILES = 4;
@@ -437,19 +439,23 @@ export function sliceWaves(planText, slices, merged) {
 /**
  * The budget warnings for a plan's open slices: those not merged and, when the
  * plan's Status table lists any slice, listed there (status-trim moves a landed
- * wave's rows out, so a slice with no row has landed).
+ * wave's rows out, so a slice with no row has landed). `errors` are the fields
+ * errors sliceFields gives those slices (an unknown Model), its own messages.
  * @param {string} planText
  * @param {{ merged?: Set<number> }} [opts] the merged slices (default: the plan's own tables)
- * @returns {{ warnings: { slice: number, text: string }[], wavesFrom: string }}
+ * @returns {{ warnings: { slice: number, text: string }[], errors: { slice: number, text: string }[], wavesFrom: string }}
  */
 export function planBudget(planText, { merged = mergedSlices([planText]) } = {}) {
   /** @type {{ slice: number, text: string }[]} */
   const warnings = [];
+  /** @type {{ slice: number, text: string }[]} */
+  const errors = [];
   const slices = [];
   const listed = new Set(sliceRows(planText).map((r) => r.slice));
   for (const { n, body } of sliceSections(planText)) {
     if (merged.has(n) || (listed.size && !listed.has(n))) continue;
     const f = sliceFields(planText, n);
+    for (const text of f.errors) errors.push({ slice: n, text });
     slices.push({ n, blockedBy: f.blockedBy, given: f.given, check: f.check });
     const files = buildFiles(body);
     if (files.length > BUILD_FILES)
@@ -477,10 +483,15 @@ export function planBudget(planText, { merged = mergedSlices([planText]) } = {})
         slice: /** @type {number} */ (ns.at(-1)),
         text: `shares its Check file ${key.split("\0")[1]} with slice ${ns.slice(0, -1).join(", ")} in one wave`,
       });
-  return { warnings, wavesFrom };
+  return { warnings, errors, wavesFrom };
 }
 
-/** `--plan <file>`: the budget's warnings on stderr, how waves were read; exit 0. */
+/** One of planBudget's errors as a line: `error: slice <n>: <text>` (check-plan --plan, anchors.mjs). */
+export function fieldsErrorLine(/** @type {{ slice: number, text: string }} */ e) {
+  return `error: slice ${e.slice}: ${e.text}`;
+}
+
+/** `--plan <file>`: the budget's warnings and errors on stderr, how waves were read; exit 1 on an error. */
 function planCli(/** @type {string} */ file) {
   let text;
   try {
@@ -497,11 +508,16 @@ function planCli(/** @type {string} */ file) {
     } catch {
       // no history yet
     }
-  const { warnings, wavesFrom } = planBudget(text, { merged: mergedSlices([text, historyText]) });
+  const { warnings, errors, wavesFrom } = planBudget(text, { merged: mergedSlices([text, historyText]) });
   for (const w of warnings) console.error(`warning: slice ${w.slice}: ${w.text}`);
+  for (const e of errors) console.error(fieldsErrorLine(e));
   console.log(
     warnings.length ? `${warnings.length} budget warning(s); ${wavesFrom}` : `budget ok; ${wavesFrom}`,
   );
+  if (errors.length) {
+    console.error(`check-plan: ${errors.length} fields error(s) in ${file}`);
+    process.exit(1);
+  }
 }
 
 const USAGE = `usage: check-plan.mjs --mode slice|quick|full [--repo DIR --base REF --head REF] < changed-files

@@ -4,15 +4,27 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/risa-next` |
-| ----- | ---- | ----- | -------------------------- |
-| 1     | 1    | —     | —                          |
-| 2     | 2    | —     | —                          |
-| 3     | 2    | —     | —                          |
-| 4     | 3    | —     | —                          |
-| 5     | 4    | —     | —                          |
+| Slice | Wave | State                  | Merge into `prd/risa-next` |
+| ----- | ---- | ---------------------- | -------------------------- |
+| 1     | 1    | merged (opus, 5fd8fdf) | 37fd0e6                    |
+| 2     | 2    | merged (opus, 1c991ce) | 6da49d7                    |
+| 3     | 2    | merged (opus, 7754261) | dadae10                    |
+| 4     | 3    | merged (opus, 8207e40) | e01708f                    |
+| 5     | 4    | merged (opus, 8b5eb6c) | cf8214f                    |
 
-**Backlog:** claim each slice's items as it starts. Slices 1 and 3: RISA-914 (`done` after 3). Slice 2: RISA-799 (and RISA-914's push label). Slice 4: RISA-815. Slice 5: RISA-984. With the first landing, mark RISA-816 and RISA-1008 `done` (answered in the PRD's _Decisions_) and move RISA-1007 to `risa-next-2` (`risa backlog set RISA-1007 prd=risa-next-2`), whose build it is.
+**Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
+
+**Models:** slices 1, 2, 3 opus; 4 and 5 opus (prompt logic and a new module).
+
+**Landed (2026-11-28):** waves 1+2 through PR #14 (main 725042b). Wave 3 (slice 4) through PR #16 at tier none: full suite green on rerun (108 files, 2449 tests; first run's 12 failures were timeouts at load ~18), Codex clean on f891446 after one P2 filed as RISA-1024 (fixes-bug); main at 75ba240, to-test `to-test/2026-11-28-0402-risa-next.md`. Slice 4's fix also mended main's `doc.test.mjs` (our 082af3a had dropped the sentence it anchored on). RISA-815 done; worktree risa-next-4 removed.
+
+**Wave 4 (started 2026-11-28):** synced (up to date with main 82c9cb7), RISA-984 claimed, worktree risa-next-5, opus agent spawned, handed off 8b5eb6c (quick check green), merged cf8214f. `risa tier`: none (tooling only), so the gate is the full check on the merged tip: green on fca8359 (2434 tests; a first run's 13 failures came at load ~19 and passed on rerun). Docs folded (backlog doc peer rule, trimmed to its 3072 B budget). risa-next-5 removed. Next: PR, Codex review, land at tier none, report, `risa status-trim`, `risa rm risa-next` (last wave). Slice 5's CLI prints `<name>\t<main>\t<backlog>` (a third field: the peer's backlog command, for the inbox fallback). Slice 4's briefs use `## From the user` (backlog.sh's internal flag is still named `directives`).
+
+**Review tip:** don't commit to the PR branch after the review round you'll land on: `land` refuses a local tip ahead of the PR's head, and a docs-only commit that isn't a main merge makes Codex's verdict stale.
+
+**Notes for slice 5:** `loops/flavor.mjs` loads `machine.mjs` only by dynamic import in its CLI (a top-level await hangs node). Tests copying `captain.mjs` also need `flavor.mjs`, `machine.mjs`, `config.mjs`, `session-names.mjs`. `loops/prompt.sh` appends the flavor line through an EXIT trap (`flavor_end`); `prompt-render.mjs` sets `RISA_MACHINE_CONFIG=""` and `RISA_CAPTAIN=Nechayev` for the golden. Session display names come from `loops/session-names.mjs` (`displayName`): the main backlog is `backlog (<project>) · Admiral <Name>`, which slice 4's check-in rule and slice 5's peer rule point to. Full-suite timeouts under machine load (`land-unsynced` and others) pass alone: load, not this PRD.
+
+**Docs at landing:** all done (peer rule in fca8359). The session-name sentence and the cut-off "Standing priorities" sentence are done (082af3a); `flavor` is in `machine.mjs`'s header.
 
 ## Architectural decisions
 
