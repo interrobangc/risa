@@ -6,9 +6,9 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                               | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | --------------------------------------------------- | ------------------------------ |
-| 48    | 9    | RISA-1026 | opus  | building (worktree fixes-tooling-48, agent spawned) | —                              |
+| Slice | Wave | Item      | Model | State                       | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------- | ------------------------------ |
+| 48    | 9    | RISA-1026 | opus  | merged (handed off 172f024) | 46bbadb                        |
 
 Wave 9 in flight: slice 48 (RISA-1026). Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
 
