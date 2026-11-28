@@ -7,7 +7,7 @@
 | Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
 | ----- | ---- | --------------------------------------------- | ---------------------------- |
 | 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
-| 2     | 2    | started 2026-11-28 (worktree, agent; opus)    | —                            |
+| 2     | 2    | merged 2026-11-28 (6a08b63; opus)             | dd41acb                      |
 | 4     | 2    | started 2026-11-28 (worktree, agent; opus)    | —                            |
 | 3     | 3    | —                                             | —                            |
 | 5     | 4    | —                                             | —                            |
@@ -18,6 +18,8 @@
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
 **Now (2026-11-28):** wave 1 landed in main through PR #38 (main at 9f54654, report a67). Wave 2 in flight: backlog ingested (nothing new), `risa sync` a skip, slices 2 and 4 started together (worktrees `risa-next-4-2` and `risa-next-4-4`, one opus agent each), `risa watch risa-next-4 --wait` running. After a crash: respawn each unmerged slice with `risa prompt slice risa-next-4 <n> --continue`. Next: merge 2 then 4 as they hand off, `risa tier` and `risa ci run <tier> --wait`, PR, Codex review, land, rotate. Before slices 3 and 5, check `risa backlog prd list` that no running topic holds `bin/risa`, `loops/rm.sh` or `loops/lib.sh` (`risa-next` is done; `fixes-bug` held `loops/new`, `loops/rotate`, `loops/open-session` on 2026-11-28).
+
+**Slice 2 merged (dd41acb):** worktree kept until the wave is green. For slice 3: `machine.mjs repo` prints a `.risa/config.json` path in the folder form and exits 2 with one line when a checkout has both forms; `configFor` keeps an `exists` argument only so `machine.test.mjs` passes unchanged. Slice 4 still in flight.
 
 **Lessons for the gate:** a full check takes no label: `env -u CLAUDE_CONFIG_DIR risa check > <log outside the worktree> 2>&1` in the background (about 8 minutes at load 20+), then `risa wait check`; with `CLAUDE_CONFIG_DIR` set, RISA-1076 fails about 20 tests. `loops/land-unsynced.test.mjs` can time out under load and passes alone. Commit _Status_ before `risa pr`: land refuses a local tip the PR's head trails.
 
