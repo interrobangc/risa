@@ -131,7 +131,6 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -163,6 +162,14 @@ import {
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { MACHINE_DIR, workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
+import {
+  applyFinish,
+  failedKey,
+  finishDecision,
+  finishPick,
+  gatherFinish,
+  landedWithCode,
+} from "./finish.mjs";
 import { doneFlags, landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
@@ -1661,25 +1668,6 @@ function resumeActs(
 // ---- the finish of a landed topic --------------------------------------------------
 
 /**
- * finish.mjs, loaded on first use, or null when it isn't there. Not a static import:
- * the test harnesses that copy a list of these scripts (dispatch.test.mjs) don't
- * list it yet, and the dispatcher must still load there.
- * @type {typeof import("./finish.mjs") | null | undefined}
- */
-let finishModule;
-const finishMjs = () => {
-  if (finishModule === undefined)
-    try {
-      finishModule = createRequire(import.meta.url)("./finish.mjs");
-    } catch (e) {
-      const code = /** @type {NodeJS.ErrnoException} */ (e).code;
-      if (code !== "MODULE_NOT_FOUND" && code !== "ERR_MODULE_NOT_FOUND") throw e;
-      finishModule = null;
-    }
-  return finishModule ?? null;
-};
-
-/**
  * The finish step: gathers each landed topic's facts, decides, picks one, and acts
  * on it (or, dry, prints what it would do). Returns whether it acted.
  */
@@ -1689,8 +1677,6 @@ function finishStep(
   /** @type {import("./drain.mjs").Drain} */ drain,
   /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
 ) {
-  const fin = finishMjs();
-  if (!fin) return false;
   const paused = g.facts.paused;
   const draining = drain.state !== "normal";
   if (paused || draining) return false;
@@ -1723,10 +1709,12 @@ function finishStep(
     ]),
   ].filter((t) => !standing.has(t) && (worktreeOf.has(t) || slots.has(t) || open(t)));
   const reported = readState(p.state).finish?.reported ?? [];
-  const plain = landedTopics(p.main, topics);
-  const code = fin.landedWithCode(
+  const trunk = env.TRUNK || kinds.trunk;
+  const plain = landedTopics(p.main, topics, trunk);
+  const code = landedWithCode(
     p.main,
     topics.filter((t) => !plain[t]),
+    trunk,
   );
   /** @type {Map<number, { ppid: number, args: string }> | undefined} */
   let table;
@@ -1738,18 +1726,18 @@ function finishStep(
   const candidates = topics
     .filter((t) => plain[t] || code[t])
     .map((topic) => {
-      const facts = fin.gatherFinish(topic, { main: p.main, env, now: g.facts.now, reported, rows, table });
+      const facts = gatherFinish(topic, { main: p.main, env, now: g.facts.now, reported, rows, table });
       return {
         topic,
         tip: facts.tip,
         name: facts.worktree?.name ?? topic,
-        decision: fin.finishDecision(facts),
+        decision: finishDecision(facts),
       };
     });
   // A key whose topic is no longer a candidate is spent: the topic finished or moved on.
   const live = new Set(candidates.map((c) => c.topic));
   const kept = reported.filter((k) => live.has(k.split("\t")[0]));
-  const c = fin.finishPick(candidates, { paused, draining, reported });
+  const c = finishPick(candidates, { paused, draining, reported });
   if (dryRun) {
     for (const x of candidates)
       if (x.decision?.kind === "wait") out(`finish: ${x.topic} waits (${x.decision.why})`);
@@ -1763,9 +1751,9 @@ function finishStep(
   const filed = [];
   if (c?.decision) {
     const d = c.decision;
-    const did = fin.applyFinish(d, { main: p.main, env: { ...env, RISA_ASKS_DIR: p.asks }, name: c.name });
+    const did = applyFinish(d, { main: p.main, env: { ...env, RISA_ASKS_DIR: p.asks }, name: c.name });
     if (d.kind === "report" && did.filed) filed.push(d.key);
-    if (d.kind === "act" && !did.ok) filed.push(fin.failedKey(d.topic, c.tip));
+    if (d.kind === "act" && !did.ok) filed.push(failedKey(d.topic, c.tip));
     const [first, ...rest] = (did.report ?? "").split("\n");
     out(`finish: ${first}${did.filed ? "" : " (its report wasn't filed)"}`);
     for (const l of rest) out(`  ${l}`);

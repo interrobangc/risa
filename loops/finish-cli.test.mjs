@@ -58,7 +58,7 @@ ${TOPICS.map((t) => `| \`${t}\` | — | — | — | landed |`).join("\n")}
 ## Items
 `;
 
-let root, main, loops, sessions, asks, state, env;
+let root, main, loops, sessions, asks, state, env, dispatchEnv;
 /** @type {{ child: import("node:child_process").ChildProcess, pid: number }[]} */
 const started = [];
 const finish = (args) =>
@@ -67,6 +67,19 @@ const finish = (args) =>
     encoding: "utf8",
     env,
   });
+const dispatch = (args) =>
+  spawnSync(process.execPath, [join(main, "loops/dispatch.mjs"), ...args], {
+    cwd: main,
+    encoding: "utf8",
+    env: dispatchEnv,
+  });
+const reportedKeys = () => {
+  try {
+    return JSON.parse(readFileSync(join(loops, ".dispatch.json"), "utf8")).finish?.reported ?? [];
+  } catch {
+    return [];
+  }
+};
 const filed = () =>
   existsSync(asks)
     ? readdirSync(asks)
@@ -194,6 +207,33 @@ beforeAll(async () => {
     SAMPLE_STACK_STATE: join(root, "stack-state"),
   };
   mkdirSync(env.SAMPLE_STACK_STATE);
+  mkdirSync(join(root, "iTerm.app"));
+  writeFileSync(join(root, "load"), "1 1 1");
+  writeFileSync(join(root, "processes"), "");
+  // The dispatcher's tick, hermetic: no load gate, keep-alive, usage or pickup.
+  dispatchEnv = {
+    ...env,
+    RISA_ITERM_APP: join(root, "iTerm.app"),
+    RISA_REQUESTS_DIR: join(root, "requests"),
+    RISA_NOTICES_DIR: join(root, "notices"),
+    RISA_WATCH_DIR: join(root, "watch"),
+    RISA_LOAD_FILE: join(root, "load"),
+    RISA_LOAD_BUSY: "8",
+    RISA_LOAD_GATE: "",
+    RISA_MAX_PRDS: "",
+    RISA_CLOCK_FILE: "",
+    RISA_FINISH_IDLE_MIN: "",
+    RISA_KEEP_SESSIONS: "off",
+    RISA_PROCESS_FILE: join(root, "processes"),
+    RISA_USAGE_WATCH: "off",
+    RISA_USAGE_DIR: join(root, "usage"),
+    RISA_PICKUP_EVERY: "off",
+    RISA_STUCK_WATCH: "off",
+    RISA_INBOX_DIR: join(root, "home/.risa/inbox"),
+    RISA_CLAUDE_PROJECTS: join(root, "projects"),
+    RISA_CLAUDE_CONFIG: join(root, "claude.json"),
+    RISA_MACHINE_CONFIG: join(root, "machine.json"),
+  };
   git(main, "add", ".");
   git(main, "commit", "-q", "-m", "chore: init");
 
@@ -257,5 +297,31 @@ describe("prd finish", () => {
     const reports = filedFor(t);
     expect(reports).toHaveLength(1);
     expect(JSON.stringify(reports[0])).toMatch(why);
+  });
+
+  it("reports an unchanged code tail once however often it runs, again at a new tip, and a dispatcher tick on the same tip files none", () => {
+    const tip = () => git(main, "rev-parse", "prd/code");
+    expect(reportedKeys()).toContain(`code\tcode\t${tip()}`);
+    const again = finish(["code"]);
+    expect(again.status, `${again.stdout}\n${again.stderr}`).toBe(0);
+    expect(again.stdout).toMatch(/reported already/);
+    expect(filedFor("code")).toHaveLength(1);
+
+    const dir = join(loops, "code");
+    writeFileSync(join(dir, "more.mjs"), "export {};\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", "feat(code): more");
+    const moved = finish(["code"]);
+    expect(moved.status, `${moved.stdout}\n${moved.stderr}`).toBe(0);
+    expect(moved.stdout).toMatch(/aren't Markdown only/);
+    expect(filedFor("code")).toHaveLength(2);
+    expect(reportedKeys()).toContain(`code\tcode\t${tip()}`);
+
+    // The dispatcher reads the same keys: code's and dirty's reports aren't filed again.
+    const tick = dispatch(["--once"]);
+    expect(tick.status, `${tick.stdout}\n${tick.stderr}`).toBe(0);
+    expect(tick.stdout).not.toMatch(/finish: /);
+    expect(filedFor("code")).toHaveLength(2);
+    expect(filedFor("dirty")).toHaveLength(1);
   });
 });

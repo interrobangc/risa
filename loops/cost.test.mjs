@@ -1,7 +1,7 @@
 // cost.mjs: the pure parser, attribution, merge and summary, and the CLI against a
 // temp projects folder (RISA_CLAUDE_PROJECTS) and main checkout (RISA_MAIN). Every
 // transcript here is made up.
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -113,6 +113,14 @@ describe("attribute", () => {
     expect(Object.keys(out[0]).sort()).toEqual(
       ["cacheRead", "cacheWrite", "id", "input", "line", "model", "output"].sort(),
     );
+  });
+
+  it("leaves a plan-<topic> worktree's rows out when plan-<topic> is a topic of its own", () => {
+    const text = jsonl(reply("p"));
+    const plan = rows(text, { worktree: "plan-t" });
+    expect(attribute(plan, "t")[0].line).toBe("planning");
+    expect(attribute(plan, "t", { planTopic: true })).toEqual([]);
+    expect(attribute(rows(text, { worktree: "plan-t" }), "plan-t")[0].line).toBe("orchestration");
   });
 
   it("keeps a ledger row's line", () => {
@@ -258,5 +266,78 @@ describe("cost.mjs report and ledger", () => {
     // A ledger run again with nothing on disk keeps every row.
     cli("ledger", "demo");
     expect(JSON.parse(cli("report", "demo", "--json")).total).toEqual(before.total);
+  });
+});
+
+describe("cost.mjs with a topic named plan-<x> beside <x>", () => {
+  let root;
+  const REGISTRY = (topics) => `# Backlog
+
+## PRDs
+
+| PRD | Flags | After | Hot files | Doc and notes |
+| --- | ----- | ----- | --------- | ------------- |
+${topics.map((t) => `| \`${t}\` | — | — | — | notes |`).join("\n")}
+
+## Items
+`;
+  /** A main checkout with a's orchestrator and a plan-a folder whose sessions are on BRANCH. */
+  const setup = (name, branch, { rows = [], prdBranch = false } = {}) => {
+    const main = join(root, name);
+    const projects = join(root, `${name}-projects`);
+    mkdirSync(join(main, "plans"), { recursive: true });
+    if (rows.length) writeFileSync(join(main, "plans/backlog.md"), REGISTRY(rows));
+    if (prdBranch) {
+      const git = (...a) => execFileSync("git", ["-C", main, ...a], { stdio: "ignore" });
+      git("init", "-q", "-b", "main");
+      git(
+        "-c",
+        "user.email=t@example.com",
+        "-c",
+        "user.name=T",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+      );
+      git("branch", "prd/plan-a");
+    }
+    const folderOf = (w) => join(projects, projectFolder(join(main, ".loops", w)));
+    for (const [w, file, text] of [
+      ["a", "o.jsonl", jsonl(user("orchestrate", "prd/a"), reply("o1", { input: 10 }))],
+      ["plan-a", "p.jsonl", jsonl(user("go", branch), reply("p1", { input: 7 }))],
+    ]) {
+      mkdirSync(folderOf(w), { recursive: true });
+      writeFileSync(join(folderOf(w), file), text);
+    }
+    const env = { ...process.env, RISA_MAIN: main, RISA_CLAUDE_PROJECTS: projects };
+    return (topic) => {
+      const r = spawnSync(process.execPath, [join(HERE, "cost.mjs"), "report", topic, "--json"], {
+        encoding: "utf8",
+        env,
+      });
+      expect(r.stderr).toBe("");
+      return Object.fromEntries(JSON.parse(r.stdout).lines.map((l) => [l.line, l.messages]));
+    };
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "cost-plan-"));
+  });
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it.each([
+    ["a registry row", "row", { rows: ["a", "plan-a"] }],
+    ["a prd/plan-a branch", "branch", { prdBranch: true }],
+  ])("with %s, plan-a's orchestrator counts to plan-a, not to a's planning", (_, name, opts) => {
+    const report = setup(name, "prd/plan-a", opts);
+    expect(report("a")).toEqual({ orchestration: 1 });
+    expect(report("plan-a")).toEqual({ orchestration: 1 });
+  });
+
+  it("a plain planning worktree plan-a for topic a still counts as a's planning", () => {
+    const report = setup("plain", "plan/a", { rows: ["a"] });
+    expect(report("a")).toEqual({ planning: 1, orchestration: 1 });
   });
 });
