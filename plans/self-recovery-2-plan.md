@@ -11,15 +11,15 @@
 | 3     | 2    | landed (opus) | aa0916e                          |
 | 4     | 2    | landed (opus) | 8477e15                          |
 | 5     | 2    | landed (opus) | 3c6214c                          |
-| 6     | 3    | merged (opus) | 115919f                          |
+| 6     | 3    | landed (opus) | 115919f                          |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Hand-over (2026-11-28):** wave 2 landed in main as ae50f44 through PR #21 (tier none, Codex clean on a9112f8; report a39 filed; to-test/2026-11-28-0621-self-recovery-2.md). Wave 3 (slice 6, RISA-789, opus) handed off at 931349b (slice check 2488/2488) and is merged at 115919f; its worktree self-recovery-2-6 stays until the wave is green. Next session: wave gate (tier none: `pnpm test` / `risa check` on the tip), then `risa rm self-recovery-2-6`, `risa sync`, `risa pr`, `risa review --wait`, triage, land, report. That is the plan's last slice: after it lands, `risa rm self-recovery-2`, unless the user brings RISA-1027/1028/1029 into a wave.
+**Hand-over (2026-11-28):** every slice has landed: wave 2 as ae50f44 (PR #21, report a39), wave 3 (slice 6) through PR #22 (full check 2488/2488 on 74b6f4d, Codex clean; main 2d56388; report filed; to-test/2026-11-28-0634-self-recovery-2.md). Slice worktrees all removed. `land` didn't mark the row done: RISA-1027, 1028, 1029 (triaged here) aren't landed. A skeptic is reading the question "move them to fixes-bug and rm, or a wave 4 here" (recommend: fixes-bug, then `risa rm self-recovery-2`).
 
-**Open:** Messaged `fixes-tooling-3e` that slice 3 is in main (ae50f44; RISA-1025 waited on it); it holds RISA-1025 until prd/self-recovery-2 fully lands: **ping `fixes-tooling-3e` after the wave 3 landing**. Triaged into this PRD, the user decides whether they join a wave: RISA-1027 (finish CLI re-files reports), RISA-1028 (cost counts `plan-<x>` as `<x>`'s planning), RISA-1029 (Codex on PR #21: finishStep ignores an overridden TRUNK). Slice 6 adds no dispatcher-side test (dispatch.test.mjs stays unchanged by rule). No serve hook (tooling only).
+**Open:** fixes-tooling-3e told the PRD's code is all in main (it held RISA-1025 on our dispatch/finish files). Slice 6 adds no dispatcher-side test (dispatch.test.mjs unchanged by rule). No serve hook (tooling only).
 
-**Backlog:** RISA-811, RISA-560 landed; RISA-789 marked done at 115919f.
+**Backlog:** RISA-811, RISA-560 landed; RISA-789 landed (PR #22).
 
 ## Architectural decisions
 
