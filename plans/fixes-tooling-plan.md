@@ -10,11 +10,12 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                                                                               | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 53    | 12   | RISA-1073 | opus  | merged twice (the fix: its steps test passed only on a slice branch); main synced (b60d88c); gate `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed (2618 passed); worktree removed; PR and Codex review next, then land. No doc to fold (the budget rule lives in `check-budget.mjs`'s header) | a9eb9ec, 68950ed               |
+| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
 
-Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
+No slice in flight (idle hand-over). Waiting, triaged: RISA-1076 (tests read the session's CLAUDE_CONFIG_DIR; likely `loops/test-env*` or `loops/test-setup.mjs`: write it as slice 54, the next wave) and RISA-1069 (waits while `loops/dispatch` is risa-next-2's hot file).
+
+**Wave 12 landed** 2026-11-28 in main as c49040a through PR #37: slice 53, opus (RISA-1073; merged twice, a9eb9ec and 68950ed: its steps test passed only on a slice branch). Synced with main (b60d88c) first; tooling only, tier none; `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed; Codex clean on 466ed83. Report filed (a65); to-test/2026-11-28-1254-fixes-tooling.md; slice worktree removed. Takes effect with the next release tag.
 
 **Wave 11 landed** 2026-11-28 in main as 7c89472 through PR #35: slices 51, 52, opus (RISA-1066, RISA-1068; RISA-1066 cut by test file, dispatch to RISA-1069). Tooling only, tier none; `pnpm test` green on 4b86c75; Codex clean on 96796e9; landed on an unsynced tip (main's 4 new commits share no file). Report filed (a62); to-test/2026-11-28-1153-fixes-tooling.md; slice worktrees removed. Both slice checks stopped at their budget in the tooling step with nothing failed: filed as RISA-1073.
 
