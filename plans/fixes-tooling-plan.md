@@ -11,7 +11,7 @@
 | 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)                         | 4b888b6                        |
 | 20    | 4    | RISA-1005 | opus   | started                                                                                     |                                |
 | 21    | 4    | RISA-1003 | opus   | merged                                                                                      | cf9c3a4                        |
-| 22    | 4    | RISA-1004 | opus   | started                                                                                     |                                |
+| 22    | 4    | RISA-1004 | opus   | handed off (1ebdba8; slice checks: 5–8 load timeouts in untouched files)                    |                                |
 | 23    | 4    | RISA-926  | opus   | handed off (e44e8f8; slice check: 13 load timeouts in untouched files); merges after 20, 22 |                                |
 | 24    | 4    | RISA-981  | opus   | started (high priority, the user via the backlog session)                                   |                                |
 | 25    | 4    | RISA-1009 | opus   | started                                                                                     |                                |
