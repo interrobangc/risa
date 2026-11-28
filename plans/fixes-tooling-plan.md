@@ -11,7 +11,7 @@
 | 49    | 10   | RISA-1054 | opus  | merged | daced0a                        |
 | 50    | 10   | RISA-1062 | opus  | merged | 879b606                        |
 
-**Wave 10** (2026-11-28): reopened for RISA-1054 and RISA-1062; synced with main (19a7b50) first. Both slices merged; wave gate: `risa ci run unit` (tier proposed for ci.yml) out on 97836d7.
+**Wave 10** (2026-11-28): reopened for RISA-1054 and RISA-1062; synced with main (19a7b50) first. Both slices merged; CI unit green on 97836d7 (run 46162434569); sync a no-op; slice worktrees removed; PR and Codex review next. RISA-1066 (triaged since) waits for wave 11.
 
 **Wave 9 landed** 2026-11-28 in main as 85bdff7 through PR #24: slice 48, opus (RISA-1026). Tooling only, tier none; `pnpm test` green on fa6a59d; Codex clean on adab17b; landed on an unsynced tip (main's 11 new commits share no file). Report filed; to-test/2026-11-28-0710-fixes-tooling.md; slice worktree removed. Nothing triaged for fixes-tooling after it, so the topic is closed (`risa rm fixes-tooling`) to free its lane, at the backlog session's request.
 
