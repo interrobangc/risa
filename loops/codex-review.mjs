@@ -19,7 +19,10 @@
 //   2. the PR's own diff against dev is the same as the reviewed one (patch id);
 //   3. the dev changes that came in touch none of the files the PR touches.
 // Incoming code in another file that changes what the PR's code means is left
-// to the check gate. Otherwise it is stale (or waiting) as before.
+// to the check gate. With --docs=<regex> (land.sh passes lib.sh's docs_re:
+// Markdown), it also carries when the head builds on the reviewed commit and
+// every file changed since matches it: a Status commit after the approval
+// (docsRefusal). Otherwise it is stale (or waiting) as before.
 //
 // Codex keeps one summary comment per PR up to date, with a machine-readable
 // line `<!-- codex-review-state:v1 {"code_review":{"commit_sha":…,"status":…}} -->`
@@ -34,7 +37,7 @@
 // the head); any other open thread, a declined or current one, is replied to
 // and resolved before the verdict is clean; replies alone don't clear it.
 //
-//   node codex-review.mjs [file] [--line|--text] [--repo=<dir> --trunk=<ref>]
+//   node codex-review.mjs [file] [--line|--text] [--repo=<dir> --trunk=<ref>] [--docs=<regex>]
 //     the PR's JSON on stdin when no file; prints the verdict as JSON (--line:
 //     one line; --text: the line and the findings, for people). With --repo
 //     and --trunk (a checkout holding the PR's commits, and dev's ref there) a
@@ -322,20 +325,58 @@ export function carryRefusal(repo, trunk, reviewedSha, headSha) {
 }
 
 /**
- * The verdict, with a clean one carried over dev merges: when Codex last
- * finished on an older head with none of its threads open, and carryRefusal
- * finds nothing, the state is "clean" and carriedFrom names the reviewed
- * commit, even while Codex reviews the new head. A refused stale verdict gets
+ * Why a clean verdict on reviewedSha does not carry to headSha over docs
+ * commits, or null when it does: the head builds on the reviewed commit and
+ * every file changed between them (both sides of a rename) matches docs, the
+ * caller's file rule (a RegExp source; land.sh passes lib.sh's docs_re).
+ */
+export function docsRefusal(repo, docs, reviewedSha, headSha) {
+  const git = (...args) =>
+    execFileSync("git", ["-C", repo, ...args], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      maxBuffer: 1 << 28,
+    });
+  try {
+    const rule = new RegExp(docs);
+    try {
+      git("merge-base", "--is-ancestor", reviewedSha, headSha);
+    } catch {
+      return `the head doesn't build on ${short(reviewedSha)}`;
+    }
+    const other = git("diff", "--name-only", "--no-renames", "-z", reviewedSha, headSha)
+      .split("\0")
+      .filter((file) => file && !rule.test(file));
+    if (other.length)
+      return `${other[0]}${other.length > 1 ? ` and ${other.length - 1} more` : ""} changed since, not only docs`;
+    return null;
+  } catch {
+    return "git couldn't compare the commits";
+  }
+}
+
+/**
+ * The verdict, with a clean one carried: when Codex last finished on an older
+ * head with none of its threads open, and carryRefusal (plain dev merges) or,
+ * with docs, docsRefusal (only docs since) finds nothing, the state is "clean"
+ * and carriedFrom names the reviewed commit (carriedOver: "merges" or "docs"),
+ * even while Codex reviews the new head. A refused stale verdict gets
  * notCarried (why). Without repo and trunk this is verdict().
  */
-export function carried(json, { repo, trunk } = {}) {
+export function carried(json, { repo, trunk, docs } = {}) {
   const v = verdict(json);
   if (!repo || !trunk || !["stale", "waiting", "out-of-credits"].includes(v.state)) return v;
   if (!v.reviewedSha || v.reviewedSha === v.headSha) return v;
   if (openFindings(pullRequestOf(json)).length) return v;
-  const why = carryRefusal(repo, trunk, v.reviewedSha, v.headSha);
+  let why = carryRefusal(repo, trunk, v.reviewedSha, v.headSha);
+  let over = "merges";
+  if (why && docs) {
+    const docsWhy = docsRefusal(repo, docs, v.reviewedSha, v.headSha);
+    if (docsWhy) why = `${why}; ${docsWhy}`;
+    else [why, over] = [null, "docs"];
+  }
   if (why) return { ...v, notCarried: why };
-  const clean = { ...v, state: "clean", findings: [], carriedFrom: v.reviewedSha };
+  const clean = { ...v, state: "clean", findings: [], carriedFrom: v.reviewedSha, carriedOver: over };
   delete clean.outOfCreditsAt;
   return clean;
 }
@@ -344,9 +385,10 @@ export function carried(json, { repo, trunk } = {}) {
 export function verdictLine(v) {
   switch (v.state) {
     case "clean":
-      return v.carriedFrom
-        ? `codex: clean on ${short(v.headSha)} (carried from ${short(v.carriedFrom)}: only plain dev merges since, the PR's diff unchanged)`
-        : `codex: clean on ${short(v.headSha)}`;
+      if (!v.carriedFrom) return `codex: clean on ${short(v.headSha)}`;
+      return v.carriedOver === "docs"
+        ? `codex: clean on ${short(v.headSha)} (approved on ${short(v.carriedFrom)}: only docs changed since)`
+        : `codex: clean on ${short(v.headSha)} (carried from ${short(v.carriedFrom)}: only plain dev merges since, the PR's diff unchanged)`;
     case "findings":
       return `codex: ${v.findings.length} open finding${v.findings.length === 1 ? "" : "s"} on ${short(v.headSha)}`;
     case "out-of-credits":
@@ -379,6 +421,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const v = carried(JSON.parse(readFileSync(file ?? 0, "utf8")), {
     repo: option("repo"),
     trunk: option("trunk"),
+    docs: option("docs"),
   });
   if (args.includes("--line")) console.log(verdictLine(v));
   else if (args.includes("--text")) console.log(verdictText(v));
