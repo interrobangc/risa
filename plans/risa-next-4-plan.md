@@ -4,14 +4,14 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/risa-next-4` |
-| ----- | ---- | ----- | ---------------------------- |
+| Slice | Wave | State                                                   | Merge into `prd/risa-next-4` |
+| ----- | ---- | ------------------------------------------------------- | ---------------------------- |
 | 1     | 1    | started 2026-11-28 (worktree made, agent spawned, opus) | —                            |
-| 2     | 2    | —     | —                            |
-| 4     | 2    | —     | —                            |
-| 3     | 3    | —     | —                            |
-| 5     | 4    | —     | —                            |
-| 6     | 5    | —     | —                            |
+| 2     | 2    | —                                                       | —                            |
+| 4     | 2    | —                                                       | —                            |
+| 3     | 3    | —                                                       | —                            |
+| 5     | 4    | —                                                       | —                            |
+| 6     | 5    | —                                                       | —                            |
 
 **From the user:** nothing yet beyond the start itself.
 
