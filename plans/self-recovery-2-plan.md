@@ -17,7 +17,7 @@
 
 **Hand-over (2026-11-28):** wave 2 landed in main as ae50f44 through PR #21 (tier none, Codex clean on a9112f8; report a39 filed; to-test/2026-11-28-0621-self-recovery-2.md). Wave 3 (slice 6, RISA-789, opus) handed off at 931349b (slice check 2488/2488) and is merged at 115919f; its worktree self-recovery-2-6 stays until the wave is green. Next session: wave gate (tier none: `pnpm test` / `risa check` on the tip), then `risa rm self-recovery-2-6`, `risa sync`, `risa pr`, `risa review --wait`, triage, land, report. That is the plan's last slice: after it lands, `risa rm self-recovery-2`, unless the user brings RISA-1027/1028/1029 into a wave.
 
-**Open:** **message `fixes-tooling-3e` that slice 3 is in main** (ae50f44; RISA-1025 waited on it) if not yet done. Triaged into this PRD, the user decides whether they join a wave: RISA-1027 (finish CLI re-files reports), RISA-1028 (cost counts `plan-<x>` as `<x>`'s planning), RISA-1029 (Codex on PR #21: finishStep ignores an overridden TRUNK). Slice 6 adds no dispatcher-side test (dispatch.test.mjs stays unchanged by rule). No serve hook (tooling only).
+**Open:** Messaged `fixes-tooling-3e` that slice 3 is in main (ae50f44; RISA-1025 waited on it). Triaged into this PRD, the user decides whether they join a wave: RISA-1027 (finish CLI re-files reports), RISA-1028 (cost counts `plan-<x>` as `<x>`'s planning), RISA-1029 (Codex on PR #21: finishStep ignores an overridden TRUNK). Slice 6 adds no dispatcher-side test (dispatch.test.mjs stays unchanged by rule). No serve hook (tooling only).
 
 **Backlog:** RISA-811, RISA-560 landed; RISA-789 marked done at 115919f.
 
