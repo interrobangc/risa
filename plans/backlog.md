@@ -116,6 +116,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1020 | bug | triaged | fixes-tooling |  | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
 | RISA-1021 | chore | triaged | fixes-tooling |  | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
 | RISA-1022 | bug | triaged | fixes-tooling |  | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
+| RISA-1023 | bug | triaged | fixes-bug |  | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
+| RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 
 ## Items
 
@@ -981,3 +983,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-tooling): Found by slice 44 (RISA-1018): keep polling on unread once it has said busy.
+
+### RISA-1023 · bug · Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Seen 2026-11-28 by Caretook's fixes-bug orchestrator on v0.1.8 (pin f5ce80a58), reported by Caretook's backlog session; it trimmed its Status by hand. Same family as RISA-980 (paths resolved against the release). fixes-bug: wrong behaviour in a released install; also breaks AGENTS.md's no-runtime-dependencies rule.
+
+### RISA-1024 · bug · A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next): Codex P2 on PR #16 (loops/prompts/backlog.sh:15, thread PRRT_kwDOV9ctaM69B8DS): directives=1 for a legacy heading, but the standing line names only _From the user_. Only the first rotation after risa-next wave 3 lands can carry a legacy brief.
