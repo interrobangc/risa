@@ -14,6 +14,7 @@
 //      - commit: 1a2b3c4
 //
 //      Free notes (any Markdown) until the next item.
+import { createHash } from "node:crypto";
 import { backlogIds, commandName, loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 
 // A broken config is one line, named for the command that imported this (`backlog:` for the
@@ -357,6 +358,32 @@ export function parseInbox(text) {
 
 /** The new (untagged, non-empty) bullets. @param {string} text */
 export const newInboxEntries = (text) => parseInbox(text).filter((e) => !e.id && e.text.trim());
+
+/**
+ * An inbox store line's key: a short hash of its text and details (whitespace folded),
+ * which ingest writes into the filed item's note (`keyNote`) in place of a tag, so a
+ * line is filed once and is removed from the store once that note is on origin.
+ * @param {{ text: string, details: string }} entry
+ */
+export const lineKey = (entry) =>
+  createHash("sha256")
+    .update(`${entry.text.replace(/\s+/g, " ").trim()}\n${entry.details.replace(/\s+/g, " ").trim()}`)
+    .digest("hex")
+    .slice(0, 12);
+/** The key as ingest writes it at the end of the item's inbox note. @param {string} key */
+export const keyNote = (key) => `(inbox key ${key})`;
+const KEY_NOTE = /\(inbox key ([0-9a-f]{12})\)/g;
+/**
+ * The store line keys items' notes hold, each with its item's id.
+ * @param {{ id: string, notes: string }[]} items
+ * @returns {Map<string, string>} key → id
+ */
+export function inboxKeys(items) {
+  const out = new Map();
+  for (const it of items)
+    for (const m of it.notes.matchAll(KEY_NOTE)) if (!out.has(m[1])) out.set(m[1], it.id);
+  return out;
+}
 
 /** Append " (B-n)" to line `line`. @param {string} text @param {number} line @param {string} id */
 export function tagInboxLine(text, line, id) {
