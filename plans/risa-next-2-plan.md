@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1: slice 1 merged (72d3a64); `risa tier` says none (tooling only), so the gate is the full check on the tip. Slice 1 notes for 2/6: no store CLI yet; find a clone by listing `storeRoot()`; no lock around a clone's fetches. Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
+**Now:** wave 1 green: `pnpm check` passed on e715fff (synced, up to date with main); slice 1 worktree removed. PR https://github.com/interrobangc/risa/pull/28 open, Codex review out. Next: triage review, land wave 1 (tier none), then rotate.
 
 | Slice | Wave | State                                  | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------------------------------- | ---------------------------- |
