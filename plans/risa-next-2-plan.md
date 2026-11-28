@@ -10,14 +10,14 @@
 
 **Now:** wave 1: slice 1 merged (72d3a64); `risa tier` says none (tooling only), so the gate is the full check on the tip. Slice 1 notes for 2/6: no store CLI yet; find a clone by listing `storeRoot()`; no lock around a clone's fetches. Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
 
-| Slice | Wave | State | Merge into `prd/risa-next-2` |
-| ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | merged (opus, check passed on 7e76dbe) | 72d3a64                            |
-| 2     | 2    | —     | —                            |
-| 3     | 3    | —     | —                            |
-| 5     | 3    | —     | —                            |
-| 4     | 4    | —     | —                            |
-| 6     | 4    | —     | —                            |
+| Slice | Wave | State                                  | Merge into `prd/risa-next-2` |
+| ----- | ---- | -------------------------------------- | ---------------------------- |
+| 1     | 1    | merged (opus, check passed on 7e76dbe) | 72d3a64                      |
+| 2     | 2    | —                                      | —                            |
+| 3     | 3    | —                                      | —                            |
+| 5     | 3    | —                                      | —                            |
+| 4     | 4    | —                                      | —                            |
+| 6     | 4    | —                                      | —                            |
 
 **Backlog:** claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
