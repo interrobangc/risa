@@ -345,6 +345,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-24 (plan/orchestration-split): Filed 2026-11-24 from the orchestration-split planning: after the move (plans/orchestration-split-move.md). The user: the config may become a folder of files; the test rules and gates (tiers, brake list, quarantine, check plan) move cleanly after the split.
 - 2026-11-27 (the Risa move, B-543): Was B-796 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-28 (plan/risa-next-4): Planned in risa-next-4 (2026-11-28): the .risa/ folder form (additive; risa.json keeps working), the four test-rule files by default name, risa config migrate.
+- 2026-11-28 (prd/risa-next-4): slice 1 (the loader finds .risa/config.json) merged into prd/risa-next-4 at 952927e
 
 ### RISA-797 · plan · Risa: prove it on a second repo with tests, then make it usable by others
 
