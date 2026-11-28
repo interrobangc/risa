@@ -33,6 +33,7 @@ import {
   stalledSessions,
 } from "./drain.mjs";
 import { resumeDecision } from "./resume.mjs";
+import { keepAliveDecision } from "./keep-alive.mjs";
 import { markStalled, mergeReadings, readReadings } from "./usage.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
 
@@ -397,6 +398,52 @@ describe("each session on its own account", () => {
         now: after,
       });
       expect(d.claim.map((c) => c.session)).toEqual(["prd-b"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a backlog session ended on its own limited account isn't kept alive until its reset", () => {
+    const dir = mkdtempSync(join(tmpdir(), "risa-drain-keep-"));
+    try {
+      // backlog on account B at 99%; the dispatcher on A, under the line.
+      writeFileSync(join(dir, "backlog.json"), JSON.stringify(reading("backlog", B, 99)));
+      const normal = { state: /** @type {const} */ ("normal"), resetsAt: null, why: "", unknown: false };
+      // Tick 1: ended and marked, as drainStep does.
+      const drains = sessionDrains(readReadings(dir), ["backlog"], { ...opts, account: A });
+      expect(
+        limitActions({
+          sessions: [{ name: "backlog", pid: 31, live: true, managed: true }],
+          landing: new Set(),
+          stalls: {},
+          drain: normal,
+          drains,
+          now: NOW,
+        }),
+      ).toEqual([{ type: "end", session: "backlog", pid: 31 }]);
+      markStalled(dir, "backlog", {
+        error: "limited",
+        resetsAt: drains.backlog.resetsAt,
+        pid: 31,
+        now: NOW,
+        account: B,
+      });
+      const keep = (now) =>
+        keepAliveDecision({
+          kinds: ["backlog"],
+          sessions: [
+            { name: "backlog", live: false, stalled: stalledSessions(readReadings(dir), now).has("backlog") },
+          ],
+          processes: [],
+          keep: { backlog: { openedAt: NOW - 120 * MIN } },
+          now,
+        })[0];
+      // Tick 2: dead, its mark's reset ahead: not opened, and no death counted.
+      const held = keep(NOW + MIN);
+      expect(held.action).toBe("none");
+      expect(held.why).toMatch(/not opened before its reset/);
+      // After B's reset: kept alive again.
+      expect(keep(NOW + 61 * MIN).action).toBe("open");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
