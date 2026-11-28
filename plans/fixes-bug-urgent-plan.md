@@ -17,6 +17,7 @@ Wave 1 gate: synced with main (58fcc52); tier none (tooling only), so the gate i
 
 **For the next session:**
 
+- **RISA-1038** (the inbox session finds the wrong project; filed by risa-ca for the next wave): it touches `loops/prd.sh` (self-recovery-2's hot file), `loops/session.sh` and `loops/lib.sh`, so it goes in wave 2 beside slice 4.
 - **Docs fold deferred:** the `wait` help in `loops/prd.sh` and `loops/docs/` are self-recovery-2's hot files, so the note on `wait`'s new output and exit 1 (slice 2) and the `notified` stall (slice 3) waits for wave 2, after self-recovery-2 lands.
 - **Context:** this session passed the soft limit (120k) during wave 1; rotate after wave 1 lands.
 - **self-recovery-2** (2026-11-28) said it won't edit `loops/dispatch.mjs` again (barring a Codex fix) and never touches `loops/dispatch-stuck.mjs`, so slice 3 (RISA-1033) started at once. Its last slice changes `dispatch.mjs` and is in review as PR #23. Slice 4 (RISA-1037) starts once PR #23 is in main and `risa sync` has brought it in; self-recovery-2 will message when it lands, and a background check watches its registry row.
