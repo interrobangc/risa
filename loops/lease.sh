@@ -379,14 +379,14 @@ lease_wait() {
       else echo "$wt holds no $kind lease."; fi
       return 0
     fi
+    # Each heading goes out with its holders in one write, so a reader never
+    # sees the heading without them (RISA-1026).
     if [[ -z $announced ]]; then
-      echo "Waiting (up to $(fmt_secs "$timeout")) for $wt's $kind:"
-      echo "$mine"
+      printf '%s\n%s\n' "Waiting (up to $(fmt_secs "$timeout")) for $wt's $kind:" "$mine"
       announced=1
     fi
     if ((waited >= timeout)); then
-      echo "Gave up after $(fmt_secs "$waited"): $wt's $kind is still running:" >&2
-      echo "$mine" >&2
+      printf '%s\n%s\n' "Gave up after $(fmt_secs "$waited"): $wt's $kind is still running:" "$mine" >&2
       return 75
     fi
     sleep "$poll"
