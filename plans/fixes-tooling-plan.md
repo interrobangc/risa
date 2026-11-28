@@ -6,13 +6,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State         | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------------- | ------------------------------ |
-| 39    | 6    | RISA-1015 | opus  | merged        | 33ad69f                        |
-| 40    | 6    | RISA-1015 | opus  | merged        | fc0bfc6                        |
-| 41    | 6    | RISA-1015 | opus  | merged        | 798942f                        |
-| 42    | 6    | RISA-1016 | opus  | merged        | c856566                        |
-| 43    | 6    | RISA-1016 | opus  | agent working |                                |
+| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
+| 39    | 6    | RISA-1015 | opus  | merged | 33ad69f                        |
+| 40    | 6    | RISA-1015 | opus  | merged | fc0bfc6                        |
+| 41    | 6    | RISA-1015 | opus  | merged | 798942f                        |
+| 42    | 6    | RISA-1016 | opus  | merged | c856566                        |
+| 43    | 6    | RISA-1016 | opus  | merged | 387b09b                        |
 
 **Wave 6** (slices 39–43, all opus): RISA-1015 split three ways (slice refuses an uncommitted section; tooling join runs only the Check file; check-plan reports an unknown Model), RISA-1016 two ways (review.sh, lib.sh pr_verdict). Hot files: loops/new, loops/check-hook, loops/check-tooling, loops/check-plan, loops/review, loops/ready, loops/lib.sh. No running topic's hot files touched (risa-next's are elsewhere; staging-ship, which holds lib.sh and review.sh, is on hold).
 
