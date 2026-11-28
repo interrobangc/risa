@@ -225,6 +225,14 @@ export const TIDY_EVERY_MS = 6 * 3600_000;
 export const PICKUP_EVERY_S = 300;
 /** The longest a pickup may take before the tick gives up on it (a hung fetch). */
 export const PICKUP_TIMEOUT_MS = 120_000;
+/**
+ * The longest any other command a tick runs may take (RISA-1094): past it the command is
+ * killed and the call reads as failed, so a hung one ends the tick rather than hold it, and a
+ * stop with it, for good. RISA_DISPATCH_RUN_SECS overrides it (the tests' short limit).
+ */
+export const RUN_TIMEOUT_MS = 120_000;
+/** The worktree command's own limit: it installs, and may start and migrate a stack. */
+export const SETUP_TIMEOUT_MS = 30 * 60_000;
 /** A reopened session live this long has recovered: its reopen count is dropped. */
 export const REOPEN_RESET_MS = 30 * 60_000;
 /** The one-shot helper that pushes the dispatcher's own asks. */
@@ -720,9 +728,32 @@ const nowOf = (env = process.env) => {
   return Date.now();
 };
 
-const run = (/** @type {string} */ cmd, /** @type {string[]} */ args, opts = {}) => {
-  const r = spawnSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts });
-  return { ok: r.status === 0, code: r.status, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim() };
+/** A tick's limit for a command: RISA_DISPATCH_RUN_SECS, else RUN_TIMEOUT_MS. */
+const runLimit = (env = process.env) =>
+  Number(env.RISA_DISPATCH_RUN_SECS) > 0 ? Number(env.RISA_DISPATCH_RUN_SECS) * 1000 : RUN_TIMEOUT_MS;
+
+/**
+ * CMD ARGS, bounded (RISA-1094): one past its limit (opts.timeout, else runLimit) is killed
+ * (SIGKILL, so one that ignores TERM goes too) and reads as failed, code null, its err the
+ * limit; a caller's failure path handles it as any other failure, never as empty output.
+ */
+const run = (
+  /** @type {string} */ cmd,
+  /** @type {string[]} */ args,
+  /** @type {import("node:child_process").SpawnSyncOptions} */ opts = {},
+) => {
+  const timeout = opts.timeout ?? runLimit();
+  const r = spawnSync(cmd, args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    killSignal: "SIGKILL",
+    ...opts,
+    timeout,
+  });
+  const out = String(r.stdout ?? "").trim();
+  if (/** @type {NodeJS.ErrnoException | undefined} */ (r.error)?.code === "ETIMEDOUT")
+    return { ok: false, code: null, out, err: `timed out after ${timeout / 1000}s (killed)`, timedOut: true };
+  return { ok: r.status === 0, code: r.status, out, err: String(r.stderr ?? "").trim(), timedOut: false };
 };
 
 const backlog = (/** @type {string} */ main, /** @type {string[]} */ args) =>
@@ -735,6 +766,8 @@ export function worktreesOf(/** @type {string} */ main) {
   let dir = "";
   for (const l of execFileSync("git", ["-C", main, "worktree", "list", "--porcelain"], {
     encoding: "utf8",
+    timeout: runLimit(),
+    killSignal: "SIGKILL",
   }).split("\n")) {
     if (l.startsWith("worktree ")) dir = l.slice(9);
     else if (l.startsWith("branch ") && dirname(dir) === loops)
@@ -749,7 +782,11 @@ const positive = (/** @type {string | undefined} */ s, /** @type {number} */ d) 
 /** Everything the pick needs, and the records for the bookkeeping. */
 export function gather(/** @type {ReturnType<typeof pathsOf>} */ p, env = process.env) {
   const listed = backlog(p.main, ["prd", "list", "--json"]);
-  if (!listed.ok) throw new Error(`${toolCmd.backlog} prd list failed: ${listed.err || listed.out}`);
+  // A timeout too: never read as an empty registry, which could start or close work.
+  if (!listed.ok)
+    throw new Error(
+      `${toolCmd.backlog} prd list ${listed.timedOut ? listed.err : `failed: ${listed.err || listed.out}`}`,
+    );
   const rows = JSON.parse(listed.out);
   const records = readRecords(p.sessions).map(({ name, record }) => {
     // When it went rotating: the record's own time if it has one, else the file's mtime (the
@@ -2225,7 +2262,9 @@ export function tick(
       cwd: p.main,
     });
   const result = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
-    r.ok ? r.out.split("\n").pop() || "ok" : `failed (exit ${r.code}): ${(r.err || r.out).split("\n").pop()}`;
+    r.ok
+      ? r.out.split("\n").pop() || "ok"
+      : `failed (exit ${r.code ?? "timeout"}): ${(r.err || r.out).split("\n").pop()}`;
   /** An opener that exited non-zero: the tab never opened (no death, no count; a later tick retries). */
   const neverOpened = (/** @type {{ ok: boolean, code: number | null, out: string, err: string }} */ r) =>
     `its tab never opened, not counted as a death (${result(r)}); a later tick retries`;
@@ -2338,7 +2377,10 @@ export function tick(
         return gone.ok ? `; ${name} removed` : `; removing ${name} ${result(gone)}`;
       };
       if (fresh) {
-        const made = run("bash", [join(bin, "new.sh"), kind, topic], { cwd: p.main });
+        const made = run("bash", [join(bin, "new.sh"), kind, topic], {
+          cwd: p.main,
+          timeout: SETUP_TIMEOUT_MS,
+        });
         // A new.sh that failed after making the worktree: it goes (forced: it
         // holds nothing but this tick's half setup), so no worktree without a
         // managed record holds a slot as one opened by hand; a later tick retries.

@@ -12,12 +12,14 @@ import {
   env,
   scripts,
   calls,
+  openCalls,
   dispatch,
   ok,
   dstate,
   logText,
   setRows,
   setClock,
+  state,
   T0,
   until,
   useDispatchRepo,
@@ -63,6 +65,74 @@ describe("the lock, pause, resume and stop", () => {
     expect(existsSync(join(loops, ".dispatch.lock"))).toBe(false);
     expect(logText()).toContain("stopped (SIGTERM)");
     expect(ok(["--stop"])).toContain("No dispatcher is running.");
+  });
+});
+
+describe("a backlog command that hangs (RISA-1094)", () => {
+  const hang = { STUB_BACKLOG_HANG: "1", RISA_DISPATCH_RUN_SECS: "1" };
+  /** The hung stub's pid, once it has started hanging; 0 before. */
+  const hungPid = () => {
+    try {
+      return Number(readFileSync(join(state, "backlog.hang"), "utf8"));
+    } catch {
+      return 0;
+    }
+  };
+  const alive = (/** @type {number} */ pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // A stub the dispatcher failed to kill must not outlive its test.
+  afterEach(() => {
+    const pid = hungPid();
+    if (pid && alive(pid)) process.kill(pid, "SIGKILL");
+  });
+
+  it("ends the tick with a line naming the command and its limit, starting and closing nothing", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const t0 = Date.now();
+    const out = ok(["--once"], hang);
+    expect(Date.now() - t0).toBeLessThan(8000);
+    expect(out).toMatch(/nothing: couldn't gather the facts \(.*prd list timed out after 1s \(killed\)\)/);
+    expect(calls("new")).toEqual([]);
+    expect(calls("rm")).toEqual([]);
+    expect(openCalls()).toEqual([]);
+    expect(alive(hungPid())).toBe(false);
+  });
+
+  it("a SIGTERM sent while it hangs stops the dispatcher within a few seconds", async () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    const child = spawn("node", [scripts("dispatch.mjs"), "--every", "1"], {
+      cwd: main,
+      env: { ...env, ...hang, RISA_DISPATCH_RUN_SECS: "2" },
+    });
+    try {
+      const exited = new Promise((r) => child.on("exit", (code) => r(code)));
+      await until(() => hungPid() > 0);
+      const sent = Date.now();
+      child.kill("SIGTERM");
+      expect(await exited).toBe(0);
+      expect(Date.now() - sent).toBeLessThan(5000);
+      const log = logText();
+      expect(log).toMatch(/prd list timed out after 2s \(killed\)/);
+      expect(log).toContain("stopped (SIGTERM)");
+      expect(log).not.toContain("start a");
+      expect(calls("new")).toEqual([]);
+      expect(existsSync(join(loops, ".dispatch.lock"))).toBe(false);
+      expect(alive(hungPid())).toBe(false);
+    } finally {
+      child.kill("SIGKILL");
+    }
+  });
+
+  it("one that answers in time behaves as before", () => {
+    setRows([{ topic: "a", state: "planned" }]);
+    expect(ok(["--once"], { RISA_DISPATCH_RUN_SECS: "5" })).toContain("start a");
+    expect(calls("new")).toEqual(["prd a"]);
   });
 });
 
