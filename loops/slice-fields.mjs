@@ -8,12 +8,14 @@
 // Fields are separated by "·", ";" or "|"; names are case-insensitive. A missing
 // field gets its default (no stack, nothing extra to read, no tests named) and a
 // warning, as does a malformed one. An optional `Blocked by: slice 3` (or `3`,
-// `1, 2`, `none`) names the slices this one waits for; leaving it out is fine.
-// (`prd doc planner "Slice fields"`.)
+// `1, 2`, `none`) names the slices this one waits for, and an optional
+// `Check: loops/x.test.mjs` the one test file the slice's narrow check runs;
+// leaving either out is fine here (check-plan.mjs's planBudget warns on a
+// missing Check). (`prd doc planner`.)
 //
 //   node slice-fields.mjs <n> [plan-file]   (the plan on stdin when no file)
 //     prints "Stack: …", "Reads: …" and "Tests: …", warnings on stderr
-//   node slice-fields.mjs <n> [plan-file] --get stack|reads|tests
+//   node slice-fields.mjs <n> [plan-file] --get stack|reads|tests|check
 //     prints one field's value only (stack: yes or no)
 // A slice's body is also read for line-number anchors (`file.mjs ~158`,
 // `:231`), which go stale on hot files: `lineAnchors` finds them, and
@@ -23,7 +25,9 @@ import { pathToFileURL } from "node:url";
 
 export const FIELDS = ["stack", "reads", "tests"];
 /** Known fields a slice may leave out without a warning. */
-export const OPTIONAL_FIELDS = ["blocked by"];
+export const OPTIONAL_FIELDS = ["blocked by", "check"];
+/** What `--get` prints. */
+const GETS = [...FIELDS, "check"];
 const KNOWN = [...FIELDS, ...OPTIONAL_FIELDS];
 const HEADING = /^#{2,4}\s+Slice\s+(\d+)\b/i;
 const FIELD = /^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*:\s*(.*)$/;
@@ -76,7 +80,9 @@ export function parseFieldsLine(line) {
 
 /**
  * The fields of slice `n` in a plan's text.
- * → { found, stack: boolean, reads: string[], readsText, tests: string[], blockedBy: number[], missing: string[], warnings: string[] }
+ * → { found, stack: boolean, reads: string[], readsText, tests: string[], blockedBy: number[],
+ *     check: string[], given: string[], missing: string[], warnings: string[] }
+ * `given` names the fields the slice's fields line gives (lowercased).
  * `found` is false when the plan has no such slice heading. Defaults apply to
  * anything missing or malformed, and each such case adds a warning.
  */
@@ -89,6 +95,8 @@ export function sliceFields(planText, n) {
     readsText: "",
     tests: [],
     blockedBy: [],
+    check: [],
+    given: [],
     missing: [],
     warnings: [],
   };
@@ -136,6 +144,8 @@ export function sliceFields(planText, n) {
         result.warnings.push(`Blocked by takes slice numbers, not "${item}"`);
     }
   }
+  if ("check" in values) result.check = splitList(values.check);
+  result.given = Object.keys(values);
   result.missing = FIELDS.filter((f) => !(f in values));
   for (const f of result.missing) result.warnings.push(`no ${f[0].toUpperCase()}${f.slice(1)} field`);
   return result;
@@ -188,6 +198,52 @@ export function sliceSections(/** @type {string} */ planText) {
   return out;
 }
 
+const SHA = /\b[0-9a-f]{7,40}\b/;
+const DONE_STATE = /^\s*(?:merged|landed|done)\b/i;
+
+/**
+ * The rows of a plan's (or its history's) tables that have a Slice column, each
+ * as { slice, cells } with cells keyed by the lowercased column name.
+ */
+export function sliceRows(/** @type {string} */ text) {
+  const rows = [];
+  let cols = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (!/^\s*\|/.test(line)) {
+      cols = null;
+      continue;
+    }
+    const cells = line
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((c) => c.trim());
+    if (!cols) {
+      cols = cells.map((c) => c.toLowerCase());
+      continue;
+    }
+    if (cells.every((c) => /^:?-+:?$/.test(c))) continue;
+    const slice = /^\d+$/.exec(cells[cols.indexOf("slice")] ?? "");
+    if (!slice) continue;
+    rows.push({
+      slice: Number(slice[0]),
+      cells: Object.fromEntries(cols.map((c, i) => [c, cells[i] ?? ""])),
+    });
+  }
+  return rows;
+}
+
+/** The slice numbers a plan's (or its history's) tables mark merged (anchors.mjs, check-plan.mjs). */
+export function mergedSlices(/** @type {string[]} */ texts) {
+  const merged = new Set();
+  for (const text of texts)
+    for (const { slice, cells } of sliceRows(text)) {
+      const merge = Object.keys(cells).find((c) => c.startsWith("merge"));
+      if ((merge && SHA.test(cells[merge])) || DONE_STATE.test(cells.state ?? "")) merged.add(slice);
+    }
+  return merged;
+}
+
 /** The three lines prompt.sh prints. */
 export function formatFields(f) {
   return [
@@ -204,14 +260,14 @@ function main(argv) {
   if (gi >= 0) {
     get = args[gi + 1];
     args.splice(gi, 2);
-    if (!FIELDS.includes(get)) {
-      process.stderr.write(`--get takes ${FIELDS.join(", ")}\n`);
+    if (!GETS.includes(get)) {
+      process.stderr.write(`--get takes ${GETS.join(", ")}\n`);
       return 2;
     }
   }
   const [n, file] = args;
   if (!n || !/^\d+$/.test(n)) {
-    process.stderr.write("usage: slice-fields.mjs <n> [plan-file] [--get stack|reads|tests]\n");
+    process.stderr.write("usage: slice-fields.mjs <n> [plan-file] [--get stack|reads|tests|check]\n");
     return 2;
   }
   const text = readFileSync(file ?? 0, "utf8");
@@ -220,6 +276,7 @@ function main(argv) {
   if (get === "stack") process.stdout.write(`${f.stack ? "yes" : "no"}\n`);
   else if (get === "reads") process.stdout.write(`${f.readsText}\n`);
   else if (get === "tests") process.stdout.write(`${f.tests.join(", ")}\n`);
+  else if (get === "check") process.stdout.write(`${f.check.join(", ")}\n`);
   else process.stdout.write(`${formatFields(f)}\n`);
   return 0;
 }

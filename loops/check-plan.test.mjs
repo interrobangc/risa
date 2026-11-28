@@ -6,7 +6,14 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CheckPlanRulesError, checkPlanFor, checkPlanRulesProblems, parseArgs } from "./check-plan.mjs";
+import {
+  CheckPlanRulesError,
+  buildFiles,
+  checkPlanFor,
+  checkPlanRulesProblems,
+  parseArgs,
+  planBudget,
+} from "./check-plan.mjs";
 import { CONFIG_NAME, loadConfig } from "./config.mjs";
 import { SAMPLE_CONFIG } from "./sample-project/repo.mjs";
 
@@ -581,6 +588,106 @@ describe("checkPlanFor's repo", () => {
       const file = "extra-tools";
       expect(checkPlanFor(project, { repo: dir }).planCheck([file], "full").tooling).toBe(false);
       expect(checkPlanFor(project).planCheck([file], "full").tooling).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+/** A fictional plan: `slices` are the slice sections, `status` its Status table's rows. */
+const budgetPlan = (/** @type {string} */ slices, status = "") =>
+  `# Plan: sample\n\n## Status\n\n${status ? `| Slice | Wave | State | Merge |\n| --- | --- | --- | --- |\n${status}\n` : ""}\n${slices}`;
+const slice = (/** @type {number} */ n, /** @type {string} */ fields, files = ["`web/a.js`"]) =>
+  `## Slice ${n}: sample\n\nStack: no · Reads: none · Tests: unit${fields}\n\n**Build:** change ${files.join(", ")}.\n\n**Acceptance criteria:**\n\n- Unit test (\`web/z.test.js\`, \`web/y.js\`).\n`;
+
+describe("planBudget", () => {
+  const over = slice(
+    1,
+    " · Blocked by: none · Check: web/a.test.js",
+    [1, 2, 3, 4, 5, 6].map((i) => `\`web/f${i}.js\``),
+  );
+  const noCheck = slice(2, " · Blocked by: none");
+  const shareA = slice(3, " · Blocked by: none · Check: web/shared.test.js");
+  const shareB = slice(4, " · Blocked by: none · Check: web/shared.test.js");
+  const overPlan = budgetPlan([over, noCheck, shareA, shareB].join("\n"));
+
+  it("warns once each on a 6-file slice, a slice with no Check, and a Check file shared in a wave", () => {
+    const { warnings, wavesFrom } = planBudget(overPlan);
+    expect(warnings).toEqual([
+      { slice: 1, text: "Build names 6 files (budget: about 4): split it" },
+      { slice: 2, text: "no Check field (its one test file)" },
+      { slice: 4, text: "shares its Check file web/shared.test.js with slice 3 in one wave" },
+    ]);
+    expect(wavesFrom).toContain("Blocked by");
+  });
+
+  it("gives a plan within budget no warning", () => {
+    const ok = budgetPlan(
+      [1, 2].map((n) => slice(n, ` · Blocked by: none · Check: web/${n}.test.js`)).join("\n"),
+    );
+    expect(planBudget(ok).warnings).toEqual([]);
+  });
+
+  it("warns on a Check naming two test files", () => {
+    const two = budgetPlan(slice(1, " · Blocked by: none · Check: web/a.test.js, web/b.test.js"));
+    expect(planBudget(two).warnings).toEqual([{ slice: 1, text: "Check names 2 test files, not one" }]);
+  });
+
+  it("reads waves from Blocked by, then the Status table, then the slices after the last merged one", () => {
+    // Blocked by: slice 4 waits for 3, so they never run at once.
+    const chained = budgetPlan([shareA, shareB.replace("Blocked by: none", "Blocked by: 3")].join("\n"));
+    expect(planBudget(chained).warnings).toEqual([]);
+    // No Blocked by: the Status table's Wave column.
+    const [a, b] = [shareA, shareB].map((s) => s.replace(" · Blocked by: none", ""));
+    const apart = budgetPlan([a, b].join("\n"), "| 3 | 1 | | |\n| 4 | 2 | | |");
+    expect(planBudget(apart)).toEqual({
+      warnings: [],
+      wavesFrom: "waves from the Status table's Wave column",
+    });
+    const together = budgetPlan([a, b].join("\n"), "| 3 | 2 | | |\n| 4 | 2 | | |");
+    expect(planBudget(together).warnings).toHaveLength(1);
+    // Neither: the slices after the last merged one (slice 2, by its SHA) are one wave.
+    const unread = budgetPlan(
+      [noCheck, a, b].join("\n"),
+      "| 2 | | landed | abc1234 |\n| 3 | | | |\n| 4 | | | |",
+    );
+    const r = planBudget(unread);
+    expect(r.wavesFrom).toBe("one wave: the slices after the last merged one (2)");
+    expect(r.warnings.map((w) => w.slice)).toEqual([4]);
+  });
+
+  it("skips merged slices, and those a Status table no longer lists (trimmed: landed)", () => {
+    const plan = budgetPlan(
+      [noCheck, slice(5, " · Blocked by: none · Check: web/5.test.js")].join("\n"),
+      "| 5 | 1 | | |",
+    );
+    expect(planBudget(plan).warnings).toEqual([]);
+    expect(planBudget(budgetPlan(noCheck), { merged: new Set([2]) }).warnings).toEqual([]);
+  });
+
+  it("counts only the Build paragraph's distinct files", () => {
+    expect(
+      buildFiles(
+        "**Build:** `a.mjs`, `a.mjs`, `fnName`, `b/c.sh`.\nmore `d.md`\n\n**Acceptance criteria:** `e.mjs`",
+      ),
+    ).toEqual(["a.mjs", "b/c.sh", "d.md"]);
+    expect(buildFiles("**What to build:** `x.ts`")).toEqual(["x.ts"]);
+  });
+
+  it("--plan prints the warnings and how it read the waves, and exits 0", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-plan-budget-"));
+    try {
+      const file = join(dir, "sample-plan.md");
+      writeFileSync(file, overPlan);
+      const r = spawnSync("node", [CLI, "--plan", file], { encoding: "utf8" });
+      expect(r.status).toBe(0);
+      expect(r.stderr.trim().split("\n")).toHaveLength(3);
+      expect(r.stdout).toBe("3 budget warning(s); waves from the slices' Blocked by chains\n");
+      expect(spawnSync("node", [CLI, "--plan", join(dir, "none.md")]).status).toBe(2);
+      expect(parseArgs(["--plan", file, "--mode", "slice"])).toEqual({
+        ok: false,
+        error: "--plan goes alone",
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

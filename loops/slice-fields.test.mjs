@@ -1,7 +1,14 @@
 // The slice fields parser, through its exports and its command line.
 import { execFileSync, spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { formatFields, lineAnchors, sliceFields, sliceSections, splitList } from "./slice-fields.mjs";
+import {
+  formatFields,
+  lineAnchors,
+  mergedSlices,
+  sliceFields,
+  sliceSections,
+  splitList,
+} from "./slice-fields.mjs";
 
 const CLI = new URL("./slice-fields.mjs", import.meta.url).pathname;
 
@@ -46,6 +53,10 @@ Stack: no · Tests: unit · blocked  BY: none · Colour: blue
 ## Slice 8: Blocked by, malformed
 
 Blocked by: 2, later · Stack: no · Reads: none · Tests: unit
+
+## Slice 10: Check
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/x.test.mjs
 
 ## Slice 12: Two digits
 
@@ -114,6 +125,13 @@ describe("sliceFields", () => {
     expect(f.warnings).toEqual(['Blocked by takes slice numbers, not "later"']);
   });
 
+  it("knows Check: the fields parse complete, with its file", () => {
+    const f = sliceFields(plan, 10);
+    expect(f).toMatchObject({ check: ["loops/x.test.mjs"], missing: [], warnings: [] });
+    expect(f.given).toEqual(["stack", "reads", "tests", "blocked by", "check"]);
+    expect(sliceFields(plan, 1)).toMatchObject({ check: [], given: ["stack", "reads", "tests"] });
+  });
+
   it("only reads fields directly under the heading", () => {
     const f = sliceFields(plan, 5);
     expect(f.stack).toBe(false);
@@ -135,6 +153,14 @@ describe("sliceFields", () => {
     expect(formatFields(sliceFields(plan, 2))).toBe(
       "Stack: no\nReads: nothing besides AGENTS.md\nTests: none named",
     );
+  });
+});
+
+describe("mergedSlices", () => {
+  it("reads merge SHAs and done states from any table with a Slice column", () => {
+    const status =
+      "| Slice | State | Merge |\n| - | - | - |\n| 1 | started | |\n| 2 | landed | |\n| 3 | | abc1234 |";
+    expect([...mergedSlices([status])].sort()).toEqual([2, 3]);
   });
 });
 
@@ -185,6 +211,8 @@ describe("the command line", () => {
     expect(execFileSync("node", [CLI, "1", "--get", "tests"], { input: plan, encoding: "utf8" })).toBe(
       "unit, e2e:invites\n",
     );
+    const check = spawnSync("node", [CLI, "10", "--get", "check"], { input: plan, encoding: "utf8" });
+    expect([check.stdout, check.stderr]).toEqual(["loops/x.test.mjs\n", ""]);
   });
 
   it("refuses a bad slice number", () => {
