@@ -639,10 +639,10 @@ describe("plan and backlog", () => {
       expect(out).not.toContain("A fresh skeptic reads every question");
   });
 
-  it("both planner prompts cap a slice at about 8 files and one running topic's hot file", () => {
+  it("both planner prompts cap a slice at about 4 files, one test file and one running topic's hot file", () => {
     for (const plan of [ok("plan", "T"), ok("plan", "T", "--auto")])
       expect(plan).toContain(
-        "**a slice that would touch more than about 8 files, or more than one running topic's hot file** (`pnpm backlog prd list`), **is split into slices that each land on their own**",
+        "**a slice that would change more than about 4 files, need more than one test file (its fields line's `Check:` names the one, and no two slices in a wave share it), or touch more than one running topic's hot file** (`pnpm backlog prd list`), **is split into slices that each land on their own**",
       );
   });
 
