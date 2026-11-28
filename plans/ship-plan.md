@@ -8,14 +8,14 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Now (2026-11-28):** wave 1 started: slice 1 on opus (real logic). No running topic holds its hot files (`fixes-tooling` holds only test files). Next: watch, merge, CI run, PR, Codex review, land, rotate.
+**Now (2026-11-28):** wave 1: slice 1 (opus) handed off at `937185a` (slice check green, 15 tests) and merged as `bde2083`. `risa tier`: none (tooling only), so the gate is the full check on the synced tip. Next: `risa sync`, check, PR, Codex review, land, docs, rotate. Slice 1 added `isVersion` to `loops/config.mjs` (outside the plan, additive) and `ship` to `prd.sh`'s `known_cmds`. For slices 2 and 3: facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed.
 
-| Slice | Wave | State          | Merge into `prd/ship` |
-| ----- | ---- | -------------- | --------------------- |
-| 1     | 1    | started (opus) | —                     |
-| 2     | 2    | —              | —                     |
-| 4     | 2    | —              | —                     |
-| 3     | 3    | —              | —                     |
+| Slice | Wave | State  | Merge into `prd/ship` |
+| ----- | ---- | ------ | --------------------- |
+| 1     | 1    | merged | `bde2083`             |
+| 2     | 2    | —      | —                     |
+| 4     | 2    | —      | —                     |
+| 3     | 3    | —      | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
