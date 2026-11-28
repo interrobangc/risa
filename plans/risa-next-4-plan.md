@@ -4,20 +4,20 @@
 
 ## Status
 
-| Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
-| ----- | ---- | --------------------------------------------- | ---------------------------- |
-| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
-| 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | dd41acb                      |
-| 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | ca49316                      |
-| 3     | 3    | started 2026-11-28 (worktree, agent; opus)    | —                            |
-| 5     | 4    | —                                             | —                            |
-| 6     | 5    | —                                             | —                            |
+| Slice | Wave | State                                           | Merge into `prd/risa-next-4` |
+| ----- | ---- | ----------------------------------------------- | ---------------------------- |
+| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus)   | 952927e                      |
+| 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus)   | dd41acb                      |
+| 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus)   | ca49316                      |
+| 3     | 3    | merged 2026-11-28 (75d1fe9; opus), gate running | 32bb4ed                      |
+| 5     | 4    | —                                               | —                            |
+| 6     | 5    | —                                               | —                            |
 
 **From the user:** nothing yet beyond the start itself.
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Now (2026-11-28):** wave 2 (slices 2 and 4) landed in main through PR #39 (main at 34eb47b, tier none, Codex clean, report a69, both slice worktrees removed). **Wave 3 (a fresh session, 2026-11-28):** ingest found nothing new; `risa sync` needed no merge (main's 29 commits share no file with this branch); RISA-796 claimed; slice 3 is in flight in `.loops/risa-next-4-3` on `slice/risa-next-4/3` (one opus agent, the watch running). When it hands off: merge, `risa backlog` stays in-progress (RISA-796 is done after slice 5), then the wave gate (`risa tier`, `risa ci run <tier> --wait`), `risa pr`, `risa review --wait`, land, `risa rm risa-next-4-3`, rotate. `fixes-bug` (running) holds only `loops/new`, `loops/rotate`, `loops/open-session`, so `bin/risa`, `loops/rm.sh` and `loops/lib.sh` are free: check `risa backlog prd list` again before slice 5.
+**Now (2026-11-28):** wave 2 (slices 2 and 4) landed in main through PR #39 (main at 34eb47b, tier none, Codex clean, report a69, both slice worktrees removed). **Wave 3 (a fresh session, 2026-11-28):** ingest found nothing new; `risa sync` needed no merge (main's 29 commits share no file with this branch); RISA-796 claimed; slice 3 handed off (75d1fe9, slice check passed, 6 of 6) and is merged at 32bb4ed; its worktree `.loops/risa-next-4-3` stays until the gate is green. `risa tier` says none (tooling only), so the gate is a full `risa check` on the merged tip (log: `~/.risa/tmp/risa-next-4-wave3-check.log`). Next: `risa pr`, `risa review --wait`, land (RISA-796 stays in-progress until slice 5), `risa rm risa-next-4-3`, rotate. Slice 3 put the backlog route's change in `loops/backlog-config.sh` (`bin/risa` only sources it) and left two `risa.json` comments in `loops/lib.sh` (lines 22, 638). **For slice 6 (from slice 3):** a `makeRepo` repo's `work/archive.md` has no `## Items` heading, which `backlog prd list` needs; `makeRepo` copies only `loops/`, not `backlog/`. `fixes-bug` (running) holds only `loops/new`, `loops/rotate`, `loops/open-session`, so `bin/risa`, `loops/rm.sh` and `loops/lib.sh` are free: check `risa backlog prd list` again before slice 5.
 
 **Wave 2's gate, for the next ones:** `pnpm check`'s test pass was whole on the merged tip; `risa check`'s tooling rerun of the same files failed twice with 20 s timeouts at load near 50 while `fixes-bug`'s full check ran beside it (25 then 31 tests, different sets; RISA-1088, fixes-test), and PR 39's GitHub run had the one known failure RISA-1085 (`check-run.test.mjs` on every `pull_request` run). Both waived on the backlog session's advice ("No objection"; "No reason not to"). Start a full check when the other check lease is free and load is low. Nothing to fold into the docs: slice 4 wrote the folder form and `where` into `loops/docs/project-config.md`.
 
