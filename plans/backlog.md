@@ -142,7 +142,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1072 | bug | live | risa-next-2 | prd/risa-next-2 | prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop |
 | RISA-1073 | bug | live | fixes-tooling | prd/fixes-tooling | The slice check's time budget doesn't allow for the tooling step: on a slice touching loops/ it comes from slice runs with a 15s median (705s), so the tooling step that follows the unit run is stopped (exit 124) with no test failed, as both wave-11 slices of fixes-tooling were at load ~21 |
 | RISA-1074 | feature | triaged | usage-aware-drain |  | risa account setup\|use\|status: set up a second Claude config folder, point a repo's sessions at it,… |
-| RISA-1075 | bug | in-progress | fixes-test | prd/fixes-test | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
+| RISA-1075 | bug | ready | fixes-test | prd/fixes-test | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
 | RISA-1076 | bug | triaged | fixes-tooling |  | Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables |
 | RISA-1077 | bug | live | fixes-bug | prd/fixes-bug | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
 | RISA-1078 | bug | live | fixes-bug | prd/fixes-bug | Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim |
@@ -161,6 +161,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1091 | bug | triaged | fixes-bug |  | risa init writes a repo that fails the project-data check: project-check.mjs needs paths.preferences (a doc with a 'Default on silence … Never (--waits)' line), a planner role doc with What to ask and The skeptic pass, and <plans>/fixes-rules.md, and every other .md beside the preferences doc must be named by a role; init writes none of them (beyond the AGENTS.md and docs/ file it already names when missing), so init should write working defaults or print each step |
 | RISA-1092 | feature | triaged | risa-next-5 |  | risa init: a flag for the branch prefixes (today branches.prefixes is edited by hand after init), and config.mjs check run from a Risa install with RISA_CONFIG unset checks Risa's own checkout config, not the repo in the current directory, which surprises a second repo's user (say which config it checked, or prefer the cwd's repo) |
 | RISA-1093 | bug | triaged | fixes-test |  | Entry points guarded with pathToFileURL(process.argv[1]).href are a silent no-op through a symlink (about 20 in loops/: slice-brief, status-trim, dispatch, finish, context, drain, bye, cost, host and others): run directly they work, through a symlink they print nothing and exit 0; switch them to isMain from loops/is-main.mjs |
+| RISA-1094 | bug | triaged | fixes-bug |  | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
 
 ## Items
 
@@ -1184,12 +1185,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1075 · bug · dispatch-restart test leaves its dispatchers running after it deletes their temp repo
 
-- status: in-progress
+- status: ready
 - prd: fixes-test
 - owner: prd/fixes-test
-- commit:
+- commit: d763551
 
 - 2026-11-28 (Robert Bo Davis): Two dispatch.mjs --every 1 processes from a dispatch-restart-* temp repo found orphaned (ppid 1) for ~3h47m on 2026-11-28; their repo was already gone. The test should stop the dispatchers it starts, even when it fails.
+- 2026-11-28 (prd/fixes-test): Cause (slice 2): each orphan was blocked in spawnSync on its tick's backlog command, whose child a test preload kept alive, so SIGTERM never ran its handler and the old afterEach gave up after 10 s. Two orphans from before the fix were still running at hand-off (pids 6808, 99477 and their children 6830, 99501, root dispatch-restart-CSG2KH): the slice agent's kill was refused by its permissions, so they wait for the user.
 
 ### RISA-1076 · bug · Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables
 
@@ -1359,3 +1361,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-test): From fixes-test slice 1's hand-off (RISA-1048, 2026-11-28): slice-brief.mjs tested, usage printed directly and nothing through a symlink. Through the risa command the paths are real (bin/risa resolves them), so only a direct node call through node_modules is hit. More than 12 files: split in two slices; loops/dispatch.mjs and others may be hot for a running topic.
+
+### RISA-1094 · bug · A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-test): From fixes-test slice 2's hand-off (RISA-1075, 2026-11-28): seen in two test dispatchers whose backlog child was kept alive by a test preload; they ignored SIGTERM for hours.
