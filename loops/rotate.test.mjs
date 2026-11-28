@@ -22,11 +22,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPTAINS } from "./captain.mjs";
+import { namesOf } from "./flavor.mjs";
 import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 import { pick } from "./dispatch-pick.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
 
 const HERE = new URL(".", import.meta.url).pathname;
 // The limits follow the load as this file starts, not only as the run did (RISA-994).
@@ -731,7 +734,7 @@ describe("pnpm prd rotate --self", () => {
     const captain = /^Rotating backlog: pid \d+ \(the calling session\), as ([A-Za-z]+)\.$/m.exec(
       old.out,
     )?.[1];
-    expect(CAPTAINS).toContain(captain);
+    expect(ADMIRALS).toContain(captain);
     expect(captain).not.toBe("Archer");
     // The tab is titled with the captain.
     expect(old.out).toContain(`to open ${captain} (its command):`);
@@ -790,7 +793,7 @@ describe("pnpm prd rotate --self", () => {
     await s.done;
     // A rotation given no --captain (an old opener's line) draws one itself.
     const args = newArgs();
-    expect(CAPTAINS).toContain(args[args.indexOf("--remote-control") + 1]);
+    expect(ADMIRALS).toContain(args[args.indexOf("--remote-control") + 1]);
     const prompt = promptOf(args);
     expect(prompt.startsWith("## Brief from the session before")).toBe(true);
     expect(prompt).toContain(text);

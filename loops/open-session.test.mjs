@@ -28,8 +28,11 @@ import {
   projectFolder,
   runThrough,
 } from "./open-session.mjs";
-import { CAPTAINS } from "./captain.mjs";
+import { namesOf } from "./flavor.mjs";
 import "./config-fixture.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
 
 const SESSION_SH = "/o/loops/session.sh";
 const W = `cd /w/.loops/t && ${SESSION_SH} prd-t`;
@@ -137,6 +140,8 @@ beforeAll(() => {
     "planner-model.mjs",
     "sessions.mjs",
     "captain.mjs",
+    "flavor.mjs",
+    "machine.mjs",
   ])
     copyFileSync(join(HERE, f), join(main, "loops", f));
   mkdirSync(join(main, "backlog"));
@@ -198,7 +203,7 @@ describe("backlog, recovery and hotfix sessions", () => {
         wrapper,
         record: { kind: "backlog", remote: "Riker" },
       });
-      expect(CAPTAINS).toContain(c.title);
+      expect(ADMIRALS).toContain(c.title);
       expect(c.title).not.toBe("Riker");
       expect(c.session).toBe("backlog");
       expect(c.command).toContain(
@@ -319,7 +324,7 @@ describe("backlog, recovery and hotfix sessions", () => {
     const out = ok(["backlog", "--print"]);
     expect(out).toContain(`cd ${main} && `);
     const captain = /^backlog as ([A-Za-z]+) /m.exec(out)?.[1];
-    expect(CAPTAINS).toContain(captain);
+    expect(ADMIRALS).toContain(captain);
     expect(out).toContain(
       `--model sonnet --remote-control ${captain} "$(RISA_CAPTAIN=${captain} ${join(main, "loops/prompt.sh")} backlog)"`,
     );
