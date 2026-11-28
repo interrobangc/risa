@@ -13,7 +13,7 @@
     "docs": "loops/docs",
     "agentsDoc": "AGENTS.md",
     "preferences": "docs/preferences.md",
-    "tooling": ["bin"],
+    "tooling": ["bin", "release"],
     "tierData": "risa-tiers.json",
     "checkPlanRules": "risa-check-plan.json"
   },
