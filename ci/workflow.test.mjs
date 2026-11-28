@@ -89,6 +89,16 @@ const stepOf = (/** @type {RegExp} */ re) => steps().find((s) => re.test(s)) ?? 
 const field = (/** @type {string} */ step, /** @type {string} */ key) =>
   new RegExp(`^\\s+(?:- )?${key}: (.+)$`, "m").exec(step)?.[1]?.trim();
 
+describe("the CI workflow's checkout", () => {
+  it("fetches the full history and its tags, so docs:headings finds the last v* tag", () => {
+    const checkout = stepOf(/uses: actions\/checkout@/);
+    expect(checkout).not.toBe("");
+    // A shallow checkout has no v* tag reachable from HEAD: the headings check passes vacuously.
+    expect(field(checkout, "fetch-depth")).toBe("0");
+    expect(field(checkout, "fetch-tags")).not.toBe("false");
+  });
+});
+
 describe("the CI workflow's verdict", () => {
   const writer = stepOf(/run: node ci\/write-verdict\.mjs/);
   const upload = stepOf(/uses: actions\/upload-artifact@/);
