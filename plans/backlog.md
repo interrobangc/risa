@@ -16,11 +16,11 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `fixes-tooling` | standing | — | `loops/rotate`, `loops/dispatch`, `.github`, `ci/workflow`, `ci/write-verdict`, `ci/ci-io`, `ci/ci-runs`, `backlog/registry`, `backlog/backlog`, `vitest.config.mjs`, `loops/drain`, `loops/usage`, `loops/check-budget`, `loops/test-limits` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
 | `fixes-bug` | standing | — | — | Small fixes for wrong behaviour or data (plans/fixes-rules.md) |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | To write. Ship dev to staging in one command, Codex findings filed by tool, a staging to-test report (B-404, B-430, B-436). Cut from orchestration-3; doesn't need the dispatcher |
-| `self-recovery-2` | hold | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560). Held after two skeptic send-backs; the user chose to land it held (a7). |
+| `self-recovery-2` | — | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560). Held after two skeptic send-backs; the user chose to land it held (a7). |
 | `self-recovery-3` | — | `self-recovery-2` | `loops/session`, `loops/open-session`, `loops/dispatch`, `loops/prd.sh` | Headless sessions and machinery-owned jobs (RISA-438, RISA-912, RISA-913), cut from self-recovery-2 |
 | `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Also moved to the bottom of the queue by the user 2026-11-24. Released 2026-11-23 by the user. The backlog session as go-between for every agent's questions, and asks queue hygiene. Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic) |
 | `risa-next` | hold | — | — | — |
-| `usage-aware-drain` | hold | — | — | Plan-aware drain line, after the orchestrator split |
+| `usage-aware-drain` | — | — | — | Plan-aware drain line, after the orchestrator split |
 | `after-split-2` | done | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
 
 ## Summary
@@ -94,6 +94,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-999 | bug | ready | fixes-tooling | prd/fixes-tooling | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
 | RISA-1000 | bug | ready | fixes-tooling | prd/fixes-tooling | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
 | RISA-1001 | bug | triaged | fixes-bug |  | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
+| RISA-1002 | feature | triaged | usage-aware-drain |  | Backup Claude account: when the current account reaches 99% usage on this machine, or on the user's word, Risa pauses work, swaps every session to the other account (work or personal) and resumes there |
+| RISA-1003 | bug | triaged | fixes-tooling |  | rotate's standing-close simulated pick omits facts.landed, so a landed-but-planned row can make a standing topic close and then be restarted by the dispatcher (worktree, stack, test db torn down and rebuilt) |
 
 ## Items
 
@@ -781,3 +783,25 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/after-split-2): Codex P2 on PR #9 (after-split-2), https://github.com/interrobangc/risa/pull/9#discussion_r4724774993; Codex reproduced it with paths.backlog=plans/new-backlog.md in a worktree
+
+### RISA-1002 · feature · Backup Claude account: when the current account reaches 99% usage on this machine, or on the user's word, Risa pauses work, swaps every session to the other account (work or personal) and resumes there
+
+- status: triaged
+- prd: usage-aware-drain
+- owner:
+- commit:
+
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: filed into risa-next. Builds on what exists: a Claude config folder per project or role (host.mjs claudeConfigDir, RISA_CLAUDE_CONFIG_DIR, machine config; Caretook B-543 slice 7), per-account usage readings, and RISA-927 (the drain reads each session's own account, fixes-tooling wave 3 slice 18). New: the machine config names two accounts (config folders) and which is current; a trigger at 99% (5-hour or weekly) on the current one, or a user command (e.g. risa account swap, from the phone too); pause the dispatcher, drain or rotate running sessions at a safe point, reopen them on the other account's folder, resume. Related: usage-aware-drain (RISA-814 drain line per plan), self-recovery (sessions reopening cleanly).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: the backup account's config folder shares, by symlink to the main one, everything that must persist between them: memory (projects/<repo>/memory), settings (settings.json, keybindings.json), CLAUDE.md, skills, agents, commands, plugins and hooks scripts, and the session transcripts (projects/) so a swapped session can resume its conversation. Account-specific, never linked: the sign-in (.claude.json's account and the keychain entry), usage and rate-limit caches. A risa command sets the links up and checks them (machine check), and says which entries it found that it doesn't know.
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, from Caretook's backlog (Garrett), read from that machine's disk: ~/.claude is personal, ~/.claude-work the other. A local-only Caretook script (.local/account-switch/switch-account.sh, git-excluded) does 'setup DIR': symlinks CLAUDE.md, settings.json, skills, plugins to ~/.claude and each projects/<slug>/memory (re-run for new memory; skips linked and real files). Kept per account: login, transcripts (so no --resume across accounts), .claude.json (trust, onboarding), history.jsonl, file-history, session-env, sessions, shell-snapshots, backups, cache, Remote Control pairing, claude.ai connectors, artifacts. Sign-in: CLAUDE_CONFIG_DIR=~/.claude-work claude, /login, trust the repo, /exit. 'use work' sets machine.json repos[<path>].claudeConfigDir and runs machine check; 'use personal' removes it; 'status' prints host.mjs claudeChoiceFor per role; warns when RISA_CLAUDE_CONFIG_DIR is set (it overrides). Switch steps: hand off, pause dispatcher, use work, close sessions, resume (keep-alive reopens). Gotchas: a plain claude stays personal (hand-started work sessions need CLAUDE_CONFIG_DIR=… claude --remote-control <name>); running sessions keep their account until restart; keep all sessions on one account at a time (drain readings, B-927/RISA-927); the phone app stays personal, the work account is reached by browser; ~/.claude/skills is itself a symlink (two hops). Open for planning: the user's earlier note wants transcripts shared so a swapped session resumes; this setup keeps them per account. The plan moves this script into Risa (a risa account command).
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: transcripts stay per account, as on the other machine; a swap is a hand-off: each session reopens fresh on the other account from its brief. This replaces the earlier note's 'share the transcripts'.
+- 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: separate transcripts is for now; once agents depend less on their context (hand-offs and jobs that survive them, e.g. RISA-913), resuming across accounts matters less. Revisit then.
+
+### RISA-1003 · bug · rotate's standing-close simulated pick omits facts.landed, so a landed-but-planned row can make a standing topic close and then be restarted by the dispatcher (worktree, stack, test db torn down and rebuilt)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): Codex P2 on PR #10 (thread PRRT_kwDOV9ctaM68-zC2, loops/rotate.mjs:139), from RISA-952: pass the gathered landed-topic facts into standingClose's simulated pick, as dispatch-pick's landedWhy() uses them.
