@@ -124,7 +124,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1048 | bug | live | fixes-test | prd/fixes-test | pnpm test:tooling runs no tests and exits 0 (a false green) from a project's node_modules: loops/tooling-tests.mjs's main guard compares import.meta.url with file://argv[1], and under pnpm argv[1] is the symlink while import.meta.url is the real .pnpm path; compare realpaths (as session-names.mjs's isMain does) here and in the other entry points with the same guard |
 | RISA-1050 | change | live | fixes-bug | prd/fixes-bug | Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning) |
 | RISA-1052 | bug | triaged | fixes-bug-urgent |  | session.sh resolves its own directory (bin=$(cd "$(dirname "$0")" && pwd)) before sourcing lib.sh, whose unset CDPATH now comes too late: with CDPATH set and a relative $0, cd prints the matched path and bin gets it twice, so source "$bin/lib.sh" fails. Unset CDPATH first |
-| RISA-1053 | feature | triaged | ship |  | A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion) |
+| RISA-1053 | feature | in-progress | ship | prd/ship | A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion) |
 | RISA-1054 | bug | live | fixes-tooling | prd/fixes-tooling | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
 | RISA-1055 | feature | triaged | cross-machine-messages |  | Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account |
 | RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
@@ -1009,9 +1009,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1053 · feature · A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion)
 
-- status: triaged
+- status: in-progress
 - prd: ship
-- owner:
+- owner: prd/ship
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "Let's add some generic \"ship\" finding that caretook and risa can override for their own usage so we have a shared scaffolding. We DO ship pinned versions right now, so we need a \"ship (version)\" command that standardizes pre checks, steps, smoke test, and notification". Reshapes staging-ship: its Caretook staging flow (RISA-404, 430, 436, 584) becomes Caretook's override of this scaffold; the topic needs a replan around it.
