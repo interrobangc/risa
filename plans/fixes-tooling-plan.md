@@ -12,7 +12,7 @@
 | 15    | 3    | RISA-997  | opus  | handed off (e11790b; check red only on load timeouts)           |                                |
 | 16    | 3    | RISA-999  | opus  | handed off (8a74265; check red only on load timeouts)           |                                |
 | 17    | 3    | RISA-1000 | opus  | handed off (9a4e8b3; check red only on load timeouts, RISA-994) |                                |
-| 18    | 3    | RISA-927  | opus  | agent working                                                   |                                |
+| 18    | 3    | RISA-927  | opus  | handed off (0c62afa; check red only on load timeouts)           |                                |
 
 **Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
 
