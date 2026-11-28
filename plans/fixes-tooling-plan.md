@@ -10,7 +10,7 @@
 | ----- | ---- | --------- | ----- | ------ | ------------------------------ |
 | 44    | 7    | RISA-1018 | opus  | merged | 92d9344                        |
 
-**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file). Slice 44 handed off (check passed on 672ba10, 20/20 runs), merged 92d9344; tier none (tooling only), gate is `pnpm test`. Slice 44 found the gate itself reads an unread load mid-wait as dropped: filed RISA-1022.
+**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file). Slice 44 handed off (check passed on 672ba10, 20/20 runs), merged 92d9344; tier none (tooling only); `pnpm test` green on 1c0c740 (2388 tests); sync needed no merge; PR #17 open, Codex review out. Slice 44 found the gate itself reads an unread load mid-wait as dropped: filed RISA-1022.
 
 **Wave 6 landed** 2026-11-28 in main as 1b65a5f through PR #15: slices 39–43, all opus (RISA-1015 in three parts, RISA-1016 in two). CI unit: first run 46123266140 red on an unrelated load-gate flake (filed RISA-1018), rerun green; synced with main (a8f3cb8), CI unit green there (run 46124077140). Codex clean on a8f3cb8, then again on ce3fe0b (the installed release doesn't yet carry a review over docs-only commits). Report filed; to-test/2026-11-28-0311-fixes-tooling.md; slice worktrees removed. Handbook gained "commit the plan before `risa slice`".
 
