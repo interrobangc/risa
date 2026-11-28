@@ -26,7 +26,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:budget": "node loops/docs-budget.mjs",
-    "check": "pnpm format:check && pnpm lint && pnpm docs:budget && pnpm test"
+    "docs:headings": "node loops/docs-headings.mjs",
+    "check": "pnpm format:check && pnpm lint && pnpm docs:budget && pnpm docs:headings && pnpm test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
