@@ -4,6 +4,8 @@
 
 ## Status
 
+**From the user:** (none yet)
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
 | Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
@@ -22,7 +24,9 @@
 
 **Wave 2** (slices 6–9), 2026-11-28: synced main first (19c92dd; fixes-rules.md conflict resolved to main's topic list). RISA-1050 waits for a later wave: it touches the dispatcher (`loops/dispatch`, hot for running risa-next-2). Slice 7 is sonnet (a wording change the plan spells out); the rest opus. Slices 6–9 started (worktrees `.loops/fixes-bug-<n>`, one agent each). Slice 7 handed off (8eb3c96: the header names _Directives_, _From the user_ or both). Slice 6 handed off (e1cc3ac: prettier from the project, then Risa's own, else formatting skipped with a line). Both merged (e29fab7, cf93d26). Slice 8 handed off (5b60cd4: `Adm Morrow · backlog (caretook)`; old-order names still read; also keep-alive.mjs and session-requests.mjs matchers, backlog.md's name sentence) and merged (9f14e04). plans/risa-next-prd.md's note that matchers need no change is now stale. Slice 9 handed off (d362c67: `mergeAdditions` in doc.mjs; `pnpm docs:headings` (loops/docs-headings.mjs) in `pnpm check`; new CHANGELOG.md; the fixture planner's skeptic-pass addition now merges into its section) and merged (c0751bb). CI's shallow checkout fetches no tags, so docs:headings passes vacuously there: filed as RISA-1054 (fixes-tooling). Wave gate: `risa ci run unit` (tier from `risa tier`: ci.yml changed) on 23a6955: **green** (run 46154596385). Slice worktrees removed; sync skipped (up to date). PR #27: one Codex P2 (CI fetches no tags), tracked as RISA-1054, thread resolved; Codex clean on 2760dbc. **Landed** 2026-11-28 in main as 5767dfb (tier unit, unsynced tip: main's 2 commits shared no file); to-test file `to-test/2026-11-28-0952-fixes-bug.md`; report a52. Caretook's backlog session told 5767dfb has RISA-1049 (its note asked). The role-doc heading rule went into plans/fixes-rules.md.
 
-**For the next session:** RISA-1050 waits (dispatcher hot for risa-next-2); when it ships, tell Caretook's backlog session the commit (its note asks). Check `risa backlog list` at the wave boundary. The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
+**Wave 3 boundary** (2026-11-28, fresh session): ingest had nothing new. Nothing is runnable, so no slice was written. All five triaged fixes-bug items are in risa-next-2's hot files: RISA-1050 touches `loops/dispatch`. RISA-1057–1060 touch `backlog/inbox-store.mjs`, which is not in main yet (risa-next-2's PR #28; these items are its Codex findings) and sits under its hot `backlog/`. I asked prd-risa-next-2 to message fixes-bug when wave 1 lands and when `backlog/` and `loops/dispatch` stop being hot (it may take 1057–1060 itself). I told the backlog session, recommending rotating now and leaving 1057–1060 to risa-next-2's call. Rotated with nothing in flight (the lane closes).
+
+**For the next session:** first run `risa backlog prd list`. Start a slice only for an item whose files no running topic holds hot. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
 ## How to run this plan
 
