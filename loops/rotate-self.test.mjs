@@ -16,6 +16,8 @@ import {
   stub,
   env,
   wt,
+  sessions,
+  tabEnv,
   scripts,
   record,
   stubPid,
@@ -37,12 +39,12 @@ describe("pnpm prd rotate --self", () => {
   /** A recorded session that runs `rotate --self` from inside itself, then stays up. */
   const selfSession = async (
     name,
-    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name } = {},
+    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name, extra = {} } = {},
   ) => {
     const s = start(
       "bash",
       [scripts("session.sh"), name, "--", ...claude, "--remote-control", remote, "x"],
-      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args },
+      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args, ...extra },
       cwd,
     );
     await until(() => existsSync(join(state, "ready")));
@@ -232,6 +234,61 @@ describe("pnpm prd rotate --self", () => {
     expect(briefed.code).toBe("1");
     expect(briefed.out).toContain("an orchestrator hands over through _Status_");
     await finish(briefed);
+  });
+
+  describe("says whether the hand-off took once its tab is open (RISA-1082)", () => {
+    const alive = (pid) => spawnSync("kill", ["-0", String(pid)]).status === 0;
+
+    it.each([
+      ["backlog", main],
+      ["prd-w", null],
+    ])(
+      "%s: rotate-into never runs in the tab: not started, exit 1, the session carries on",
+      async (name, cwd) => {
+        const old = await selfSession(name, {
+          cwd: cwd ?? wt,
+          claude: name === "backlog" ? ["--model", "sonnet"] : [],
+          extra: { ...tabEnv, FAKE_TAB: "none", RISA_ROTATE_START_WAIT: "1" },
+        });
+        expect(old.code).toBe("1");
+        expect(old.out).toMatch(/^Opened .* in a new background iTerm2 tab/m);
+        expect(old.out).toContain(`the hand-off did not start: no sign of rotate-into on ${name} within 1s`);
+        expect(old.out).toContain(`This session carries on (pid ${old.pid})`);
+        expect(old.out).not.toContain("The hand-off started");
+        expect(alive(old.pid)).toBe(true);
+        expect(record(name)).not.toHaveProperty("rotating");
+        await finish(old);
+      },
+    );
+
+    it("rotate-into refuses in the tab: not started, with its reason, and the reason's file is gone", async () => {
+      const file = join(root, "gone-brief.md");
+      writeFileSync(file, "Fictional notes.\n");
+      const old = await selfSession("backlog", {
+        args: `--brief ${file}`,
+        extra: { ...tabEnv, FAKE_TAB: "run", FAKE_RM: file },
+      });
+      expect(old.code).toBe("1");
+      expect(old.out).toContain(
+        `rotate --self: the hand-off did not start: rotate-into: can't read the brief ${file}; nothing was ended. This session carries on (pid ${old.pid})`,
+      );
+      expect(old.out).not.toContain("The hand-off started");
+      expect(existsSync(join(sessions, "backlog.refused"))).toBe(false);
+      expect(alive(old.pid)).toBe(true);
+      expect(record("backlog")).not.toHaveProperty("rotating");
+      await finish(old);
+    });
+
+    it("the record is marked rotating within the wait: the hand-off is under way, exit 0", async () => {
+      const old = await selfSession("backlog", { extra: { ...tabEnv, FAKE_TAB: "rotating" } });
+      expect(old.code).toBe("0");
+      expect(old.out).toContain(
+        `The hand-off started (marked rotating): this session (pid ${old.pid}) is about to be ended; a fresh backlog opens in that tab.`,
+      );
+      expect(old.out).not.toContain("did not start");
+      expect(record("backlog")).toMatchObject({ pid: old.pid, rotating: true });
+      await finish(old);
+    });
   });
 
   describe("the inbox session", () => {

@@ -78,7 +78,18 @@ case \${STUB_MODE:-exit} in
 esac
 `;
 
-export let root, main, loops, sessions, state, stub, env, wt;
+// A stand-in osascript (`osascript - <line> <title> <0|1>`) for --self's tab (with RISA_ITERM_APP at a folder that exists): FAKE_TAB
+// none opens a tab where nothing runs; run runs its line there (after removing FAKE_RM); rotating
+// marks the record rotating a moment later, as rotate-into's first step does.
+const FAKE_OSASCRIPT = `#!/usr/bin/env bash
+cat > /dev/null
+case \${FAKE_TAB:-none} in
+  run) [[ -z \${FAKE_RM:-} ]] || rm -f "$FAKE_RM"; STUB_MODE=exit bash -c "$2" > "$STUB_STATE/tab.out" 2>&1 || true ;;
+  rotating) (sleep 0.3; node "$SESSIONS_MJS" set "$STUB_NAME" rotating=true) > /dev/null 2>&1 & ;;
+esac
+`;
+
+export let root, main, loops, sessions, state, stub, env, wt, tabEnv;
 export const scripts = (f) => join(main, "loops", f);
 export const record = (name) => JSON.parse(readFileSync(join(sessions, `${name}.json`), "utf8"));
 export const stubPid = () => Number(readFileSync(join(state, "pid"), "utf8").trim());
@@ -153,6 +164,11 @@ export function useRotateRepo() {
     stub = join(bin, "claude-stub");
     writeFileSync(stub, STUB);
     chmodSync(stub, 0o755);
+    const tabBin = join(root, "tab-bin");
+    mkdirSync(tabBin);
+    writeFileSync(join(tabBin, "osascript"), FAKE_OSASCRIPT);
+    chmodSync(join(tabBin, "osascript"), 0o755);
+    mkdirSync(join(root, "iTerm.app"));
     execFileSync("git", ["init", "-q", "-b", "dev", main]);
     for (const [k, v] of [
       ["user.email", "test@example.com"],
@@ -189,11 +205,19 @@ export function useRotateRepo() {
       RISA_ITERM_APP: join(root, "no-iterm"),
       RISA_SESSIONS_DIR: "",
       RISA_ROTATE_WAIT: "",
+      // rotate --self's wait for its tab (RISA-1082): short, so no test sits out the 30 s default.
+      RISA_ROTATE_START_WAIT: "5",
       BACKLOG_BY: "",
       STUB_STATE: state,
       PRD_SH: scripts("prd.sh"),
       RISA_CONFIG: config,
       SAMPLE_STACK_STATE: join(root, "stack-state"),
+    };
+    // A tab that opens (the stand-in osascript, FAKE_TAB): for --self's hand-off tests.
+    tabEnv = {
+      PATH: `${tabBin}:${env.PATH}`,
+      RISA_ITERM_APP: join(root, "iTerm.app"),
+      SESSIONS_MJS: scripts("sessions.mjs"),
     };
   }, scaledWait(60_000));
   afterAll(() => rmSync(root, { recursive: true, force: true }));
