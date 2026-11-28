@@ -4,18 +4,18 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/self-recovery-2` |
-| ----- | ---- | ----- | -------------------------------- |
-| 1     | 1    | —     | —                                |
-| 2     | 1    | —     | —                                |
-| 3     | 2    | —     | —                                |
-| 4     | 2    | —     | —                                |
-| 5     | 2    | —     | —                                |
-| 6     | 3    | —     | —                                |
+| Slice | Wave | State          | Merge into `prd/self-recovery-2` |
+| ----- | ---- | -------------- | -------------------------------- |
+| 1     | 1    | working (opus) | —                                |
+| 2     | 1    | working (opus) | —                                |
+| 3     | 2    | —              | —                                |
+| 4     | 2    | —              | —                                |
+| 5     | 2    | —              | —                                |
+| 6     | 3    | —              | —                                |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 starting: slices 1 and 2, both on opus. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
+**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 running: slices 1 and 2 spawned on opus (worktrees `.loops/self-recovery-2-1`, `-2`); RISA-811 and RISA-560 claimed. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
 
 **Backlog:** claim each slice's items as it starts; `done` them when the last slice naming them merges. Slices 1, 3 and 4: RISA-811 (`done` after 3 and 4). Slices 2 and 5: RISA-560 (`done` after 5). Slice 6: RISA-789.
 
