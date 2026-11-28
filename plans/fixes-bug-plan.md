@@ -8,19 +8,19 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | working | —                          |
+| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
 
 **Wave 1** (slices 1–5, all opus; 5 after 4): the plan's first wave, started 2026-11-28. RISA-985 was closed at triage without a slice: a489eef (PR #3) already fixed it. Slices 1–4 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each); 5 waits for 4's merge. Slice 1 handed off (a new `too-long` verdict state, never clean; review.sh exits 3 on it) and merged. Slice 2 merged (pickup checks the loaded config's and RISA_MAIN's checkout, not lib.sh's; dev_sync runs on the project). Slice 4 merged (helper `backlog_run` in lib.sh over a shared `loops/backlog-config.sh`, which bin/risa now sources); slice 5 started. Slice 3 merged (stack down/status/ready exit 0 with no hooks). Slice 5 merged (kept the `cd "$main"` wrappers: backlog.mjs still takes its checkout and By: from the cwd). All five merged; sync skipped (no shared files); `risa tier`: none (tooling only), so the gate was `risa check`: green on 6d5cfc0 (2377 tests). Slice worktrees removed. PR #13: Codex clean on 83c70a7. **Landed** 2026-11-28 in main as 3598122 (tier none, unsynced tip: main's one commit shared no file); to-test file `to-test/2026-11-28-0223-fixes-bug.md`. The `Model:` rule went into plans/fixes-rules.md.
 
@@ -28,7 +28,7 @@
 
 **Wave 3 boundary** (2026-11-28, fresh session): ingest had nothing new. Nothing is runnable, so no slice was written. All five triaged fixes-bug items are in risa-next-2's hot files: RISA-1050 touches `loops/dispatch`. RISA-1057–1060 touch `backlog/inbox-store.mjs`, which is not in main yet (risa-next-2's PR #28; these items are its Codex findings) and sits under its hot `backlog/`. I asked prd-risa-next-2 to message fixes-bug when wave 1 lands and when `backlog/` and `loops/dispatch` stop being hot (it may take 1057–1060 itself). I told the backlog session, recommending rotating now and leaving 1057–1060 to risa-next-2's call. Rotated with nothing in flight (the lane closes).
 
-**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3).
+**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3). Slice 11 handed off (7135a2a: `machineHeld` in captain.mjs reads every machine repo's live records; `personaFor`/`drawAdmiral` take `held`; a stepped persona is kept in the session record's `persona`; also edited loops/session-names.mjs `personaOf`, added to hot) and merged (6e331aa). `risa tier`: none (tooling only), so the gate is `risa check`.
 
 **For the next session:** first run `risa backlog prd list`. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
