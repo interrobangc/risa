@@ -6,20 +6,18 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 44    | 7    | RISA-1018 | opus  | merged | 92d9344                        |
+| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
 
-**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file). Slice 44 handed off (check passed on 672ba10, 20/20 runs), merged 92d9344; tier none (tooling only); `pnpm test` green on 1c0c740 (2388 tests); sync needed no merge; PR #17 open, Codex review out. Slice 44 found the gate itself reads an unread load mid-wait as dropped: filed RISA-1022.
+No slice in flight (idle hand-over after wave 7; its slice's merge: 44 92d9344).
 
-**Wave 6 landed** 2026-11-28 in main as 1b65a5f through PR #15: slices 39–43, all opus (RISA-1015 in three parts, RISA-1016 in two). CI unit: first run 46123266140 red on an unrelated load-gate flake (filed RISA-1018), rerun green; synced with main (a8f3cb8), CI unit green there (run 46124077140). Codex clean on a8f3cb8, then again on ce3fe0b (the installed release doesn't yet carry a review over docs-only commits). Report filed; to-test/2026-11-28-0311-fixes-tooling.md; slice worktrees removed. Handbook gained "commit the plan before `risa slice`".
+**Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
 **For the next session:**
 
-- **Ready (triaged, fixes-tooling):** RISA-1018 (check-run.test.mjs "waits while busy, starts when the load drops" flakes on CI: the load-drop line read "-"). Check `risa backlog list` for more.
-- **Follow-ups of RISA-1015 filed** (triaged, for wave 8): RISA-1020 (anchors ignores planBudget's errors), RISA-1021 (the Check file runs twice in this repo's slice check).
+- **Ready (triaged, fixes-tooling):** RISA-1020, RISA-1021, RISA-1022 (the load gate reads an unread load mid-wait as dropped, `load_gate_wait` in loops/lib.sh: keep polling once busy). Check `risa backlog list` for more; lib.sh is in staging-ship's and risa-next-4's hot files (hold/planned), check `risa backlog prd list`.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
