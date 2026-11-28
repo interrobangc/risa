@@ -6,17 +6,23 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model | State  | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ----- | ------ | -------------------------- |
-| 1     | 1    | RISA-241        | opus  | merged | 5155c24                    |
-| 2     | 1    | RISA-980        | opus  | merged | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus  | merged | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus  | merged | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus  | merged | 3697271                    |
+| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | ready  |                            |
+| 7     | 2    | RISA-1024       | sonnet | ready  |                            |
+| 8     | 2    | RISA-1039       | opus   | ready  |                            |
+| 9     | 2    | RISA-1049       | opus   | ready  |                            |
 
 **Wave 1** (slices 1–5, all opus; 5 after 4): the plan's first wave, started 2026-11-28. RISA-985 was closed at triage without a slice: a489eef (PR #3) already fixed it. Slices 1–4 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each); 5 waits for 4's merge. Slice 1 handed off (a new `too-long` verdict state, never clean; review.sh exits 3 on it) and merged. Slice 2 merged (pickup checks the loaded config's and RISA_MAIN's checkout, not lib.sh's; dev_sync runs on the project). Slice 4 merged (helper `backlog_run` in lib.sh over a shared `loops/backlog-config.sh`, which bin/risa now sources); slice 5 started. Slice 3 merged (stack down/status/ready exit 0 with no hooks). Slice 5 merged (kept the `cd "$main"` wrappers: backlog.mjs still takes its checkout and By: from the cwd). All five merged; sync skipped (no shared files); `risa tier`: none (tooling only), so the gate was `risa check`: green on 6d5cfc0 (2377 tests). Slice worktrees removed. PR #13: Codex clean on 83c70a7. **Landed** 2026-11-28 in main as 3598122 (tier none, unsynced tip: main's one commit shared no file); to-test file `to-test/2026-11-28-0223-fixes-bug.md`. The `Model:` rule went into plans/fixes-rules.md.
 
-**For the next session:** nothing triaged for fixes-bug is waiting; check `risa backlog list` at the wave boundary. The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
+**Wave 2** (slices 6–9), 2026-11-28: synced main first (19c92dd; fixes-rules.md conflict resolved to main's topic list). RISA-1050 waits for a later wave: it touches the dispatcher (`loops/dispatch`, hot for running risa-next-2). Slice 7 is sonnet (a wording change the plan spells out); the rest opus.
+
+**For the next session:** RISA-1050 waits (dispatcher hot for risa-next-2). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
 ## How to run this plan
 
@@ -73,3 +79,44 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: 4 · Chec
 **Acceptance criteria:**
 
 - Unit test (`loops/land.test.mjs`): a topic's worktree whose config names another paths.backlog still marks the main checkout's registry row (land's flags, rm's done) and reads its items.
+
+## Slice 6: status-trim runs under a release install
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/status-trim.test.mjs
+
+**Build (RISA-1023):** `format()` (`loops/status-trim.mjs`) does `await import("prettier")`, a dev dependency; a release folder (`~/.risa/releases/<tag>/`) has no `node_modules`, so `risa status-trim` dies with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout (the plan file's repo, via `createRequire` on a path inside it), and when it can't be found there either, write the text unformatted and print one line saying formatting was skipped. Exit status and the trimmed content stay the same either way. No new dependency.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/status-trim.test.mjs`): with prettier unresolvable (inject the resolver, or run the module from a temp copy outside any `node_modules`), status-trim still trims, exits 0 and says it skipped formatting; with prettier found in the project it formats as before.
+
+## Slice 7: A brief with the old Directives heading names it as the user's word
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/prompt.test.mjs
+
+**Build (RISA-1024):** `loops/prompts/backlog.sh` sets `directives=1` for a `## From the user` or a legacy `## Directives` heading, but the standing line always says "except its _From the user_ lines", so a legacy brief's directives read as context. Name the heading the brief actually has (`_Directives_` for the legacy one; both when both are present). Keep the rest of the header as is.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/prompt.test.mjs`): a brief with `## Directives` gets a header naming _Directives_ as the user's word; one with `## From the user` keeps today's line; one with neither says it is context.
+
+## Slice 8: Session names lead with the persona, its rank abbreviated
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/session-names.test.mjs
+
+**Build (RISA-1039):** `displayName` (`loops/session-names.mjs`) builds `<name> (<project>) · <Rank> <Name>`; the user wants `<Abbr> <Name> · <name> (<project>)`, e.g. `Adm Morrow · backlog (caretook)`. Each rank's short form lives beside its rank in the flavor pack (`loops/flavor.mjs`; Starfleet: Admiral → ADM, Captain → CAPT, Commander → CMDR, Lieutenant Commander → LCDR, Lieutenant → LT, Ensign → ENS, Yeoman and Doctor their usual short forms), so another pack brings its own; written in the name as the user's example shows (`Adm`). Only the session name is shortened: the persona line and replies keep the full rank. The already-qualified check and every reader that parses a name (`loops/ask.mjs` labels, rotate, sessions, tab titles: grep for the `·` and ` (<project>)` matches) take the new order and still read names set the old way. A name with no persona (flavor none) stays `<name> (<project>)`.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/session-names.test.mjs`, `loops/flavor.test.mjs`): the new order with the abbreviated rank; an old-order name is recognised as qualified and read back to the same role, project and persona; flavor none unchanged; every Starfleet rank has a short form.
+
+## Slice 9: Role additions can target a section, and a heading change needs a changelog line
+
+Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests: unit · Blocked by: none · Check: loops/doc.test.mjs
+
+**Build (RISA-1049):** additions (`roles.<role>.additions`, `loops/doc.mjs`) print after the generic doc, so they can only continue its last section, and two releases broke Caretook's by renaming or moving a section. (1) A `## <Heading>` in an additions file that matches a generic doc's `##` heading merges its body at the end of that section; additions before any heading, and sections that match none, append at the end as today. (2) A check (a script beside `loops/docs-budget.mjs`, run by `pnpm check`) compares each `loops/docs/*.md`'s `##` headings and its last section's heading against the latest `v*` tag, and fails when one is added, renamed, removed or moved and no line under the unreleased heading of a new root `CHANGELOG.md` names that doc and heading. Start `CHANGELOG.md` with an `## Unreleased` heading and a line for this change. Say the merge rule in `loops/docs/project-config.md` (the additions entry), within its budget.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/doc.test.mjs`): an additions `## <Heading>` lands at the end of the matching section; unmatched and headless parts append at the end.
+- Unit test (beside the new check): a heading rename with no CHANGELOG line fails, naming the doc and heading; with the line it passes; no tag passes.
