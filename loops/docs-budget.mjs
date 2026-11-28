@@ -22,6 +22,7 @@ export const BUDGETS = {
   "planner.md": 5 * KB + 16,
   "project-config.md": 1 * KB,
   "recovery.md": 5 * KB + 4,
+  "ship.md": 1 * KB,
 };
 
 /**
