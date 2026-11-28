@@ -10,7 +10,7 @@
 //       newline) and stage it. One line per move, then the commit. --dry-run: the same
 //       lines, nothing changed. Exit 2 with one line, changing nothing: outside a repo,
 //       no risa.json, the .risa folder there, a config that doesn't load, a moved file
-//       dirty or untracked.
+//       dirty, untracked or git-ignored (checked before anything moves).
 //   node setup.mjs init --name <slug> [--trunk <branch>] [--check <command>]
 //       Writes .risa/config.json (Risa's defaults for the rest: paths under plans/, the
 //       id prefix from the name, no-op commands), the backlog (its PRDs table, empty),
@@ -178,6 +178,33 @@ function mustLoad(file, raw) {
 }
 
 /**
+ * The FROMS git doesn't track (an ignored one marked so), which git mv would fail on:
+ * git status shows nothing for an ignored file, or for an untracked one under
+ * status.showUntrackedFiles=no.
+ * @param {string} root @param {string[]} froms
+ * @returns {string[]}
+ */
+function untrackedOf(root, froms) {
+  return froms
+    .filter((from) => {
+      try {
+        git(root, "--literal-pathspecs", "ls-files", "--error-unmatch", "--", from);
+        return false;
+      } catch {
+        return true;
+      }
+    })
+    .map((from) => {
+      try {
+        git(root, "check-ignore", "-q", "--no-index", "--", from);
+        return `${from} (ignored)`;
+      } catch {
+        return from;
+      }
+    });
+}
+
+/**
  * `config migrate`, in CWD's repo. Returns the lines to print.
  * @param {{ cwd?: string, dryRun?: boolean }} [opts]
  * @returns {string[]}
@@ -197,6 +224,11 @@ export function migrate({ cwd = process.cwd(), dryRun = false } = {}) {
   mustLoad(CONFIG_NAME, raw);
   const plan = migratePlan({ root, raw });
   const froms = plan.moves.map(([from]) => from);
+  const untracked = untrackedOf(root, froms);
+  if (untracked.length)
+    throw new Refusal(
+      `${untracked.join(", ")}: not tracked by git, so git mv can't move it; track it (git add -f, then commit) or move it by hand`,
+    );
   // -z: NUL-ended `XY name` entries; untrimmed, so a leading space of XY stays.
   const dirty = execFileSync("git", ["-C", root, "status", "--porcelain", "-z", "--", ...froms], {
     encoding: "utf8",
