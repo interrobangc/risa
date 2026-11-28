@@ -4,14 +4,19 @@
 
 ## Status
 
+**From the user:**
+
+- 2026-11-28 (relayed by the backlog session, on the account switch to ~/.claude-personal): "and notify orchesrators"
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                                                                | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------ |
-| 51    | 11   | RISA-1066 | opus  | merged (81db42a; check stopped at budget in tooling step, no failure)                | 423f066                        |
-| 52    | 11   | RISA-1068 | opus  | merged (ca5850b; check stopped at 600s budget in tooling step, load ~21; no failure) | 9b04e99                        |
+| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                                                                               | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | merged twice (the fix: its steps test passed only on a slice branch); main synced (b60d88c); gate `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed (2618 passed); worktree removed; PR and Codex review next, then land. No doc to fold (the budget rule lives in `check-budget.mjs`'s header) | a9eb9ec, 68950ed               |
 
-**Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file. Gate: tier none (tooling only); `pnpm test` green on 4b86c75 (124 files, 2585 tests); sync skipped (main shares no file); slice worktrees removed. Next: PR, Codex review, land.
+Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
+
+**Wave 11 landed** 2026-11-28 in main as 7c89472 through PR #35: slices 51, 52, opus (RISA-1066, RISA-1068; RISA-1066 cut by test file, dispatch to RISA-1069). Tooling only, tier none; `pnpm test` green on 4b86c75; Codex clean on 96796e9; landed on an unsynced tip (main's 4 new commits share no file). Report filed (a62); to-test/2026-11-28-1153-fixes-tooling.md; slice worktrees removed. Both slice checks stopped at their budget in the tooling step with nothing failed: filed as RISA-1073.
 
 **Wave 10 landed** 2026-11-28 in main as 8448fee through PR #31: slices 49, 50, opus (RISA-1054, RISA-1062). Synced with main (19a7b50) first; CI unit green on 97836d7 (run 46162434569); Codex clean on 90e51cb. Report filed; to-test/2026-11-28-1104-fixes-tooling.md; slice worktrees removed. CI now checks out full history, so docs:headings bites there too.
 
@@ -28,6 +33,7 @@
 - **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029.
 - **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
+- **Run local test gates with `env -u CLAUDE_CONFIG_DIR`** until RISA-1076 lands: a session on ~/.claude-personal fails 10 drain/usage tests otherwise.
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
 
@@ -559,3 +565,13 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - The same test names pass before and after (`pnpm exec vitest run loops/rotate loops/rm-done` lists every old test once); `loops/test-limits.test.mjs` passes naming each new file; no new file is over about 400 lines; `pnpm check` passes.
+
+## Slice 53: The slice check's budget allows for the steps it will run
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1073):** `loops/check-budget.mjs` takes its budget from the last passing runs of the same mode and branch kind, whatever steps they ran, so a slice touching `loops/` (which adds the tooling step) gets a budget from slice runs without it (a 15 s median, 705 s at load ~21) and `loops/check-run.sh` stops it in the tooling step with nothing failed (exit 124). The check log records each run's step times (`check-times.mjs`, `stepTimes`): make the budget allow for the steps this check will run, for example by taking only samples that ran the same steps (falling back as now with too few), or by summing a per-step usual time; choose, and say why in the hand-off. `check-run.sh` passes what the budget needs (the steps it will run) to `check-budget.mjs`; keep its fallback when the budget script fails. Keep the header comment in `check-budget.mjs` true.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-budget.test.mjs`): fast slice runs without the tooling step and slower ones with it; a check that will run the tooling step gets a budget from the slower ones (or their step sums), one without it keeps the fast budget, and too few matching samples falls back as before.

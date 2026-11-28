@@ -548,9 +548,13 @@ case $cmd in
     # check-hook.sh runs it, then the tooling tests when the plan says so.
     echo "The $pmode check of the diff since ${base:0:7}${why:+ ($why)}."
     [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests join after the project's check."
+    # The steps it will run (check-hook.sh --steps) set the budget's samples
+    # (check-run.sh, RISA_CHECK_STEPS); none read, the budget takes any steps'.
     # shellcheck disable=SC2086
-    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
-      "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-hook.sh" "$pmode" "$base" "$ptooling" $pown)
+    (cd "$dir" && use_node &&
+      steps=$("$bin/check-hook.sh" --steps "$pmode" "$base" "$ptooling" $pown 2> /dev/null || true) &&
+      RISA_CHECK_STEPS=$steps "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
+        "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-hook.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"

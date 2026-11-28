@@ -56,6 +56,8 @@ const run = (mode, why, cmd, { clock = "", ...extra } = {}) =>
       RISA_CHECK_LIMIT: "",
       RISA_CHECK_SILENCE: "",
       RISA_CHECK_BUDGET_LOAD: "1",
+      RISA_CHECK_BUDGET_FLOOR: "",
+      RISA_CHECK_STEPS: "",
       RISA_CLOCK_FILE: clock,
       ...extra,
     },
@@ -128,6 +130,27 @@ describe("check-run.sh budget and silence limit", () => {
   const hang = (pidFile) =>
     `echo unit > ${inState("step")}; echo "last words"; sh -c 'trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 1; done' & wait`;
   const lastRun = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
+
+  it("hands the budget the steps it will run, RISA_CHECK_STEPS (RISA-1073)", () => {
+    const log = join(root, "steps-log");
+    // The samples' branch is the checkout's own (check-run.sh reads it from its
+    // cwd), so they match the check's branch kind on a slice, prd or detached checkout.
+    const branch = spawnSync("git", ["branch", "--show-current"], {
+      cwd: HERE,
+      encoding: "utf8",
+    }).stdout.trim();
+    const line = (secs, steps) =>
+      ["2026-11-01T10:00:00Z", "wt", branch, "quick", "", secs, "1", "1", "0"]
+        .concat(Array(8).fill(""), steps)
+        .join("\t");
+    writeFileSync(log, [5, 6, 7, 8, 9].map((s) => line(s, "check:5")).join("\n") + "\n");
+    const said = (steps) =>
+      run("quick", "steps", "exit 0", { RISA_CHECK_LOG: log, RISA_CHECK_STEPS: steps }).stdout;
+    expect(said("check")).toMatch(
+      /^Check budget 10m00s \(from 5 passing quick runs on \w+ branches that ran check,/m,
+    );
+    expect(said("check,tooling")).toMatch(/^Check budget 20m00s \(the hard limit: 0 passing quick run/m);
+  });
 
   it("stops past its budget, exits non-zero, leaves no child, prints the last lines and logs why", () => {
     const pidFile = join(root, "grandchild");
