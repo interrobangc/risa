@@ -13,7 +13,8 @@
 //                                           RISA_DISPATCH_STOP_SECS, 10, for it to go)
 //   prd dispatch --restart [--every <s>] stop it as --stop does, then start one through the tool's
 //                                           command (its current release) in a background tab, keeping
-//                                           its --every and keep-alive state; none running: starts one
+//                                           its --every and keep-alive state; none running: starts one;
+//                                           no iTerm2: refuses before stopping anything
 //   prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
@@ -2202,6 +2203,14 @@ async function main() {
   }
   if (o.restart) {
     const was = lockHolder(p.lock);
+    // No tab to open (no iTerm2): refuse before stopping anything. A detached one
+    // would end at the start's own check below, so either way none would run.
+    if (!canOpenTabs()) {
+      console.error(
+        `${toolCmd.prd}: --restart needs iTerm2 (${itermApp()}) to open the new dispatcher's tab, as dispatch does to open sessions; ${was ? `the running one (pid ${was}) was left running` : "none was started"}`,
+      );
+      process.exit(1);
+    }
     const every = o.everySet ? o.every : (was && everyOf(was, readState(p.state))) || 60;
     if (was && !(await stopHolder(p.lock, was))) {
       console.error(
