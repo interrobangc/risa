@@ -6,18 +6,18 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model  | State                                                                                      | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ------ | ------------------------------------------------------------------------------------------ | ------------------------------ |
-| 19    | 4    | RISA-881  | opus   | started                                                                                    |                                |
-| 20    | 4    | RISA-1005 | opus   | waits on 19                                                                                |                                |
-| 21    | 4    | RISA-1003 | opus   | handed off (ad28f74; check failed only on the plan format, fixed 95b17c9); merges after 19 |                                |
-| 22    | 4    | RISA-1004 | opus   | started                                                                                    |                                |
-| 23    | 4    | RISA-926  | opus   | started                                                                                    |                                |
-| 24    | 4    | RISA-981  | opus   | started (high priority, the user via the backlog session)                                  |                                |
-| 25    | 4    | RISA-1009 | opus   | started                                                                                    |                                |
-| 26    | 4    | RISA-1010 | sonnet | started (the plan spells the edit out)                                                     |                                |
+| Slice | Wave | Item      | Model  | State                                                                                       | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ------ | ------------------------------------------------------------------------------------------- | ------------------------------ |
+| 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)                         | 4b888b6                        |
+| 20    | 4    | RISA-1005 | opus   | started                                                                                     |                                |
+| 21    | 4    | RISA-1003 | opus   | merged                                                                                      | cf9c3a4                        |
+| 22    | 4    | RISA-1004 | opus   | started                                                                                     |                                |
+| 23    | 4    | RISA-926  | opus   | handed off (e44e8f8; slice check: 13 load timeouts in untouched files); merges after 20, 22 |                                |
+| 24    | 4    | RISA-981  | opus   | started (high priority, the user via the backlog session)                                   |                                |
+| 25    | 4    | RISA-1009 | opus   | started                                                                                     |                                |
+| 26    | 4    | RISA-1010 | sonnet | started (the plan spells the edit out)                                                      |                                |
 
-**Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running.
+**Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running. Slice 19 also moved `mergedSlices` into slice-fields.mjs and runs the budget in `risa anchors`; its follow-up (plan.sh and skeptics' 'about 8 files') is RISA-1011. Slices 24–26 joined on the backlog session's word (RISA-981 high priority; v0.1.8 is cut once 981 and 1010 land).
 
 **Wave 3 landed** 2026-11-27 in main as a00a846 (PR #10): slices 14–18 (RISA-952, 997, 999, 1000, 927), all opus. CI unit green on a9b6f2a (run 46095529013, the first run with a real verdict: RISA-997 works). Codex went 4 rounds (3 P1s and 1 P2 fixed); landed on the user's word with `--no-review --by-user` (ask a17), its last two P2s tracked as RISA-1003 and RISA-1004. Report filed; slice worktrees removed; backlog session (risa-ee) told 952 landed (its release plan keys off it).
 

@@ -18,6 +18,8 @@
 //     "`x.mjs` (new)". Gitignored paths, placeholders (`<topic>`, `*`) and
 //     words with spaces are not anchors. Line-number anchors (`file.mjs ~158`)
 //     are warnings (slice-fields.mjs lineAnchors): name the function instead.
+//     Also each unmerged slice's budget (check-plan.mjs planBudget: its Build
+//     files, its Check field, a Check file shared within a wave), as warnings.
 //     Prints each miss and warning. It only warns: exit 0 with or without
 //     misses (it never stops a PRD start), 2 on a usage error.
 //
@@ -27,7 +29,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { FILE_EXT, lineAnchors, sliceSections } from "./slice-fields.mjs";
+import { FILE_EXT, lineAnchors, mergedSlices, sliceSections } from "./slice-fields.mjs";
+import { planBudget } from "./check-plan.mjs";
 
 /** The backticked spans of one line: { text, start, end } (end is past the closing tick). */
 export function codeSpans(/** @type {string} */ line) {
@@ -108,39 +111,7 @@ export function anchorsOf(/** @type {string} */ body, /** @type {Set<string>} */
   return { paths, symbols };
 }
 
-const SHA = /\b[0-9a-f]{7,40}\b/;
-const DONE_STATE = /^\s*(?:merged|landed|done)\b/i;
-
-/** The slice numbers a plan's (or its history's) tables mark merged. */
-export function mergedSlices(/** @type {string[]} */ texts) {
-  const merged = new Set();
-  for (const text of texts) {
-    let cols = null;
-    for (const line of text.split(/\r?\n/)) {
-      if (!/^\s*\|/.test(line)) {
-        cols = null;
-        continue;
-      }
-      const cells = line
-        .trim()
-        .replace(/^\||\|$/g, "")
-        .split("|")
-        .map((c) => c.trim());
-      if (!cols) {
-        cols = cells.map((c) => c.toLowerCase());
-        continue;
-      }
-      if (cells.every((c) => /^:?-+:?$/.test(c))) continue;
-      const slice = /^\d+$/.exec(cells[cols.indexOf("slice")] ?? "");
-      if (!slice) continue;
-      const merge = cols.findIndex((c) => c.startsWith("merge"));
-      const state = cols.indexOf("state");
-      if ((merge >= 0 && SHA.test(cells[merge] ?? "")) || (state >= 0 && DONE_STATE.test(cells[state] ?? "")))
-        merged.add(Number(slice[0]));
-    }
-  }
-  return merged;
-}
+export { mergedSlices };
 
 /**
  * Check every unmerged slice's anchors.
@@ -248,12 +219,13 @@ function main(/** @type {string[]} */ argv) {
   if (!ref) ref = refExists(repo, "dev") ? "dev" : "origin/dev";
   else if (!refExists(repo, ref) && refExists(repo, `origin/${ref}`)) ref = `origin/${ref}`;
   if (!refExists(repo, ref)) return die(`anchors: no ${ref} in ${repo}`, 2);
-  const r = checkAnchors({
-    planText: readFileSync(planFile, "utf8"),
-    historyText: existsSync(historyFile) ? readFileSync(historyFile, "utf8") : "",
-    base: gitBase(repo, ref),
-  });
-  for (const w of r.warnings) process.stderr.write(`warning: slice ${w.slice}: ${w.text}\n`);
+  const planText = readFileSync(planFile, "utf8");
+  const historyText = existsSync(historyFile) ? readFileSync(historyFile, "utf8") : "";
+  const r = checkAnchors({ planText, historyText, base: gitBase(repo, ref) });
+  const budget = planBudget(planText, { merged: mergedSlices([planText, historyText]) });
+  for (const w of [...r.warnings, ...budget.warnings])
+    process.stderr.write(`warning: slice ${w.slice}: ${w.text}\n`);
+  if (budget.warnings.length) process.stderr.write(`(budget: ${budget.wavesFrom})\n`);
   for (const m of r.misses)
     process.stdout.write(
       m.kind === "path"
