@@ -2033,6 +2033,7 @@ export function tick(
       }
     } catch (e) {
       homeBlocked = `the home couldn't be read (${e instanceof Error ? e.message : String(e)})`;
+      homeInbox = homeBlocked;
       homeLines.push(`home: ${homeBlocked}: nothing starts, plans, reopens or is kept alive here`);
     }
   /** @type {import("./dispatch-pick.mjs").Pick} */
@@ -2141,8 +2142,9 @@ export function tick(
   // The inbox session waits until its folder is trusted (Claude Code's own files, only read).
   /** @type {Record<string, string>} */
   const unready = {};
-  if (homeBlocked) for (const kind of ["backlog", "inbox"]) unready[kind] = homeBlocked;
-  else if (homeInbox) unready.inbox = homeInbox;
+  // The inbox kind reads the inbox home alone, the backlog kind the project's (RISA-1079).
+  if (homeBlocked) unready.backlog = homeBlocked;
+  if (homeInbox) unready.inbox = homeInbox;
   if (env.RISA_KEEP_SESSIONS !== "off" && !unready.inbox) {
     const why = inboxUntrusted(inboxDirOf(records.find((r) => r.name === "inbox")?.record, env));
     if (why) unready.inbox = why;
@@ -2172,7 +2174,7 @@ export function tick(
   const requested = (/** @type {boolean} */ dry) => {
     // Limited: a request waits until the reset (opening it would spend extra usage).
     if (limited) return false;
-    // Another machine's home: a requested session waits with the rest.
+    // Another machine's home: a requested session (backlog-kind, the only kind) waits with the rest.
     if (homeBlocked) {
       if (dry) out(`session request: waits (${homeBlocked})`);
       return false;

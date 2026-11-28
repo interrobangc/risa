@@ -166,8 +166,9 @@ export function inboxKeeper({ env = process.env } = {}) {
  * One dispatcher tick's home facts for the project at MAIN; null for a project
  * without `inbox` (untouched). `away` names each home another machine holds;
  * `unknown`, each this run couldn't claim; `blocked` is the project's reason to start,
- * plan, reopen and keep alive nothing (null: none); `inboxWhy`, the inbox kind's
- * reason to stay closed (null: this dispatcher keeps it). REPORT files one report
+ * plan, reopen and keep alive nothing but the inbox session (null: none); `inboxWhy`,
+ * the inbox kind's reason to stay closed, from the keeper choice and the inbox home
+ * alone (null: this dispatcher keeps it). REPORT files one report
  * (true: filed); `state` is the next `home` state (dry run: unchanged, nothing written).
  * @param {{ main: string, state?: HomeState, now: number, dryRun?: boolean,
  *   env?: Record<string, string | undefined>, pid?: number,
@@ -248,19 +249,24 @@ export function homeTick({
           ? `${name}'s home isn't claimed here (${offWhy})`
           : `${name}'s home isn't known yet (the inbox store can't be reached)`
       : null;
-  if (blocked) lines.push(`home: ${blocked}: nothing starts, plans, reopens or is kept alive here`);
   let inboxWhy = null;
   if (!keepsInbox) {
     inboxWhy = `the inbox keeper is ${keeper ? keeper.main : "no repo"} (the machine config's first \`work: true\` repo with inbox)`;
     if (fresh) lines.push(`home: the inbox session is left to ${keeper ? keeper.main : "no repo here"}`);
-  } else if (blocked) inboxWhy = blocked;
-  else if (away[INBOX_HOME])
+  } else if (away[INBOX_HOME])
+    // The inbox session is the inbox home's alone: the project's home away doesn't close it (RISA-1079).
     inboxWhy = `the inbox home is ${away[INBOX_HOME]}, not ${me} (${takeCmd} ${INBOX_HOME} moves it here)`;
   else if (unknown.includes(INBOX_HOME))
     inboxWhy = unreadable
       ? `the inbox home isn't known (${unreadable})`
-      : "the inbox home isn't known yet (the inbox store can't be reached)";
-  if (inboxWhy && keepsInbox && !blocked) lines.push(`home: ${inboxWhy}: the inbox session isn't kept here`);
+      : offWhy
+        ? `the inbox home isn't claimed here (${offWhy})`
+        : "the inbox home isn't known yet (the inbox store can't be reached)";
+  if (blocked)
+    lines.push(
+      `home: ${blocked}: nothing starts, plans, reopens or is kept alive here${keepsInbox && !inboxWhy ? " but the inbox session" : ""}`,
+    );
+  if (inboxWhy && keepsInbox) lines.push(`home: ${inboxWhy}: the inbox session isn't kept here`);
 
   /** @type {Record<string, string>} */
   const reported = {};
