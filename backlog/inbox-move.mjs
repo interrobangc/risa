@@ -127,13 +127,16 @@ export function moveToRepo(url, o) {
   const store = storeFor(url, { env: o.env ?? process.env });
   const file = `${o.name}.md`;
   const tmpIndex = join(o.gitDir, `${o.name}-inbox-move-index-${process.pid}`);
-  /** Lines filed here (tagged in local trunk's copy) whose tag isn't on origin yet. */
-  const fold = (/** @type {string} */ s) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  /**
+   * Lines filed here (tagged in local trunk's copy) whose tag isn't on origin yet, by
+   * line key: title and details, so an unfiled line that only shares a filed one's title
+   * still moves. The key ignores the tag: parseInbox strips it from the text.
+   */
   const localTagged = new Set(
     fmt
       .parseInbox(show(`refs/heads/${o.trunk}`, o.inboxRel) ?? "")
       .filter((e) => e.id)
-      .map((e) => fold(e.text)),
+      .map(fmt.lineKey),
   );
   try {
     for (let tries = 1; tries <= TRIES; tries++) {
@@ -155,7 +158,7 @@ export function moveToRepo(url, o) {
           `${o.remote}/${o.trunk}'s ${o.configRel} already has an inbox group: its inbox is in a store`,
         );
       const inboxText = show(tip, o.inboxRel);
-      const lines = fmt.newInboxEntries(inboxText ?? "").filter((e) => !localTagged.has(fold(e.text)));
+      const lines = fmt.newInboxEntries(inboxText ?? "").filter((e) => !localTagged.has(fmt.lineKey(e)));
 
       let added = 0;
       let storeSha;

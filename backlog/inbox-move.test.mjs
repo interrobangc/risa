@@ -180,6 +180,30 @@ describe("backlog inbox to-repo", () => {
     );
   });
 
+  it("drops a line tagged locally but not on origin, and keeps an unfiled one sharing its title", () => {
+    const two = "\n## Bugs\n\n- Export fails\n  on CSV downloads\n- Export fails\n  on PDF downloads\n";
+    writeFileSync(join(dir, INBOX_REL), `# Inbox\n${two}`);
+    git(dir, "commit", "-q", "-am", "two exports");
+    git(dir, "push", "-q", "origin", "dev");
+    // Filed here, the tag not on origin yet: a commit of the user's own, never pushed.
+    writeFileSync(
+      join(dir, INBOX_REL),
+      `# Inbox\n${two.replace("- Export fails\n  on CSV", "- Export fails (B-2)\n  on CSV")}`,
+    );
+    git(dir, "commit", "-q", "-am", "file the CSV one");
+
+    const r = backlog("PRIVATE", "inbox", "to-repo", store);
+    expect(r.status).toBe(0);
+    expect(r.out.split("\n")[0]).toMatch(/^moved 1 inbox line to /);
+    expect(git(store, "show", "main:sample.md")).toBe(
+      "# Inbox\n\n## Bugs\n\n- Export fails\n  on PDF downloads",
+    );
+    expect(git(origin, "diff-tree", "--no-commit-id", "--name-status", "-r", "dev").split("\n")).toEqual([
+      `D\t${INBOX_REL}`,
+      "M\trisa.json",
+    ]);
+  });
+
   it("refuses with uncommitted changes to the inbox, writing nothing", () => {
     writeFileSync(join(dir, INBOX_REL), `${INBOX}- A line not committed\n`);
     const r = backlog("PRIVATE", "inbox", "to-repo", store);
