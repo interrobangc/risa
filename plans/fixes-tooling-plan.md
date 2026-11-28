@@ -21,6 +21,10 @@
 | 37 | 5 | RISA-813 | opus | agent spawned | — |
 | 38 | 5 | RISA-883 | opus | agent spawned | — |
 
+**Wave 4 landed** 2026-11-27 in main as 730639e (PR #11), released as v0.1.8: slices 19–26 (RISA-881, 1005, 1003, 1004, 926, 981, 1009, 1010); 26 on sonnet, the rest opus. CI unit green on 9f74528 (run 46102353384). Codex: 2 P2s filed (RISA-1012, 1013), clean on 9f74528; landed on the user's word with `--no-review --by-user` without its re-review of the docs-only tip. The new risa.json keys (commands.testFile, staticCheck) broke v0.1.7 until v0.1.8 was installed: **a change to Risa's own risa.json needs the release that reads it installed first.** Report filed; slice worktrees removed.
+
+**The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
+
 **Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. Watch running.
 
 **Carried over:** a change to Risa's own risa.json needs the release that reads it installed first. Slice checks run red on load timeouts (RISA-994, slices 31–32); the wave's CI run is the gate. machinery.md is at its budget. check-plan's "shares its Check file with slice 25" on 34 is a false wave (25 landed).
