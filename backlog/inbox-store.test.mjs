@@ -3,6 +3,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdtempSync,
   readdirSync,
@@ -15,7 +16,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BRANCH, StoreError, TRIES, cloneName, storeFor, storeRoot } from "./inbox-store.mjs";
+import { BRANCH, StoreError, TRIES, cloneName, findStoreRepo, storeFor, storeRoot } from "./inbox-store.mjs";
 
 const IDENTITY = {
   GIT_AUTHOR_NAME: "T",
@@ -200,5 +201,18 @@ describe("read and write", () => {
     expect(a.read(FILE)).toBe(`${HEAD}- one\n- two\n`);
     expect(store("c").read(FILE, { fetch: false })).toBeNull();
     expect(existsSync(store("c").dir)).toBe(false);
+  });
+});
+
+describe("finding the store", () => {
+  it("counts two clones of one URL as one store (RISA-1067)", () => {
+    const clones = join(root, "clones-a");
+    const env = { RISA_INBOX_STORE: clones, RISA_MACHINE_CONFIG: join(root, "no-machine.json") };
+    store("a").read(FILE);
+    cpSync(join(clones, cloneName(remote)), join(clones, "an-older-name"), { recursive: true });
+    expect(readdirSync(clones)).toHaveLength(2);
+    expect(findStoreRepo({ env })).toBe(remote);
+    storeFor(join(root, "other.git"), { env }).read(FILE);
+    expect(() => findStoreRepo({ env })).toThrow(/holds 2 clones/);
   });
 });
