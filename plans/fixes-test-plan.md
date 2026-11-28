@@ -12,11 +12,11 @@
 
 | Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-test` |
 | ----- | ---- | --------- | ----- | ------- | --------------------------- |
-| 1     | 1    | RISA-1048 | opus  | written |                             |
-| 2     | 1    | RISA-1075 | opus  | written |                             |
-| 3     | 1    | RISA-1088 | opus  | written |                             |
+| 1     | 1    | RISA-1048 | opus  | started |                             |
+| 2     | 1    | RISA-1075 | opus  | started |                             |
+| 3     | 1    | RISA-1088 | opus  | started |                             |
 
-**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. `risa anchors` warns slice 1 names 11 files: a one-line guard edit in nine of them, kept as is. Items claimed, hot files set. When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
+**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. `risa anchors` warns slice 1 names 11 files: a one-line guard edit in nine of them, kept as is. Items claimed, hot files set. Slices 1–3 started (worktrees `.loops/fixes-test-<n>`, one opus agent each; brief from `risa prompt slice`). When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
 
 ## How to run this plan
 
