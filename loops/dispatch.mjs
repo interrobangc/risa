@@ -122,7 +122,9 @@
 // RISA_CLAUDE_BIN (the helper's claude; its config folder: host.mjs); RISA_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
 //
-// Home machines (home.mjs, loaded only for a project with `inbox`, at the start): each
+// Home machines (home.mjs, loaded only for a project with `inbox`; the config file is
+// stat'd between ticks and read again when it changed, so a move to an inbox store
+// gates from the next tick, RISA-1083): each
 // tick asks it whose home the project is. Another machine's (or unknown yet) makes the
 // tick start, plan, reopen, resume, keep alive and open requested sessions for nothing,
 // with a line each tick and one report; the inbox kind stays closed unless this repo
@@ -210,7 +212,7 @@ import {
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 import { resumeDecision, resumingOf, sessionOfBranch } from "./resume.mjs";
 import { clearStalled, markStalled, readReadings, readUsage, staleMsOf } from "./usage.mjs";
-import { branchKinds, inboxStore, loadConfig, toolCmd } from "./config.mjs";
+import { branchKinds, configPath, inboxStore, loadConfig, toolCmd } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -418,7 +420,7 @@ export const staleCode = (
  * ticking, so the caller re-execs between ticks. --once ticks once.
  */
 export async function runLoop(
-  /** @type {{ every: number, once?: boolean, step: () => void, started: string | null,
+  /** @type {{ every: number, once?: boolean, step: () => unknown, started: string | null,
    *   current: () => string | null, sleep?: (ms: number) => Promise<unknown> }} */ {
     every,
     once = false,
@@ -433,7 +435,7 @@ export async function runLoop(
       const now = current();
       if (staleCode(started, now)) return { stale: true, from: started, to: now };
     }
-    step();
+    await step();
     if (once) return { stale: false };
     await sleep(every * 1000);
   }
@@ -653,15 +655,48 @@ let onEnd = /** @type {((why: string) => void) | null} */ (null);
 /** home.mjs, when the project has `inbox` (main loads it); null: no homes. */
 let homeModule = /** @type {typeof import("./home.mjs") | null} */ (null);
 
-/** Loads home.mjs for a project whose config has `inbox`; else null, loading nothing new. */
-export async function loadHome(env = process.env) {
+/** The config file's stat when loadHome last read it ("" before any read, null: none there). */
+let homeSeen = /** @type {string | null} */ ("");
+
+/** The config file's inode, size and mtime: what refreshHome compares (RISA-1083); null: no file. */
+export function configStamp(env = process.env) {
   try {
-    if (!inboxStore(loadConfig({ env }).config)) return null;
+    const st = statSync(configPath(env));
+    return `${st.ino}:${st.size}:${st.mtimeMs}`;
   } catch {
     return null;
   }
-  homeModule = await import("./home.mjs");
+}
+
+/**
+ * Loads home.mjs for a project whose config has `inbox`; else null, loading nothing new
+ * and dropping a module an earlier read loaded. A config that doesn't load keeps what
+ * was there (a write in progress is no move) and is read again next time.
+ */
+export async function loadHome(env = process.env) {
+  const seen = configStamp(env);
+  let gated;
+  try {
+    gated = Boolean(inboxStore(loadConfig({ env }).config));
+  } catch {
+    homeSeen = "";
+    return homeModule;
+  }
+  homeSeen = seen;
+  homeModule = gated ? await import("./home.mjs") : null;
   return homeModule;
+}
+
+/**
+ * Between ticks (RISA-1083): the home module for the config as it is now. A config
+ * file whose stat is unchanged since loadHome's read is not read again (one stat, no
+ * fetch); a changed one is loaded again (LOAD: loadHome), so a project moved to an
+ * inbox store (`backlog inbox to-repo`, then the pickup) is home-gated from the next
+ * tick, and one whose `inbox` group went is no longer, with no restart.
+ */
+export async function refreshHome(env = process.env, load = loadHome) {
+  if (homeSeen !== "" && configStamp(env) === homeSeen) return homeModule;
+  return load(env);
 }
 
 const releaseLock = (/** @type {string} */ lock) => {
@@ -2687,7 +2722,7 @@ async function main() {
     once: o.once,
     started: CODE_AT_START,
     current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
-    step: () => {
+    step: async () => {
       // Another took the lock (or it was removed): this one ends rather than tick beside it.
       let held = null;
       try {
@@ -2701,9 +2736,11 @@ async function main() {
         });
         process.exit(1);
       }
+      // The home gate as the config is now (a stat; read again only when it changed).
+      const home = await refreshHome();
       const now = nowOf();
       const quiet = [];
-      const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
+      const t = tick(p, { say: (l) => quiet.push(l), every: o.every, home });
       const text = t.lines.join("\n");
       if (o.once || t.acted || text !== last) {
         log(t.lines, now);
