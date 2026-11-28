@@ -17,7 +17,8 @@
 //
 // A checkout's config (configIn): .risa/config.json when that folder has one, else
 // risa.json; both is an error naming both. The loaded `root` is the repo's root in
-// either form (the folder's parent for .risa/config.json).
+// either form (the folder's parent for .risa/config.json). The folder form finds its
+// test rules and gates by name (RULE_FILES): an unset paths key is filled when its file is there.
 //
 // Where it lives: RISA_CONFIG (a file, or a .risa folder: its config.json; tests
 // and sample projects set it), else the config of the checkout this file is in.
@@ -411,7 +412,34 @@ export function loadConfig({ path, env = process.env } = {}) {
   }
   const problems = configProblems(raw);
   if (problems.length) throw new ConfigError(problems.map((p) => `${file}: ${p}`));
-  return { config: raw, path: file, root: rootOf(file) };
+  const root = rootOf(file);
+  return { config: root === dirname(file) ? raw : withRuleFiles(raw, root), path: file, root };
+}
+
+/**
+ * The test rules and gates the folder form finds by name: an unset key of these is
+ * `.risa/<name>` when that file exists. A set key wins; risa.json gets none.
+ */
+export const RULE_FILES = /** @type {const} */ ([
+  ["tierData", "tiers.json"],
+  ["checkPlanRules", "check-plan.json"],
+  ["brakeList", "brake-list.txt"],
+  ["quarantine", "quarantine.txt"],
+]);
+
+/**
+ * A folder-form config with RULE_FILES' defaults filled in, as a copy (the parse is
+ * never changed).
+ * @param {Record<string, any>} raw a valid config
+ * @param {string} root the repo's root
+ */
+function withRuleFiles(raw, root) {
+  const paths = { ...raw.paths };
+  for (const [key, name] of RULE_FILES) {
+    const rel = `${CONFIG_DIR}/${name}`;
+    if (paths[key] === undefined && existsSync(join(root, rel))) paths[key] = rel;
+  }
+  return { ...raw, paths };
 }
 
 /** The repo root a config file's paths start from. @param {string} file */
