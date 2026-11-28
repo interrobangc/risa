@@ -11,13 +11,14 @@
 | 3     | 2    | —     | —                                       |
 | 4     | 2    | —     | —                                       |
 | 5     | 3    | —     | —                                       |
+| 6     | 3    | —     | —                                       |
 
-**Backlog:** claim RISA-1055 when slice 1 starts; `done` after slice 5 merges. The follow-up item for ship's cross-machine sender (`fixes-tooling`, after `ship` lands) is filed by the planner at landing.
+**Backlog:** claim RISA-1055 when slice 1 starts; `done` after slices 5 and 6 merge. The follow-up item for ship's cross-machine sender (`fixes-tooling`, after `ship` lands) is filed by the planner at landing.
 
 ## Architectural decisions
 
 - **Tooling only:** `loops/` and their tests; no role doc changes. No new dependency, no `risa.json` key; the new state is a store file per project (`<project>.messages.json`) and a local folder (`.loops/.messages/`).
-- **The store module stays the only git in the inbox repo:** every store read and write goes through `backlog/inbox-store.mjs` `storeFor` (`read`, `write`); it is not changed (`<project>.messages.json` already passes its file-name check and its `files()` lists only `.md`).
+- **The store module stays the only git in the inbox repo:** every store read and write goes through `backlog/inbox-store.mjs` `storeFor` (`read`, `write`); it gains one read, `head()` (the remote branch's head by `git ls-remote`, no fetch), for the watcher, and nothing else changes (`<project>.messages.json` already passes its file-name check and its `files()` lists only `.md`).
 - **Pure decisions, thin CLIs:** the send route and the pickup's plan are pure functions over gathered facts; the CLI and the dispatcher gather and act (the `home.mjs` `homeTick` pattern).
 - **A project's store name is its inbox file's stem** (`inboxStore(config).file` without `.md`), the key `homes.json` already uses: `<stem>.messages.json`, the route, the pickup and the peers' de-duplication all use it; a project without `inbox` is named by its config's `name`.
 - **Projects without `inbox` see no change** except the new command and the prompt's peer wording: local sends work for them; nothing in the dispatcher runs for them.
@@ -25,9 +26,9 @@
 
 ## How to run this plan
 
-- **Waves:** wave 1 is slice 1. Wave 2 runs slices 2, 3 and 4 at once (2 owns `loops/message.mjs` and `loops/prd.sh`; 3 owns `loops/message-pickup.mjs` and `loops/dispatch.mjs`; 4 owns `loops/context.mjs`). Wave 3 is slice 5 (after 2).
+- **Waves:** wave 1 is slice 1. Wave 2 runs slices 2, 3 and 4 at once (2 owns `loops/message.mjs` and `loops/prd.sh`; 3 owns `loops/message-pickup.mjs` and `backlog/inbox-store.mjs`; 4 owns `loops/context.mjs`). Wave 3 runs slices 5 (after 2) and 6 (after 3; owns `loops/dispatch.mjs`).
 - **Gate:** `risa check --quick "slice hand-off"` before each hand-off; `pnpm check` once on the merged tip at landing.
-- **Other topics:** this row's hot files (`loops/message`, `loops/prd.sh`, `loops/dispatch`, `loops/context`, `loops/peers`, `loops/prompts/backlog.sh`, `loops/sample-project/prompt-golden.txt`) miss both running topics' (`fixes-test`, `risa-next-4`); `usage-aware-drain` shares `loops/dispatch`, `loops/context` and `loops/prd.sh` and runs after this one.
+- **Other topics:** this row's hot files (`loops/message`, `backlog/inbox-store`, `loops/prd.sh`, `loops/dispatch`, `loops/context`, `loops/peers`, `loops/prompts/backlog.sh`, `loops/sample-project/prompt-golden.txt`) meet two running topics': `ship` holds `loops/prd.sh`, where slice 2 adds only its own region (the two commands' routes and help lines, beside the others), rebasing on `ship`'s if it has landed; `fixes-tooling` holds `loops/dispatch.test.mjs` and `loops/dispatch-fixture.mjs`, which no slice edits (slice 6's tests are in its own file, and in-process `tick` starts no watcher unless given one); `usage-aware-drain` shares `loops/dispatch`, `loops/context` and `loops/prd.sh` and runs after this one.
 - **Docs:** each new module's header comment and `prd.sh`'s help say how messages work; no role doc grows (the inbox doc is at its budget and its session never receives messages; the backlog session's rules live in its prompt).
 
 ## Slice 1: Messages and the local mailbox
@@ -60,20 +61,21 @@ Stack: no · Reads: loops/home.mjs, loops/peers.mjs, backlog/inbox-store.mjs, lo
 
 **Blocked by:** 1. **Blocks:** 5.
 
-## Slice 3: The home dispatcher's pickup
+## Slice 3: The home machine's message watcher
 
-Stack: no · Reads: loops/home.mjs, backlog/inbox-store.mjs · Tests: unit · Blocked by: 1 · Check: loops/message-pickup.test.mjs (new)
+Stack: no · Reads: backlog/inbox-store.mjs, loops/notices.mjs · Tests: unit · Blocked by: 1 · Check: loops/message-pickup.test.mjs (new)
 
 **User stories:** US 4, 7.
 
-**Build:** PRD _Implementation decisions_, _Pickup_. `loops/message-pickup.mjs` (new): `FETCH_SEC` (60, `RISA_MESSAGES_FETCH_SEC`), `pickupTick({ main, store, project, state, now, dryRun, out })`: when due, reads `<stem>.messages.json` (the project's store name) with fetch, `createMessage` into `ownMailbox` for each entry (by `storeId`), then one `store.write` removing exactly the ids it copied (those already in the mailbox included), returning the next `state` (`fetchedAt`); a `StoreError` prints one line and leaves `fetchedAt` unchanged so the next tick retries. `loops/dispatch.mjs` `tick`: for a project with `inbox` whose home `homeTick` reports this machine holds (not `away`, not `unknown`), runs it after the home step, its state kept beside `home` in the dispatcher's state; `tick` takes the module as an injectable option (as it takes `home`), loaded with the home module.
+**Build:** PRD _Implementation decisions_, _Pickup_. `backlog/inbox-store.mjs` `storeFor`: a new `head()`, `git ls-remote --quiet` of the branch (making the clone if none): its sha, `""` for a remote with no branch, null when unreachable. `loops/message-pickup.mjs` (new): `pickup({ main, store, project, dryRun, out })`: reads `<stem>.messages.json` (the project's store name) with fetch, `createMessage` into `ownMailbox` for each entry (by `storeId`), then one `store.write` removing exactly the ids it copied (those already in the mailbox included); a `StoreError` propagates. `WATCH_SEC` (2, `RISA_MESSAGES_WATCH_SEC`, fractions allowed), `BACKOFF_MAX_SEC` (60), pure `watchStep(state, { head, now, every })` returning `{ pickup, state, line }` and pure `pickedStep(state, { head, ok, now, every })` returning `{ state, line }` (state: `seen`, `failures`, `nextAt`; at start `seen` is unset, so the first step picks up; `seen` moves to the head read before the pickup only when the pickup succeeded, so a failed pickup with an unchanged head is retried on the next due poll, and a send landing mid-pickup is caught by the next poll; a null head or a failed pickup doubles the wait up to the cap, with a line on the first failure and on recovery). `watch` (the module's CLI: `node message-pickup.mjs watch --main <main>`): takes `.loops/.messages-watch.lock` exclusively (a live holder: exits 0), appends its lines to `.loops/.messages-watch.log`, loops `head()` → `watchStep` → `pickup` → `pickedStep`, and exits when `.dispatch.lock` (read again each poll, so a re-exec or a takeover keeps it) is missing, unreadable or names a dead pid, or on TERM; `RISA_MESSAGES_WATCH=off` makes it exit at once.
 
 **Acceptance criteria:**
 
-- Unit test (`loops/message-pickup.test.mjs` (new)): two queued messages are copied into the mailbox and removed from the remote; a mailbox already holding one's `storeId` (a crash after the copy) delivers it once and still removes it; an unreachable store prints one line and retries on the next call; a dry run writes neither side; no fetch before `FETCH_SEC` has passed.
-- Same file: one `tick` with fake home facts holding the home runs the pickup, and with the home away runs nothing.
+- Unit test (`loops/message-pickup.test.mjs` (new)): two queued messages are copied into the mailbox and removed from the remote; a mailbox already holding one's `storeId` (a crash after the copy) delivers it once and still removes it; a dry run writes neither side; `head()` moves after a store write and is null for an unreachable remote.
+- Same file, `watchStep`: an unchanged head picks up nothing; a moved one picks up; an unreachable store waits 2, 4, 8, 16, 32, then 60s, with one line, and one more when it is back; a failed pickup with an unchanged head is picked up again on the next due poll, its wait doubled, and a later success writes the recovery line.
+- Same file: the watcher (`RISA_MESSAGES_WATCH_SEC=0.05`) puts a message sent after it starts into the mailbox within a few polls, and exits once the dispatcher's lock is removed or names a dead pid.
 
-**Blocked by:** 1. **Blocks:** nothing.
+**Blocked by:** 1. **Blocks:** 6.
 
 ## Slice 4: Delivery into the backlog session
 
@@ -103,3 +105,17 @@ Stack: no · Reads: loops/home.mjs, loops/message.mjs · Tests: unit · Blocked 
 - `loops/prompt-golden.test.mjs` passes on the regenerated golden file, and the golden's backlog prompt holds the `risa messages --wait` rule.
 
 **Blocked by:** 2. **Blocks:** nothing.
+
+## Slice 6: The dispatcher keeps the watcher alive
+
+Stack: no · Reads: loops/home.mjs, loops/keep-alive.mjs, loops/message-pickup.mjs · Tests: unit · Blocked by: 3 · Check: loops/dispatch-watcher.test.mjs (new)
+
+**User stories:** US 4, 7.
+
+**Build:** PRD _Implementation decisions_, _Pickup_. `loops/dispatch.mjs`: a pure `watcherAction({ holds, alive })` (`start`, `stop` or `none`; `alive` from `.loops/.messages-watch.lock`'s pid); `tick`, for a project with `inbox` whose home `homeTick` reports this machine holds (not `away`, not `unknown`), acts on it after the home step, paused or not: start spawns `message-pickup.mjs watch --main <main>` detached (one line), stop TERMs it; a dry run prints the action. `tick` takes a `watcher` option (`{ spawn, kill }`); with none it starts and stops nothing, and only the long-running loop passes the real one, never `--once`, `--dry-run` or a test's in-process `tick`, so the existing tests (the subprocess `--once` runs in `loops/home.test.mjs` and `loops/dispatch.test.mjs` included) start no watcher and are not edited. `RISA_MESSAGES_WATCH=off` also starts none. The loop's start (and each re-exec's) stops a live watcher, so the next tick starts one on the current code.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/dispatch-watcher.test.mjs` (new)): `watcherAction` over held or not and alive or not; `tick` with fake home facts holding the home and a fake watcher starts one when none is live, none when one is, and stops the live one when the home is away; `tick` with no `watcher` option starts nothing; a dry run prints the start and spawns nothing; `RISA_MESSAGES_WATCH=off` starts nothing.
+
+**Blocked by:** 3. **Blocks:** nothing.

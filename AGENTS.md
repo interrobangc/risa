@@ -17,7 +17,8 @@ generic role docs in `loops/docs/` (`risa doc <role>`), with two additions: the 
 - **`main` is the trunk and the only long-lived branch.** `prd/`, `slice/`, `plan/` and
   `hotfix/` branches land into `main` by PR. There is no `dev` and no `staging`.
 - **Checks:** `pnpm check` (prettier, eslint, the docs budget and headings, the tests) before handing
-  off. GitHub Actions (`.github/workflows/ci.yml`) runs the same `pnpm check` on pushes
+  off. A change to Markdown only (a plan, a PRD, a doc) runs just `pnpm format:check`,
+  `pnpm docs:budget` and `pnpm docs:headings`: the tests read no Markdown. GitHub Actions (`.github/workflows/ci.yml`) runs the same `pnpm check` on pushes
   and PRs to `main` and on `risa ci run`'s `ci/` refs.
 - **Commit subjects are Conventional Commits:** `<type>(<scope>)!: <description>`, backlog
   ids in parentheses at the end (`RISA-n`).
