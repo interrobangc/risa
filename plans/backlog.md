@@ -151,6 +151,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
 | RISA-1057 | bug | triaged | fixes-bug |  | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
 | RISA-1058 | bug | triaged | fixes-bug |  | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
+| RISA-1059 | bug | triaged | fixes-bug |  | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
+| RISA-1060 | bug | triaged | fixes-bug |  | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
 
 ## Items
 
@@ -1252,3 +1254,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:149. resolve() the store root or the index path.
+
+### RISA-1059 · bug · inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:101. Delete TRACKING when ls-remote answers empty.
+
+### RISA-1060 · bug · inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:91. Init in a temp folder and rename into place, or tolerate an existing remote with the same URL.
