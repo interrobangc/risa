@@ -825,6 +825,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/fixes-tooling): Codex P2 on PR #10 (thread PRRT_kwDOV9ctaM68-5-h, loops/dispatch.mjs:1622), from RISA-927 fix 2: apply drainSettings' watch-off override to the stalled-session lookup too.
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27 (slice 22 hand-off): with the watch off the resume (resumePrep) still keeps its stall marks, so once a mark's reset passes it may end the reopened live session and resume it again; outside slice 22's scope, a follow-up if it shows.
 
 ### RISA-1005 · chore · Slice check runs only the slice's named check: a project config key for a one-test-file command (the runner differs per project), risa check --quick on a slice branch runs the plan's Check field through it, the full check stays at the wave's landing; the orchestrator splits a slice that comes back over budget (second half of RISA-881)
 
