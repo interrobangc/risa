@@ -6,26 +6,21 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-**Wave 2** (started 2026-11-27): slices 8–13, all opus. Wave 1 landed in main as c4ae22d (PR #5); its table is in the history once trimmed.
+| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
 
-| Slice | Wave | Item     | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------- | ----- | ------ | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | merged | 6202184                        |
-| 9     | 2    | RISA-681 | opus  | merged | 7796fbc                        |
-| 10    | 2    | RISA-934 | opus  | merged | 4c91c61                        |
-| 11    | 2    | RISA-987 | opus  | merged | 00269bb                        |
-| 12    | 2    | RISA-989 | opus  | merged | ee78763                        |
-| 13    | 2    | RISA-993 | opus  | merged | 7451bdd                        |
+No slice in flight (idle hand-over after wave 2).
 
-**Notes:**
+**Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
 
-- **Gate:** `risa check` inside a session fails ~259 tests on the `RISA_CONFIG` leak until after-split's slice 1 lands; gate with every `RISA_*`, `CLAUDE_CODE_*`, `CLAUDECODE` unset, rerun failing files once (load timeouts). No CI until slice 8's workflow is on main: landing wave 2 needs `--force` (ask the user, `--waits`) unless the workflow runs on the PR.
-- **Wave 3 first (the user, via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982, as wave 3's first slice right after wave 2 lands; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold). Main's b5c4391: land skeptics run on Opus (`model: "opus"`), not Fable: pick it up at the next sync.
-- **Waiting:** RISA-994 (may share after-split slice 1's cause: check after it lands); RISA-996 (Codex review of wave 1's landed diff: do it at wave 2's PR); after after-split lands: RISA-813, 915, 926, 927, 952, 882, 886, 881, 883, 889, 986, plus wave 1's docs (loop doc: `wait check` 160 s, RISA-911; machinery: plan sessions get the context hook, RISA-880; backlog doc: `prd set … why=`, RISA-477).
-- Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
-- RISA-997 filed (slice 8): the workflow writes no verdict artifact, so `risa ci run --wait` reads its runs as unknown.
-- Context past the soft limit (120k): rotate at this wave's boundary.
-- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). Gate run 1 (load 75): 18 failures, mostly timeouts. Rerun of 4 files on main vs the branch: `loops/land-unsynced.test.mjs` times out on both (pre-existing, noted on RISA-994); `loops/tidy-cli.test.mjs` fails only on the branch (its fixture doesn't copy slice 12's new `backlog/lock.mjs`): **sent back to slice 12**. Slice 12's fix merged as 4323007. Gate run 3 (load to 29): 34 timeouts; rerun of those 19 files at load ~8: only `land-unsynced` (fails on main too) and one `recover` timeout, both RISA-994's: **green**. Docs folded (a46d9fb: loop doc 160 s wait; backlog doc `why=` and `prd archive`); the RISA-880 machinery line is still to fold. **PR #7** open; Codex: one P2 (RISA-999, replied, resolved), then clean on 5bd92ed. First land refused: the unit run (https://github.com/interrobangc/risa/actions/runs/46084230316) concluded **success** on 5bd92ed but left no verdict (RISA-997), and main had moved. Synced again as 0634bd0 (plans/backlog.md conflict: took main's). Next: CI run + Codex on 0634bd0, then a land skeptic (Opus, b5c4391) on `--force` (evidence in the session scratchpad's land-evidence.md), `risa land fixes-tooling --tier unit --force --skeptic <id>`; a `no` means ask the user (`--waits`). RISA-996: asked Codex on merged PR #5 by comment; triage what it finds. Then status-trim, the RISA-880 machinery doc line, rotate. after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
+**For the next session (wave 3):**
+
+- **First, on the user's word (via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold).
+- **Ready (after-split has landed):** RISA-997 (the workflow writes a verdict artifact, so `risa land`'s unit gate reads its runs: do it early, it removes the `--force`), RISA-999 (an After on an archived PRD topic), RISA-994 (land-unsynced times out on main too; recover), RISA-813, 915, 926, 927, 882, 886, 881, 883, 889, 986. Check hot files first (`risa backlog prd list`).
+- **RISA-996:** Codex asked on merged PR #5 by comment (wave 1's unreviewed diff); triage its findings to the backlog.
+- **Docs still to fold:** machinery doc: plan sessions get the context hook (RISA-880, wave 1).
+- **Gate:** the test env is hermetic now (after-split's RISA-975), so `risa check` works in a session; under load (>25) many tests time out: rerun failing files once at low load. Land skeptics run on Opus (b5c4391).
+- Slice 12's note for later: `backlog/lock.mjs` is new; tests that copy backlog/ files by name must list it.
 
 ## How to run this plan
 
