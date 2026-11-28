@@ -31,7 +31,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_NAME, loadConfig, toolCmd } from "./config.mjs";
+import { configIn, loadConfig, toolCmd } from "./config.mjs";
 import { DocError, roleDoc } from "./doc.mjs";
 
 const ID = /^s(\d+)$/;
@@ -353,9 +353,10 @@ const readDoc = (root, file) => {
  * The rules a skeptic judges by, as the docs have them today. A doc that lost
  * its rule is refused: a brief without the never list must not go out.
  * @param {string} root the checkout whose docs to read
- * @param {Record<string, any>} [config] its project config (by default, its risa.json)
+ * @param {Record<string, any>} [config] its project config (by default, the one in ROOT
+ *   in either form: configIn; none there, or both, is the loader's ConfigError)
  */
-export function readRules(root, config = loadConfig({ path: join(root, CONFIG_NAME) }).config) {
+export function readRules(root, config = loadConfig({ path: configIn(root) ?? root }).config) {
   const prefsPath = config.paths?.preferences;
   if (!prefsPath) throw new SkepticError("the brief needs the preferences doc, and the config names none");
   const preferences = readDoc(root, prefsPath);

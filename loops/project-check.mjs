@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 import { tierDataProblems, tiersFrom } from "../ci/tier-data.mjs";
 import { parseQuarantine } from "../ci/ci-lists.mjs";
 import { CheckPlanRulesError, checkPlanFor, checkPlanRulesProblems } from "./check-plan.mjs";
-import { CONFIG_NAME, backlogIds, loadConfigOrExit, sharedNames } from "./config.mjs";
+import { CONFIG_NAME, backlogIds, configIn, loadConfigOrExit, sharedNames } from "./config.mjs";
 import { DocError, roleDoc } from "./doc.mjs";
 import { renderPrompts } from "./prompt-render.mjs";
 import { SkepticError, readRules } from "./skeptics.mjs";
@@ -109,10 +109,11 @@ const listLines = (text) =>
 /**
  * What is wrong with the project's own data: one line per problem, none when it all loads.
  * @param {{ config: Record<string, any>, root: string, path?: string }} project a loaded
- *   config (its path, for the prompt golden's render: the root's risa.json when left out)
+ *   config (its path, for the prompt golden's render: the root's config, in either form
+ *   (configIn), when left out; both forms there throw its ConfigError)
  * @returns {string[]}
  */
-export function projectProblems({ config, root, path = join(root, CONFIG_NAME) }) {
+export function projectProblems({ config, root, path = configIn(root) ?? root }) {
   /** @type {string[]} */
   const problems = [];
   const paths = config.paths ?? {};
