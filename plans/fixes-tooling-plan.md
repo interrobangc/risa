@@ -6,10 +6,10 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model  | State   | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ------ | ------- | ------------------------------ |
-| 49    | 10   | RISA-1054 | opus   | started |                                |
-| 50    | 10   | RISA-1062 | sonnet | started |                                |
+| Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------- | ------------------------------ |
+| 49    | 10   | RISA-1054 | opus  | started |                                |
+| 50    | 10   | RISA-1062 | opus  | started |                                |
 
 **Wave 10** (2026-11-28): reopened for RISA-1054 and RISA-1062; synced with main (19a7b50) first.
 
