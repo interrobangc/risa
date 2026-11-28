@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); gate green (`pnpm check` on cd7d14c, tier none, 2572 tests); slice worktrees removed; PR #34 open, Codex review waiting. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
+**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); gate green (`pnpm check` on cd7d14c, tier none, 2572 tests); slice worktrees removed; PR #34: Codex clean on 3aaff33 after two P2 findings filed as RISA-1071 (into slice 4) and RISA-1072 (into slice 6); landing. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
 
 | Slice | Wave | State          | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------- | ---------------------------- |
@@ -99,6 +99,8 @@ Stack: no · Reads: loops/docs/inbox.md · Tests: unit · Blocked by: 3, 5 · Ch
 
 - Unit test (`backlog/inbox-move.test.mjs` (new)), stub `gh`: public and missing repos refused with nothing written; a private one gets the unfiled lines (tagged ones dropped), and the trunk commit changes exactly `risa.json` and the inbox file; a second run refuses.
 
+**Also fix:** RISA-1071 (Codex on PR #34: `inbox-commands.mjs` refuses edit, move and remove of a store line whose inbox key a backlog item holds, with a case in `backlog/inbox-store-cli.test.mjs`).
+
 **Blocked by:** 3, 5 (its doc describes slice 5's session). **Blocks:** nothing.
 
 ## Slice 5: One inbox session for every project
@@ -127,5 +129,7 @@ Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1, 5 �
 
 - Unit test (`loops/home.test.mjs` (new)), temp store, two machine names by env: the first claim wins and a second machine's is refused; `take` moves it, and after machine B takes a project, machine A's next dry-run tick past the five-minute refetch skips it and files the one report; the first `work: true` repo with `inbox` claims `inbox` on its first tick and keeps the inbox session; the second such repo on one machine skips it; a repo without `inbox` claims nothing and keeps its own inbox session.
 - `loops/dispatch.test.mjs` passes unchanged.
+
+**Also fix:** RISA-1072 (Codex on PR #34: `loops/prd.sh`'s inbox hop rebases an inherited `RISA_SESSIONS_DIR` onto the first project's `.loops/.sessions`, with a case in `loops/inbox-prompt.test.mjs` or `loops/home.test.mjs`).
 
 **Blocked by:** 1, 5. **Blocks:** nothing.
