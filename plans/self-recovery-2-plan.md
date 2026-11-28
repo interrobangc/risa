@@ -137,7 +137,7 @@ Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3, 6 ·
 
 **Build:**
 
-- RISA-1025: `loops/dispatch.mjs` imports `finish.mjs` statically (drop the `createRequire` loader and its null path); add `finish.mjs` to the script lists the dispatch tests copy (`dispatch.test.mjs`, `dispatch-restart.test.mjs`, `dispatch-release.test.mjs`, `dispatch-context.test.mjs` and any sibling that copies `dispatch.mjs`). `after-split` is done, so `dispatch.test.mjs` may now change, for that list only.
+- RISA-1025: `loops/dispatch.mjs` imports `finish.mjs` statically (drop its lazy loader, `finishModule`, and its null path); add `finish.mjs` to the script lists the dispatch tests copy (`dispatch.test.mjs`, `dispatch-restart.test.mjs`, `dispatch-release.test.mjs`, `dispatch-context.test.mjs` and any sibling that copies `dispatch.mjs`). `after-split` is done, so `dispatch.test.mjs` may now change, for that list only.
 - RISA-1029: `finishStep` passes `env.TRUNK || kinds.trunk` to both `landedTopics` and `landedWithCode`, as `collectTidyFacts` does.
 - RISA-1027: the `finish <topic>` CLI reads its reported keys from the dispatcher's state (`finish.reported`, the same file `finishStep` uses) and appends the key of each report it files, so an unchanged reason is reported once whichever path files it.
 - RISA-1028: `cost.mjs` `topicFolders` and `attribute` don't count a topic named `plan-<x>`'s own worktree (`.loops/plan-<x>`, branch `prd/plan-<x>`) as `<x>`'s planning: a `plan-<x>` folder is `<x>`'s planning only when no registry row or `prd/plan-<x>` branch names `plan-<x>` as a topic.
@@ -147,7 +147,7 @@ Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3, 6 ·
 - `loops/finish-cli.test.mjs`: `finish <t>` twice on an unchanged code tail files one report; a new tip reports again; a report filed by the CLI isn't re-filed by a dispatcher tick on the same tip.
 - `loops/finish-tick.test.mjs`: with `TRUNK` set to a branch other than the configured trunk, a topic landed only into it is a finish candidate.
 - `loops/cost.test.mjs`: with a topic `plan-a` (a row or `prd/plan-a`) beside `a`, `plan-a`'s orchestrator transcripts count to `plan-a`, not to `a`'s planning; a plain planning worktree `plan-a` for topic `a` still counts as `a`'s planning.
-- The dispatch tests pass with `finish.mjs` imported statically; `loops/dispatch.mjs` no longer loads it through `createRequire`.
+- The dispatch tests pass with `finish.mjs` imported statically; `loops/dispatch.mjs` has no lazy `finishModule` loader.
 - `risa check --quick "slice hand-off"` passes.
 
 **Blocked by:** 3, 6. **Blocks:** nothing.
