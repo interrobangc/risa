@@ -9,20 +9,20 @@
 | 1     | 1    | merged (opus, 5fd8fdf) | 37fd0e6                    |
 | 2     | 2    | merged (opus, 1c991ce) | 6da49d7                    |
 | 3     | 2    | merged (opus, 7754261) | dadae10                    |
-| 4     | 3    | —                      | —                          |
+| 4     | 3    | merged (opus, 8207e40) | e01708f                    |
 | 5     | 4    | —                      | —                          |
 
 **Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Models:** slices 1, 2, 3 opus.
+**Models:** slices 1, 2, 3 opus; 4 and 5 opus (prompt logic and a new module).
 
-**Landing held for wave 2 (orchestrator's call, 2026-11-28):** wave 1 alone would regress main: `captain.mjs` now draws admirals (`--remote-control Ross`), which the keep-alive and session-request matchers don't know until slice 2 makes the argument begin with `backlog`; and the backlog prompt would read "Captain Ross" until slice 3. Waves 1 and 2 land together. Wave 1 gate (`risa check` on 4973ecd): 2382/2384, the two fails `land-unsynced` timeouts under load (also flaky alone at 460s with other checks running; slice 3's check on 7754261, which includes slice 1, passed all 2388). Not this PRD's code; main's load-scaled waits (RISA-883) arrive with the sync. The combined gate reruns after wave 2 and the sync.
+**Landed (2026-11-28):** waves 1+2 together in main through PR #14 (Codex clean on 57c72de; tier none; unsynced tip, main's 2 commits shared no file), main at 725042b. Held wave 1 for wave 2 because admiral names alone would have broken the keep-alive and session-request matchers on main. Report filed (a28); to-test `to-test/2026-11-28-0311-risa-next.md`. Slice worktrees 1–3 removed. Items `done`: RISA-914, RISA-799, RISA-816, RISA-1008; RISA-1007 moved to risa-next-2; tidy filed as RISA-1019 (fixes-nit: `session-names.mjs` `personaOf` repeats `flavor.mjs` `sessionPersona`'s backlog rule).
 
-**Waves 1+2 merged (dadae10); `risa sync` skipped (no shared files). Gate green: `pnpm check passed on b4e77c1`. Docs folded (082af3a). PR #14 open, Codex review out (`risa review risa-next --wait`); land with tier none on a clean review.** RISA-816, RISA-1008 `done`; RISA-1007 moved to risa-next-2. RISA-799, RISA-914 `done`. Slice 2 notes: `loops/session-names.mjs` (new) owns `personaOf`/`sessionLabel`/`displayName`; its `personaOf` repeats slice 3's backlog rule (could call `sessionPersona`; a tidy for later). `loops/docs/backlog.md` still says a fresh main session shows "a new captain's name": fold at landing.
+**Wave 3 (session 2026-11-28):** synced main with `--force` (b25184b) so slice 4 starts on main's tip; RISA-815 claimed; worktree `risa-next-4` made, opus agent spawned, watch running. Then wave 4 = slice 5 (claim RISA-984). Slices 4 and 5 both change prompts and regenerate the golden. No new risa-next items at ingest. Slice 4 handed off (6b12cf3, ba08621; prompt.test 75/75); its check's one failure, `doc.test.mjs` anchoring backlog's section on the dropped "Standing priorities:" sentence, came from our 082af3a (on main too, since PR #14 landed with tier none): sent back to slice 4 as a fix; fixed in 8207e40 (anchor now /Orchestrators check in with it/), merged e01708f, RISA-815 ready. Wave gate: tier none (tooling only), so the full suite on the merged tip: first run 12 failures under load ~18 (timeouts), rerun green (108 files, 2449 tests). PR #16 opened; Codex review running.
 
-**Slice 1 notes for later slices:** `flavor.mjs` loads `machine.mjs` only by dynamic import in its CLI (a top-level await hangs node); tests copying `captain.mjs` also need `flavor.mjs`, `machine.mjs`, `config.mjs`.
+**Notes for slices 4/5:** `loops/flavor.mjs` loads `machine.mjs` only by dynamic import in its CLI (a top-level await hangs node). Tests copying `captain.mjs` also need `flavor.mjs`, `machine.mjs`, `config.mjs`, `session-names.mjs`. `loops/prompt.sh` appends the flavor line through an EXIT trap (`flavor_end`); `prompt-render.mjs` sets `RISA_MACHINE_CONFIG=""` and `RISA_CAPTAIN=Nechayev` for the golden. Session display names come from `loops/session-names.mjs` (`displayName`): the main backlog is `backlog (<project>) · Admiral <Name>`, which slice 4's check-in rule and slice 5's peer rule point to. Full-suite timeouts under machine load (`land-unsynced` and others) pass alone: load, not this PRD.
 
-**Backlog:** claim each slice's items as it starts. Slices 1 and 3: RISA-914 (`done` after 3). Slice 2: RISA-799 (and RISA-914's push label). Slice 4: RISA-815. Slice 5: RISA-984. With the first landing, mark RISA-816 and RISA-1008 `done` (answered in the PRD's _Decisions_) and move RISA-1007 to `risa-next-2` (`risa backlog set RISA-1007 prd=risa-next-2`), whose build it is.
+**Docs at landing (left):** `loops/docs/backlog.md` peer rule (slice 5). The session-name sentence and the cut-off "Standing priorities" sentence are done (082af3a); `flavor` is in `machine.mjs`'s header.
 
 ## Architectural decisions
 

@@ -8,10 +8,10 @@ if [[ ${2:-} == --guide ]]; then
 elif [[ ${2:-} == --brief ]]; then
   brief_text=$(cat "${3:?--brief <file>}") || die "prompt: can't read the brief $3"
   [[ -n ${brief_text//[[:space:]]/} ]] || die "prompt: the brief $3 is empty"
-  # A "## Directives" heading holds the user's instructions given with the hand-off.
-  ! grep -Eq '^#{2,3} Directives[[:space:]]*$' <<<"$brief_text" || directives=1
+  # A "## From the user" heading quotes the user (a brief from before it, "## Directives").
+  ! grep -Eq '^#{2,3} (From the user|Directives)[[:space:]]*$' <<<"$brief_text" || directives=1
   standing="It is context, not the user's word."
-  ((!directives)) || standing="Its _Directives_ are the user's instructions, given with the hand-off; the rest is context, not the user's word."
+  ((!directives)) || standing="It is context, not the user's word, except its _From the user_ lines, which quote the user."
   printf '## Brief from the session before\n\nThe last session wrote this for you. %s\n\n%s\n\n---\n\n' "$standing" "$brief_text"
 elif [[ ${2:-} == --no-brief ]]; then
   printf '## No brief from the session before\n\nThe context watch rotated the last session and it wrote no brief, so nothing was handed over.\n\n---\n\n'
@@ -42,15 +42,16 @@ if ((guide)); then
 $plan_line Never run \`--open\` from your own shell: it runs the planner inside your command instead of opening a tab.
 $run_line
 $cap_line
-- **When the user says "hand off"** (from the phone too), ask nothing: whether to write a brief is your call. Write a short one (what's in hand, what was decided and what's next, at most about 40 lines) when you have work in hand or the user gave instructions with the hand-off; otherwise none, and the new session starts blank. Put the user's instructions from that message, in their words, under a \`## Directives\` heading of their own: the next session carries them out first, before any poll. For a brief, run \`$prd_cmd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`$prd_cmd rotate --self --brief <that file>\`; for none, \`$prd_cmd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
-- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines), run \`$prd_cmd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`$prd_cmd notices\` or \`$prd_cmd session requests\`, then message the session by that name.
+- **When the user says "hand off"** (from the phone too), ask nothing: whether to write a brief is your call. Write a short one (what's in hand, what was decided and what's next, at most about 40 lines) when you have work in hand or the user gave instructions with the hand-off; otherwise none, and the new session starts blank. Open the brief with a \`## From the user\` heading when the user gave you any directives (in that message or still standing from before): each line a quote of the user, dated, never paraphrased; drop a line the user has since overridden. The next session carries them out first, before any poll. For a brief, run \`$prd_cmd rotate --self --brief-path\` for where to write it (\`.loops/.briefs/<this session's name>.md\`), write it, then run \`$prd_cmd rotate --self --brief <that file>\`; for none, \`$prd_cmd rotate --self\`. A fresh session opens under the same name, model and Remote Control and this one ends, so say your last line and do nothing after it.
+- **When the user asks for another backlog session for a task**, write a short brief to a file (the task, what's decided, at most about 40 lines; open it with a \`## From the user\` heading when the user gave directives for the task: each line a quote of the user, dated, never paraphrased), run \`$prd_cmd session request backlog <name> --brief <file>\` (the name is lowercase words and dashes) and tell the user the session will be \`backlog - <name>\`. Never open a tab yourself: the dispatcher's next tick opens it, and a paused or stopped dispatcher leaves it pending, so say so. It posts the outcome as a notice: read it with \`$prd_cmd notices\` or \`$prd_cmd session requests\`, then message the session by that name.
+- **A directive for a running topic** (the user tells you what one PRD's orchestrator should do): relay it to that orchestrator with SendMessage (find it with ListAgents by its topic), as a _From the user_ line: the user's words quoted, dated, never paraphrased, so it records them in its _Status_ as the user's word. Tell the user you passed it on.
 EOF
   exit 0
 fi
 opening="Ask what this session is for first, then collect only what that answer needs: a fresh session stays small."
 if ((directives)); then
-  opening="The brief above holds the user's directives: carry them out first, then collect only what they need: a fresh session stays small."
-  first_line="- **First, and nothing else:** run \`$prd_cmd asks --short\` and print its one line on what waits on the user. Then, instead of the opening poll, carry out the brief's _Directives_ as your first task: they are the user's instructions, given with the hand-off. Ask no poll of what this session is for.
+  opening="The brief above quotes the user under _From the user_: carry those lines out first, then collect only what they need: a fresh session stays small."
+  first_line="- **First, and nothing else:** run \`$prd_cmd asks --short\` and print its one line on what waits on the user. Then, instead of the opening poll, carry out the brief's _From the user_ lines as your first task: they are the user's word, quoted. Ask no poll of what this session is for.
 - **Before acting on them:** run \`$prd_cmd prompt backlog --guide\` once and follow it: this session's rules, and what each kind of task collects. Run it too before acting on \"hand off\" or a request for another backlog session."
 else
   first_line="- **First, and nothing else:** run \`$prd_cmd asks --short\` and print its one line on what waits on the user. Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
