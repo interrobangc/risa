@@ -165,6 +165,25 @@ export function storeFor(repo, { env = process.env } = {}) {
       return show(tip(), file);
     },
     /**
+     * The store's files at its tip (a project's inbox each: `<project>.md`), sorted; none
+     * when there is no clone or branch. Fetches as `read` does; `fetch: false` lists
+     * the last fetched copy with no network.
+     * @param {{ fetch?: boolean }} [opts]
+     * @returns {string[]}
+     */
+    files({ fetch: doFetch = true } = {}) {
+      if (!existsSync(join(dir, "HEAD"))) {
+        if (!doFetch) return [];
+        ensure();
+      }
+      if (doFetch) fetch();
+      const at = tip();
+      const names = at ? tryRun(["ls-tree", "--name-only", at]) : null;
+      return (names ? names.split("\n") : [])
+        .filter((n) => /\.md$/.test(n) && n.toLowerCase() !== "readme.md")
+        .sort();
+    },
+    /**
      * Applies EDIT to the tip's copy of FILE (null: no file yet) and pushes the result
      * as one commit changing only that file. Returns the commit, or null when the edit
      * changed nothing. Throws a StoreError when the store can't be fetched or after
@@ -248,6 +267,24 @@ export function storeProjects({ env = process.env } = {}) {
 }
 
 /**
+ * The store's projects: the machine config's repos with an inbox file at REPO (in the
+ * machine config's order), then the store's other files (sorted). Each by the name
+ * `--project` takes (its file's stem), with its config's name and main checkout when
+ * this machine has it.
+ * @param {string} repo the store's URL
+ * @param {{ env?: Record<string, string | undefined>, fetch?: boolean }} [opts]
+ * @returns {{ project: string, name: string | null, main: string | null }[]}
+ */
+export function storeProjectList(repo, { env = process.env, fetch = true } = {}) {
+  const stem = (/** @type {string} */ file) => file.replace(/\.md$/, "");
+  const here = storeProjects({ env }).filter((p) => p.repo === repo);
+  const out = here.map((p) => ({ project: stem(p.file), name: p.config.name, main: p.main }));
+  for (const file of storeFor(repo, { env }).files({ fetch }))
+    if (!out.some((p) => p.project === stem(file))) out.push({ project: stem(file), name: null, main: null });
+  return out;
+}
+
+/**
  * The store this machine uses: the machine config's repos' `inbox.repo` (all the same;
  * two differing refuse, naming both), else the one existing clone under storeRoot.
  * Throws a StoreError when there is none, or more than one to choose from.
@@ -296,7 +333,13 @@ export function findStoreRepo({ env = process.env } = {}) {
 // ---- CLI ---------------------------------------------------------------------
 //
 //   node <tool>/backlog/inbox-store.mjs <add|edit|move|remove|list> --project <name> …
+//   node <tool>/backlog/inbox-store.mjs projects [--no-fetch]
 //
+// `projects` prints storeProjectList's, one a line: the name `--project` takes, its
+// config's name and its main checkout, tab-separated (the last two empty for a store
+// file with no repo on this machine): the inbox session's prompt lists them, and
+// `prd inbox` opens the session from the first one's checkout. `--no-fetch` reads the
+// clone's last copy.
 // The inbox commands (backlog/inbox-commands.mjs) on the store file `<name>.md`, from
 // any folder, inside a repo or not: it needs no project config. The store is
 // findStoreRepo's. When a machine config repo's inbox file is that one, its config is
@@ -315,6 +358,13 @@ const isMain = () => {
 /** @param {string[]} argv */
 async function cli(argv) {
   const [verb, ...rest] = argv;
+  if (verb === "projects") {
+    const bad = rest.find((a) => a !== "--no-fetch");
+    if (bad) throw new StoreError(`${bad}: unknown option (projects [--no-fetch])`);
+    for (const p of storeProjectList(findStoreRepo(), { fetch: !rest.includes("--no-fetch") }))
+      console.log([p.project, p.name ?? "", p.main ?? ""].join("\t"));
+    return;
+  }
   /** @type {string[]} */
   const pos = [];
   /** @type {Record<string, string | boolean | undefined>} */
@@ -335,7 +385,9 @@ async function cli(argv) {
   }
   const verbs = ["add", "edit", "move", "remove", "list"];
   if (!verbs.includes(verb) || typeof opts.project !== "string")
-    throw new StoreError(`usage: inbox-store.mjs <${verbs.join("|")}> --project <name> [arguments…]`);
+    throw new StoreError(
+      `usage: inbox-store.mjs <${verbs.join("|")}> --project <name> [arguments…] | projects [--no-fetch]`,
+    );
   const file = `${opts.project}.md`;
   checkFile(file);
   const repo = findStoreRepo();
