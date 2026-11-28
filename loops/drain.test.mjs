@@ -28,6 +28,7 @@ import {
   landingUnder,
   limitActions,
   probeAllowed,
+  sessionDrains,
 } from "./drain.mjs";
 import { mergeReadings } from "./usage.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
@@ -281,6 +282,60 @@ describe("the limited tick's actions", () => {
       expect(
         limitActions({ sessions, landing: new Set(), stalls: {}, drain: { ...limited, state }, now: NOW }),
       ).toEqual([]);
+  });
+});
+
+describe("each session on its own account", () => {
+  // Two made-up Claude config folders: each reading names the one its session's claude used.
+  const A = "/tmp/fictional-claude-a";
+  const B = "/tmp/fictional-claude-b";
+  const reading = (session, account, percent) => ({
+    session,
+    ...(account ? { account } : {}),
+    windows: { fiveHour: { percent, at: iso(NOW - MIN), resetsAt: iso(NOW + 60 * MIN) } },
+  });
+  const opts = { ...lines, now: NOW, staleMs: STALE };
+
+  it("two sessions on two config folders, one over the drain line and one under: only the one over drains", () => {
+    const readings = [reading("prd-a", A, 96), reading("prd-b", B, 40)];
+    const d = sessionDrains(readings, ["prd-a", "prd-b"], opts);
+    expect(d["prd-a"].state).toBe("draining");
+    expect(d["prd-a"].why).toContain("5h 96%");
+    expect(d["prd-b"].state).toBe("normal");
+    // Whichever account the dispatcher itself is on.
+    for (const account of [A, B, null])
+      expect(
+        Object.values(sessionDrains(readings, ["prd-a", "prd-b"], { ...opts, account })).map((x) => x.state),
+      ).toEqual(["draining", "normal"]);
+  });
+
+  it("a session with no reading takes the dispatcher's account; one without `account` is the default's", () => {
+    const readings = [reading("prd-a", A, 99), reading("prd-d", null, 10)];
+    expect(sessionDrains(readings, ["prd-new"], { ...opts, account: A })["prd-new"].state).toBe("limited");
+    expect(sessionDrains(readings, ["prd-new"], { ...opts, account: B })["prd-new"].state).toBe("normal");
+    expect(sessionDrains(readings, ["prd-d"], { ...opts, account: A })["prd-d"].state).toBe("normal");
+  });
+
+  it("a limited tick ends only the sessions whose own account is limited", () => {
+    const readings = [reading("prd-a", A, 99), reading("prd-b", B, 40), reading("mine", A, 99)];
+    const sessions = [
+      { name: "prd-a", pid: 11, live: true, managed: true },
+      { name: "prd-b", pid: 12, live: true, managed: true },
+      { name: "mine", pid: 16, live: true, managed: false },
+    ];
+    const drains = sessionDrains(
+      readings,
+      sessions.map((s) => s.name),
+      { ...opts, account: B },
+    );
+    // The dispatcher's own account (B) is under the line; A's sessions are still limited.
+    const normal = { state: /** @type {const} */ ("normal"), resetsAt: null, why: "", unknown: false };
+    const a = limitActions({ sessions, landing: new Set(), stalls: {}, drain: normal, drains, now: NOW });
+    expect(a).toEqual([
+      { type: "end", session: "prd-a", pid: 11 },
+      expect.objectContaining({ type: "report", sessions: ["mine"] }),
+    ]);
+    expect(a[1].text).toContain("5h 99%");
   });
 });
 
