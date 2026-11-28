@@ -16,6 +16,8 @@
 
 **Wave 6** (slices 39–43, all opus): RISA-1015 split three ways (slice refuses an uncommitted section; tooling join runs only the Check file; check-plan reports an unknown Model), RISA-1016 two ways (review.sh, lib.sh pr_verdict). Hot files: loops/new, loops/check-hook, loops/check-tooling, loops/check-plan, loops/review, loops/ready, loops/lib.sh. No running topic's hot files touched (risa-next's are elsewhere; staging-ship, which holds lib.sh and review.sh, is on hold).
 
+**Wave 6 gate:** all five merged (tip 04b1309); RISA-1015, 1016 marked done; `risa tier` says none (tooling only), CI unit requested anyway (local slice checks never finished the tooling suite under load). Slice worktrees kept until green.
+
 **Wave 5 landed** 2026-11-28 in main through PR #12 (slices 27–38; report a24; to-test/2026-11-28-0105-fixes-tooling.md). Older waves: plans/fixes-tooling-history.md.
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
