@@ -8,8 +8,8 @@
 
 | Slice | Wave | Item           | Model  | State                                                                                         | Merge into `prd/fixes-tooling` |
 | ----- | ---- | -------------- | ------ | --------------------------------------------------------------------------------------------- | ------------------------------ |
-| 27    | 5    | RISA-1011      | sonnet | agent spawned                                                                                 | —                              |
-| 28    | 5    | RISA-882       | opus   | waiting (blocked by 27)                                                                       | —                              |
+| 27    | 5    | RISA-1011      | sonnet | merged                                                                                        | 5bff9fa                        |
+| 28    | 5    | RISA-882       | opus   | agent spawned (opus)                                                                          | —                              |
 | 29    | 5    | RISA-886, 889  | opus   | agent spawned                                                                                 | —                              |
 | 30    | 5    | RISA-986       | opus   | handed off (91ff7ef, merge 9704c53): ls.sh Holds section, dry-run reason                      | —                              |
 | 31    | 5    | RISA-994 (1/2) | opus   | agent spawned                                                                                 | —                              |
