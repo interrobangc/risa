@@ -88,7 +88,7 @@ describe("run_log in lib.sh", () => {
   beforeEach(() => {
     repo = join(root, "repo");
     mkdirSync(join(repo, "loops"), { recursive: true });
-    for (const f of ["lib.sh", "config.mjs", "run-log.mjs"])
+    for (const f of ["lib.sh", "config.mjs", "run-log.mjs", "is-main.mjs"])
       copyFileSync(join(HERE, f), join(repo, "loops", f));
     execFileSync("git", ["init", "-q", repo]);
   });

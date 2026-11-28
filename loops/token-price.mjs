@@ -14,6 +14,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { claudeProjects } from "./host.mjs";
+import { isMain } from "./is-main.mjs";
 
 /** When PRICES was read: the claude-api skill's pricing reference (its cache of 2026-11-03). */
 export const PRICES_READ = "2026-11-27";
@@ -239,7 +240,7 @@ export function parseArgs(/** @type {string[]} */ args, env = process.env) {
   return { since, cutoff, dir: got.dir || claudeProjects(env) };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   try {
     const { since, cutoff, dir } = parseArgs(process.argv.slice(2));
     const now = Date.now();
