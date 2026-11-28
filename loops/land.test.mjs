@@ -9,7 +9,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, wr
 import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { FIXTURE_CONFIG } from "./config-fixture.mjs";
+import { FIXTURE_CONFIG, sampleFoldersConfig } from "./config-fixture.mjs";
 import { root, repo, config, git, commit, landWith, land, branch, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
@@ -404,6 +404,94 @@ else console.log(process.env.ITEMS ?? "[]");
     expect(r.status, r.stderr + r.stdout).toBe(0);
     expect(r.stdout).toContain("Not marking throwaway-x done: no slice is left, but B-2 aren't landed");
     expect(set).toBe("");
+  });
+});
+
+// RISA-1001: a topic's worktree whose config names another paths.backlog still
+// marks the main checkout's registry row and reads its items (lib.sh's backlog_run,
+// the config `risa backlog` takes). The machine config lists the repo, so its
+// config is found (the current checkout's risa.json); the stub backlog answers only
+// on the main checkout's, its `prd set` logged.
+describe("land.sh and rm.sh mark the main checkout's registry from a worktree", () => {
+  const STUB = `import { appendFileSync, readFileSync } from "node:fs";
+const a = process.argv.slice(2);
+const at = JSON.parse(readFileSync(process.env.RISA_CONFIG, "utf8")).paths.backlog;
+if (at !== "plans/backlog.md") { console.error("no backlog at " + at); process.exit(1); }
+if (a[0] === "prd" && a[1] === "list")
+  console.log(JSON.stringify(["throwaway-x", "throwaway-y"].map((topic) => ({ topic, flags: [], hot: [] }))));
+else if (a[0] === "prd" && a[1] === "set") appendFileSync(process.env.PRD_SET_LOG, a.slice(2).join(" ") + "\\n");
+else console.log(JSON.stringify([{ id: "B-1", status: "landed" }]));
+`;
+  const PLAN =
+    "# Plan: X\n\n## Status\n\n| Slice | Wave | State | Merge |\n| ----- | ---- | ----- | ----- |\n| 1 | 1 | merged | abc |\n";
+  const log = () => join(root, "prd-set.log");
+  const set = () => (existsSync(log()) ? readFileSync(log(), "utf8") : "");
+  /** The repo's own config (no stack hooks), the stub, and the worktree's config moving the backlog. */
+  const setUp = () => {
+    sampleFoldersConfig(repo);
+    const cfg = JSON.parse(readFileSync(join(repo, "risa.json"), "utf8"));
+    delete cfg.hooks.stackDown;
+    delete cfg.hooks.testDb;
+    writeFileSync(join(repo, "risa.json"), JSON.stringify(cfg));
+    commit(
+      {
+        ".gitignore": ".loops/\n",
+        "backlog/backlog.mjs": STUB,
+        "plans/throwaway-x-plan.md": PLAN,
+        "plans/throwaway-y-plan.md": PLAN,
+      },
+      "the repo's config and its stub backlog",
+    );
+    git("branch", "prd/throwaway-y");
+    const wt = join(repo, ".loops", "throwaway-x");
+    git("worktree", "add", "-q", "-b", "prd/throwaway-x", wt, "dev");
+    writeFileSync(join(wt, "work.ts"), "1\n");
+    git("-C", wt, "add", "work.ts");
+    git("-C", wt, "commit", "-qm", "work");
+    // Uncommitted (and hidden from status, which land checks), so the landing
+    // doesn't carry the move into the main checkout.
+    git("-C", wt, "update-index", "--skip-worktree", "risa.json");
+    writeFileSync(
+      join(wt, "risa.json"),
+      JSON.stringify({ ...cfg, paths: { ...cfg.paths, backlog: "plans/moved-backlog.md" } }),
+    );
+    const machine = join(root, "machine.json");
+    writeFileSync(machine, JSON.stringify({ repos: [{ path: repo }] }));
+    return { wt, env: { RISA_MACHINE_CONFIG: machine, RISA_CONFIG: "", RISA_CONFIG_FOUND: "" } };
+  };
+  const run = (cwd, env, script, ...args) =>
+    spawnSync("bash", [join(repo, "loops", script), ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, PRD_SET_LOG: log(), ...env },
+    });
+
+  it("land's done flags, its items read from the main checkout's backlog", () => {
+    const { wt, env } = setUp();
+    const r = run(
+      wt,
+      env,
+      "land.sh",
+      "throwaway-x",
+      "--local",
+      "--force",
+      "--by-user",
+      "-m",
+      "feat(throwaway-x): t",
+    );
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stderr).not.toContain("no backlog at");
+    expect(r.stdout).toContain("Marked throwaway-x done in the PRD registry");
+    expect(set()).toBe("throwaway-x flags=done\n");
+  });
+
+  it("rm's done, run from that worktree", () => {
+    const { wt, env } = setUp();
+    git("worktree", "add", "-q", join(repo, ".loops", "throwaway-y"), "prd/throwaway-y");
+    const r = run(wt, env, "rm.sh", "throwaway-y");
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(r.stdout).toContain("Marked throwaway-y done in the PRD registry (flags done)");
+    expect(set()).toBe("throwaway-y flags=done\n");
   });
 });
 

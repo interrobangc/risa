@@ -8,7 +8,8 @@
 // thread resolved, asked again) and stale (one more push, before Codex
 // started on it). out-of-credits is PR #48 (dev into
 // staging): Codex reviewed one head, then answered later pushes with its usage
-// limit comment and marked its summary "failed". The carry rule runs against a
+// limit comment and marked its summary "failed". too-long is clean with its
+// threads' page saying there's another (built by hand). The carry rule runs against a
 // throwaway repository, with PR states built by hand in the same shape.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
@@ -111,6 +112,42 @@ describe("codex-review verdict", () => {
     const v = verdict(fixture("clean"));
     expect(v).toMatchObject({ state: "clean", findings: [], headSha: FIXED, reviewedSha: FIXED });
     expect(verdictLine(v)).toBe("codex: clean on 2783795");
+  });
+
+  it("isn't clean when the threads have another page (too long to read whole)", () => {
+    const v = verdict(fixture("too-long"));
+    expect(v).toMatchObject({
+      state: "too-long",
+      findings: [],
+      headSha: FIXED,
+      unread: "more than one page of review threads",
+    });
+    expect(verdictLine(v)).toBe(
+      "codex: not clean on 2783795: the review is too long to read whole (more than one page of review threads); read the PR on GitHub, then land with --no-review",
+    );
+  });
+
+  it("isn't clean when a thread's comments have another page", () => {
+    const pr = fixture("too-long");
+    pr.reviewThreads.pageInfo.hasNextPage = false;
+    pr.reviewThreads.nodes[1].comments.pageInfo.hasNextPage = true;
+    expect(verdict(pr)).toMatchObject({
+      state: "too-long",
+      unread: "1 review thread with more than one page of comments",
+    });
+  });
+
+  it("is clean as before when every page is read", () => {
+    const pr = fixture("too-long");
+    pr.reviewThreads.pageInfo.hasNextPage = false;
+    expect(verdict(pr)).toMatchObject({ state: "clean", findings: [], headSha: FIXED });
+    expect(verdict(pr).unread).toBeUndefined();
+  });
+
+  it("keeps findings as findings when the threads have another page", () => {
+    const pr = fixture("findings");
+    pr.reviewThreads.pageInfo = { hasNextPage: true };
+    expect(verdict(pr).state).toBe("findings");
   });
 
   it("is stale when the last review is of an older head, whatever 👍 is on the PR", () => {
@@ -289,6 +326,15 @@ describe("a clean verdict carried over dev merges", () => {
   it("still waits when the running review is of the head Codex already reviewed (--again)", () => {
     const json = pr(reviewed, [reviewed, "running"], [[reviewed, "completed"]]);
     expect(check(json)).toMatchObject({ state: "waiting", reviewingSha: reviewed });
+  });
+
+  it("doesn't carry when the review is too long to read whole", () => {
+    const head = mergeDev({ "other.txt": "dev\n" });
+    const json = pr(head, [reviewed, "completed"]);
+    json.reviewThreads.pageInfo = { hasNextPage: true };
+    const v = check(json);
+    expect(v.state).toBe("stale");
+    expect(v.notCarried).toBe("the review is too long to read whole (more than one page of review threads)");
   });
 
   it("doesn't carry over new work by the branch", () => {

@@ -424,6 +424,34 @@ describe("a repo with no stack or testDb hooks (RISA-973)", () => {
       rmSync(config, { force: true });
     }
   });
+
+  it("stack down, status and ready say there is no stack, and down frees a leased slot (RISA-991)", () => {
+    const raw = JSON.parse(read(env.RISA_CONFIG));
+    for (const h of Object.keys(raw.hooks)) if (/^stack|^testDb$/.test(h)) delete raw.hooks[h];
+    const config = join(loops, "no-stack-hooks.json");
+    mkdirSync(loops, { recursive: true });
+    writeFileSync(config, `${JSON.stringify(raw, null, 2)}\n`);
+    const opts = { env: { RISA_CONFIG: config } };
+    try {
+      expect(sh("new.sh", ["slice", "t", "7"], opts).status).toBe(0);
+      // A lease left from before the hooks went: down gives it back.
+      mkdirSync(join(loops, ".slots", "19"), { recursive: true });
+      writeFileSync(join(loops, ".slots", "19", "name"), "t-7\n");
+      const before = calls();
+      const down = sh("stack.sh", ["down", "t-7"], opts);
+      expect(down.stderr).not.toMatch(/no value for hooks/);
+      expect([down.status, down.stdout]).toEqual([0, "t-7 has no stack\n"]);
+      expect(leases()).not.toContain("19");
+      for (const cmd of ["status", "ready"]) {
+        const r = sh("stack.sh", [cmd, "t-7"], opts);
+        expect([r.status, r.stdout, r.stderr]).toEqual([0, "", "t-7: no stack hooks in the config\n"]);
+      }
+      expect(calls()).toBe(before);
+      expect(sh("rm.sh", ["t-7"], opts).status).toBe(0);
+    } finally {
+      rmSync(config, { force: true });
+    }
+  });
 });
 
 describe("rm.sh from inside the worktree it removes (B-812)", () => {
