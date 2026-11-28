@@ -136,7 +136,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1066 | change | live | fixes-tooling | prd/fixes-tooling | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
 | RISA-1067 | bug | live | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
 | RISA-1068 | change | live | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
-| RISA-1069 | change | in-progress | fixes-tooling | prd/fixes-tooling | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
+| RISA-1069 | change | ready | fixes-tooling | prd/fixes-tooling | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 | RISA-1070 | bug | live | fixes-bug | prd/fixes-bug | risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help |
 | RISA-1071 | bug | live | risa-next-2 | prd/risa-next-2 | Inbox store: a filed line still in the store (cleanup delayed by an unpushed user commit) accepts inbox edit/move/remove, since findUnfiled refuses only id-tagged lines; an edit changes its key and the next ingest files a duplicate. Refuse lines whose inbox key a backlog item holds |
 | RISA-1072 | bug | live | risa-next-2 | prd/risa-next-2 | prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop |
@@ -1132,10 +1132,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1069 · change · Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 40da287
 
 - 2026-11-28 (prd/fixes-tooling): Cut from RISA-1066 by the fixes-tooling orchestrator. Waits: loops/dispatch is risa-next-2's hot file.
 
