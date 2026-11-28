@@ -58,7 +58,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-813 | feature | live | fixes-tooling | prd/fixes-tooling | Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop |
 | RISA-814 | feature | triaged | usage-aware-drain |  | Orchestrator picks the usage drain line from the current Claude plan (e.g. ultra vs smaller plans) instead of one fixed percent |
 | RISA-815 | change | triaged | risa-next |  | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
-| RISA-816 | question | triaged | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
+| RISA-816 | question | ready | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
 | RISA-820 | feature | triaged | risa-next-3 |  | Risa: cross-repo topics: a Risa topic can change a configured subproject's code (Caretook), each side passing its own repo's checks |
 | RISA-841 | change | triaged | risa-next-2 |  | Risa: one inbox session for every configured project, lines kept in a private inbox repo |
 | RISA-880 | chore | live | fixes-tooling | prd/fixes-tooling | Planners get the context watch: add plan sessions to the context hook (data-rights peaked 256k, onboarding-2 214k) |
@@ -100,8 +100,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1004 | bug | live | fixes-tooling | prd/fixes-tooling | With RISA_USAGE_WATCH=off, a dead session with an outstanding stall mark is still held out of pick()'s reopen, and resume waits for its recorded reset, so disabling the watch doesn't release it |
 | RISA-1005 | chore | live | fixes-tooling | prd/fixes-tooling | Slice check runs only the slice's named check: a project config key for a one-test-file command (the runner differs per project), risa check --quick on a slice branch runs the plan's Check field through it, the full check stays at the wave's landing; the orchestrator splits a slice that comes back over budget (second half of RISA-881) |
 | RISA-1006 | chore | live | fixes-tooling | prd/fixes-tooling | A release tag leaves package.json's version behind: v0.1.7 still says 0.1.2; cutting a tag should bump it (or a check should catch the mismatch) |
-| RISA-1007 | plan | triaged | risa-next |  | Multi-machine: Risa runs and coordinates across several machines (sessions, repos, releases, agent discovery); risa-next designs for it, building the cross-machine parts can follow |
-| RISA-1008 | question | triaged | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
+| RISA-1007 | plan | triaged | risa-next-2 |  | Multi-machine: Risa runs and coordinates across several machines (sessions, repos, releases, agent discovery); risa-next designs for it, building the cross-machine parts can follow |
+| RISA-1008 | question | ready | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
 | RISA-1009 | feature | live | fixes-tooling | prd/fixes-tooling | A command a backlog agent can run to restart the dispatcher on the current release (stop, then start it in its own tab or detached), so a new pin or install doesn't need the user at the terminal |
 | RISA-1010 | bug | live | fixes-tooling | prd/fixes-tooling | machinery.md ends with a stub '## The context watch' after '## Worktrees and leases' (2b02eab, RISA-880), so a project's additions, which continue the generic doc's last section, merge under the stub: Caretook's worktree lines drop out of risa doc machinery 'Worktrees and leases' and its own 'The context watch' heading appears twice |
 | RISA-1011 | chore | live | fixes-tooling | prd/fixes-tooling | The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt |
@@ -403,10 +403,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-816 · question · Should the orchestrator PRDQ be slice-based instead of PRD-based?
 
-- status: triaged
+- status: ready
 - prd: risa-next
 - owner:
-- commit:
+- commit: 082af3a
 
 - 2026-11-25 (Robert Bo Davis): Triage: risa-next, orchestration tooling (hand-off briefs, the PRD queue) that the split moves into Risa.
 - 2026-11-27 (the Risa move, B-543): Was B-816 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -833,7 +833,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 ### RISA-1007 · plan · Multi-machine: Risa runs and coordinates across several machines (sessions, repos, releases, agent discovery); risa-next designs for it, building the cross-machine parts can follow
 
 - status: triaged
-- prd: risa-next
+- prd: risa-next-2
 - owner:
 - commit:
 
@@ -841,10 +841,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1008 · question · Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files?
 
-- status: triaged
+- status: ready
 - prd: risa-next
 - owner:
-- commit:
+- commit: 082af3a
 
 - 2026-11-27 (Robert Bo Davis): User 2026-11-28: the risa-next planner weighs it with RISA-1007 (multi-machine) and RISA-841 (one inbox, private repo) and recommends one. For: one store every machine reaches, no cross-machine lock. Against: an API call per read (dispatch reads every tick; rate limits, offline), items no longer land in the work's commit, the tests need a fake GitHub.
 
