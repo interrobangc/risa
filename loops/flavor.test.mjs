@@ -109,6 +109,23 @@ describe("personaFor", () => {
     }
   });
 
+  it("steps from the hashed one to the next entry HELD doesn't name; the hashed one when it names them all", () => {
+    const pool = namesOf("prd");
+    const hashed = /** @type {{ name: string }} */ (personaFor("prd", "prd-fixes-bug")).name;
+    const next = pool[(pool.indexOf(hashed) + 1) % pool.length];
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", [hashed])).toEqual({
+      rank: "Captain",
+      name: next,
+    });
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", [hashed, next])?.name).toBe(
+      pool[(pool.indexOf(hashed) + 2) % pool.length],
+    );
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", ["Picard"])?.name).toBe(hashed);
+    expect(personaFor("prd", "prd-fixes-bug", "starfleet", pool)?.name).toBe(hashed);
+    expect(sessionPersona("prd", "prd-fixes-bug", "starfleet", [hashed])?.name).toBe(next);
+    expect(personaFor("prd", "prd-fixes-bug", "none", [hashed])).toBeNull();
+  });
+
   it("is null under none, and for a role the pack doesn't name", () => {
     for (const role of ROLES) expect(personaFor(role, "prd-x", "none")).toBeNull();
     expect(personaFor("dispatcher", "x")).toBeNull();
@@ -141,7 +158,22 @@ describe("drawAdmiral", () => {
     expect(drawAdmiral(null, fixed(1))).toBe(admirals.at(-1));
   });
 
+  it("never draws one another live session on the machine holds; with every one held, today's draw", () => {
+    const admirals = namesOf("backlog");
+    for (let i = 0; i < admirals.length; i++) {
+      const a = drawAdmiral("Ross", fixed(i / admirals.length), "starfleet", ["Cartwright", "Nogura"]);
+      expect(admirals).toContain(a);
+      expect(["Ross", "Cartwright", "Nogura"]).not.toContain(a);
+    }
+    for (let i = 0; i < admirals.length; i++) {
+      const a = drawAdmiral("Ross", fixed(i / admirals.length), "starfleet", admirals);
+      expect(a).toBe(drawAdmiral("Ross", fixed(i / admirals.length)));
+      expect(a).not.toBe("Ross");
+    }
+  });
+
   it("is the bare backlog under none", () => {
+    expect(drawAdmiral(null, Math.random, "none", ["Ross"])).toBe("backlog");
     expect(drawAdmiral(null, Math.random, "none")).toBe("backlog");
     expect(drawAdmiral("backlog", Math.random, "none")).toBe("backlog");
   });
