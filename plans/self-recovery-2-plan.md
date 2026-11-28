@@ -20,7 +20,7 @@
 
 **Earlier hand-over:** waves 1-3 (slices 1-6) have all landed: wave 3 through PR #22 (main 2d56388; report filed; to-test/2026-11-28-0634-self-recovery-2.md). The four triaged bugs left here (RISA-1025, 1027, 1028, 1029) became **wave 4 = slice 7** (skeptic decide s23, filed as a42 under "decided for you"; the user may veto). Next session: `risa backlog claim` the four, `risa slice self-recovery-2 7`, one **opus** agent, watch; merge, gate (tier none: `risa check`), rm the slice worktree, sync, `risa pr`, review, land, report, then `risa rm self-recovery-2`. If the user vetoes a42: move the four to fixes-bug/fixes-tooling and `risa rm`.
 
-**Open:** fixes-tooling-3e told the PRD's code is all in main; the backlog session then moved RISA-1025 here (fixes-tooling no longer waits on it). Slice 6 adds no dispatcher-side test (dispatch.test.mjs unchanged by rule). No serve hook (tooling only).
+**Open:** message fixes-bug-urgent-a5 (SendMessage) when PR #23 lands in main (its RISA-1037 waits on our dispatch.mjs). fixes-tooling-3e told the PRD's code is all in main; the backlog session then moved RISA-1025 here (fixes-tooling no longer waits on it). Slice 6 adds no dispatcher-side test (dispatch.test.mjs unchanged by rule). No serve hook (tooling only).
 
 **Backlog:** RISA-811, RISA-560 landed; RISA-789 landed (PR #22).
 
