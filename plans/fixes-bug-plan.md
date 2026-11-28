@@ -8,29 +8,29 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | started |                            |
-| 13    | 4    | RISA-1065       | opus   | started |                            |
+| Slice | Wave | Item            | Model  | State      | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ---------- | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged     | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged     | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged     | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged     | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged     | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged     | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged     | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged     | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged     | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged     | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged     | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | started    |                            |
+| 13    | 4    | RISA-1065       | opus   | handed off |                            |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
 **Wave 2** (slices 6–9, RISA-1023/1024/1039/1049): landed 2026-11-28 in main as 5767dfb (PR #27, tier unit, run 46154596385); Codex's P2 (CI fetches no tags) is RISA-1054 (fixes-tooling). Caretook's backlog session told 5767dfb has RISA-1049.
 
-**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3). Slice 11 handed off (7135a2a: `machineHeld` in captain.mjs reads every machine repo's live records; `personaFor`/`drawAdmiral` take `held`; a stepped persona is kept in the session record's `persona`; also edited loops/session-names.mjs `personaOf`, added to hot) and merged (6e331aa). `risa tier`: none (tooling only), so the gate is `risa check`: green on 0d6ee37 (2543 tests). Synced main (4142eb2; session-names.mjs import conflict with fixes-nit's RISA-1019 refactor, kept both); `pnpm test` green on the synced tip. Slice worktrees removed. PR #30: one Codex P2 (a fresh session's stepped persona isn't kept in its first record), tracked as RISA-1064 (fixes-bug, triaged), thread resolved; Codex clean on 9959f75. **Landed** 2026-11-28 in main as 6f1daaa (tier none, unsynced tip: main's 1 commit shared no file); to-test file `to-test/2026-11-28-1045-fixes-bug.md`; report filed.
+**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); waits for slice 12 to merge in order. Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3). Slice 11 handed off (7135a2a: `machineHeld` in captain.mjs reads every machine repo's live records; `personaFor`/`drawAdmiral` take `held`; a stepped persona is kept in the session record's `persona`; also edited loops/session-names.mjs `personaOf`, added to hot) and merged (6e331aa). `risa tier`: none (tooling only), so the gate is `risa check`: green on 0d6ee37 (2543 tests). Synced main (4142eb2; session-names.mjs import conflict with fixes-nit's RISA-1019 refactor, kept both); `pnpm test` green on the synced tip. Slice worktrees removed. PR #30: one Codex P2 (a fresh session's stepped persona isn't kept in its first record), tracked as RISA-1064 (fixes-bug, triaged), thread resolved; Codex clean on 9959f75. **Landed** 2026-11-28 in main as 6f1daaa (tier none, unsynced tip: main's 1 commit shared no file); to-test file `to-test/2026-11-28-1045-fixes-bug.md`; report filed.
 
-**Wave 4** (slices 12–13, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1064 (loops/captain, loops/session.sh) and RISA-1065 (loops/time-gate) clear of risa-next-2's hot files; RISA-1050 still waits (`loops/dispatch`). Hot set: loops/captain, loops/session, loops/time-gate, loops/docs. Items claimed; slices 12–13 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each).
+**Wave 4** (slices 12–13, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1064 (loops/captain, loops/session.sh) and RISA-1065 (loops/time-gate) clear of risa-next-2's hot files; RISA-1050 still waits (`loops/dispatch`). Hot set: loops/captain, loops/session, loops/time-gate, loops/docs. Items claimed; slices 12–13 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); waits for slice 12 to merge in order.
 
 **For the next session:** first run `risa backlog prd list`. RISA-1064 (loops/captain.mjs, loops/session.sh) is the next wave's item if neither is hot. risa-next-2 (2026-11-28): wave 1 landed in main (36eee3e, PR #28); `backlog/` stays hot through its wave 4, `loops/dispatch` hot only in wave 4; its next session will say when each frees (RISA-1050 waits on dispatch). When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
