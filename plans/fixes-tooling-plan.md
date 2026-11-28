@@ -8,11 +8,11 @@
 
 | Slice | Wave | Item      | Model | State              | Merge into `prd/fixes-tooling` |
 | ----- | ---- | --------- | ----- | ------------------ | ------------------------------ |
-| 45    | 8    | RISA-1020 | opus  | spawned            | —                              |
+| 45    | 8    | RISA-1020 | opus  | merged 6634dd6     | 6634dd6                        |
 | 46    | 8    | RISA-1021 | opus  | spawned            | —                              |
 | 47    | 8    | RISA-1022 | opus  | handed off 136583c | —                              |
 
-**Wave 8** (2026-11-28): slices 45–47 written, items claimed, hot files set; main has new commits (fixes-bug 3598122, risa-next 725042b, 75ba240): `risa sync` at this wave's green.
+**Wave 8** (2026-11-28): slices 45–47 written, items claimed, hot files set; main has new commits (fixes-bug 3598122, risa-next 725042b, 75ba240): `risa sync` at this wave's green. Docs at landing: `risa anchors` now exits 1 on a fields error (planner.md, orchestrator.md say it only warns).
 
 **Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
