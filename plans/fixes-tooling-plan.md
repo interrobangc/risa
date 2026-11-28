@@ -6,13 +6,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | -------------------------------------- | ------------------------------ |
-| 14    | 3    | RISA-952  | opus  | agent working                          |                                |
-| 15    | 3    | RISA-997  | opus  | agent working                          |                                |
-| 16    | 3    | RISA-999  | opus  | agent working                          |                                |
-| 17    | 3    | RISA-1000 | opus  | rechecking (plan-format fix merged in) |                                |
-| 18    | 3    | RISA-927  | opus  | agent working                          |                                |
+| Slice | Wave | Item      | Model | State                                                           | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------------------------------------------- | ------------------------------ |
+| 14    | 3    | RISA-952  | opus  | agent working                                                   |                                |
+| 15    | 3    | RISA-997  | opus  | agent working                                                   |                                |
+| 16    | 3    | RISA-999  | opus  | agent working                                                   |                                |
+| 17    | 3    | RISA-1000 | opus  | handed off (9a4e8b3; check red only on load timeouts, RISA-994) |                                |
+| 18    | 3    | RISA-927  | opus  | agent working                                                   |                                |
 
 **Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
 
