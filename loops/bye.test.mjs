@@ -135,13 +135,15 @@ describe("the verdict", () => {
   });
 });
 
-// The stub claude: records itself (when STUB_NAME is set) and its pid, takes a
+// The stub claude: records itself (when STUB_NAME is set; with its dir, as
+// session.sh records one, so `prd end` counts only the claude-stubs in this test's
+// repo, never another test file's session under the same name) and its pid, takes a
 // lease as itself (STUB_LEASE) and starts a background job (STUB_JOB), then runs
 // bye in STUB_CWD in the background and waits for it, so a TERM lands at once.
 const STUB = `#!/usr/bin/env bash
 mkdir -p "$STUB_STATE"
 echo "$$" > "$STUB_STATE/pid"
-[[ -z \${STUB_NAME:-} ]] || node "$SESSIONS_MJS" set "$STUB_NAME" pid=$$ kind="$STUB_KIND" topic="\${STUB_TOPIC:-}" started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+[[ -z \${STUB_NAME:-} ]] || node "$SESSIONS_MJS" set "$STUB_NAME" pid=$$ kind="$STUB_KIND" topic="\${STUB_TOPIC:-}" started="$(date -u +%Y-%m-%dT%H:%M:%SZ)" dir="$STUB_CWD"
 if [[ -n \${STUB_LEASE:-} ]]; then
   mkdir -p "$RISA_LEASE_ROOT/check/1"
   printf 'kind=check\\nworktree=%s\\ncheck=stub\\npid=%s\\ncmd=claude-stub\\nstarted=1\\n' "$STUB_LEASE" "$$" > "$RISA_LEASE_ROOT/check/1/name"
@@ -250,7 +252,7 @@ describe("pnpm prd bye", () => {
       topic: "w",
     });
     const r = await bye({ STUB_NAME: "prd-w", STUB_KIND: "prd", STUB_TOPIC: "w", STUB_LEASE: "w" });
-    expect(r.ended).toBe(true);
+    expect(r.ended, r.out).toBe(true);
     expect(r.code).toBeNull();
     expect(r.out).toContain("Notices for w to read first (none blocks):");
     expect(r.out).toContain("bye: prd-w (prd) is clean: nothing open; released 1 lease.");
@@ -334,7 +336,7 @@ describe("pnpm prd bye", () => {
     rmSync(state, { recursive: true, force: true });
     const again = await bye({ ...session, STUB_CWD: main });
     expect(again.out).toContain("bye: prd-w (prd) is clean: nothing open; released 1 lease.");
-    expect(again.ended).toBe(true);
+    expect(again.ended, again.out).toBe(true);
     expect(existsSync(join(leaseRoot, "check/2"))).toBe(false);
   });
 
