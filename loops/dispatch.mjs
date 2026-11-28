@@ -63,8 +63,9 @@
 // (usage.mjs, .loops/.usage/): draining (RISA_USAGE_DRAIN, 85%) holds starts,
 // plans, reopens and the keep-alive (--resume doesn't override it); limited
 // (RISA_USAGE_STOP, 98%, overage, or a session stopped on a limit) also ends
-// each managed session not running a landing (marked stalled; KILL a tick later if
-// it ignored TERM), files one report naming the live hand-opened ones, and opens no
+// each managed prd or plan session not running a landing (marked stalled; KILL a tick
+// later if it ignored TERM), files one report naming the live hand-opened, backlog and
+// inbox ones (never ended), and opens no
 // claude at all: no helper, session request, context or stuck follow-up. An
 // unknown reading never drains; with a session live past RISA_USAGE_STALE_MIN,
 // it files one report per incident. RISA_USAGE_WATCH=off turns it off.
@@ -1205,9 +1206,10 @@ function drainOf(
 }
 
 /**
- * The drain's actions: one report for an unknown reading, and each managed session whose
+ * The drain's actions: one report for an unknown reading, and each managed prd or plan session whose
  * own account is limited (sessionDrains: its reading's account) ended (marked stalled first)
- * unless it runs a landing, and one report naming the hand-opened ones. Returns whether it
+ * unless it runs a landing, and one report naming the hand-opened, backlog and inbox ones
+ * (never ended). Returns whether it
  * did anything.
  */
 function drainStep(
@@ -1264,6 +1266,7 @@ function drainStep(
       pid: r.record.pid ?? 0,
       live: r.live,
       managed: r.record.managed === true,
+      kind: r.record.kind,
     }));
     if (!table && sessions.some((s) => s.live && s.managed))
       // A landing can't be told apart: none is ever stopped, so nothing is ended.
@@ -1293,7 +1296,9 @@ function drainStep(
         if (a.type === "report") {
           if (report(a.text)) {
             reported = [...reported, ...a.sessions];
-            out(`usage limited: reported ${a.sessions.join(", ")} (opened by hand, never ended)`);
+            out(
+              `usage limited: reported ${a.sessions.join(", ")} (opened by hand, or backlog or inbox: never ended)`,
+            );
           }
           continue;
         }
