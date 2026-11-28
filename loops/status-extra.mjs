@@ -116,7 +116,8 @@ export function dispatcherPart(
     ? `running (pid ${pid})${code}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
     : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
   const last = lastEntry(files.log);
-  const tickAt = st.stuck?.lastTickAt;
+  // The tick's own heartbeat; a state an older release wrote has only the stuck watch's.
+  const tickAt = typeof st.lastTickAt === "number" ? st.lastTickAt : st.stuck?.lastTickAt;
   const tick =
     typeof tickAt === "number" && Number.isFinite(tickAt)
       ? `last tick ${span(now - tickAt)} ago (${new Date(tickAt).toISOString().replace(/\.\d+Z$/, "Z")})`
