@@ -19,7 +19,7 @@
 **For the next session:**
 
 - **Ready (triaged, fixes-tooling):** RISA-1018 (check-run.test.mjs "waits while busy, starts when the load drops" flakes on CI: the load-drop line read "-"). Check `risa backlog list` for more.
-- **Follow-ups noted on RISA-1015** (worth their own items): `loops/anchors.mjs` ignores `planBudget`'s new `errors` (prd anchors doesn't show a bad Model); in this repo the Check file runs twice in the slice check (unit step via commands.testFile, then the narrowed tooling step).
+- **Follow-ups of RISA-1015 filed** (triaged, for wave 8): RISA-1020 (anchors ignores planBudget's errors), RISA-1021 (the Check file runs twice in this repo's slice check).
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
