@@ -28,12 +28,12 @@
 
 Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/is-main.test.mjs
 
-**Build (RISA-1048):** `pnpm test:tooling` from a project's `node_modules` runs no tests and exits 0: `loops/tooling-tests.mjs`'s main guard is `import.meta.url === \`file://${process.argv[1]}\``, and under pnpm `argv[1]`is the symlink while`import.meta.url`is the real`.pnpm`path. Add a shared helper in a new`loops/is-main.mjs` (`isMain(import.meta.url)`: the realpaths of `argv[1]`and of the module's file are equal; false when`argv[1]`is missing or doesn't exist, as`loops/session-names.mjs`'s own `isMain`does) and use it in the nine entry points with that`file://`guard:`loops/tooling-tests.mjs`, `check-budget.mjs`, `check-plan.mjs`, `check-tooling.mjs`(touch only its guard: slice 3 edits the rest),`check-times.mjs`, `dev-brought.mjs`, `metrics.mjs`, `run-log.mjs`and`token-price.mjs`. Leave the modules that already compare realpaths (several are hot for risa-next-4) and those guarded with `pathToFileURL(process.argv[1])`; say in the hand-off whether the `pathToFileURL` ones also fail through a symlink, so it can be filed.
+**Build (RISA-1048):** `pnpm test:tooling` from a project's `node_modules` runs no tests and exits 0: the main guard of `loops/tooling-tests.mjs` compares `import.meta.url` with "file://" plus `process.argv[1]`, and under pnpm that argument is the symlink while `import.meta.url` is the real `.pnpm` path. Add a shared helper in a new `loops/is-main.mjs` (say `isMain(import.meta.url)`: true when the realpaths of the script argument and of the module's file are equal; false when the argument is missing or doesn't exist, as the `isMain` inside `loops/session-names.mjs` does) and use it in the nine entry points with that "file://" guard: `loops/tooling-tests.mjs`, `loops/check-budget.mjs`, `loops/check-plan.mjs`, `loops/check-tooling.mjs` (touch only its guard: slice 3 edits the rest), `loops/check-times.mjs`, `loops/dev-brought.mjs`, `loops/metrics.mjs`, `loops/run-log.mjs` and `loops/token-price.mjs`. Leave the modules that already compare realpaths (several are hot for risa-next-4) and those guarded with `pathToFileURL`; say in the hand-off whether the `pathToFileURL` ones also fail through a symlink, so it can be filed.
 
 **Acceptance criteria:**
 
 - Unit tests (`loops/is-main.test.mjs` (new)): `isMain` is true for the real path and for a symlink to the module, false for another script and for no `argv[1]`; one of the nine entry points, run with `node` through a symlink in a temp dir, does its work (prints its usage or output) and no longer exits 0 silently.
-- No `file://${process.argv[1]}` guard left in `loops/` (`grep`).
+- No guard built from "file://" and the script argument left in `loops/` (`grep`).
 
 ## Slice 2: The dispatch-restart test stops every dispatcher it starts
 
