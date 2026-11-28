@@ -23,6 +23,8 @@
 | 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
 | 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
 | 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | merged | 9b490d4                    |
+| 15    | 5    | RISA-1082       | opus   | merged | c8dac71                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
@@ -32,7 +34,7 @@
 
 **Wave 4** (slices 12–13, RISA-1064/1065): landed 2026-11-28 in main as acb0975 (PR #33, tier none, Codex clean); to-test file `to-test/2026-11-28-1123-fixes-bug.md`.
 
-**Wave 5** (slices 14–15, both opus), 2026-11-28, fresh session: ingest had nothing new. Ten items wait; only risa-next-2 runs (hot: backlog/, loops/config, loops/docs/project-config.md, loops/docs/inbox.md, loops/prompts/inbox.sh, loops/prd.sh, loops/dispatch, loops/home). Clear of those: RISA-1070 (loops/new.sh; the `plan` case in loops/prd.sh stays untouched) and RISA-1082 (loops/rotate*, loops/open-session*). Waiting on risa-next-2's hot files: RISA-1050, 1083, 1084 (loops/dispatch), RISA-1077 (loops/prompts/inbox.sh), RISA-1078, 1079, 1080 (loops/home), RISA-1081 (backlog/). Hot set: loops/new, loops/rotate, loops/open-session.
+**Wave 5** (slices 14–15, both opus), 2026-11-28, fresh session: ingest had nothing new. Ten items wait; only risa-next-2 runs (hot: backlog/, loops/config, loops/docs/project-config.md, loops/docs/inbox.md, loops/prompts/inbox.sh, loops/prd.sh, loops/dispatch, loops/home). Clear of those: RISA-1070 (loops/new.sh; the `plan` case in loops/prd.sh stays untouched) and RISA-1082 (loops/rotate*, loops/open-session*). Waiting on risa-next-2's hot files: RISA-1050, 1083, 1084 (loops/dispatch), RISA-1077 (loops/prompts/inbox.sh), RISA-1078, 1079, 1080 (loops/home), RISA-1081 (backlog/). Hot set: loops/new, loops/rotate, loops/open-session. Items claimed; slices 14–15 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 14 handed off (222dfdf: new.sh refuses a topic not starting with a letter or digit, before the kind case; bin/risa has no per-command `--help` hook, so that and unknown-flag refusal are a new follow-up item needing loops/prd.sh) and merged (9b490d4). Slice 15 handed off (f4dcee3: `rotate --self` waits `RISA_ROTATE_START_WAIT`, default 30 s, for the record marked rotating or replaced, else exits 1 with rotate-into's reason from `<sessions dir>/<name>.refused`; plain `rotate <topic>` unchanged) and merged (c8dac71). `risa tier`: none, so the gate is `risa check` on c8dac71's tip. risa-next-2's orchestrator asked to say when its hot files land in main.
 
 **For the next session:** first run `risa backlog prd list`; start the eight waiting items once risa-next-2 frees their files. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). When a tagged release carries RISA-1065 (acb0975) or RISA-1070, tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 

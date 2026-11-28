@@ -9,8 +9,11 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 | Id | Type | Status | PRD | Owner | Title |
 | -- | ---- | ------ | --- | ----- | ----- |
 | RISA-241 | bug | live | fixes-bug | prd/fixes-bug | codex-review: PR_QUERY reads only the first 100 review threads (and 50 comments each), so a PR with more could read as clean |
+| RISA-560 | feature | live | self-recovery-2 | prd/self-recovery-2 | A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost |
 | RISA-720 | chore | dropped | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
+| RISA-789 | change | live | self-recovery-2 | prd/self-recovery-2 | A landing journal (even one whose pid is dead) holds a session's resume after a usage limit with only a waits line each tick; file one report so the user runs pnpm prd land --resume |
 | RISA-799 | change | live | risa-next | prd/risa-next | Include captain name and backlog agent name so other agents can find it. |
+| RISA-811 | change | live | self-recovery-2 | prd/self-recovery-2 | Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits |
 | RISA-815 | change | live | risa-next | prd/risa-next | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
 | RISA-816 | question | live | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
 | RISA-914 | plan | live | risa-next | prd/risa-next | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
@@ -40,6 +43,28 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 | RISA-996 | chore | dropped | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
 | RISA-1001 | bug | live | fixes-bug | prd/fixes-bug | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
 | RISA-1008 | question | live | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
+| RISA-1019 | chore | live | fixes-nit | prd/fixes-nit | session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead |
+| RISA-1023 | bug | live | fixes-bug | prd/fixes-bug | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
+| RISA-1024 | bug | live | fixes-bug | prd/fixes-bug | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
+| RISA-1025 | change | live | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically |
+| RISA-1027 | bug | live | self-recovery-2 | prd/self-recovery-2 | risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key |
+| RISA-1028 | bug | live | self-recovery-2 | prd/self-recovery-2 | cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens |
+| RISA-1029 | bug | live | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs finishStep prefilters candidates with landedTopics/landedWithCode on the configured trunk, ignoring env.TRUNK (gatherFinish and tidy honor it): a topic landed only into an overridden trunk is never auto-finished |
+| RISA-1030 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The dispatcher can die silently and nothing notices: Caretook's (v0.1.8, pid 22040) was gone hours after a normal tick with no error in .loops/.dispatch.log and .dispatch.json still naming its pid. Log why it exits, have risa status flag a dead dispatcher pid, and keep it alive (launchd or a watchdog that restarts it and files a report) |
+| RISA-1033 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification |
+| RISA-1034 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on |
+| RISA-1035 | change | dropped | fixes-bug |  | Backlog and orchestrator prompts: keep queues moving the best way you know; contact the user about flow actions only when the action risks major work, data, or another critical problem |
+| RISA-1037 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The dispatcher logs why it exits: every exit path (signal, uncaught error, lost lock, clean stop) writes one line to .loops/.dispatch.log and marks .dispatch.json stopped, so a dead pid with no stop mark reads as a crash |
+| RISA-1038 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The inbox session finds the wrong project: run from its own directory (~/.risa/inbox, outside any repo), session.sh's find_repo falls back to the release worktree's repo (Risa's checkout), not the project prd.sh inbox ran for, so it misses that project's claudeConfigDir (starts on Claude Code's default account) and writes its session record under Risa's .loops/.sessions (the project's risa status shows it ended while it's live) |
+| RISA-1039 | change | live | fixes-bug | prd/fixes-bug | Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
+| RISA-1041 | change | live | fixes-nit | prd/fixes-nit | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
+| RISA-1042 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began |
+| RISA-1049 | change | live | fixes-bug | prd/fixes-bug | A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names |
+| RISA-1051 | bug | live | fixes-nit | prd/fixes-nit | The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one |
+| RISA-1061 | bug | live | fixes-bug | prd/fixes-bug | context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo |
+| RISA-1063 | bug | live | fixes-bug | prd/fixes-bug | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
+| RISA-1064 | bug | live | fixes-bug | prd/fixes-bug | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
+| RISA-1065 | bug | live | fixes-bug | prd/fixes-bug | The time gate judges the local measure on its start load only (the quiet rule) |
 
 ## Items
 
@@ -58,6 +83,16 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-27 (the Risa move, B-543): Was B-241 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): Moved from staging-ship to fixes-bug 2026-11-28 on the user's word: a Risa bug that doesn't need dev or staging; staging-ship stays held to be rethought.
 
+### RISA-560 · feature · A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: 3c6214c
+
+- 2026-11-22 (plan/self-recovery): Split from B-433 by the self-recovery planner. Needs a SubagentStop hook for per-slice totals, no double counting across --continue, and reconciling at rm because a session end can be missed. Unattended runs never spend extra usage, so tokens remain the measure.
+- 2026-11-27 (the Risa move, B-543): Was B-560 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
 ### RISA-720 · chore · Confirm dev syncs that share no files with a branch no longer trigger a second CI run
 
 - status: dropped
@@ -71,6 +106,16 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-27 (the Risa move, B-543): Was B-720 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: dropped. A check on Caretook's CI; its causes are filed separately, and Risa has no dev branch.
 
+### RISA-789 · change · A landing journal (even one whose pid is dead) holds a session's resume after a usage limit with only a waits line each tick; file one report so the user runs pnpm prd land --resume
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: 115919f
+
+- 2026-11-24 (prd/self-recovery): From self-recovery slice 6 hand-off (resume.mjs waits on any landing journal for the branch).
+- 2026-11-27 (the Risa move, B-543): Was B-789 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
 ### RISA-799 · change · Include captain name and backlog agent name so other agents can find it.
 
 - status: live
@@ -81,6 +126,17 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-24 (prd/fixes-ui): From the inbox: The backlog agents are named after Star Trek captains for the user, but not their internal names, so other agents can't find them by captain name.
 - 2026-11-25 (Robert Bo Davis): Triage: name sessions so other agents can find the backlog session; fits the split's session tooling
 - 2026-11-27 (the Risa move, B-543): Was B-799 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+
+### RISA-811 · change · Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: 3c6214c
+
+- 2026-11-25 (Robert Bo Davis): From the planner-3 incident 2026-11-25 (B-431). Detect it in tidy or the watchdog and, unattended: land or fold the docs-only tail, rm the worktree, set done, end its sessions, report. Planner-3's sessions said 'removing worktree and ending' several times without doing it; find out why from their transcripts.
+- 2026-11-25 (Robert Bo Davis): Causes so far: B-431 (a post-landing docs commit stops rm from setting done), the new rm-deletes-own-cwd bug, B-810 (end kills a stale pid). Cleanup should also spot several sessions of one topic (planner-3-35, -88 and others were live at once).
+- 2026-11-27 (the Risa move, B-543): Was B-811 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 
 ### RISA-815 · change · Orchestrator summary for backlog handoff should include the ability to pass on directives from the…
 
@@ -366,3 +422,216 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - commit: 082af3a
 
 - 2026-11-27 (Robert Bo Davis): User 2026-11-28: the risa-next planner weighs it with RISA-1007 (multi-machine) and RISA-841 (one inbox, private repo) and recommends one. For: one store every machine reaches, no cross-machine lock. Against: an API call per read (dispatch reads every tick; rate limits, offline), items no longer land in the work's commit, the tests need a fake GitHub.
+
+### RISA-1019 · chore · session-names.mjs personaOf repeats flavor.mjs sessionPersona's backlog rule (one word of letters, not 'backlog', the pool's rank); call sessionPersona instead
+
+- status: live
+- prd: fixes-nit
+- owner: prd/fixes-nit
+- commit: c503711
+
+- 2026-11-28 (prd/risa-next): Found merging risa-next slices 2 and 3 (both wrote the rule in parallel); no behaviour difference today
+
+### RISA-1023 · bug · Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: cf93d26
+
+- 2026-11-28 (Robert Bo Davis): Seen 2026-11-28 by Caretook's fixes-bug orchestrator on v0.1.8 (pin f5ce80a58), reported by Caretook's backlog session; it trimmed its Status by hand. Same family as RISA-980 (paths resolved against the release). fixes-bug: wrong behaviour in a released install; also breaks AGENTS.md's no-runtime-dependencies rule.
+
+### RISA-1024 · bug · A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: cf93d26
+
+- 2026-11-28 (prd/risa-next): Codex P2 on PR #16 (loops/prompts/backlog.sh:15, thread PRRT_kwDOV9ctaM69B8DS): directives=1 for a legacy heading, but the standing line names only _From the user_. Only the first rotation after risa-next wave 3 lands can carry a legacy brief.
+
+### RISA-1025 · change · dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: fe26f6c
+
+- 2026-11-28 (prd/self-recovery-2): From self-recovery-2 slice 3 (1f9606b): the plan barred editing loops/dispatch.test.mjs while after-split owned it. A missing finish.mjs silently skips the finish step; dispatch-context and dispatch-restart tests skip it too.
+- 2026-11-28 (Robert Bo Davis): Moved from fixes-tooling to self-recovery-2 2026-11-28: the same dispatch.mjs and finish.mjs lines as RISA-1027 and RISA-1029, already triaged there; one topic makes the one change.
+
+### RISA-1027 · bug · risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: fe26f6c
+
+- 2026-11-28 (prd/self-recovery-2): Codex P2 on PR #20 (loops/finish.mjs:467). The dispatcher's finishStep (slice 3) keeps finish.reported; the CLI should read and write the same keys.
+
+### RISA-1028 · bug · cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: fe26f6c
+
+- 2026-11-28 (prd/self-recovery-2): Codex P2 on PR #20 (loops/cost.mjs:292), reproduced by Codex. A planning folder should require a plan/<topic> branch (or none), not any non-slice branch.
+
+### RISA-1029 · bug · dispatch.mjs finishStep prefilters candidates with landedTopics/landedWithCode on the configured trunk, ignoring env.TRUNK (gatherFinish and tidy honor it): a topic landed only into an overridden trunk is never auto-finished
+
+- status: live
+- prd: self-recovery-2
+- owner: prd/self-recovery-2
+- commit: fe26f6c
+
+- 2026-11-28 (prd/self-recovery-2): Codex on PR #21 (loops/dispatch.mjs:1709): pass env.TRUNK || kinds.trunk to both landing checks, as collectTidyFacts does
+
+### RISA-1030 · bug · The dispatcher can die silently and nothing notices: Caretook's (v0.1.8, pid 22040) was gone hours after a normal tick with no error in .loops/.dispatch.log and .dispatch.json still naming its pid. Log why it exits, have risa status flag a dead dispatcher pid, and keep it alive (launchd or a watchdog that restarts it and files a report)
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 1f81567
+
+- 2026-11-28 (Robert Bo Davis): Seen 2026-11-28 by Caretook's backlog session: started by risa dispatch --restart at 03:36Z, last tick 09:13:53Z, gone by 11:34Z; restarted by hand. self-recovery-3: the machinery keeping its own long-running work alive (beside RISA-913), more than a small fix.
+- 2026-11-28 (Robert Bo Davis): Moved to fixes-bug-urgent 2026-11-28 on the user's word: log why the dispatcher exits and have risa status flag a dead pid now; the keep-alive (launchd or a watchdog) may stay for self-recovery-3 if it grows past a fix.
+- 2026-11-28 (Robert Bo Davis): More from Caretook's backlog session 2026-11-28: in the same minutes (09:13-09:18Z) both running orchestrators stalled too. prd-fixes-bug got its CI task notification at 09:18:23Z and never took another turn (3h40m idle, processes alive). prd-sync-safety-3 ended its turn at 09:38Z waiting on a browser check that printed nothing, with no Playwright left running. Likely one machine or network event. With the dispatcher dead, worker-watch's 30-minute quiet-orchestrator check never ran, so nobody noticed for ~3h.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: no Sleep/Wake/DarkWake in pmset -g log 08:00-12:59Z (a MaintenanceWake assertion at 09:02Z; Claude.app's NoIdleSleepAssertion held throughout), so not sleep. System log (OOM, network) not checked yet.
+
+### RISA-1033 · bug · A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 1f81567
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog session 2026-11-28, beside RISA-1030 (same event). fixes-bug-urgent: lanes stall unseen overnight.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: prd-fixes-bug was alive and took a turn at 11:59:35Z right after a SendMessage nudge, so its 09:18Z task notification simply never triggered a turn. Separate from the dispatcher dying (RISA-1030).
+
+### RISA-1034 · bug · An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 1f81567
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog session 2026-11-28, beside RISA-1030. Overlaps RISA-913's machinery-owned jobs (self-recovery-3) for the long-term shape; this is the small guard now.
+- 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: prd-sync-safety-3 was alive and took a turn at 11:59:35Z right after a nudge; its background wait on the browser check had ended with nothing to wake it. Separate from RISA-1030.
+
+### RISA-1035 · change · Backlog and orchestrator prompts: keep queues moving the best way you know; contact the user about flow actions only when the action risks major work, data, or another critical problem
+
+- status: dropped
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-tooling): From the user, 2026-11-28 (in the fixes-tooling session): 'a general rule: keep queues moving the best way you know how. Only contact me about actions that keep work moving if you see any real risk of major work, any data, or any other critical problems arising from your recommended action. This should probably be part of backlog prompts'
+- 2026-11-28 (prd/fixes-tooling): The user added: '(or a new "queue-tender" agent)': the rule could live in the backlog prompts, or in a new queue-tender role whose job is keeping the lanes moving.
+- 2026-11-28 (Robert Bo Davis): Triaged 2026-11-28 into fixes-bug (normal urgency): a wording rule in loops/prompts/backlog.sh, orchestrator.sh and their docs, one slice. The 'queue-tender' role the user floated is a bigger design; asks-relay (the backlog session as go-between for every agent) is the natural place for its planner to weigh it.
+- 2026-11-28 (Robert Bo Davis): Dropped 2026-11-28: the user sent this rule to the fixes-tooling session by mistake and asked for it undone; the rule was meant for the backlog session, which now follows it.
+
+### RISA-1037 · bug · The dispatcher logs why it exits: every exit path (signal, uncaught error, lost lock, clean stop) writes one line to .loops/.dispatch.log and marks .dispatch.json stopped, so a dead pid with no stop mark reads as a crash
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 7db3bce
+
+- 2026-11-28 (prd/fixes-bug-urgent): Split from RISA-1030 2026-11-28 by the fixes-bug-urgent orchestrator: needs loops/dispatch.mjs, a running self-recovery-2 hot file, so it waits for a later wave; RISA-1030 keeps the risa status flag (loops/status-extra.mjs) now. The keep-alive stays with self-recovery-3.
+
+### RISA-1038 · bug · The inbox session finds the wrong project: run from its own directory (~/.risa/inbox, outside any repo), session.sh's find_repo falls back to the release worktree's repo (Risa's checkout), not the project prd.sh inbox ran for, so it misses that project's claudeConfigDir (starts on Claude Code's default account) and writes its session record under Risa's .loops/.sessions (the project's risa status shows it ended while it's live)
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 3fa8ed4
+
+- 2026-11-28 (Robert Bo Davis): Seen 2026-11-28 12:53Z on Caretook's machine under v0.2.0 (from Caretook's backlog session): keep-alive opened 'inbox (caretook)', pid 45166, with no CLAUDE_CONFIG_DIR; machine.json gives caretook.com claudeConfigDir=/Users/bo/.claude-work (a plain string) and its prd/recover sessions carry it. Cause read from the code, not yet reproduced: session.sh sources lib.sh, find_repo from $PWD=~/.risa/inbox gets no machine entry, so main comes from git -C $loops_lib_dir, the release worktree, i.e. ~/git/risa; host.mjs claude-session then reads Risa's entry (no claudeConfigDir) and leaves the env as it is. Likely fix: prd.sh inbox passes the project's main (RISA_MAIN) through, and session.sh prefers it when $PWD is outside a repo. The session record path likely makes the keep-alive reopen a live inbox. fixes-bug-urgent: it spends on the wrong account on every inbox open.
+
+### RISA-1039 · change · Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow'
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 9f14e04
+
+- 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): the Starfleet name goes before the role. loops/session-names.mjs displayName builds the order; its already-qualified check (the ' (<project>) · ' match) and any reader that parses the name (ask.mjs labels, rotate, sessions, tab titles) must take the new order and still read names set the old way. Same file as RISA-1019; fixes-bug since every session shows it.
+- 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'use abbreviations for ranks in agent names to the fix for swapping role/agent info.' Each rank's short form comes from the flavor pack beside its rank (e.g. Starfleet ADM, CAPT, CMDR, LCDR, LT, ENS), so another color setting brings its own. Only the agent's name is shortened: the persona line and replies keep the full rank. Reading an old name back must still work.
+
+### RISA-1041 · change · Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work
+
+- status: live
+- prd: fixes-nit
+- owner: prd/fixes-nit
+- commit: fdfb876
+
+- 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'When captains are just talking about what they are doing, they should be writing to their captains log so the fleet admiral can review later. Only address fleet admiral when interacting directly with me.' The line is built in loops/flavor.mjs (~182); flavor.test.mjs checks its text.
+- 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'That needs to be configurable when switching color settings.' So the log's name and when to use the title come from the flavor pack, beside pack.address (e.g. a pack.log field: captain's log for the Starfleet pack, its own wording or none for other flavors), never hard-coded in flavorLine; the default flavor and any pack without the field keep a plain report voice.
+
+### RISA-1042 · bug · risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began
+
+- status: live
+- prd: fixes-bug-urgent
+- owner: prd/fixes-bug-urgent
+- commit: 42321be
+
+- 2026-11-28 (prd/fixes-bug-urgent): Codex finding on PR #25 (loops/lease.sh lease_wait/lease_results, RISA-1034's slice 2), verified 2026-11-28: browser.sh holds one lease for the whole suite and logs each check separately. Check waits are unaffected (one line per run, at its end). Not a regression: before RISA-1034 wait printed no result at all.
+
+### RISA-1049 · change · A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: c0751bb
+
+- 2026-11-28 (Robert Bo Davis): Asked by Caretook's backlog session 2026-11-28: additions print after the generic doc, so they can only continue its last section; v0.2.0 dropped backlog.md's closing 'Standing priorities:' lead-in, and v0.1.7 moved machinery's Worktrees section (Caretook B-996/B-997): two breaks in two days. loops/doc.mjs builds the doc.
+- 2026-11-28 (Robert Bo Davis): When this ships, tell Caretook's backlog session which version or commit has it (asked 2026-11-28; Caretook pins v0.2.0 since dev 956c63a7c).
+
+### RISA-1051 · bug · The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one
+
+- status: live
+- prd: fixes-nit
+- owner: prd/fixes-nit
+- commit: 941a01a
+
+- 2026-11-28 (prd/fixes-bug-urgent): Found by fixes-bug-urgent at wave 2's docs fold (2026-11-28): the fold went into prd.sh's help instead.
+- 2026-11-28 (Robert Bo Davis): Same gap in the orchestrator doc: 'risa doc orchestrator "Rules across PRDs"' prints 'no section', though the planner prompt and the skeptic brief point at it (seen by both self-recovery-3 skeptics, 2026-11-28).
+
+### RISA-1061 · bug · context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: fcb1dd3
+
+- 2026-11-28 (prd/fixes-nit): Found by fixes-nit slice 1 (2026-11-28); expectations in loops/context.test.mjs (~315, 330, 363, 539)
+
+### RISA-1063 · bug · Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains)
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 6e331aa
+
+- 2026-11-28 (Robert Bo Davis): From Caretook's backlog, quoting the user: 'name overlap is not good'. Seen 2026-11-28: backlog (risa) and backlog (caretook) both Admiral Cartwright; two Captain Saru too (prd-fixes-bug risa, prd-account-security caretook).
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-bug (wrong behaviour). Touches loops/captain.mjs and the live-session list (loops/session-names.mjs or the sessions record); check risa-next-2's hot files before a wave picks it.
+
+### RISA-1064 · bug · A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 47c911a
+
+- 2026-11-28 (prd/fixes-bug): Codex P2 on PR #30 (loops/captain.mjs:176, thread PRRT_kwDOV9ctaM69FeM-), follow-up of RISA-1063 slice 11
+
+### RISA-1065 · bug · The time gate judges the local measure on its start load only (the quiet rule)
+
+- status: live
+- prd: fixes-bug
+- owner: prd/fixes-bug
+- commit: 47c911a
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: From Caretook (prd-test-time-gates-2, with Caretook's backlog agreeing; the Caretook user's answer a255): a local check's end load counts the check's own work, so it shouldn't make a run unjudged. loops/time-gate.mjs:77 sets quiet = calm(start) && calm(end), so every Caretook quick check comes out unjudged and its quick gate can't be armed. Wanted: the local measure is judged when the start load is quiet; the end load stays in the input and the lines but no longer decides unjudged; CI measures unchanged. time-gate.test.mjs: quiet start + busy end is judged (ok/warn/fail); busy start is unjudged; lines still name both loads. Notify backlog (caretook) when it ships in a tagged release.
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-bug: wrong verdict (local runs unjudged). Caretook waits on it in a tagged release; notify backlog (caretook) and prd-test-time-gates-2 when tagged.
