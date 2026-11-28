@@ -13,8 +13,10 @@
 //       dirty or untracked.
 //   node setup.mjs init --name <slug> [--trunk <branch>] [--check <command>]
 //       Writes .risa/config.json (Risa's defaults for the rest: paths under plans/, the
-//       id prefix from the name, no-op commands), the backlog (its PRDs table, empty),
-//       the inbox and the archive. Prints the machine config line and the commit. Exit 2
+//       id prefix from the name, no-op commands, a check hook running --check), the
+//       folder's tier data and check plan rules (one tier, `check`, that every file asks
+//       for), the backlog (its PRDs table, empty), the inbox and the archive. Prints the
+//       machine config line and the commit. Exit 2
 //       with one line, writing nothing: outside a repo, a config in either form there,
 //       a file it would write already there, a value the loader refuses.
 //
@@ -41,6 +43,12 @@ class Refusal extends Error {}
 
 /** @param {Record<string, any>} raw */
 const json = (raw) => `${JSON.stringify(raw, null, 2)}\n`;
+
+/** TEXT as one sh word, single-quoted. @param {string} text */
+const shQuote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
+
+/** A RULE_FILES file's path in the folder, by its key. @param {string} key */
+const ruleFile = (key) => `${CONFIG_DIR}/${RULE_FILES.find(([k]) => k === key)?.[1]}`;
 
 /**
  * What migrate does to a risa.json repo: the moves (from → to, from the root) and the
@@ -69,8 +77,10 @@ export function migratePlan({ root, raw, exists = (rel) => existsSync(join(root,
 }
 
 /**
- * The files init writes (path from the root → text): the folder's config and the backlog,
- * inbox and archive under plans/.
+ * The files init writes (path from the root → text): the folder's config, its tier data
+ * and check plan rules (by RULE_FILES' names, so the loader finds them), and the backlog,
+ * inbox and archive under plans/. The check hook runs CHECK through sh, which drops the
+ * mode, base and test files check-hook.sh appends.
  * @param {{ name: string, trunk?: string, check?: string }} opts
  * @returns {Record<string, string>}
  */
@@ -101,6 +111,23 @@ export function initFiles({ name, trunk = "main", check = "true" }) {
       datastoreReset: "true",
       datastoreSeed: "true",
     },
+    hooks: { check: `sh -c ${shQuote(check)} check` },
+  };
+  // One tier, `check`: CI's one job runs the project's check, on `ci/<tier>/<branch>` refs.
+  const tiers = {
+    tiers: ["check"],
+    jobs: { check: ["check"] },
+    fileGroups: [{ group: "check", pattern: "*", tier: "check" }],
+    narrowedTiers: ["check"],
+    browserCheck: "browser-checks/*.spec.js",
+    narrowedFile: ".risa-narrowed.json",
+    forcedFlakeFile: ".risa-force-flake.json",
+    refPrefix: "ci/",
+  };
+  // Every file no rule covers asks for the suite's tier: here, the one tier.
+  const checkPlan = {
+    ownTests: "\\.(integration|component)\\.test\\.[^/]+$",
+    suite: { tier: "check", rules: [] },
   };
   const summary = [
     "## Summary",
@@ -147,6 +174,8 @@ export function initFiles({ name, trunk = "main", check = "true" }) {
   ];
   return {
     [FOLDER_CONFIG]: json(config),
+    [ruleFile("tierData")]: json(tiers),
+    [ruleFile("checkPlanRules")]: json(checkPlan),
     [config.paths.backlog]: backlog.join("\n"),
     [config.paths.inbox]: inbox.join("\n"),
     [config.paths.archive]: archive.join("\n"),
