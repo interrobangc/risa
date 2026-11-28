@@ -6,7 +6,7 @@
 // with no section gets one at the end of the file. A bullet is found by its
 // words: the folded words are a part of its text (tag left out), and when
 // several bullets hold them, the one whose whole text they are wins.
-import { BacklogError, IDS, checkType, parseInbox, typeForHeading } from "./format.mjs";
+import { BacklogError, IDS, checkType, parseInbox, similarLine, typeForHeading } from "./format.mjs";
 
 /** The heading a new section gets, by type. */
 const HEADING_FOR = {
@@ -166,3 +166,18 @@ export function headingFor(text, type) {
   const s = sections(lines).find((x) => x.type === type);
   return s ? lines[s.heading].slice(3).trim() : HEADING_FOR[type];
 }
+
+/** A write stopped on look-alikes: nothing was written (exit 3). The backlog CLI and
+ * the store's commands (inbox-commands.mjs) both throw it. */
+export class LookAlikeStop extends Error {
+  /** @param {ReturnType<typeof import("./format.mjs").similarItems>} matches */
+  constructor(matches) {
+    super("look-alikes");
+    this.matches = matches;
+  }
+}
+
+/** A look-alike as a line: an item, or an unfiled inbox line. */
+export const lookAlikeLine = (
+  /** @type {ReturnType<typeof import("./format.mjs").similarItems>[number]} */ m,
+) => (m.id === "inbox" ? `unfiled inbox line  ${m.title}` : similarLine(m));

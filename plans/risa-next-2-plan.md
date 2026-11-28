@@ -8,16 +8,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1: Codex findings filed (RISA-1057–1060) and threads resolved; land needed `sync --force` (main's package.json): merged 0e2518c (project-config.md conflict, both kept, doc trimmed); `pnpm check` passed on 226294b. Next: push, Codex again, land (tier none), message prd-fixes-bug (risa), rotate.
+**Now:** wave 2 green: slice 2 merged 9a783a1, its fix (lazy store imports) 641b29b; `pnpm test` 2563/2563 on 641b29b; sync needed no merge; slice worktree removed. Next: PR + Codex review, land (tier none). Before: wave 1 landed in main through PR #28 (36eee3e).
 
-| Slice | Wave | State                                  | Merge into `prd/risa-next-2` |
-| ----- | ---- | -------------------------------------- | ---------------------------- |
-| 1     | 1    | merged (opus, check passed on 7e76dbe) | 72d3a64                      |
-| 2     | 2    | —                                      | —                            |
-| 3     | 3    | —                                      | —                            |
-| 5     | 3    | —                                      | —                            |
-| 4     | 4    | —                                      | —                            |
-| 6     | 4    | —                                      | —                            |
+| Slice | Wave | State         | Merge into `prd/risa-next-2` |
+| ----- | ---- | ------------- | ---------------------------- |
+| 1     | 1    | landed (opus) | 72d3a64                      |
+| 2     | 2    | merged (opus) | (this merge)                 |
+| 3     | 3    | —             | —                            |
+| 5     | 3    | —             | —                            |
+| 4     | 4    | —             | —                            |
+| 6     | 4    | —             | —                            |
 
 **Backlog:** RISA-1057–1060 (Codex on PR #28, `backlog/inbox-store.mjs`) taken into this PRD at fixes-bug's request: add them to slice 2's brief. Promised prd-fixes-bug (risa): a message when wave 1 lands in main, and when `backlog/` and `loops/dispatch` stop being hot. Claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
@@ -58,6 +58,8 @@ Stack: no · Reads: loops/docs/inbox.md · Tests: unit · Blocked by: 1 · Check
 **User stories:** US 2, 4, 6.
 
 **Build:** PRD _Implementation decisions_, _The inbox commands_. `backlog/backlog.mjs` `inboxAdd`, `inboxMove`, `inboxEdit`, `inboxRemove` and the `inbox` list: with `config.inbox` set, read and write through slice 1's store (no `pushInboxEdit`, no `pickup`), same arguments, exit codes and look-alikes, output `on <repo> <file> as <sha>`. `backlog/inbox-store.mjs` (new in slice 1) gains a CLI, `node <tool>/backlog/inbox-store.mjs <add|edit|move|remove|list> --project <name> …`, that runs from any folder with no project config (the inbox session's entry point; `risa backlog` needs a repo config), finding the store from the machine config's repos (their `inbox.repo`, all equal, else one line naming both) or an existing clone; look-alikes against the store's lines, and the backlog too when the project's main checkout is in the machine config.
+
+**Also fix (Codex on PR #28, `backlog/inbox-store.mjs`):** RISA-1057 (a clone name that can't collide: a short hash of the URL in it); RISA-1058 (the temp index at an absolute path, so a relative `RISA_INBOX_STORE` works); RISA-1059 (a remote confirmed empty clears the tracking ref: no stale read, no write on a gone commit); RISA-1060 (a first-use clone safe across processes: clone into a temp folder and rename into place, the loser using the winner's). Each with a case in `backlog/inbox-store.test.mjs`.
 
 **Acceptance criteria:**
 

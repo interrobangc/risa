@@ -3,17 +3,26 @@
 // module is the only code that knows the repo's clone and the only one that runs git
 // in it; every other file asks it. It never touches a project's checkout.
 //
-// The clone is bare, one per repo URL, under ~/.risa/inbox-store/ (RISA_INBOX_STORE
-// names another folder), made on first use. It reads and writes the remote's BRANCH
+// The clone is bare, one per repo URL (its folder's name carries a short hash of the
+// URL, so two URLs never share one), under ~/.risa/inbox-store/ (RISA_INBOX_STORE
+// names another folder, made absolute), made on first use: in a temporary folder
+// renamed into place, so two processes making it at once both end on one clone. It reads and writes the remote's BRANCH
 // through its remote-tracking ref: a read shows the file at that ref; a write builds
 // a commit on the ref's tip from a temporary index, changing only its file, and
 // pushes it without force. A refused push is fetched and rebuilt on the new tip,
-// TRIES times in all; then it fails and nothing was written.
+// TRIES times in all; then it fails and nothing was written. A remote with no
+// branch (emptied, or replaced by an empty repo) clears the ref: nothing to read,
+// and the next write starts the branch.
+//
+// Run directly, it is the store CLI (the inbox session's entry point; see CLI below).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { MACHINE_DIR } from "../loops/machine.mjs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync } from "node:fs";
+import { homedir, userInfo } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { CONFIG_NAME, inboxStore, loadConfig } from "../loops/config.mjs";
+import { MACHINE_DIR, MachineConfigError, loadMachineConfig } from "../loops/machine.mjs";
 
 /** Pushes tried before a write gives up. */
 export const TRIES = 5;
@@ -37,20 +46,24 @@ export class StoreError extends Error {
  * @param {Record<string, string | undefined>} [env]
  */
 export const storeRoot = (env = process.env) =>
-  env.RISA_INBOX_STORE || join(env.HOME || homedir(), MACHINE_DIR, "inbox-store");
+  resolve(env.RISA_INBOX_STORE || join(env.HOME || homedir(), MACHINE_DIR, "inbox-store"));
 
 /**
- * The clone's folder name for a repo URL: its host and path, one safe name
- * (git@github.com:me/ideas.git → github.com-me-ideas).
+ * The clone's folder name for a repo URL: its host and path, one safe name, then a
+ * short hash of the whole URL, so URLs the safe name folds together (a/b-c, a-b/c)
+ * never share a clone (git@github.com:me/ideas.git → github.com-me-ideas-<8 hex>).
  * @param {string} repo
  */
-export const cloneName = (repo) =>
-  repo
-    .replace(/^[a-z+]+:\/\//i, "")
-    .replace(/^[^@/]+@/, "")
-    .replace(/\.git\/?$/, "")
-    .replace(/[^\w.-]+/g, "-")
-    .replace(/^[-.]+|-+$/g, "") || "store";
+export const cloneName = (repo) => {
+  const readable =
+    repo
+      .replace(/^[a-z+]+:\/\//i, "")
+      .replace(/^[^@/]+@/, "")
+      .replace(/\.git\/?$/, "")
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/^[-.]+|-+$/g, "") || "store";
+  return `${readable}-${createHash("sha256").update(repo).digest("hex").slice(0, 8)}`;
+};
 
 /**
  * The store for a git URL.
@@ -80,25 +93,44 @@ export function storeFor(repo, { env = process.env } = {}) {
     }
   };
 
-  /** Makes the clone when there is none: a bare repo with the URL as its remote. */
+  /**
+   * Makes the clone when there is none: a bare repo with the URL as its remote, made
+   * in a temporary folder and renamed into place. A process that loses the race to
+   * rename (another made the clone first) drops its own and uses the winner's.
+   */
   const ensure = () => {
     if (existsSync(join(dir, "HEAD"))) return;
-    mkdirSync(dir, { recursive: true });
+    const tmp = `${dir}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      execFileSync("git", ["init", "-q", "--bare", dir], { stdio: "pipe" });
-      run(["remote", "add", REMOTE, repo]);
+      mkdirSync(tmp, { recursive: true });
+      execFileSync("git", ["init", "-q", "--bare", tmp], { stdio: "pipe" });
+      execFileSync("git", ["-C", tmp, "remote", "add", REMOTE, repo], { stdio: "pipe" });
     } catch (e) {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(tmp, { recursive: true, force: true });
       throw new StoreError(
         `couldn't make the inbox store's clone at ${dir}: ${e instanceof Error ? e.message : e}`,
       );
     }
+    try {
+      renameSync(tmp, dir);
+    } catch (e) {
+      rmSync(tmp, { recursive: true, force: true });
+      if (!existsSync(join(dir, "HEAD")))
+        throw new StoreError(
+          `couldn't make the inbox store's clone at ${dir}: ${e instanceof Error ? e.message : e}`,
+        );
+    }
   };
-  /** Fetches the branch; false when the remote can't be reached. An empty remote fetches fine. */
+  /**
+   * Fetches the branch; false when the remote can't be reached. A remote that answers
+   * with no branch (empty) is reachable, and clears the tracking ref: its old tip is gone.
+   */
   const fetch = () => {
     if (tryRun(["fetch", "--quiet", REMOTE, `+refs/heads/${BRANCH}:${TRACKING}`]) !== null) return true;
-    // An empty repo (no branch yet) is reachable: ls-remote answers.
-    return tryRun(["ls-remote", "--quiet", REMOTE]) === "";
+    const heads = tryRun(["ls-remote", "--quiet", REMOTE, `refs/heads/${BRANCH}`]);
+    if (heads !== "") return false;
+    tryRun(["update-ref", "-d", TRACKING]);
+    return true;
   };
   const tip = () => tryRun(["rev-parse", "--verify", "--quiet", TRACKING]) || null;
   /** The file at a commit, or null. */
@@ -182,4 +214,176 @@ export function storeFor(repo, { env = process.env } = {}) {
 /** A store file is a name at the store's root (risa.md), never a path. @param {string} file */
 function checkFile(file) {
   if (!/^[\w][\w.-]*$/.test(file)) throw new StoreError(`${file}: not a store file (a name like risa.md)`);
+}
+
+// ---- finding the store -----------------------------------------------------
+
+/**
+ * @typedef {{ name: string, file: string, repo: string, main: string, configPath: string,
+ *   config: Record<string, any> }} StoreProject a machine config repo with an `inbox` group
+ */
+
+/**
+ * The machine config's repos that have an `inbox` group (a repo whose config doesn't
+ * load is left out). None without a machine config.
+ * @param {{ env?: Record<string, string | undefined> }} [opts]
+ * @returns {StoreProject[]}
+ */
+export function storeProjects({ env = process.env } = {}) {
+  const machine = loadMachineConfig({ env });
+  /** @type {StoreProject[]} */
+  const out = [];
+  for (const r of machine?.repos ?? []) {
+    const configPath = join(r.path, CONFIG_NAME);
+    let config;
+    try {
+      config = loadConfig({ path: configPath, env }).config;
+    } catch {
+      continue;
+    }
+    const s = inboxStore(config);
+    if (s) out.push({ name: config.name, file: s.file, repo: s.repo, main: r.path, configPath, config });
+  }
+  return out;
+}
+
+/**
+ * The store this machine uses: the machine config's repos' `inbox.repo` (all the same;
+ * two differing refuse, naming both), else the one existing clone under storeRoot.
+ * Throws a StoreError when there is none, or more than one to choose from.
+ * @param {{ env?: Record<string, string | undefined> }} [opts]
+ * @returns {string} the store repo's URL
+ */
+export function findStoreRepo({ env = process.env } = {}) {
+  const projects = storeProjects({ env });
+  const repos = [...new Set(projects.map((p) => p.repo))];
+  if (repos.length > 1) {
+    const [a, b] = repos.map((repo) => projects.find((p) => p.repo === repo));
+    throw new StoreError(
+      `the machine config's repos name different inbox stores: ${a?.repo} (${a?.main}) and ${b?.repo} (${b?.main}); give them one inbox.repo`,
+    );
+  }
+  if (repos.length) return repos[0];
+  const root = storeRoot(env);
+  const clones = existsSync(root)
+    ? readdirSync(root).filter((n) => !n.includes(".tmp-") && existsSync(join(root, n, "HEAD")))
+    : [];
+  const urls = clones
+    .map((n) => {
+      try {
+        return execFileSync("git", ["-C", join(root, n), "config", "--get", `remote.${REMOTE}.url`], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
+  if (urls.length === 1) return urls[0];
+  if (urls.length > 1)
+    throw new StoreError(
+      `no repo in the machine config has an inbox store, and ${root} holds ${urls.length} clones (${urls.join(", ")}): set one inbox.repo`,
+    );
+  throw new StoreError(
+    `no inbox store: no repo in the machine config has an inbox group, and ${root} holds no clone`,
+  );
+}
+
+// ---- CLI ---------------------------------------------------------------------
+//
+//   node <tool>/backlog/inbox-store.mjs <add|edit|move|remove|list> --project <name> …
+//
+// The inbox commands (backlog/inbox-commands.mjs) on the store file `<name>.md`, from
+// any folder, inside a repo or not: it needs no project config. The store is
+// findStoreRepo's. When a machine config repo's inbox file is that one, its config is
+// the one read (the ids' form) and its main checkout's backlog joins the look-alikes;
+// else the tool's own config is read and only the store's lines are compared.
+// Arguments after the verb are `backlog inbox`'s; exit 3 on a look-alike, 1 on a refusal.
+
+const isMain = () => {
+  try {
+    return realpathSync(process.argv[1] ?? "") === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+};
+
+/** @param {string[]} argv */
+async function cli(argv) {
+  const [verb, ...rest] = argv;
+  /** @type {string[]} */
+  const pos = [];
+  /** @type {Record<string, string | boolean | undefined>} */
+  const opts = {};
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (!a.startsWith("--")) {
+      pos.push(a);
+      continue;
+    }
+    const key = a.slice(2);
+    if (key === "anyway") opts.anyway = true;
+    else if (["project", "details", "to"].includes(key) && rest[i + 1] !== undefined) opts[key] = rest[++i];
+    else
+      throw new StoreError(
+        `${a}: ${["project", "details", "to"].includes(key) ? "needs a value" : "unknown option"}`,
+      );
+  }
+  const verbs = ["add", "edit", "move", "remove", "list"];
+  if (!verbs.includes(verb) || typeof opts.project !== "string")
+    throw new StoreError(`usage: inbox-store.mjs <${verbs.join("|")}> --project <name> [arguments…]`);
+  const file = `${opts.project}.md`;
+  checkFile(file);
+  const repo = findStoreRepo();
+  const project = storeProjects().find((p) => p.repo === repo && p.file === file) ?? null;
+  // format.mjs reads a project config as it loads: the project's own when it is here.
+  if (project) process.env.RISA_CONFIG = project.configPath;
+  const fmt = await import("./format.mjs");
+  const { storeInbox } = await import("./inbox-commands.mjs");
+  const { LookAlikeStop, lookAlikeLine } = await import("./inbox-edit.mjs");
+  /** The project's backlog and archive items, from its main checkout's copies. */
+  const pool = () => {
+    if (!project) return [];
+    const at = (/** @type {string} */ rel) => {
+      const path = join(project.main, rel);
+      return existsSync(path) ? fmt.parse(readFileSync(path, "utf8"), { lenient: true }).items : [];
+    };
+    return [
+      ...at(project.config.paths.backlog),
+      ...at(project.config.paths.archive).map((i) => ({ ...i, archived: true })),
+    ];
+  };
+  const by = process.env.BACKLOG_BY || userInfo().username || "unknown";
+  try {
+    for (const line of storeInbox(
+      { store: storeFor(repo), file, by, pool },
+      verb === "list" ? undefined : verb,
+      pos,
+      opts,
+    ))
+      console.log(line);
+  } catch (e) {
+    if (e instanceof LookAlikeStop) {
+      console.error("inbox-store: this looks like what's already filed or in the inbox; nothing was added:");
+      for (const m of e.matches) console.error(`  ${lookAlikeLine(m)}`);
+      console.error("Rerun with --anyway to add it all the same.");
+      process.exit(3);
+    }
+    if (e instanceof fmt.BacklogError) {
+      console.error(`inbox-store: ${e.message}`);
+      process.exit(1);
+    }
+    throw e;
+  }
+}
+
+if (isMain()) {
+  try {
+    await cli(process.argv.slice(2));
+  } catch (e) {
+    if (!(e instanceof StoreError || e instanceof MachineConfigError)) throw e;
+    console.error(`inbox-store: ${e.message.replace(/\n/g, "; ")}`);
+    process.exit(1);
+  }
 }

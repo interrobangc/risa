@@ -52,6 +52,11 @@
 // HEAD; unpushed backlog commits of local dev go first. Then the pickup, best
 // effort: a busy main checkout only prints why it skipped. BACKLOG_PICKUP=off
 // skips the pickup (tests).
+//
+// With the config's `inbox` group (an inbox store, backlog/inbox-store.mjs), the inbox
+// commands and the list act on the project's store file instead (backlog/inbox-commands.mjs):
+// same arguments, refusals and look-alike stop, one store commit each ("on <repo> <file>
+// as <sha>"), no trunk commit and no pickup.
 //   backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   backlog show B-n                    finds archived items too (list --all lists them)
 //   backlog similar <text…>             open and archived items that look like it (read only)
@@ -94,17 +99,24 @@ import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { LookAlikeStop, lookAlikeLine } from "./inbox-edit.mjs";
 import { withLock as withLockAt } from "./lock.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
-import { loadConfigOrExit, toolCmd } from "../loops/config.mjs";
+import { inboxStore, loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 
 const { config, path: CONFIG_FILE } = loadConfigOrExit("backlog");
 const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = config.paths.backlog;
 const INBOX_REL = config.paths.inbox;
+/** The project's inbox store and its file there, or null: the trunk inbox. */
+const STORE = inboxStore(config);
+// Loaded only with a store: a trunk-only project loads nothing more than before.
+const store = STORE
+  ? { ...(await import("./inbox-commands.mjs")), ...(await import("./inbox-store.mjs")) }
+  : null;
 const ARCHIVE_REL = config.paths.archive;
 /** CI's quarantine list, which `ci-file` commits with the backlog (null: the project has none). */
 const QUARANTINE_REL = config.paths.quarantine ?? null;
@@ -427,15 +439,6 @@ function write(tool, describe, change, opts = {}) {
   });
 }
 
-/** `add` stopped on look-alikes: nothing was filed (exit 3). */
-class LookAlikeStop extends Error {
-  /** @param {ReturnType<typeof fmt.similarItems>} matches */
-  constructor(matches) {
-    super("look-alikes");
-    this.matches = matches;
-  }
-}
-
 /**
  * Open and archived items to compare a new line with, each with its status
  * from git.
@@ -571,9 +574,6 @@ function mergedInbox(fetch) {
   const base = tryGit(mainCheckout, "merge-base", `refs/heads/${TRUNK}`, tracking);
   return mergeInbox((base && showAt(base, INBOX_REL)) ?? "", working, theirs).text;
 }
-
-/** A look-alike as a line: an item, or an unfiled inbox line. */
-const lookAlikeLine = (m) => (m.id === "inbox" ? `unfiled inbox line  ${m.title}` : fmt.similarLine(m));
 
 /** The writer's fixed parts, for one inbox command. */
 const originWrite = () => ({
@@ -1239,6 +1239,16 @@ function main() {
       return console.log(`${file}\n${inboxFile}`);
     case "inbox": {
       const [sub, ...args] = pos;
+      if (STORE && store) {
+        const at = {
+          store: store.storeFor(STORE.repo),
+          file: STORE.file,
+          by: who(),
+          pool: () => similarPool(read({ lenient: true }).items),
+        };
+        for (const line of store.storeInbox(at, sub, args, opts)) console.log(line);
+        return;
+      }
       if (sub === "add") return inboxAdd(args, opts);
       if (sub === "move") return inboxMove(args);
       if (sub === "edit") return inboxEdit(args, opts);
@@ -1473,7 +1483,7 @@ try {
     );
     process.exit(3);
   }
-  if (e instanceof fmt.BacklogError) {
+  if (e instanceof fmt.BacklogError || (store && e instanceof store.StoreError)) {
     console.error(`backlog: ${e.message}`);
     process.exit(1);
   }
