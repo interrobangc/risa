@@ -22,7 +22,11 @@ import { fileURLToPath } from "node:url";
 export const ROLES = Object.freeze(["backlog", "prd", "slice", "inbox", "hotfix", "plan", "recovery"]);
 
 /** @typedef {{ rank: string, name: string }} Persona */
-/** @typedef {{ address: string, roles: Record<string, readonly Persona[]> }} Pack */
+/**
+ * A pack: how to address the user, each role's pool, and each rank's short form
+ * (the session name's, session-names.mjs; written as the name shows it, `Adm`).
+ * @typedef {{ address: string, roles: Record<string, readonly Persona[]>, short: Record<string, string> }} Pack
+ */
 
 /** One rank for every name. @param {string} rank @param {string[]} names */
 const ranked = (rank, names) => Object.freeze(names.map((name) => Object.freeze({ rank, name })));
@@ -32,6 +36,17 @@ export const PACKS = Object.freeze({
   starfleet: Object.freeze({
     // A high-ranking officer, not President.
     address: "Fleet Admiral",
+    // Each rank's short form: ADM, CAPT, CMDR, LCDR, LT, ENS, and the usual Yeo and Dr.
+    short: Object.freeze({
+      Admiral: "Adm",
+      Captain: "Capt",
+      Commander: "Cmdr",
+      "Lieutenant Commander": "Lcdr",
+      Lieutenant: "Lt",
+      Ensign: "Ens",
+      Yeoman: "Yeo",
+      Doctor: "Dr",
+    }),
     roles: Object.freeze({
       // The main backlog session's per-session draw (drawAdmiral), not a hash.
       backlog: ranked("Admiral", [
@@ -88,7 +103,7 @@ export const PACKS = Object.freeze({
       recovery: ranked("Doctor", ["McCoy", "Crusher", "Bashir", "Phlox", "Pulaski", "Culber"]),
     }),
   }),
-  none: Object.freeze({ address: "", roles: Object.freeze({}) }),
+  none: Object.freeze({ address: "", roles: Object.freeze({}), short: Object.freeze({}) }),
 });
 
 /** The flavors a machine config may name. */
@@ -167,6 +182,29 @@ export function drawAdmiral(last, random = Math.random, flavor = DEFAULT_FLAVOR)
 
 /** `Rank Name`, or "" for no persona. @param {Persona | null | undefined} persona */
 export const label = (persona) => (persona ? `${persona.rank} ${persona.name}` : "");
+
+/** RANK's short form under FLAVOR (`Adm`), else RANK itself. @param {string} rank */
+export const shortRank = (rank, flavor = DEFAULT_FLAVOR) =>
+  Object.hasOwn(packOf(flavor).short, rank) ? packOf(flavor).short[rank] : rank;
+
+/** `Abbr Name` (`Adm Morrow`), the session name's; "" for no persona. @param {Persona | null | undefined} persona */
+export const shortLabel = (persona, flavor = DEFAULT_FLAVOR) =>
+  persona ? `${shortRank(persona.rank, flavor)} ${persona.name}` : "";
+
+/**
+ * The persona a label reads as under FLAVOR, either form (`Admiral Morrow`, `Adm Morrow`):
+ * its rank a pack rank or a rank's short form, its name one word; else null.
+ * @param {string} text
+ * @returns {Persona | null}
+ */
+export function personaOfLabel(text, flavor = DEFAULT_FLAVOR) {
+  const pack = packOf(flavor);
+  const m = /^(.+) ([A-Za-z]+)$/.exec(text.trim());
+  if (!m) return null;
+  const ranks = new Set(Object.values(pack.roles).flatMap((pool) => pool.map((p) => p.rank)));
+  const rank = ranks.has(m[1]) ? m[1] : Object.keys(pack.short).find((r) => pack.short[r] === m[1]);
+  return rank ? { rank, name: m[2] } : null;
+}
 
 /**
  * The one prompt line for ROLE's PERSONA: who the session is, the light touch in

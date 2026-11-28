@@ -36,6 +36,12 @@ import { WORK_VAR } from "./machine.mjs";
  */
 export const MACHINE_TAG = "[A-Z]{2}-";
 
+/**
+ * The persona a display name leads with (`Adm Ross · `, session-names.mjs, RISA-1039): the
+ * matchers skip it to the session's own name. The old order put it after the project.
+ */
+export const PERSONA_TAG = "[A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)+ · ";
+
 /** The kinds kept alive; each one's session is named after it. */
 export const KEPT_KINDS = ["backlog", "inbox"];
 /** The answers the keep-alive question offers. */
@@ -77,9 +83,9 @@ export function hasRemoteControl(
 ) {
   if (!runs(args, claude)) return false;
   const word = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(?:^|\\s)--remote-control[ =](?:${MACHINE_TAG})?${word}(?=\\s|$)(?!\\s+-\\s)`).test(
-    args,
-  );
+  return new RegExp(
+    `(?:^|\\s)--remote-control[ =](?:${PERSONA_TAG})?(?:${MACHINE_TAG})?${word}(?=\\s|$)(?!\\s+-\\s)`,
+  ).test(args);
 }
 
 /** The Remote Control names a kept kind's session may run under: its own, and for backlog each captain's. */

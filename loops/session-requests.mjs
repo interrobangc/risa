@@ -37,7 +37,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
-import { MACHINE_TAG, START_GRACE_MS, workOffWhy } from "./keep-alive.mjs";
+import { MACHINE_TAG, PERSONA_TAG, START_GRACE_MS, workOffWhy } from "./keep-alive.mjs";
 import { MAX_TEXT, oneLine, raiseSeq, readSeq } from "./notices.mjs";
 import { CLAUDE } from "./host.mjs";
 import {
@@ -209,10 +209,9 @@ export function backlogRemoteOf(/** @type {string} */ args, /** @type {string} *
     )
   )
     return CAPTAIN_SESSION;
-  const m =
-    /(?:^|\s)--remote-control[ =](?:[A-Z]{2}-)?backlog(?:( - |-)([a-z0-9]+(?:-[a-z0-9]+)*))?(?=\s|$)/.exec(
-      args,
-    );
+  const m = new RegExp(
+    `(?:^|\\s)--remote-control[ =](?:${PERSONA_TAG})?(?:${MACHINE_TAG})?backlog(?:( - |-)([a-z0-9]+(?:-[a-z0-9]+)*))?(?=\\s|$)`,
+  ).exec(args);
   if (!m) return null;
   return m[2] ? sessionNameOf(m[2]) : "backlog";
 }

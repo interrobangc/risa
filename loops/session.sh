@@ -87,7 +87,7 @@ for a in "$@"; do
 done
 
 # The name the outside sees (session-names.mjs; the only place names are
-# qualified): `<name> (<project>)`, then ` · <Rank> <Name>` for a persona; the main
+# qualified): `<name> (<project>)`, led by `<Abbr> <Name> · ` for a persona; the main
 # backlog's shows `backlog (<project>)` and the admiral it was given. It replaces
 # claude's --remote-control name and goes as its --name too, unless the args carry
 # one. The record's remote keeps the name as given.
