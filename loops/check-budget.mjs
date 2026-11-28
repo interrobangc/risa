@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { parseLog } from "./check-times.mjs";
 import { branchKind } from "./metrics.mjs";
+import { isMain } from "./is-main.mjs";
 
 export const DEFAULTS = Object.freeze({
   last: 20,
@@ -116,7 +117,7 @@ export function describeBudget(b, { mode, branch }) {
   return `Check budget ${m(b.budget)} (${why}); silence limit ${m(b.silence)}.`;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   // node check-budget.mjs --mode M --branch B [--log F] [--load L] [--steps S1,S2…]
   //   → "<budget> <silence>" on the first line, the description on the second.
   //   --steps: the steps the check will run (check-hook.sh --steps); empty or none: any.

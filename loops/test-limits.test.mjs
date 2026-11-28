@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadScale } from "./check-budget.mjs";
-import { BASE, scaledWait, testLimits, testLoad } from "./test-limits.mjs";
+import { BASE, peakLoad, scaledWait, testLimits, testLoad } from "./test-limits.mjs";
 
 const CONFIG = new URL("../vitest.config.mjs", import.meta.url).href;
 const root = mkdtempSync(join(tmpdir(), "risa-test-limits-"));
@@ -32,15 +32,34 @@ describe("testLoad", () => {
   it("reads RISA_TEST_LOAD first, so the limits follow a given load, not the machine's", () => {
     expect(testLoad({ RISA_TEST_LOAD: "30" })).toBe(30);
     expect(testLoad({ RISA_TEST_LOAD: "1.0 33.5 20" })).toBe(33.5);
+    expect(testLoad({ RISA_TEST_LOAD: "50 14 8" })).toBe(50);
     expect(testLoad({ RISA_TEST_LOAD: "busy" })).toBeNull();
     expect(testLimits({ load: testLoad({ RISA_TEST_LOAD: "30" }) }).testTimeout).toBe(40_000);
   });
 
-  it("else reads the load gate's reading (RISA_LOAD_FILE stands in for the OS)", () => {
+  it("else reads RISA_LOAD_FILE, the load gate's stand-in for the OS", () => {
     const file = join(root, "loadavg");
     writeFileSync(file, "{ 40.00 25.00 12.00 }");
-    expect(testLoad({ RISA_LOAD_FILE: file })).toBe(25);
+    expect(testLoad({ RISA_LOAD_FILE: file })).toBe(40);
     expect(testLoad({ RISA_LOAD_FILE: join(root, "none") })).toBeNull();
+  });
+
+  // RISA-1088: the 5-minute load lags a second check starting beside this one.
+  it("takes the higher of the 1-minute and 5-minute loads, or the one number", () => {
+    expect(peakLoad("50.00 14.00 8.00")).toBe(50);
+    expect(peakLoad("{ 4.00 12.00 30.00 }")).toBe(12);
+    expect(peakLoad("22")).toBe(22);
+    for (const bad of ["", "busy", "1 -2 3"]) expect(peakLoad(bad)).toBeNull();
+    expect(testLimits({ load: peakLoad("50 14 8") })).toEqual({
+      testTimeout: 60_000,
+      hookTimeout: 30_000,
+      scale: 3,
+    });
+    expect(testLimits({ load: peakLoad("3 4 5") })).toEqual({
+      testTimeout: 20_000,
+      hookTimeout: 10_000,
+      scale: 1,
+    });
   });
 });
 
@@ -91,7 +110,7 @@ describe("scaledWait", () => {
 
 describe("vitest.config.mjs", () => {
   // In its own node, as vitest loads it: the config computes its limits once, on load.
-  const limits = (load) => {
+  const limits = (load, more = {}) => {
     const r = spawnSync(
       process.execPath,
       [
@@ -100,7 +119,7 @@ describe("vitest.config.mjs", () => {
         `const { default: c } = await import(${JSON.stringify(CONFIG)});
          console.log(JSON.stringify(c.test.projects.map((p) => [p.test.name, p.test.testTimeout, p.test.hookTimeout])));`,
       ],
-      { encoding: "utf8", env: { ...process.env, RISA_TEST_LOAD: load } },
+      { encoding: "utf8", env: { ...process.env, RISA_TEST_LOAD: load, ...more } },
     );
     expect(r.status, r.stderr).toBe(0);
     return JSON.parse(r.stdout);
@@ -117,5 +136,13 @@ describe("vitest.config.mjs", () => {
       ["tooling:unit", 40_000, 20_000],
       ["tooling:browser", 40_000, 20_000],
     ]);
+  });
+
+  it("raises them at a 1-minute load of 50 on the machine even while the 5-minute is low", () => {
+    const file = join(root, "loadavg-config");
+    writeFileSync(file, "50.00 14.00 8.00");
+    for (const [, t, h] of limits("", { RISA_LOAD_FILE: file })) expect([t, h]).toEqual([60_000, 30_000]);
+    writeFileSync(file, "3.00 4.00 5.00");
+    for (const [, t, h] of limits("", { RISA_LOAD_FILE: file })) expect([t, h]).toEqual([20_000, 10_000]);
   });
 });

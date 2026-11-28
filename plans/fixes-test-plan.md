@@ -10,13 +10,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-test` |
-| ----- | ---- | --------- | ----- | ------- | --------------------------- |
-| 1     | 1    | RISA-1048 | opus  | written |                             |
-| 2     | 1    | RISA-1075 | opus  | written |                             |
-| 3     | 1    | RISA-1088 | opus  | written |                             |
+| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-test` |
+| ----- | ---- | --------- | ----- | ------ | --------------------------- |
+| 1     | 1    | RISA-1048 | opus  | merged | ba9d9de                     |
+| 2     | 1    | RISA-1075 | opus  | merged | d763551                     |
+| 3     | 1    | RISA-1088 | opus  | merged | da04cce                     |
 
-**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. `risa anchors` warns slice 1 names 11 files: a one-line guard edit in nine of them, kept as is. Items claimed, hot files set. When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
+**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. `risa anchors` warns slice 1 names 11 files: a one-line guard edit in nine of them, kept as is. Items claimed, hot files set. Slices 1–3 started (worktrees `.loops/fixes-test-<n>`, one opus agent each; brief from `risa prompt slice`). Slice 1 handed off (3c9162b: `loops/is-main.mjs`'s `isMain`, used by the nine entry points; the `pathToFileURL` guards fail through a symlink too, filed for a later wave) and merged (ba9d9de). Slice 3 handed off (b7e54eb: the limits scaled on the lagging 5-minute load; `testLoad` now takes the higher of the 1- and 5-minute loads, and the tooling rerun never gets lower limits than its run; `loops/check-tooling.test.mjs` is new and first runs in the wave's gate; the load gate still lets two full checks overlap, noted on the item) and merged (da04cce; the import conflict with slice 1 in `loops/check-tooling.mjs` resolved by keeping both lines). Slice 2 handed off (20ed52b, the test file only: the orphans were blocked in `spawnSync` on a hung backlog child, so SIGTERM never reached their handler; the cleanup now scans `ps` for this run's temp root, sends TERM then KILL, and `afterAll` fails the file if anything survives) and merged (d763551). All three merged. **Open for the user:** two orphans from before the fix still run (pids 6808, 99477, children 6830, 99501, root `dispatch-restart-CSG2KH`); the slice agent's `kill` was refused by its permissions, so this session doesn't kill them either: it goes in the landing report. Wave gate: `risa ci run unit` (`risa tier`: unit). **Red** on 67ae4c5 (run 46185635265): `loops/run-log.test.mjs` (2) and `loops/stack.test.mjs` (2) sent back to slice 1's agent, `loops/dispatch-restart.test.mjs` "a dispatcher that throws (throw)" (the dispatcher never started) to slice 2's; fixes in flight, no rotation. When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
 
 ## How to run this plan
 
@@ -28,12 +28,12 @@
 
 Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/is-main.test.mjs
 
-**Build (RISA-1048):** `pnpm test:tooling` from a project's `node_modules` runs no tests and exits 0: `loops/tooling-tests.mjs`'s main guard is `import.meta.url === \`file://${process.argv[1]}\``, and under pnpm `argv[1]`is the symlink while`import.meta.url`is the real`.pnpm`path. Add a shared helper in a new`loops/is-main.mjs` (`isMain(import.meta.url)`: the realpaths of `argv[1]`and of the module's file are equal; false when`argv[1]`is missing or doesn't exist, as`loops/session-names.mjs`'s own `isMain`does) and use it in the nine entry points with that`file://`guard:`loops/tooling-tests.mjs`, `check-budget.mjs`, `check-plan.mjs`, `check-tooling.mjs`(touch only its guard: slice 3 edits the rest),`check-times.mjs`, `dev-brought.mjs`, `metrics.mjs`, `run-log.mjs`and`token-price.mjs`. Leave the modules that already compare realpaths (several are hot for risa-next-4) and those guarded with `pathToFileURL(process.argv[1])`; say in the hand-off whether the `pathToFileURL` ones also fail through a symlink, so it can be filed.
+**Build (RISA-1048):** `pnpm test:tooling` from a project's `node_modules` runs no tests and exits 0: the main guard of `loops/tooling-tests.mjs` compares `import.meta.url` with "file://" plus `process.argv[1]`, and under pnpm that argument is the symlink while `import.meta.url` is the real `.pnpm` path. Add a shared helper in a new `loops/is-main.mjs` (say `isMain(import.meta.url)`: true when the realpaths of the script argument and of the module's file are equal; false when the argument is missing or doesn't exist, as the `isMain` inside `loops/session-names.mjs` does) and use it in the nine entry points with that "file://" guard: `loops/tooling-tests.mjs`, `loops/check-budget.mjs`, `loops/check-plan.mjs`, `loops/check-tooling.mjs` (touch only its guard: slice 3 edits the rest), `loops/check-times.mjs`, `loops/dev-brought.mjs`, `loops/metrics.mjs`, `loops/run-log.mjs` and `loops/token-price.mjs`. Leave the modules that already compare realpaths (several are hot for risa-next-4) and those guarded with `pathToFileURL`; say in the hand-off whether the `pathToFileURL` ones also fail through a symlink, so it can be filed.
 
 **Acceptance criteria:**
 
 - Unit tests (`loops/is-main.test.mjs` (new)): `isMain` is true for the real path and for a symlink to the module, false for another script and for no `argv[1]`; one of the nine entry points, run with `node` through a symlink in a temp dir, does its work (prints its usage or output) and no longer exits 0 silently.
-- No `file://${process.argv[1]}` guard left in `loops/` (`grep`).
+- No guard built from "file://" and the script argument left in `loops/` (`grep`).
 
 ## Slice 2: The dispatch-restart test stops every dispatcher it starts
 
