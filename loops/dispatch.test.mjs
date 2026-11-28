@@ -649,6 +649,17 @@ describe("one tick per action", () => {
     expect(existsSync(sessions)).toBe(false);
   });
 
+  it("--dry-run prints a hold's date and reason beside it; a bare hold as before (RISA-986)", () => {
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "h", state: "hold", flags: ["hold"], held: { date: "2026-11-21", why: "waits on the user" } },
+      { topic: "k", state: "hold", flags: ["hold"] },
+    ]);
+    const out = ok(["--dry-run"]);
+    expect(out).toContain("\n  h: on hold since 2026-11-21: waits on the user\n");
+    expect(out).toContain("\n  k: on hold\n");
+  });
+
   it("refuses to run without iTerm2", () => {
     setRows([{ topic: "a", state: "planned" }]);
     const r = dispatch(["--once"], { RISA_ITERM_APP: join(root, "nowhere") });
