@@ -706,15 +706,52 @@ describe("plan and backlog", () => {
     expect(ok("orchestrator", "T")).not.toContain("hot=<path prefixes>");
   });
 
-  it("backlog has the hand-off paragraph with both modes", () => {
+  it("backlog's hand-off paragraph asks nothing: the brief is the session's call, the user's instructions its directives", () => {
     const text = ok("backlog", "--guide");
-    expect(text).toContain('**When the user says "hand off"**');
-    expect(text).toContain("**A short brief** (recommended");
-    expect(text).toContain("at most about 40 lines");
-    expect(text).toContain("**Nothing** (the new session starts blank)");
-    expect(text).toContain("`pnpm prd rotate --self --brief-path`");
-    expect(text).toContain("`pnpm prd rotate --self --brief <that file>`");
-    expect(text).toContain("for nothing, `pnpm prd rotate --self`");
+    const bullet = text.split("\n").find((l) => l.startsWith('- **When the user says "hand off"**')) ?? "";
+    expect(bullet).toContain("ask nothing: whether to write a brief is your call");
+    expect(bullet).not.toContain("AskUserQuestion");
+    expect(bullet).not.toContain("**A short brief** (recommended");
+    expect(bullet).toContain("at most about 40 lines");
+    expect(bullet).toContain("when you have work in hand or the user gave instructions with the hand-off");
+    expect(bullet).toContain("under a `## Directives` heading of their own");
+    expect(bullet).toContain("`pnpm prd rotate --self --brief-path`");
+    expect(bullet).toContain("`pnpm prd rotate --self --brief <that file>`");
+    expect(bullet).toContain("for none, `pnpm prd rotate --self`");
+  });
+
+  it("a brief with directives has them carried out before any poll; a plain brief keeps the poll", () => {
+    const plain = join(root, "plain-brief.md");
+    const directed = join(root, "directed-brief.md");
+    writeFileSync(
+      plain,
+      "In hand: a fictional label tidy.\n\n## Next\n\n- Review the fictional export plan.\n",
+    );
+    writeFileSync(
+      directed,
+      "In hand: a fictional label tidy.\n\n## Directives\n\n- File the fictional export bug, then write its PRD.\n",
+    );
+    const poll = /ask \*\*one\*\* AskUserQuestion, multi-select/;
+
+    const withDirectives = ok("backlog", "--brief", directed);
+    expect(withDirectives).toContain("- File the fictional export bug, then write its PRD.");
+    expect(withDirectives).toContain("Its _Directives_ are the user's instructions");
+    expect(withDirectives).toContain("**First, and nothing else:** run `pnpm prd asks --short`");
+    expect(withDirectives).toContain(
+      "Then, instead of the opening poll, carry out the brief's _Directives_ as your first task",
+    );
+    expect(withDirectives).toContain("Ask no poll of what this session is for.");
+    expect(withDirectives).not.toMatch(poll);
+    expect(withDirectives).not.toContain("Ask what this session is for first");
+    expect(withDirectives.indexOf("`pnpm prd asks --short`")).toBeLessThan(
+      withDirectives.indexOf("carry out the brief's _Directives_"),
+    );
+
+    const plainText = ok("backlog", "--brief", plain);
+    expect(plainText).toContain("It is context, not the user's word.");
+    expect(plainText).toMatch(poll);
+    expect(plainText).toContain("Ask what this session is for first");
+    expect(plainText).not.toContain("_Directives_");
   });
 
   it("backlog has the request paragraph: a brief, the request, the name, and no tab of its own", () => {
