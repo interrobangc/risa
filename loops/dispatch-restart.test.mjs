@@ -158,7 +158,8 @@ beforeAll(() => {
     STUB_LOCK: lock,
   };
 }, 60_000);
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+// A TERMed dispatcher may still be writing its log: retry the removal.
+afterAll(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 /** @type {number[]} */
 let started = [];
@@ -169,16 +170,19 @@ beforeEach(() => {
   mkdirSync(loops, { recursive: true });
   started = [];
 });
-afterEach(() => {
-  // The new dispatcher runs detached: end whatever holds the lock.
+afterEach(async () => {
+  // The new dispatcher runs detached: end whatever holds the lock, and wait for it to go.
   const pid = lockHolder(lock);
-  for (const p of [...started, ...(pid ? [pid] : [])])
+  const pids = [...started, ...(pid ? [pid] : [])];
+  for (const p of pids)
     try {
       process.kill(p, "SIGTERM");
     } catch {
       /* gone */
     }
-});
+  const end = Date.now() + 10_000;
+  while (pids.some(alive) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+}, 15_000);
 
 describe("dispatch --restart (RISA-1009)", () => {
   it("ends the running one and starts one new one detached, keeping its --every and keep-alive", async () => {
