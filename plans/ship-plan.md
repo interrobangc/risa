@@ -8,18 +8,18 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Now (2026-11-28):** wave 1 landed in main through PR 47 (tier none), `main` at `f0bb832`; report filed, to-test `to-test/2026-11-28-1623-ship.md`; slice 1's worktree removed. Slice 1 merged as `bde2083`, its Codex fix as `aa46ca1`. Next session: wave 2, slices 2 and 4 together, both on opus unless slice 4 reads as a line-by-line edit (the plan spells it out: sonnet is allowed); check `risa backlog prd list` first (slice 4 waits if a running topic holds `loops/docs` or `loops/doc`). `risa sync` first (land used an unsynced tip).
+**Now (2026-11-28):** wave 1 landed in main through PR 47 (tier none), `main` at `f0bb832`; slice 1 merged as `bde2083`, its Codex fix as `aa46ca1`. A fresh session took over: no landing was cut off, `risa sync` needed no merge, no running topic holds `loops/docs`. **Wave 2 started:** slices 2 and 4, worktrees `ship-2` and `ship-4` made, one background agent each, both on opus; `risa watch ship --wait` runs in the background. Next: merge 2 then 4 as they hand off, gate as below, PR, Codex review, land; then rotate for wave 3 (slice 3, opus).
 
 **Gate on this machine:** the local full check can't go green: RISA-1076 (this session sets `CLAUDE_CONFIG_DIR`: dispatch, drain, usage tests fail) and, with it unset, load timeouts (RISA-1096). Wave 1's gate was `ci.yml` on the PR, agreed with the backlog session; its one failure was RISA-1085 (`loops/check-run.test.mjs` on pull-request runs), known, and `risa land` at tier none landed on Codex's clean verdict. Do the same until those land.
 
 **For slices 2 and 3:** facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed; `loops/config.mjs` exports `isVersion`; a lock naming no pid is refused, never taken over. Codex's open finding is RISA-1097 (`fixes-bug`: a killed runner leaves its hook alive and its lock takeable).
 
-| Slice | Wave | State  | Merge into `prd/ship` |
-| ----- | ---- | ------ | --------------------- |
-| 1     | 1    | merged | `bde2083`             |
-| 2     | 2    | —      | —                     |
-| 4     | 2    | —      | —                     |
-| 3     | 3    | —      | —                     |
+| Slice | Wave | State                | Merge into `prd/ship` |
+| ----- | ---- | -------------------- | --------------------- |
+| 1     | 1    | merged               | `bde2083`             |
+| 2     | 2    | agent working (opus) | —                     |
+| 4     | 2    | agent working (opus) | —                     |
+| 3     | 3    | —                    | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
