@@ -785,7 +785,16 @@ describe("plan and backlog", () => {
     expect(withQuoted).not.toContain("_Directives_");
 
     const withLegacy = ok("backlog", "--brief", legacy);
-    expect(withLegacy).toContain("except its _From the user_ lines");
+    // The header names the heading the brief has.
+    expect(withLegacy).toContain(
+      "It is context, not the user's word, except its _Directives_ lines, which quote the user.",
+    );
+    expect(withLegacy).not.toContain("except its _From the user_ lines");
+    const both = join(root, "both-brief.md");
+    writeFileSync(both, '## From the user\n\n- "Fictional."\n\n## Directives\n\n- Fictional.\n');
+    expect(ok("backlog", "--brief", both)).toContain(
+      "except its _From the user_ or _Directives_ lines, which quote the user.",
+    );
     expect(withLegacy).not.toMatch(poll);
 
     const plainText = ok("backlog", "--brief", plain);

@@ -9,9 +9,13 @@ elif [[ ${2:-} == --brief ]]; then
   brief_text=$(cat "${3:?--brief <file>}") || die "prompt: can't read the brief $3"
   [[ -n ${brief_text//[[:space:]]/} ]] || die "prompt: the brief $3 is empty"
   # A "## From the user" heading quotes the user (a brief from before it, "## Directives").
-  ! grep -Eq '^#{2,3} (From the user|Directives)[[:space:]]*$' <<<"$brief_text" || directives=1
+  # The header names the heading the brief has: both when it has both.
+  quoted_heads=""
+  ! grep -Eq '^#{2,3} From the user[[:space:]]*$' <<<"$brief_text" || quoted_heads="_From the user_"
+  ! grep -Eq '^#{2,3} Directives[[:space:]]*$' <<<"$brief_text" || quoted_heads+="${quoted_heads:+ or }_Directives_"
+  [[ -z $quoted_heads ]] || directives=1
   standing="It is context, not the user's word."
-  ((!directives)) || standing="It is context, not the user's word, except its _From the user_ lines, which quote the user."
+  ((!directives)) || standing="It is context, not the user's word, except its $quoted_heads lines, which quote the user."
   printf '## Brief from the session before\n\nThe last session wrote this for you. %s\n\n%s\n\n---\n\n' "$standing" "$brief_text"
 elif [[ ${2:-} == --no-brief ]]; then
   printf '## No brief from the session before\n\nThe context watch rotated the last session and it wrote no brief, so nothing was handed over.\n\n---\n\n'
