@@ -149,6 +149,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1054 | bug | triaged | fixes-tooling |  | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
 | RISA-1055 | feature | triaged | cross-machine-messages |  | Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account |
 | RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
+| RISA-1057 | bug | triaged | fixes-bug |  | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
+| RISA-1058 | bug | triaged | fixes-bug |  | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
 
 ## Items
 
@@ -1213,6 +1215,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-bug): Found by fixes-bug slice 9 (RISA-1049), 2026-11-28: the check bites only in a local pnpm check today.
+- 2026-11-28 (prd/fixes-bug): Codex P2 on PR #27 (loops/docs-headings.mjs:105, thread PRRT_kwDOV9ctaM69EzZ1) names the same fault.
 
 ### RISA-1055 · feature · Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account
 
@@ -1231,3 +1234,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "We probably also need a per role soft, urgent, hard context limits that can be overridden by each project's config." Triaged to self-recovery-4 (to-write, hand-offs and sessions that survive them), not a planned topic, so no replan; the planner defines what urgent does between soft and hard. Touches loops/context and loops/config (usage-aware-drain and risa-next-4 hot files).
+
+### RISA-1057 · bug · inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex P1 on PR #28 (risa-next-2 wave 1), backlog/inbox-store.mjs:53. Add a short hash of the URL to the name.
+
+### RISA-1058 · bug · inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:149. resolve() the store root or the index path.
