@@ -8,12 +8,12 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1 landed in main through PR #28 (36eee3e, tier none, Codex clean on 3cf4b59); to-test `to-test/2026-11-28-1041-risa-next-2.md`. Told prd-fixes-bug (risa). **Next session: wave 2** = slice 2 on opus, its brief plus RISA-1057–1060 (fixes in `backlog/inbox-store.mjs`: hashed clone name, absolute temp index, clear tracking ref on an empty remote, safe first-use clone); claim RISA-1057–1060 when it starts.
+**Now:** wave 2 started 2026-11-28: slice 2 (opus), with RISA-1057–1060 in its brief and claimed; synced (no merge needed). Before: wave 1 landed in main through PR #28 (36eee3e, tier none, Codex clean on 3cf4b59); to-test `to-test/2026-11-28-1041-risa-next-2.md`. Told prd-fixes-bug (risa). **Next session: wave 2** = slice 2 on opus, its brief plus RISA-1057–1060 (fixes in `backlog/inbox-store.mjs`: hashed clone name, absolute temp index, clear tracking ref on an empty remote, safe first-use clone); claim RISA-1057–1060 when it starts.
 
 | Slice | Wave | State         | Merge into `prd/risa-next-2` |
 | ----- | ---- | ------------- | ---------------------------- |
 | 1     | 1    | landed (opus) | 72d3a64                      |
-| 2     | 2    | —             | —                            |
+| 2     | 2    | started (opus) | —                           |
 | 3     | 3    | —             | —                            |
 | 5     | 3    | —             | —                            |
 | 4     | 4    | —             | —                            |
@@ -58,6 +58,8 @@ Stack: no · Reads: loops/docs/inbox.md · Tests: unit · Blocked by: 1 · Check
 **User stories:** US 2, 4, 6.
 
 **Build:** PRD _Implementation decisions_, _The inbox commands_. `backlog/backlog.mjs` `inboxAdd`, `inboxMove`, `inboxEdit`, `inboxRemove` and the `inbox` list: with `config.inbox` set, read and write through slice 1's store (no `pushInboxEdit`, no `pickup`), same arguments, exit codes and look-alikes, output `on <repo> <file> as <sha>`. `backlog/inbox-store.mjs` (new in slice 1) gains a CLI, `node <tool>/backlog/inbox-store.mjs <add|edit|move|remove|list> --project <name> …`, that runs from any folder with no project config (the inbox session's entry point; `risa backlog` needs a repo config), finding the store from the machine config's repos (their `inbox.repo`, all equal, else one line naming both) or an existing clone; look-alikes against the store's lines, and the backlog too when the project's main checkout is in the machine config.
+
+**Also fix (Codex on PR #28, `backlog/inbox-store.mjs`):** RISA-1057 (a clone name that can't collide: a short hash of the URL in it); RISA-1058 (the temp index at an absolute path, so a relative `RISA_INBOX_STORE` works); RISA-1059 (a remote confirmed empty clears the tracking ref: no stale read, no write on a gone commit); RISA-1060 (a first-use clone safe across processes: clone into a temp folder and rename into place, the loser using the winner's). Each with a case in `backlog/inbox-store.test.mjs`.
 
 **Acceptance criteria:**
 
