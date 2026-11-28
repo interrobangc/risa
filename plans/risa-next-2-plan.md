@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 2 green: slice 2 merged 9a783a1, its fix (lazy store imports) 641b29b; `pnpm test` 2563/2563 on 641b29b; sync needed no merge; slice worktree removed. Next: PR + Codex review, land (tier none). Before: wave 1 landed in main through PR #28 (36eee3e).
+**Now:** wave 2 landed in main through PR #32 (da16403, tier none, Codex clean on 7d27160 after one finding filed as RISA-1067); to-test `to-test/2026-11-28-1108-risa-next-2.md`. **Next session: wave 3** = slices 3 and 5, both on opus; slice 3's brief takes RISA-1067 (claim it when 3 starts).
 
 | Slice | Wave | State         | Merge into `prd/risa-next-2` |
 | ----- | ---- | ------------- | ---------------------------- |
@@ -26,6 +26,7 @@
 - **One module knows the inbox repo's clone** (`backlog/inbox-store.mjs`, new); every other file asks it. No other file runs git in the clone.
 - **Additive:** a project without an `inbox` key behaves exactly as today (the trunk inbox, its writer, its ingest, no home claims); no `risa.json` key is renamed or removed; no existing test changes.
 - **No data moves:** no slice creates a repo, runs the move command on this repo or Caretook, or edits `plans/inbox.md` (PRD _Out of scope_).
+- **A trunk-only project loads nothing new:** `backlog/backlog.mjs` imports the store modules (`inbox-commands.mjs`, `inbox-store.mjs`) with `await import()` only when the config has `inbox`; shared helpers (`LookAlikeStop`) live in `inbox-edit.mjs` (wave 2: test fixtures copy a fixed file set).
 - **The store file's format is the trunk inbox's**, so `backlog/format.mjs`'s parsers and `backlog/inbox-edit.mjs` serve both.
 - **Hermetic tests:** bare repos in the OS temp dir stand in for the private repo; the clone folder and the machine name come from env overrides; `RISA_MACHINE_CONFIG` at a temp file; a stub `gh`; never this checkout's config or `~/.risa`.
 
@@ -79,6 +80,8 @@ Stack: no · Reads: loops/docs/backlog.md · Tests: unit · Blocked by: 2 · Che
 **Acceptance criteria:**
 
 - Unit test (`backlog/inbox-ingest.test.mjs` (new)): ingest files two lines and the store is empty after; a crash after the backlog commit (the store write made to fail) and a rerun files nothing twice and then empties the store; a trunk with a user commit on top (push not possible) leaves the lines, and the doctor names them; a no-store project's ingest unchanged.
+
+**Also fix:** RISA-1067 (Codex on PR #32: `findStoreRepo` dedupes clone URLs before counting, with a case in `backlog/inbox-store.test.mjs`).
 
 **Blocked by:** 2. **Blocks:** 4.
 
