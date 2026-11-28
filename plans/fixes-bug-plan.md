@@ -8,21 +8,23 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
-| 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
+| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | merged  | a04752b                    |
+| 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | started |                            |
+| 15    | 5    | RISA-1082       | opus   | started |                            |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
@@ -32,7 +34,7 @@
 
 **Wave 4** (slices 12–13, RISA-1064/1065): landed 2026-11-28 in main as acb0975 (PR #33, tier none, Codex clean); to-test file `to-test/2026-11-28-1123-fixes-bug.md`.
 
-**Wave 5** (slices 14–15, both opus), 2026-11-28, fresh session: ingest had nothing new. Ten items wait; only risa-next-2 runs (hot: backlog/, loops/config, loops/docs/project-config.md, loops/docs/inbox.md, loops/prompts/inbox.sh, loops/prd.sh, loops/dispatch, loops/home). Clear of those: RISA-1070 (loops/new.sh; the `plan` case in loops/prd.sh stays untouched) and RISA-1082 (loops/rotate*, loops/open-session*). Waiting on risa-next-2's hot files: RISA-1050, 1083, 1084 (loops/dispatch), RISA-1077 (loops/prompts/inbox.sh), RISA-1078, 1079, 1080 (loops/home), RISA-1081 (backlog/). Hot set: loops/new, loops/rotate, loops/open-session.
+**Wave 5** (slices 14–15, both opus), 2026-11-28, fresh session: ingest had nothing new. Ten items wait; only risa-next-2 runs (hot: backlog/, loops/config, loops/docs/project-config.md, loops/docs/inbox.md, loops/prompts/inbox.sh, loops/prd.sh, loops/dispatch, loops/home). Clear of those: RISA-1070 (loops/new.sh; the `plan` case in loops/prd.sh stays untouched) and RISA-1082 (loops/rotate*, loops/open-session*). Waiting on risa-next-2's hot files: RISA-1050, 1083, 1084 (loops/dispatch), RISA-1077 (loops/prompts/inbox.sh), RISA-1078, 1079, 1080 (loops/home), RISA-1081 (backlog/). Hot set: loops/new, loops/rotate, loops/open-session. Items claimed; slices 14–15 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). risa-next-2's orchestrator asked to say when its hot files land in main.
 
 **For the next session:** first run `risa backlog prd list`; start the eight waiting items once risa-next-2 frees their files. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). When a tagged release carries RISA-1065 (acb0975) or RISA-1070, tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
