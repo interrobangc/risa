@@ -12,10 +12,15 @@ for flag in "${@:4}"; do
     *) echo "slice takes --continue, not $flag" >&2; exit 1 ;;
   esac
 done
-# The slice's fields (Stack, Reads, Tests) from its plan: this worktree's
-# copy, else prd/<topic>'s. Missing fields get the defaults and a warning.
+# The slice's fields (Stack, Reads, Tests, Model) from its plan: this worktree's
+# copy, else prd/<topic>'s. Missing fields get the defaults and a warning; an
+# unknown Model refuses the prompt.
 plan_text=$(cat "$here/$plans_dir/$topic-plan.md" 2>/dev/null || git -C "$main" show "$prd_prefix$topic:$plans_dir/$topic-plan.md" 2>/dev/null || true)
 fields_cli=$(dirname "$0")/slice-fields.mjs
+node "$fields_cli" "$n" --get model <<<"$plan_text" >/dev/null 2>&1 || {
+  node "$fields_cli" "$n" <<<"$plan_text" 2>&1 >/dev/null | grep '^error' >&2 || true
+  exit 1
+}
 fields=$(node "$fields_cli" "$n" <<<"$plan_text" 2>/dev/null | sed 's/^/  - /')
 warnings=$(node "$fields_cli" "$n" <<<"$plan_text" 2>&1 >/dev/null | sed 's/^warning: slice [0-9]*: //' | paste -sd ';' - | sed 's/;/; /g')
 stack=$(node "$fields_cli" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
