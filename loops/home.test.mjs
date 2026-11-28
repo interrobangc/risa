@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { storeFor } from "../backlog/inbox-store.mjs";
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
-import { HOMES_FILE, REFETCH_MS, claim, homeOf, homesOf, machineName, take } from "./home.mjs";
+import { HOMES_FILE, REFETCH_MS, claim, homeOf, homeTick, homesOf, machineName, take } from "./home.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8" }).trim();
@@ -335,6 +335,79 @@ describe("the dispatcher's home gate", () => {
     expect(dispatch("idle", "mac-c", ["--dry-run"], "planned", off)).toContain(
       "home: idle's home is mac-d, not mac-c",
     );
+  });
+});
+
+describe("an unreadable homes file (RISA-1080)", () => {
+  it("homesOf and homeOf throw on a file that isn't JSON or names no machine; absent is no claims", () => {
+    expect(homesOf(null)).toEqual({});
+    expect(() => homesOf("{ not json")).toThrow(/homes\.json: not JSON/);
+    expect(() => homesOf("[]")).toThrow(/must hold one JSON object/);
+    expect(() => homesOf('{"x": "mac-a"}')).toThrow(/homes\.json: x names no machine/);
+    const lone = join(root, "lone.git");
+    execFileSync("git", ["init", "-q", "--bare", lone]);
+    const s = storeFor(lone, { env: machine("probe") });
+    expect(homeOf(s, "x")).toBeNull();
+    s.write(HOMES_FILE, () => "{ not json", "corrupt", { log: () => {} });
+    expect(() => homeOf(s, "x")).toThrow(/not JSON/);
+  });
+
+  it("a claimed home reads as unknown while the file can't be parsed, claims nothing, and opens once it names this machine", () => {
+    const remote2 = join(root, "unreadable.git");
+    execFileSync("git", ["init", "-q", "--bare", remote2]);
+    const probe = storeFor(remote2, { env: machine("probe") });
+    const config = {
+      ...JSON.parse(readFileSync(join(repos.second, "risa.json"), "utf8")),
+      name: "lone",
+      inbox: { repo: remote2 },
+    };
+    const env = machine("mac-e");
+    const tick = (/** @type {number} */ now, /** @type {any} */ state, pid = 4242) =>
+      homeTick({ main: repos.second, state, now, env, pid, config, report: () => false });
+    const t0 = T0 * 1000;
+    // An absent file in a reached store: the first tick claims, as before.
+    const first = tick(t0, {});
+    expect(first.lines).toContain("home: claimed lone for mac-e");
+    expect(first.blocked).toBeNull();
+    expect(first.state.claimed).toEqual(["lone"]);
+    // The file broken, past the refetch: blocked, named unreadable, the claim dropped, nothing written.
+    probe.write(HOMES_FILE, () => "{ not json", "corrupt", { log: () => {} });
+    const later = t0 + REFETCH_MS;
+    const bad = tick(later, first.state);
+    expect(bad.blocked).toMatch(
+      /^lone's home isn't known \(the homes file is unreadable \(homes\.json: not JSON/,
+    );
+    expect(bad.unknown).toEqual(["lone"]);
+    expect(
+      bad.lines.some((l) => l.startsWith("home: lone's home isn't known (the homes file is unreadable")),
+    ).toBe(true);
+    expect(bad.state.claimed).toEqual([]);
+    // The next tick tries to claim, can't over the broken file, and stays shut.
+    const still = tick(later + 1000, bad.state);
+    expect(still.blocked).toMatch(/the homes file is unreadable/);
+    expect(still.lines.some((l) => l.startsWith("home: couldn't claim lone"))).toBe(true);
+    expect(probe.read(HOMES_FILE)).toBe("{ not json");
+    // A dry run says the same.
+    expect(
+      homeTick({
+        main: repos.second,
+        state: still.state,
+        now: later + 2000,
+        env,
+        pid: 4242,
+        config,
+        dryRun: true,
+      }).blocked,
+    ).toMatch(/unreadable/);
+    // The file readable again and naming this machine: the gate opens.
+    probe.write(HOMES_FILE, () => `${JSON.stringify({ lone: { machine: "mac-e" } })}\n`, "fixed", {
+      log: () => {},
+    });
+    const fixed = tick(later + 3000, still.state);
+    expect(fixed.blocked).toBeNull();
+    expect(fixed.unknown).toEqual([]);
+    expect(fixed.state.claimed).toEqual(["lone"]);
+    expect(fixed.lines).not.toContain("home: claimed lone for mac-e");
   });
 });
 

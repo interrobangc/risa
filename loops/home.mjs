@@ -15,7 +15,8 @@
 // `inbox` whose work switch is on, RISA_WORK_SELF aside so every shell agrees; prd.sh
 // inbox opens the session from the same repo). Later ticks read the homes file's last
 // fetched copy, and fetch it at most every REFETCH_MS. A name this run couldn't claim
-// (the store can't be reached) is unknown: nothing starts for it until it is. A project
+// (the store can't be reached) is unknown: nothing starts for it until it is; so is every
+// name while the homes file can't be read or parsed (RISA-1080). A project
 // whose work switch is off (read as the keeper's is) claims nothing: its homes read as
 // away or unknown, as on any machine that doesn't hold them (RISA-1078).
 //
@@ -63,6 +64,11 @@ export function homesOf(text) {
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     throw new StoreError(`${HOMES_FILE}: must hold one JSON object`);
+  // An entry without a machine would read as unclaimed, and a claim would take it as held
+  // here: the file is unreadable then, as a file that isn't JSON is (RISA-1080).
+  for (const [name, entry] of Object.entries(raw))
+    if (typeof entry?.machine !== "string" || !entry.machine)
+      throw new StoreError(`${HOMES_FILE}: ${name} names no machine`);
   return raw;
 }
 
@@ -212,10 +218,16 @@ export function homeTick({
   }
   const due = !reached && (state.fetchedAt === undefined || now - state.fetchedAt >= REFETCH_MS);
   let homes = {};
+  // A homes file that can't be read or parsed leaves every home unknown, not open: what
+  // this run claimed earlier is dropped, so the gate stays shut until a readable file
+  // says this machine holds the home (the next tick's claim reads it) (RISA-1080).
+  /** @type {string | null} */
+  let unreadable = null;
   try {
     homes = homesOf(store.read(HOMES_FILE, { fetch: due }));
   } catch (e) {
-    lines.push(`home: ${e instanceof Error ? e.message : e}`);
+    unreadable = `the homes file is unreadable (${e instanceof Error ? e.message : e})`;
+    for (const n of names) if (claimed.includes(n)) claimed.splice(claimed.indexOf(n), 1);
   }
   /** @type {Record<string, string>} */
   const away = {};
@@ -224,15 +236,17 @@ export function homeTick({
   for (const n of names) {
     const holder = homes[n]?.machine ?? null;
     if (holder && holder !== me) away[n] = holder;
-    else if (!dryRun && !claimed.includes(n)) unknown.push(n);
+    else if (unreadable || (!dryRun && !claimed.includes(n))) unknown.push(n);
     else if (dryRun && !holder && !offWhy) lines.push(`home: would claim ${n} for ${me}`);
   }
   const blocked = away[name]
     ? `${name}'s home is ${away[name]}, not ${me} (${takeCmd} ${name} moves it here)`
     : unknown.includes(name)
-      ? offWhy
-        ? `${name}'s home isn't claimed here (${offWhy})`
-        : `${name}'s home isn't known yet (the inbox store can't be reached)`
+      ? unreadable
+        ? `${name}'s home isn't known (${unreadable})`
+        : offWhy
+          ? `${name}'s home isn't claimed here (${offWhy})`
+          : `${name}'s home isn't known yet (the inbox store can't be reached)`
       : null;
   if (blocked) lines.push(`home: ${blocked}: nothing starts, plans, reopens or is kept alive here`);
   let inboxWhy = null;
@@ -243,7 +257,9 @@ export function homeTick({
   else if (away[INBOX_HOME])
     inboxWhy = `the inbox home is ${away[INBOX_HOME]}, not ${me} (${takeCmd} ${INBOX_HOME} moves it here)`;
   else if (unknown.includes(INBOX_HOME))
-    inboxWhy = "the inbox home isn't known yet (the inbox store can't be reached)";
+    inboxWhy = unreadable
+      ? `the inbox home isn't known (${unreadable})`
+      : "the inbox home isn't known yet (the inbox store can't be reached)";
   if (inboxWhy && keepsInbox && !blocked) lines.push(`home: ${inboxWhy}: the inbox session isn't kept here`);
 
   /** @type {Record<string, string>} */
