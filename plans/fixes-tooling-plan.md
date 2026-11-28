@@ -6,10 +6,10 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State    | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | -------- | ------------------------------ |
-| 51    | 11   | RISA-1066 | opus  | starting |                                |
-| 52    | 11   | RISA-1068 | opus  | starting |                                |
+| Slice | Wave | Item      | Model | State                                     | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ----------------------------------------- | ------------------------------ |
+| 51    | 11   | RISA-1066 | opus  | agent working (worktree fixes-tooling-51) |                                |
+| 52    | 11   | RISA-1068 | opus  | agent working (worktree fixes-tooling-52) |                                |
 
 **Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file.
 
