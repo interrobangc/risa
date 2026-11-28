@@ -149,14 +149,16 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1054 | bug | ready | fixes-tooling | prd/fixes-tooling | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
 | RISA-1055 | feature | triaged | cross-machine-messages |  | Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account |
 | RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
-| RISA-1057 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
-| RISA-1058 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
-| RISA-1059 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
-| RISA-1060 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
+| RISA-1057 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
+| RISA-1058 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
+| RISA-1059 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
+| RISA-1060 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
 | RISA-1061 | bug | live | fixes-bug | prd/fixes-bug | context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo |
-| RISA-1062 | chore | in-progress | fixes-tooling | prd/fixes-tooling | Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown) |
+| RISA-1062 | chore | ready | fixes-tooling | prd/fixes-tooling | Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown) |
 | RISA-1063 | bug | live | fixes-bug | prd/fixes-bug | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
 | RISA-1064 | bug | triaged | fixes-bug |  | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
+| RISA-1065 | bug | triaged | fixes-bug |  | The time gate judges the local measure on its start load only (the quiet rule) |
+| RISA-1066 | change | triaged | fixes-tooling |  | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
 
 ## Items
 
@@ -1246,10 +1248,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1057 · bug · inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo
 
-- status: in-progress
+- status: ready
 - prd: risa-next-2
 - owner: prd/risa-next-2
-- commit:
+- commit: 9a783a1
 
 - 2026-11-28 (prd/risa-next-2): Codex P1 on PR #28 (risa-next-2 wave 1), backlog/inbox-store.mjs:53. Add a short hash of the URL to the name.
 - 2026-11-28 (prd/risa-next-2): Taken into risa-next-2 (it owns backlog/inbox-store.mjs): fixed with wave 2 (slice 2's brief), freeing fixes-bug's lane.
@@ -1257,10 +1259,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1058 · bug · inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere
 
-- status: in-progress
+- status: ready
 - prd: risa-next-2
 - owner: prd/risa-next-2
-- commit:
+- commit: 9a783a1
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:149. resolve() the store root or the index path.
 - 2026-11-28 (prd/risa-next-2): Taken into risa-next-2 (it owns backlog/inbox-store.mjs): fixed with wave 2 (slice 2's brief), freeing fixes-bug's lane.
@@ -1268,10 +1270,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1059 · bug · inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has
 
-- status: in-progress
+- status: ready
 - prd: risa-next-2
 - owner: prd/risa-next-2
-- commit:
+- commit: 9a783a1
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:101. Delete TRACKING when ls-remote answers empty.
 - 2026-11-28 (prd/risa-next-2): Taken into risa-next-2 (it owns backlog/inbox-store.mjs): fixed with wave 2 (slice 2's brief), freeing fixes-bug's lane.
@@ -1279,10 +1281,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1060 · bug · inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using
 
-- status: in-progress
+- status: ready
 - prd: risa-next-2
 - owner: prd/risa-next-2
-- commit:
+- commit: 9a783a1
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:91. Init in a temp folder and rename into place, or tolerate an existing remote with the same URL.
 - 2026-11-28 (prd/risa-next-2): Taken into risa-next-2 (it owns backlog/inbox-store.mjs): fixed with wave 2 (slice 2's brief), freeing fixes-bug's lane.
@@ -1299,10 +1301,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1062 · chore · Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 879b606
 
 - 2026-11-28 (prd/fixes-nit): Hit by fixes-nit slices 1-4 (2026-11-28)
 
@@ -1324,3 +1326,23 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-bug): Codex P2 on PR #30 (loops/captain.mjs:176, thread PRRT_kwDOV9ctaM69FeM-), follow-up of RISA-1063 slice 11
+
+### RISA-1065 · bug · The time gate judges the local measure on its start load only (the quiet rule)
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: From Caretook (prd-test-time-gates-2, with Caretook's backlog agreeing; the Caretook user's answer a255): a local check's end load counts the check's own work, so it shouldn't make a run unjudged. loops/time-gate.mjs:77 sets quiet = calm(start) && calm(end), so every Caretook quick check comes out unjudged and its quick gate can't be armed. Wanted: the local measure is judged when the start load is quiet; the end load stays in the input and the lines but no longer decides unjudged; CI measures unchanged. time-gate.test.mjs: quiet start + busy end is judged (ok/warn/fail); busy start is unjudged; lines still name both loads. Notify backlog (caretook) when it ships in a tagged release.
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-bug: wrong verdict (local runs unjudged). Caretook waits on it in a tagged release; notify backlog (caretook) and prd-test-time-gates-2 when tagged.
+
+### RISA-1066 · change · Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a…
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a fixture module / As land.test.mjs/land-fixture.mjs were. Suggested by Caretook (prd-test-time-gates-2) as a sibling of the time-gate quiet-rule item; no longer Caretook's concern.
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-tooling: test layout and speed, sibling of RISA-1065.
