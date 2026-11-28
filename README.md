@@ -31,6 +31,14 @@ ln -sf ~/.risa/releases/v0.1.0/bin/risa ~/.local/bin/risa
 node ~/.risa/releases/v0.1.0/loops/machine.mjs check
 ```
 
+## Start a project
+
+In a repo with no config, `risa init --name <slug> [--trunk <branch>] [--check <command>]`
+writes `.risa/config.json` and an empty backlog, inbox and archive under `plans/`, then
+prints the machine config line to add and the commit to make. A repo with a `risa.json`
+moves to the folder with `risa config migrate` (`--dry-run` first): it stages the moves
+and commits nothing.
+
 ## Develop
 
 Node 24 and pnpm 12.21.0. `pnpm install`, then `pnpm check` (prettier, eslint, the
