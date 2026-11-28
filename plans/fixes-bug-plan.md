@@ -35,7 +35,7 @@
 | 23    | 6    | RISA-1081       | opus   | merged       | 69cd110                    |
 | 24    | 6    | RISA-1086       | opus   | merged       | c3324f5                    |
 | 25    | 6    | RISA-1087       | opus   | merged       | 4fbc7cf                    |
-| 26    | 7    | RISA-1089       | opus   | started      |                            |
+| 26    | 7    | RISA-1089       | opus   | merged       | a0ca4d7                    |
 | 27    | 7    | RISA-1090       | opus   | started      |                            |
 | 28    | 7    | RISA-1091       | opus   | waits for 27 |                            |
 | 29    | 7    | RISA-1094       | opus   | started      |                            |
