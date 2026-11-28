@@ -8,16 +8,18 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1: Codex findings filed (RISA-1057–1060) and threads resolved; land needed `sync --force` (main's package.json): merged 0e2518c (project-config.md conflict, both kept, doc trimmed); `pnpm check` passed on 226294b. Next: push, Codex again, land (tier none), message prd-fixes-bug (risa), rotate.
+**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); gate green (`pnpm check` on cd7d14c, tier none, 2572 tests); slice worktrees removed; PR #34: Codex clean on 3aaff33 after two P2 findings filed as RISA-1071 (into slice 4) and RISA-1072 (into slice 6); landing. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
 
-| Slice | Wave | State                                  | Merge into `prd/risa-next-2` |
-| ----- | ---- | -------------------------------------- | ---------------------------- |
-| 1     | 1    | merged (opus, check passed on 7e76dbe) | 72d3a64                      |
-| 2     | 2    | —                                      | —                            |
-| 3     | 3    | —                                      | —                            |
-| 5     | 3    | —                                      | —                            |
-| 4     | 4    | —                                      | —                            |
-| 6     | 4    | —                                      | —                            |
+| Slice | Wave | State          | Merge into `prd/risa-next-2` |
+| ----- | ---- | -------------- | ---------------------------- |
+| 1     | 1    | landed (opus)  | 72d3a64                      |
+| 2     | 2    | landed (opus)  | 5ff0aae (main)               |
+| 3     | 3    | running (opus) | —                            |
+| 5     | 3    | merged (opus)  | 1aa160b                      |
+| 4     | 4    | —              | —                            |
+| 6     | 4    | —              | —                            |
+
+**Slice 6 note (from 5's hand-off):** `prd.sh inbox` opens from the machine config's first repo with `inbox` without checking `work: true`; slice 6's keep-alive says first `work: true` repo with `inbox`: make them agree.
 
 **Backlog:** RISA-1057–1060 (Codex on PR #28, `backlog/inbox-store.mjs`) taken into this PRD at fixes-bug's request: add them to slice 2's brief. Promised prd-fixes-bug (risa): a message when wave 1 lands in main, and when `backlog/` and `loops/dispatch` stop being hot. Claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
@@ -26,6 +28,7 @@
 - **One module knows the inbox repo's clone** (`backlog/inbox-store.mjs`, new); every other file asks it. No other file runs git in the clone.
 - **Additive:** a project without an `inbox` key behaves exactly as today (the trunk inbox, its writer, its ingest, no home claims); no `risa.json` key is renamed or removed; no existing test changes.
 - **No data moves:** no slice creates a repo, runs the move command on this repo or Caretook, or edits `plans/inbox.md` (PRD _Out of scope_).
+- **A trunk-only project loads nothing new:** `backlog/backlog.mjs` imports the store modules (`inbox-commands.mjs`, `inbox-store.mjs`) with `await import()` only when the config has `inbox`; shared helpers (`LookAlikeStop`) live in `inbox-edit.mjs` (wave 2: test fixtures copy a fixed file set).
 - **The store file's format is the trunk inbox's**, so `backlog/format.mjs`'s parsers and `backlog/inbox-edit.mjs` serve both.
 - **Hermetic tests:** bare repos in the OS temp dir stand in for the private repo; the clone folder and the machine name come from env overrides; `RISA_MACHINE_CONFIG` at a temp file; a stub `gh`; never this checkout's config or `~/.risa`.
 
@@ -59,6 +62,8 @@ Stack: no · Reads: loops/docs/inbox.md · Tests: unit · Blocked by: 1 · Check
 
 **Build:** PRD _Implementation decisions_, _The inbox commands_. `backlog/backlog.mjs` `inboxAdd`, `inboxMove`, `inboxEdit`, `inboxRemove` and the `inbox` list: with `config.inbox` set, read and write through slice 1's store (no `pushInboxEdit`, no `pickup`), same arguments, exit codes and look-alikes, output `on <repo> <file> as <sha>`. `backlog/inbox-store.mjs` (new in slice 1) gains a CLI, `node <tool>/backlog/inbox-store.mjs <add|edit|move|remove|list> --project <name> …`, that runs from any folder with no project config (the inbox session's entry point; `risa backlog` needs a repo config), finding the store from the machine config's repos (their `inbox.repo`, all equal, else one line naming both) or an existing clone; look-alikes against the store's lines, and the backlog too when the project's main checkout is in the machine config.
 
+**Also fix (Codex on PR #28, `backlog/inbox-store.mjs`):** RISA-1057 (a clone name that can't collide: a short hash of the URL in it); RISA-1058 (the temp index at an absolute path, so a relative `RISA_INBOX_STORE` works); RISA-1059 (a remote confirmed empty clears the tracking ref: no stale read, no write on a gone commit); RISA-1060 (a first-use clone safe across processes: clone into a temp folder and rename into place, the loser using the winner's). Each with a case in `backlog/inbox-store.test.mjs`.
+
 **Acceptance criteria:**
 
 - Unit test (`backlog/inbox-store-cli.test.mjs` (new)), a sample project with `inbox` at a temp bare repo: `backlog inbox add` writes the store file and leaves the trunk's history unchanged; edit, move and remove act on it; a look-alike exits 3; the CLI, run by its absolute path from a temp folder outside any repo, adds with `--project`; differing `inbox.repo`s refuse; a project with a custom `inbox.file` is reached by that file's stem.
@@ -78,6 +83,8 @@ Stack: no · Reads: loops/docs/backlog.md · Tests: unit · Blocked by: 2 · Che
 
 - Unit test (`backlog/inbox-ingest.test.mjs` (new)): ingest files two lines and the store is empty after; a crash after the backlog commit (the store write made to fail) and a rerun files nothing twice and then empties the store; a trunk with a user commit on top (push not possible) leaves the lines, and the doctor names them; a no-store project's ingest unchanged.
 
+**Also fix:** RISA-1067 (Codex on PR #32: `findStoreRepo` dedupes clone URLs before counting, with a case in `backlog/inbox-store.test.mjs`).
+
 **Blocked by:** 2. **Blocks:** 4.
 
 ## Slice 4: Moving a project's inbox
@@ -91,6 +98,8 @@ Stack: no · Reads: loops/docs/inbox.md · Tests: unit · Blocked by: 3, 5 · Ch
 **Acceptance criteria:**
 
 - Unit test (`backlog/inbox-move.test.mjs` (new)), stub `gh`: public and missing repos refused with nothing written; a private one gets the unfiled lines (tagged ones dropped), and the trunk commit changes exactly `risa.json` and the inbox file; a second run refuses.
+
+**Also fix:** RISA-1071 (Codex on PR #34: `inbox-commands.mjs` refuses edit, move and remove of a store line whose inbox key a backlog item holds, with a case in `backlog/inbox-store-cli.test.mjs`).
 
 **Blocked by:** 3, 5 (its doc describes slice 5's session). **Blocks:** nothing.
 
@@ -120,5 +129,7 @@ Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1, 5 �
 
 - Unit test (`loops/home.test.mjs` (new)), temp store, two machine names by env: the first claim wins and a second machine's is refused; `take` moves it, and after machine B takes a project, machine A's next dry-run tick past the five-minute refetch skips it and files the one report; the first `work: true` repo with `inbox` claims `inbox` on its first tick and keeps the inbox session; the second such repo on one machine skips it; a repo without `inbox` claims nothing and keeps its own inbox session.
 - `loops/dispatch.test.mjs` passes unchanged.
+
+**Also fix:** RISA-1072 (Codex on PR #34: `loops/prd.sh`'s inbox hop rebases an inherited `RISA_SESSIONS_DIR` onto the first project's `.loops/.sessions`, with a case in `loops/inbox-prompt.test.mjs` or `loops/home.test.mjs`).
 
 **Blocked by:** 1, 5. **Blocks:** nothing.

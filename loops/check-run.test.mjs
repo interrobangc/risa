@@ -427,7 +427,7 @@ describe("check-run.sh and the time gate", () => {
     const r = timed("quick", { extra: { RISA_CONFIG: armedConfig } });
     expect(r.status).toBe(125);
     expect(r.stderr).toContain(
-      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s: FAIL, 40 s past the cutoff.",
+      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s (load 1 at the start, 1 at the end): FAIL, 40 s past the cutoff.",
     );
     // The tooling step's seconds count: it is one of the steps named, the slowest.
     expect(r.stderr).toContain("  steps: tooling 165 s, unit 150 s, static 80 s, typegen 5 s");
@@ -448,23 +448,23 @@ describe("check-run.sh and the time gate", () => {
     const r = timed("slice");
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(
-      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s: WARN, 40 s past the cutoff, not armed.",
+      "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s (load 1 at the start, 1 at the end): WARN, 40 s past the cutoff, not armed.",
     );
     expect(r.stdout).toContain("  steps: tooling 165 s");
     expect(lastRun()).toMatchObject({ exit: 0, verdict: "warn", stepTimes: STEPS });
   });
 
-  it("doesn't judge a check that ended on a busy machine", () => {
+  it("judges a check that ended on a busy machine on its quiet start, naming both loads", () => {
     try {
       const r = timed("quick", {
         end: `echo "99999 99999 99999" > "${sysload}"`,
         extra: { RISA_CONFIG: armedConfig },
       });
-      expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(
-        /Time gate quick: 6m40s \(400 s\).*: not judged \(load 1 at the start, 99999 at the end/,
+      expect(r.status).toBe(125);
+      expect(r.stderr).toContain(
+        "Time gate quick: 6m40s (400 s); aim 5m00s, cutoff 6m00s (load 1 at the start, 99999 at the end): FAIL, 40 s past the cutoff.",
       );
-      expect(lastRun()).toMatchObject({ exit: 0, verdict: "unjudged", stepTimes: STEPS });
+      expect(lastRun()).toMatchObject({ exit: 125, verdict: "fail", stepTimes: STEPS });
     } finally {
       writeFileSync(sysload, "1 1 1\n");
     }

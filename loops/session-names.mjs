@@ -15,9 +15,12 @@
 // CLI (the machine's flavor, from the machine config; one that doesn't load reads
 // as the default):
 //   node session-names.mjs display <name> <kind> <remote> <project>
+//   node session-names.mjs start <name> <kind> <remote> <project>
+//     the display name, then the persona the session's first record keeps (a
+//     blank line for none; startName): session.sh's, at a session's start
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CAPTAIN_SESSION, machineFlavor, machinePersona } from "./captain.mjs";
+import { CAPTAIN_SESSION, keptPersona, machineFlavor, machinePersona } from "./captain.mjs";
 import { DEFAULT_FLAVOR, ROLES, label, personaOfLabel, sessionPersona, shortLabel } from "./flavor.mjs";
 
 /** Whether NAME, KIND is the main backlog session (its record name and kind). */
@@ -67,13 +70,30 @@ export const sessionLabel = (session, flavor = DEFAULT_FLAVOR) => label(personaO
  * REMOTE, in PROJECT: REMOTE itself when it is already qualified.
  * @param {{ name: string, kind: string, remote: string, project: string }} session
  */
-export function displayName({ name, kind, remote, project }, flavor = DEFAULT_FLAVOR) {
+export const displayName = (
+  /** @type {{ name: string, kind: string, remote: string, project: string }} */ session,
+  flavor = DEFAULT_FLAVOR,
+) => startName(session, flavor).display;
+
+/**
+ * A starting session's names from one persona draw: its display name
+ * (displayName) and the persona its first record keeps (captain.mjs's
+ * keptPersona: one stepped off its hash, else ""), so the record carries the
+ * persona the outside sees from the start (RISA-1064).
+ * @param {{ name: string, kind: string, remote: string, project: string }} session
+ * @returns {{ display: string, persona: string }}
+ */
+export function startName({ name, kind, remote, project }, flavor = DEFAULT_FLAVOR) {
   const tag = ` (${project})`;
+  const keep = (/** @type {import("./flavor.mjs").Persona | null | undefined} */ p) =>
+    ROLES.includes(kind) ? (keptPersona(kind, name, p, flavor) ?? "") : "";
   // The new order ends with the project; the old one carries it before ` · `.
-  if (remote.endsWith(tag) || remote.includes(`${tag} · `)) return remote;
+  if (remote.endsWith(tag) || remote.includes(`${tag} · `))
+    return { display: remote, persona: keep(readDisplayName(remote, flavor)?.persona) };
   const base = isMainBacklog(name, kind) ? CAPTAIN_SESSION : remote;
-  const lab = shortLabel(personaOf({ name, kind, remote }, flavor), flavor);
-  return `${lab ? `${lab} · ` : ""}${base}${tag}`;
+  const p = personaOf({ name, kind, remote }, flavor);
+  const lab = shortLabel(p, flavor);
+  return { display: `${lab ? `${lab} · ` : ""}${base}${tag}`, persona: keep(p) };
 }
 
 const isMain = () => {
@@ -86,9 +106,10 @@ const isMain = () => {
 
 if (isMain()) {
   const [verb, name, kind, remote, project] = process.argv.slice(2);
-  if (verb !== "display" || !name || !kind || !remote || !project) {
-    console.error("usage: session-names.mjs display <name> <kind> <remote> <project>");
+  if ((verb !== "display" && verb !== "start") || !name || !kind || !remote || !project) {
+    console.error("usage: session-names.mjs display|start <name> <kind> <remote> <project>");
     process.exit(2);
   }
-  console.log(displayName({ name, kind, remote, project }, machineFlavor()));
+  const named = startName({ name, kind, remote, project }, machineFlavor());
+  console.log(verb === "start" ? `${named.display}\n${named.persona}` : named.display);
 }
