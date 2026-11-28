@@ -4,19 +4,19 @@
 
 ## Status
 
-| Slice | Wave | State                                | Merge into `prd/risa-next` |
-| ----- | ---- | ------------------------------------ | -------------------------- |
-| 1     | 1    | merged (opus, 5fd8fdf)               | 37fd0e6                    |
-| 2     | 2    | working (opus, worktree risa-next-2) | —                          |
-| 3     | 2    | working (opus, worktree risa-next-3) | —                          |
-| 4     | 3    | —                                    | —                          |
-| 5     | 4    | —                                    | —                          |
+| Slice | Wave | State                                      | Merge into `prd/risa-next` |
+| ----- | ---- | ------------------------------------------ | -------------------------- |
+| 1     | 1    | merged (opus, 5fd8fdf)                     | 37fd0e6                    |
+| 2     | 2    | working (opus, worktree risa-next-2)       | —                          |
+| 3     | 2    | handed off (opus, 7754261; merges after 2) | —                          |
+| 4     | 3    | —                                          | —                          |
+| 5     | 4    | —                                          | —                          |
 
 **Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
 **Models:** slices 1, 2, 3 opus.
 
-**Landing held for wave 2 (orchestrator's call, 2026-11-28):** wave 1 alone would regress main: `captain.mjs` now draws admirals (`--remote-control Ross`), which the keep-alive and session-request matchers don't know until slice 2 makes the argument begin with `backlog`; and the backlog prompt would read "Captain Ross" until slice 3. Waves 1 and 2 land together. Wave 1 gate: `pnpm test` (tier none) on 37fd0e6.
+**Landing held for wave 2 (orchestrator's call, 2026-11-28):** wave 1 alone would regress main: `captain.mjs` now draws admirals (`--remote-control Ross`), which the keep-alive and session-request matchers don't know until slice 2 makes the argument begin with `backlog`; and the backlog prompt would read "Captain Ross" until slice 3. Waves 1 and 2 land together. Wave 1 gate (`risa check` on 4973ecd): 2382/2384, the two fails `land-unsynced` timeouts under load (also flaky alone at 460s with other checks running; slice 3's check on 7754261, which includes slice 1, passed all 2388). Not this PRD's code; main's load-scaled waits (RISA-883) arrive with the sync. The combined gate reruns after wave 2 and the sync.
 
 **Slice 1 notes for later slices:** `flavor.mjs` loads `machine.mjs` only by dynamic import in its CLI (a top-level await hangs node); tests copying `captain.mjs` also need `flavor.mjs`, `machine.mjs`, `config.mjs`.
 
