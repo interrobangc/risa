@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Risa's own ship steps (RISA-1053): the commands for risa.json's hooks.shipCheck and
-// hooks.ship (wired in once an installed release knows those keys). loops/ship.mjs owns the phases, the record and the report; this
+// Risa's own ship steps (RISA-1053): the commands for risa.json's hooks.shipCheck,
+// hooks.ship, hooks.shipSmoke and hooks.shipNotify (wired in once an installed release
+// knows those keys). loops/ship.mjs owns the phases, the record and the report; this
 // file knows only Risa's release: its v* tags on origin, its package.json and
 // CHANGELOG.md, and its CI on main. Run from the main checkout (the hook runner's cwd).
 //
@@ -16,18 +17,40 @@
 //                     then makes the annotated tag and pushes it. A tag already on
 //                     origin whose commit's package.json has the version is done.
 //                     Prints tag=v<version> and commit=<sha>.
+//   smoke <version>   installs the tag at $HOME/.risa/releases/v<version> (git worktree
+//                     add --detach, as the README does; one already at the tag is
+//                     reused, one at another commit refused), then runs from it, here:
+//                     loops/machine.mjs check, bin/risa --root (it must print the
+//                     install), bin/risa doc planner and bin/risa backlog list, each to
+//                     exit 0 (their output kept off the facts). Prints install=<dir> and
+//                     link=<the ln line>; ~/.local/bin is never touched.
+//   notify <version>  each other repo in the machine config whose config's risaVersion
+//                     is below the version gets one report (topic risa-release) in its
+//                     own asks, filed by the install's bin/risa run from that repo
+//                     without the ship's STRIP_ENV (which would file it in Risa's).
+//                     Prints notified=<name> (<their version>) each, and elsewhere=.
 //
 // The helpers: compareVersions, highestTag (origin's v* tags), releaseBase (the
 // newest commit of origin/main that changes more than the backlog's files, plans/),
 // ciOn (CI's conclusion on a commit, through ci-runs.mjs's listRuns, filtered to
 // WORKFLOW_NAME there). Exit 0 done, 1 refused or failed, 2 usage.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { realIo } from "../ci/ci-io.mjs";
 import { listRuns } from "../ci/ci-runs.mjs";
+import { ConfigError, configIn, loadConfig } from "../loops/config.mjs";
 import { isMain } from "../loops/is-main.mjs";
+import { MachineConfigError, loadMachineConfig } from "../loops/machine.mjs";
 
 export const TRUNK = "main";
 /** The backlog's files: commits touching only these don't need CI to pass. */
@@ -260,8 +283,145 @@ export function ship(/** @type {string} */ version) {
   }
 }
 
-const USAGE = "usage: release/ship.mjs check|ship <version>";
-const VERBS = /** @type {Record<string, (v: string) => void>} */ ({ check, ship });
+/** Where a version is installed: HOME/.risa/releases/v<version>. */
+export const installDir = (/** @type {string} */ version, home = process.env.HOME || homedir()) =>
+  join(home, ".risa", "releases", `v${version}`);
+
+/** A path with its symlinks resolved, when it exists. */
+const real = (/** @type {string} */ p) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+};
+
+/** A failed step's last lines of output, for its refusal. */
+const tail = (/** @type {{ stdout?: string | null, stderr?: string | null }} */ r) =>
+  `${r.stderr ?? ""}\n${r.stdout ?? ""}`.trim().split("\n").filter(Boolean).slice(-5).join(" | ");
+
+/** How long one smoke step may take. */
+const STEP_MS = 120_000;
+
+/** The smoke verb. */
+export function smoke(/** @type {string} */ version) {
+  const tag = `v${version}`;
+  const dir = installDir(version);
+  const tagRef = `refs/tags/${tag}^{commit}`;
+  if (!git(["rev-parse", "--verify", "-q", tagRef]).ok)
+    must(["fetch", "-q", "origin", `refs/tags/${tag}:refs/tags/${tag}`], `fetching ${tag}`);
+  const want = must(["rev-parse", "--verify", "-q", tagRef], `reading ${tag}`);
+  if (existsSync(dir)) {
+    const top = git(["rev-parse", "--show-toplevel"], dir);
+    if (!top.ok || real(top.out) !== real(dir)) refuse(`${dir} is there but isn't a checkout: move it aside`);
+    const at = must(["rev-parse", "HEAD"], `reading ${dir}`, dir);
+    if (at !== want)
+      refuse(`${dir} is at ${at.slice(0, 8)}, not ${tag} (${want.slice(0, 8)}): move it aside`);
+    say(`${dir} is already at ${tag}: reusing it`);
+  } else {
+    mkdirSync(dirname(dir), { recursive: true });
+    must(["worktree", "add", "-q", "--detach", dir, tag], `installing ${tag} at ${dir}`);
+  }
+  const risa = join(dir, "bin", "risa");
+  /** @type {[string, string, string[]][]} */
+  const steps = [
+    ["loops/machine.mjs check", process.execPath, [join(dir, "loops", "machine.mjs"), "check"]],
+    ["bin/risa --root", risa, ["--root"]],
+    ["bin/risa doc planner", risa, ["doc", "planner"]],
+    ["bin/risa backlog list", risa, ["backlog", "list"]],
+  ];
+  for (const [name, cmd, args] of steps) {
+    const r = spawnSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: STEP_MS });
+    if (r.status !== 0)
+      refuse(
+        `${tag}'s ${name} failed (${r.error ? r.error.message : `exit ${r.status ?? r.signal}`}): ${tail(r)}`,
+      );
+    if (name === "bin/risa --root" && real(r.stdout.trim()) !== real(dir))
+      refuse(`${tag}'s ${name} printed ${r.stdout.trim() || "nothing"}, not ${dir}`);
+  }
+  say(`install=${dir}`);
+  say(`link=ln -sf ${dir}/bin/risa ~/.local/bin/risa`);
+}
+
+/** The ship's variables a report filed in another repo must not inherit. */
+export const STRIP_ENV = [
+  "RISA_ASKS_DIR",
+  "RISA_SHIPS_DIR",
+  "RISA_SKEPTIC_DIR",
+  "RISA_NOTICES_DIR",
+  "RISA_CONFIG",
+  "RISA_CONFIG_FOUND",
+];
+/** The asks topic of a release's reports. */
+export const NOTIFY_TOPIC = "risa-release";
+
+/** The report a pinned project gets. */
+export const releaseReport = (
+  /** @type {string} */ version,
+  /** @type {string} */ theirs,
+  /** @type {string} */ dir,
+) =>
+  `Risa v${version} is out; this project pins ${theirs} (risaVersion). To take it: read ` +
+  `v${version} in ${dir}/CHANGELOG.md, then set risaVersion to ${version} in the project config.`;
+
+/** The notify verb. */
+export function notify(/** @type {string} */ version) {
+  const dir = installDir(version);
+  const risa = join(dir, "bin", "risa");
+  if (!existsSync(risa)) refuse(`no install at ${dir} (the smoke phase makes it)`);
+  let machine;
+  try {
+    machine = loadMachineConfig();
+  } catch (e) {
+    if (!(e instanceof MachineConfigError)) throw e;
+    refuse(`the machine config doesn't load: ${e.problems.join("; ")}`);
+  }
+  const self = real(
+    must(["worktree", "list", "--porcelain"], "finding the main checkout")
+      .split("\n")[0]
+      .replace(/^worktree /, ""),
+  );
+  const env = { ...process.env };
+  for (const k of STRIP_ENV) delete env[k];
+  /** @type {string[]} */
+  const failed = [];
+  for (const repo of machine?.repos ?? []) {
+    if (real(repo.path) === self) continue;
+    let config;
+    try {
+      const path = configIn(repo.path);
+      if (!path) continue;
+      config = loadConfig({ path }).config;
+    } catch (e) {
+      if (!(e instanceof ConfigError)) throw e;
+      process.stderr.write(`ship notify: ${repo.path} skipped: ${e.problems.join("; ")}\n`);
+      continue;
+    }
+    const theirs = config.risaVersion;
+    if (!theirs || compareVersions(theirs, version) >= 0) continue;
+    const r = spawnSync(
+      risa,
+      ["ask", "--topic", NOTIFY_TOPIC, "--report", releaseReport(version, theirs, dir)],
+      {
+        cwd: repo.path,
+        env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: STEP_MS,
+      },
+    );
+    if (r.status === 0) say(`notified=${config.name} (${theirs})`);
+    else {
+      process.stderr.write(`ship notify: filing ${config.name}'s report failed: ${tail(r)}\n`);
+      failed.push(config.name);
+    }
+  }
+  say("elsewhere=cross-machine-messages (RISA-1055)");
+  if (failed.length) refuse(`no report reached ${failed.join(", ")}`);
+}
+
+const USAGE = "usage: release/ship.mjs check|ship|smoke|notify <version>";
+const VERBS = /** @type {Record<string, (v: string) => void>} */ ({ check, ship, smoke, notify });
 
 if (isMain(import.meta.url)) {
   const [verb, version, ...rest] = process.argv.slice(2);
