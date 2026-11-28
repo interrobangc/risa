@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); wave gate CI requested. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
+**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); gate green (`pnpm check` on cd7d14c, tier none, 2572 tests); slice worktrees removed; PR #34 open, Codex review waiting. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
 
 | Slice | Wave | State          | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------- | ---------------------------- |
