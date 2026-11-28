@@ -56,6 +56,8 @@ const run = (mode, why, cmd, { clock = "", ...extra } = {}) =>
       RISA_CHECK_LIMIT: "",
       RISA_CHECK_SILENCE: "",
       RISA_CHECK_BUDGET_LOAD: "1",
+      RISA_CHECK_BUDGET_FLOOR: "",
+      RISA_CHECK_STEPS: "",
       RISA_CLOCK_FILE: clock,
       ...extra,
     },

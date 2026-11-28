@@ -187,7 +187,13 @@ describe("check-budget.mjs CLI", () => {
   const cli = (args, env = {}) =>
     spawnSync("node", [join(HERE, "check-budget.mjs"), ...args], {
       encoding: "utf8",
-      env: { ...process.env, RISA_CHECK_LIMIT: "", RISA_CHECK_SILENCE: "", ...env },
+      env: {
+        ...process.env,
+        RISA_CHECK_LIMIT: "",
+        RISA_CHECK_SILENCE: "",
+        RISA_CHECK_BUDGET_FLOOR: "",
+        ...env,
+      },
     });
 
   it("prints the two limits, then the description, from the log", () => {
