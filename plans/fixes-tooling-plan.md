@@ -11,7 +11,7 @@
 | 27    | 5    | RISA-1011      | sonnet | merged                                                                                         | 5bff9fa                        |
 | 28    | 5    | RISA-882       | opus   | merged                                                                                         | a99f7d2                        |
 | 29    | 5    | RISA-886, 889  | opus   | agent spawned                                                                                  | —                              |
-| 30    | 5    | RISA-986       | opus   | handed off (91ff7ef, merge 9704c53): ls.sh Holds section, dry-run reason                       | —                              |
+| 30    | 5    | RISA-986       | opus   | handed off (tip 83d93fd): own tests pass; check never got a lease, CI gates                    | —                              |
 | 31    | 5    | RISA-994 (1/2) | opus   | agent spawned                                                                                  | —                              |
 | 32    | 5    | RISA-994 (2/2) | opus   | waiting (blocked by 31)                                                                        | —                              |
 | 33    | 5    | RISA-1006      | opus   | handed off (tip c30f407): own test 6/6; check timed out under load, CI gates                   | —                              |
