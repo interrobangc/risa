@@ -21,8 +21,8 @@ generic role docs in `loops/docs/` (`risa doc <role>`), with two additions: the 
   and PRs to `main` and on `risa ci run`'s `ci/` refs.
 - **Commit subjects are Conventional Commits:** `<type>(<scope>)!: <description>`, backlog
   ids in parentheses at the end (`RISA-n`).
-- **Releases are tags** (`v0.1.0`), cut after bumping `package.json`'s version to
-  match. A project pins one exactly; a change breaking its config or commands says so
+- **Releases are tags** (`v0.1.0`), cut with `risa ship <version>`, which bumps
+  `package.json`, tags, installs, tries and tells. A project pins one exactly; a change breaking its config or commands says so
   (`!`, `BREAKING CHANGE:`).
 - **All test data is fictional.** The sample and fixture projects stand in for a real one.
 
