@@ -66,7 +66,7 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 ## Slice 4: The dispatcher logs why it exits
 
-Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none (self-recovery-2's PR #23 landed as 685c78c) · Check: loops/dispatch-restart.test.mjs
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-restart.test.mjs
 
 **Build (RISA-1037):** Caretook's dispatcher was gone hours after a normal tick, with no error in its log and its state still naming the dead pid. Every way `loops/dispatch.mjs` can exit (a signal it can catch, an uncaught exception or rejection, a lost lock, a clean stop, `--restart`'s re-exec) writes one line to the dispatch log saying why, with the error's first line, and marks the state stopped (`stoppedAt`, `why`). A clean stop removes the lock as now. Afterwards a gone pid with no stop mark means a crash or a SIGKILL. Then teach the status flag from slice 1 (`loops/status-extra.mjs`) to read the stop mark: a mark means `stopped (<why>, <age> ago)`, no mark means `dead`.
 
@@ -86,7 +86,7 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 ## Slice 6: The inbox session finds its own project
 
-Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none (self-recovery-2's PR #23 landed as 685c78c) · Check: loops/session.test.mjs
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/session.test.mjs
 
 **Build (RISA-1038):** `prd.sh inbox` opens the inbox session in its own directory (`$RISA_INBOX_DIR`, default `~/.risa/inbox`, outside any repo). `loops/session.sh` sources `loops/lib.sh`, whose `find_repo` from that `$PWD` gets no machine entry, so the main checkout comes from `git -C $loops_lib_dir`: the release worktree, Risa's own checkout. `host.mjs claude-session` then reads Risa's machine entry, so the session misses the project's `claudeConfigDir` (it starts on Claude Code's default account) and its session record goes under Risa's `.loops/.sessions` (the project's `risa status` reads it ended while it's live, and the keep-alive may reopen a live inbox). Reproduce it first in a test (a throwaway project repo and machine config in the OS temp dir, a session run from a directory outside any repo). Fix: `prd.sh inbox` passes the project's main checkout through (`RISA_MAIN`), and `session.sh` (or `find_repo`) prefers it when `$PWD` is outside a repo. Keep the `prd.sh` edit to that one pass-through.
 
