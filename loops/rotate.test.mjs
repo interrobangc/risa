@@ -21,13 +21,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CAPTAINS } from "./captain.mjs";
 import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 import { pick } from "./dispatch-pick.mjs";
+import { BASE, scaledWait } from "./test-limits.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
+// The limits follow the load as this file starts, not only as the run did (RISA-994).
+vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
 
 const plan = (rows, mode = "ask before each landing") => `# Plan: W
@@ -221,8 +224,10 @@ function start(cmd, args, extra = {}, cwd = main) {
   );
   return { child, done };
 }
+// A wait on a started script, scaled for the load (test-limits.mjs): a busy
+// machine starts session.sh slower, not wrongly.
 const until = async (what, ms = 10_000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + scaledWait(ms);
   while (!what()) {
     if (Date.now() > end) throw new Error("timed out waiting");
     await new Promise((r) => setTimeout(r, 50));
@@ -309,7 +314,7 @@ beforeAll(() => {
     RISA_CONFIG: config,
     SAMPLE_STACK_STATE: join(root, "stack-state"),
   };
-}, 60_000);
+}, scaledWait(60_000));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   rmSync(state, { recursive: true, force: true });
@@ -493,25 +498,29 @@ ${owner ? `- owner: ${owner}\n` : ""}`;
     git(main, "commit", "-q", "-m", "chore: no registry");
   });
 
-  it("closes one whose waiting items are all blocked: rm runs, its session ends, none opens", async () => {
-    // Landed (nothing past dev), one item, and fy (four) would take the lane.
-    setUp(idle());
-    const { s } = await fxSession();
-    const r = run("prd.sh", ["rotate", "fx"], caps);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain(
-      "Closing prd-fx instead of rotating: 1 waiting, under 3, and fy would start in its lane",
-    );
-    expect(r.stdout).toContain("Removed fx");
-    expect(r.stdout).not.toContain("Rotating prd-fx");
-    expect(r.stdout).not.toContain("rotate-into.sh");
-    expect((await s.done).code).toBe(143);
-    expect(existsSync(fxDir())).toBe(false);
-    // rm leaves a standing row standing, not done.
-    expect(JSON.parse(backlog("prd", "list", "--json")).find((x) => x.topic === "fx").flags).toEqual([
-      "standing",
-    ]);
-  }, 60_000);
+  it(
+    "closes one whose waiting items are all blocked: rm runs, its session ends, none opens",
+    async () => {
+      // Landed (nothing past dev), one item, and fy (four) would take the lane.
+      setUp(idle());
+      const { s } = await fxSession();
+      const r = run("prd.sh", ["rotate", "fx"], caps);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(
+        "Closing prd-fx instead of rotating: 1 waiting, under 3, and fy would start in its lane",
+      );
+      expect(r.stdout).toContain("Removed fx");
+      expect(r.stdout).not.toContain("Rotating prd-fx");
+      expect(r.stdout).not.toContain("rotate-into.sh");
+      expect((await s.done).code).toBe(143);
+      expect(existsSync(fxDir())).toBe(false);
+      // rm leaves a standing row standing, not done.
+      expect(JSON.parse(backlog("prd", "list", "--json")).find((x) => x.topic === "fx").flags).toEqual([
+        "standing",
+      ]);
+    },
+    scaledWait(60_000),
+  );
 
   it("rotates one with a runnable item as now", async () => {
     setUp(["B-1", "B-2", "B-3"].map((id) => item(id, "fx")).join(""));
@@ -1117,7 +1126,7 @@ Intro.
       });
       for (const t of ["fin", "open", "std", "notable"]) prdWorktree(t);
       prdWorktree("unm", { merged: false });
-    }, 60_000);
+    }, scaledWait(60_000));
 
     it("marks a merged branch with no slice left done", () => {
       const r = run("rm.sh", ["fin"]);
@@ -1180,7 +1189,7 @@ Intro.
       landedWorktree("taild", { "docs/tail-notes.md": "# Notes\n" });
       landedWorktree("tailc", { "plans/tailc-plan.md": `${plan(MERGED)}\nLanded.\n`, "code.mjs": "x\n" });
       prdWorktree("itm");
-    }, 60_000);
+    }, scaledWait(60_000));
 
     it("marks it done when the tail changes only its plan, and drops the tail with the branch", () => {
       const r = run("rm.sh", ["tailp"]);

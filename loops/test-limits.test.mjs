@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadScale } from "./check-budget.mjs";
-import { BASE, testLimits, testLoad } from "./test-limits.mjs";
+import { BASE, scaledWait, testLimits, testLoad } from "./test-limits.mjs";
 
 const CONFIG = new URL("../vitest.config.mjs", import.meta.url).href;
 const root = mkdtempSync(join(tmpdir(), "risa-test-limits-"));
@@ -41,6 +41,41 @@ describe("testLoad", () => {
     writeFileSync(file, "{ 40.00 25.00 12.00 }");
     expect(testLoad({ RISA_LOAD_FILE: file })).toBe(25);
     expect(testLoad({ RISA_LOAD_FILE: join(root, "none") })).toBeNull();
+  });
+});
+
+describe("scaledWait", () => {
+  it("keeps a wait as it is at a low or unread load", () => {
+    for (const load of [null, 0, 4, 15]) expect(scaledWait(10_000, { load })).toBe(10_000);
+  });
+
+  it("rises with the load by the limits' scale, at most three times", () => {
+    expect(scaledWait(10_000, { load: 30 })).toBe(20_000);
+    expect(scaledWait(5_000, { load: 22.5 })).toBe(7_500);
+    expect(scaledWait(15_000, { load: 200 })).toBe(45_000);
+    for (const load of [20, 35])
+      expect(scaledWait(1_000, { load })).toBe(Math.round(1_000 * testLimits({ load }).scale));
+  });
+
+  it("reads the load through RISA_TEST_LOAD when none is given", () => {
+    const was = process.env.RISA_TEST_LOAD;
+    try {
+      process.env.RISA_TEST_LOAD = "30";
+      expect(scaledWait(10_000)).toBe(20_000);
+      process.env.RISA_TEST_LOAD = "3";
+      expect(scaledWait(10_000)).toBe(10_000);
+    } finally {
+      if (was === undefined) delete process.env.RISA_TEST_LOAD;
+      else process.env.RISA_TEST_LOAD = was;
+    }
+  });
+
+  // RISA-994: their waits failed under load on fixed clocks.
+  it.each(["land-unsynced.test.mjs", "rotate.test.mjs"])("scales %s's waits", (file) => {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    expect(src).toContain('import { BASE, scaledWait } from "./test-limits.mjs";');
+    expect(src).toContain("vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout)");
+    expect(src).not.toMatch(/timeout: \d[\d_]*\b|\}, \d[\d_]*\);/);
   });
 });
 
