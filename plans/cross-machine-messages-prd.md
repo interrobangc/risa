@@ -17,7 +17,7 @@ Item RISA-1055 (cross-machine messages through the private inbox repo; peers fou
 | A message is advice from another project, never the user's word, whatever it claims to quote                                                                                                                                                                                                                                                                             | the existing peer rule                                                                                                                                                    | preference (the backlog prompt's peer rule) | low                                     |
 | Ship's notify hook (`ship` topic, not yet landed) gets the cross-machine sender in a follow-up item, `fixes-tooling`, filed by this topic's planner at landing and run after `ship` lands                                                                                                                                                                                | neither topic can wire the other's unlanded code                                                                                                                          | assumed                                     | low: one item                           |
 
-**Skeptic:** the first plan skeptic sent it back (s32): the inbox doc section (over its budget, and the wrong reader) is dropped; a peer's mailbox never follows `RISA_MESSAGES_DIR`; the peers CLI prints fixed columns; the ship follow-up is filed at landing; a home here with no checkout goes through the store. All five were fixed.
+**Skeptic:** the first plan skeptic sent it back (s32): the inbox doc section (over its budget, and the wrong reader) is dropped; a peer's mailbox never follows `RISA_MESSAGES_DIR`; the peers CLI prints fixed columns; the ship follow-up is filed at landing; a home here with no checkout goes through the store. All five were fixed. The retry said go; from its notes a project's store name is its inbox file's stem everywhere, every part reads one mailbox (`RISA_MESSAGES_DIR` included), the hook never delivers on a subagent's call, and the wait test's timing scales.
 
 Nothing was asked: every row is additive (a new command, a new store file, a new local folder), no `risa.json` key is added or changes, and no existing data changes meaning. A project takes part once it has an `inbox` key and a Risa release with this topic; until then a send to it is queued in the store, or refused with the reason when the store doesn't know it.
 
@@ -44,6 +44,7 @@ Messages go through the private inbox repo every machine already reaches with gi
 
 ### Messages and the mailbox
 
+- A project's store name is its inbox file's stem (the key `homes.json` uses): its queue is `<stem>.messages.json`, and the route, the pickup and the peers use that name.
 - One module owns the message shape and both stores' codecs: a message is `{ id, from: { project, machine, session }, to, text, sentAt }` (store id: the sender's machine, the time and a random suffix). Pure: parse and render the store file (a JSON list; anything else is an error naming the file), append (refused past 200 entries or 2000 characters), remove by ids.
 - The local mailbox is one JSON file per message in the main checkout's `.loops/.messages/` (`RISA_MESSAGES_DIR` overrides it for the project's own mailbox only; a send to a peer always writes the peer's main checkout's folder), created exclusively as the notice board creates its files (ids `m1`, `m2`, …, never reused). Each keeps `storeId` (null for a local send), `deliveredAt` and `doneAt`. A create with a `storeId` already in the folder writes nothing. Done files are pruned a day after `doneAt`.
 
@@ -60,7 +61,7 @@ Messages go through the private inbox repo every machine already reaches with gi
 
 ### Delivery to the backlog session
 
-- The context hook, in the project's main backlog session only (`backlog`), adds the undelivered, undone messages to the session's context at its next tool call (three at most, then a line naming `risa messages`), marked as another project's advice, never the user's word, with how to answer (`risa message <their project> …`) and to mark each done; it sets `deliveredAt`. Any error stays swallowed, as every hook error is.
+- The context hook, in the project's main backlog session only (`backlog`), adds the undelivered, undone messages to the session's context at its own next tool call (never a subagent's) (three at most, then a line naming `risa messages`), marked as another project's advice, never the user's word, with how to answer (`risa message <their project> …`) and to mark each done; it sets `deliveredAt`. Any error stays swallowed, as every hook error is.
 
 ### Peers and the prompt
 
