@@ -45,7 +45,7 @@ describe("pnpm prd rotate --self", () => {
   /** A recorded session that runs `rotate --self` from inside itself, then stays up. */
   const selfSession = async (
     name,
-    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name, extra = {} } = {},
+    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name, extra = {}, wait = 10_000 } = {},
   ) => {
     const s = start(
       "bash",
@@ -53,7 +53,7 @@ describe("pnpm prd rotate --self", () => {
       { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args, ...extra },
       cwd,
     );
-    await until(() => existsSync(join(state, "ready")));
+    await until(() => existsSync(join(state, "ready")), wait);
     return { s, pid: stubPid(), out: stateFile("rotate.out"), code: stateFile("rotate.code").trim() };
   };
   const finish = async ({ s, pid }) => {
@@ -73,11 +73,12 @@ describe("pnpm prd rotate --self", () => {
 
   beforeEach(() => rmSync(briefs(), { recursive: true, force: true }));
 
-  // The file's first rotation runs every script cold: twice the scaled limit under load.
+  // The file's first rotation runs every script cold (about three times the others' start in a
+  // full run): twice the scaled limits, for the test and for its wait on the session.
   it(
     "ends the main backlog session and opens one of the same name and model, as a new captain, with no brief",
     async () => {
-      const old = await selfSession("backlog", { remote: "Archer" });
+      const old = await selfSession("backlog", { remote: "Archer", wait: 20_000 });
       expect(old.code).toBe("0");
       const captain = /^Rotating backlog: pid \d+ \(the calling session\), as ([A-Za-z]+)\.$/m.exec(
         old.out,
