@@ -12,15 +12,15 @@
 
 | Slice | Wave | Item           | Model  | State   | Merge into `prd/fixes-nit` |
 | ----- | ---- | -------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-995 (1/4) | opus   | planned |                            |
-| 2     | 1    | RISA-995 (2/4) | sonnet | planned |                            |
-| 3     | 1    | RISA-995 (3/4) | sonnet | planned |                            |
-| 4     | 1    | RISA-995 (4/4) | sonnet | planned |                            |
-| 5     | 1    | RISA-1019      | sonnet | planned |                            |
-| 6     | 1    | RISA-1041      | opus   | planned |                            |
-| 7     | 1    | RISA-1051      | opus   | planned |                            |
+| 1     | 1    | RISA-995 (1/4) | opus   | working |                            |
+| 2     | 1    | RISA-995 (2/4) | sonnet | working |                            |
+| 3     | 1    | RISA-995 (3/4) | sonnet | working |                            |
+| 4     | 1    | RISA-995 (4/4) | sonnet | working |                            |
+| 5     | 1    | RISA-1019      | sonnet | working |                            |
+| 6     | 1    | RISA-1041      | opus   | working |                            |
+| 7     | 1    | RISA-1051      | opus   | working |                            |
 
-**Wave 1** (slices 1–7, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). RISA-995's files under `backlog/` and `loops/dispatch*` wait for a later wave: they are hot for running risa-next-2; so does `loops/docs/inbox.md` for RISA-1051.
+**Wave 1** (slices 1–7, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). RISA-995's files under `backlog/` and `loops/dispatch*` wait for a later wave: they are hot for running risa-next-2; so does `loops/docs/inbox.md` for RISA-1051. `risa anchors` warns slices 1–4 name 13–18 files: each is a one-line wording edit per file, kept as is. Items claimed, hot files set. Slices 1–7 started (worktrees `.loops/fixes-nit-<n>`, one agent each; brief from `risa prompt slice`, plus a pointer to the command-name rule for 1–4).
 
 ## How to run this plan
 
