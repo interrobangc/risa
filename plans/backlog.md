@@ -151,6 +151,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1081 | bug | triaged | fixes-bug |  | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
 | RISA-1082 | bug | triaged | fixes-bug |  | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
 | RISA-1083 | bug | triaged | fixes-bug |  | Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears |
+| RISA-1084 | bug | triaged | fixes-bug |  | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
 
 ## Items
 
@@ -1252,3 +1253,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69Gjta, loops/dispatch.mjs:2586); verified: loadHome runs once before the loop, and the code hash covers only .mjs files.
+
+### RISA-1084 · bug · Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GmA8, loops/dispatch.mjs:2018); verified: homeBlocked is read at the pick, the keep-alive, the session request and the resume only.
