@@ -225,15 +225,26 @@ export function archiveDone(rows, worktrees = new Set()) {
   const moved = done.filter((r) => !worktrees.has(r.topic));
   const gone = new Set(moved.map((r) => r.topic));
   return {
-    rows: rows
-      .filter((r) => !gone.has(r.topic))
-      .map((r) =>
-        r.after.some((a) => gone.has(a)) ? { ...r, after: r.after.filter((a) => !gone.has(a)) } : r,
-      ),
+    rows: withoutAfter(
+      rows.filter((r) => !gone.has(r.topic)),
+      gone,
+    ),
     moved,
     kept: done.filter((r) => worktrees.has(r.topic)).map((r) => r.topic),
   };
 }
+
+/**
+ * `rows` with `met` (topics) gone from their After. `prd list`, which the
+ * dispatcher reads, passes the archived topics: an archived topic is done, so
+ * an After that names it (set after the archive, or by hand) is met, as doctor
+ * sees it, and the row doesn't wait on it. The stored cell keeps it.
+ * @param {Row[]} rows @param {Set<string>} met
+ */
+export const withoutAfter = (rows, met) =>
+  rows.map((r) =>
+    r.after.some((a) => met.has(a)) ? { ...r, after: r.after.filter((a) => !met.has(a)) } : r,
+  );
 
 // ---- the worked-out state --------------------------------------------------------
 

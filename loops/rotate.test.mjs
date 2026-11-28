@@ -21,9 +21,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CAPTAINS } from "./captain.mjs";
-import { clearsHot, contextHold, doneFlags, slicesLeft } from "./rotate.mjs";
+import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -100,6 +100,53 @@ describe("the pure part", () => {
     ).toEqual([]);
     // No table to read: every slice counts as at work.
     expect(contextHold({ planText: "# Plan\n", slices: ["2"], hard: 225_000 })).toEqual(["2"]);
+  });
+
+  describe("a standing topic's hand-over closes it when nothing runnable waits (RISA-952)", () => {
+    const row = (topic, extra = {}) => ({ topic, flags: [], after: [], hot: [], state: "planned", ...extra });
+    const fx = (extra = {}) => row("fx", { flags: ["standing"], state: "running", ...extra });
+    const wts = [{ name: "fx", branch: "prd/fx" }];
+    const caps = { prds: 1, planners: 1, fixesMin: 3 };
+    const close = (rows, more = {}) => standingClose({ rows, worktrees: wts, caps, ...more }, "fx");
+
+    it("closes one whose waiting items are all blocked", () => {
+      expect(close([fx({ waiting: 0 })])).toBe("no waiting items");
+      // Its items wait on another topic: an After not done, or a hot file a running topic shares.
+      expect(close([fx({ waiting: 4, after: ["big"] }), row("big", { state: "to-write" })])).toBe(
+        "nothing it could start: waits for big",
+      );
+      expect(
+        close([fx({ waiting: 4, hot: ["loops/x"] }), row("big", { state: "running", hot: ["loops/"] })], {
+          worktrees: [...wts, { name: "big", branch: "prd/big" }],
+        }),
+      ).toBe("nothing it could start: shares loops/x with big");
+      // Held: the dispatcher never starts it.
+      expect(close([fx({ waiting: 4, flags: ["standing", "hold"] })])).toMatch(
+        /^nothing it could start: on hold/,
+      );
+      // Short of the minimum while another topic would take the lane it frees (fixes-ui's 4 h idle).
+      expect(close([fx({ waiting: 1 }), row("fixes-bug", { flags: ["standing"], waiting: 4 })])).toBe(
+        "1 waiting, under 3, and fixes-bug would start in its lane",
+      );
+    });
+
+    it("rotates one with a runnable item, as now", () => {
+      expect(close([fx({ waiting: 3 }), row("other")])).toBeNull();
+      // Short, but nothing else would start in its place.
+      expect(close([fx({ waiting: 1 })])).toBeNull();
+      expect(close([fx({ waiting: 1 }), row("other", { state: "hold" })])).toBeNull();
+      // Its own open question isn't a block: a fresh session carries it.
+      expect(
+        close([fx({ waiting: 3 })], {
+          asks: [{ id: "a1", kind: "question", topic: "fx", session: "prd-fx" }],
+        }),
+      ).toBeNull();
+    });
+
+    it("rotates a non-standing topic, as now", () => {
+      expect(close([row("fx", { state: "running", waiting: 0 })])).toBeNull();
+      expect(close([])).toBeNull();
+    });
   });
 });
 
@@ -205,28 +252,8 @@ beforeAll(() => {
     git(main, "config", k, v);
   mkdirSync(join(main, "loops"), { recursive: true });
   mkdirSync(join(main, "backlog"), { recursive: true });
-  for (const f of [
-    "prd.sh",
-    "lib.sh",
-    "config.mjs",
-    "session.sh",
-    "sessions.mjs",
-    "captain.mjs",
-    "rotate.sh",
-    "rotate-into.sh",
-    "rotate.mjs",
-    "landed.mjs",
-    "context.mjs",
-    "heartbeat.mjs",
-    "open-session.sh",
-    "open-session.mjs",
-    "host.mjs",
-    "planner-model.mjs",
-    "prompt.sh",
-    "rm.sh",
-    "stack-lib.sh",
-    "hooks.mjs",
-  ])
+  // Every script, not a list: standing-close reads the dispatcher's facts (dispatch.mjs and its imports).
+  for (const f of readdirSync(HERE).filter((f) => /\.(mjs|sh)$/.test(f) && !f.includes(".test.")))
     copyFileSync(join(HERE, f), scripts(f));
   cpSync(join(HERE, "prompts"), scripts("prompts"), { recursive: true });
   const backlogDir = join(HERE, "../backlog");
@@ -391,6 +418,98 @@ describe("pnpm prd rotate", () => {
       git(main, "worktree", "remove", "--force", join(loops, "w-3"));
       git(main, "branch", "-D", "slice/w/3");
     }
+  });
+});
+
+describe("pnpm prd rotate on a standing topic (RISA-952)", () => {
+  const registry = (items = "") => `# Backlog tracker
+
+Intro.
+
+## PRDs
+
+| PRD | Flags | After | Hot files | Doc and notes |
+| --- | ----- | ----- | --------- | ------------- |
+| \`fx\` | standing | — | — | a fixes topic |
+| \`fy\` | standing | — | — | another fixes topic |
+| \`w\` | — | — | — | a PRD |
+
+## Items
+${items}`;
+  const item = (id, prd) => `
+### ${id} · bug · Something
+
+- status: triaged
+- prd: ${prd}
+`;
+  const fxDir = () => join(loops, "fx");
+  const setUp = (items) => {
+    writeFileSync(join(main, "plans/backlog.md"), registry(items));
+    writeFileSync(join(main, "plans/fx-plan.md"), plan(MERGED));
+    git(main, "add", "plans");
+    git(main, "commit", "-q", "-m", "chore: registry");
+    git(main, "worktree", "add", "-q", "-b", "prd/fx", fxDir(), "dev");
+  };
+  const fxSession = async () => {
+    const s = start(
+      "bash",
+      [scripts("session.sh"), "prd-fx", "--", "x"],
+      { STUB_MODE: "wait", STUB_NAME: "prd-fx" },
+      fxDir(),
+    );
+    await until(() => existsSync(join(state, "ready")));
+    return { s, pid: stubPid() };
+  };
+  // Two lanes: w's worktree (the other tests') takes one, fx the other.
+  const caps = { RISA_MAX_PRDS: "2", RISA_FIXES_MIN: "" };
+  afterEach(() => {
+    if (existsSync(fxDir())) git(main, "worktree", "remove", "--force", fxDir());
+    if (git(main, "branch", "--list", "prd/fx")) git(main, "branch", "-D", "prd/fx");
+    git(main, "rm", "-q", "plans/backlog.md", "plans/fx-plan.md");
+    git(main, "commit", "-q", "-m", "chore: no registry");
+  });
+
+  it("closes one whose waiting items are all blocked: rm runs, its session ends, none opens", async () => {
+    // One item, under the minimum, and fy (four) would take the lane.
+    setUp(item("B-1", "fx") + ["B-2", "B-3", "B-4", "B-5"].map((id) => item(id, "fy")).join(""));
+    const { s } = await fxSession();
+    const r = run("prd.sh", ["rotate", "fx"], caps);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      "Closing prd-fx instead of rotating: 1 waiting, under 3, and fy would start in its lane",
+    );
+    expect(r.stdout).toContain("Removed fx");
+    expect(r.stdout).not.toContain("Rotating prd-fx");
+    expect(r.stdout).not.toContain("rotate-into.sh");
+    expect((await s.done).code).toBe(143);
+    expect(existsSync(fxDir())).toBe(false);
+    // rm leaves a standing row standing, not done.
+    expect(JSON.parse(backlog("prd", "list", "--json")).find((x) => x.topic === "fx").flags).toEqual([
+      "standing",
+    ]);
+  }, 60_000);
+
+  it("rotates one with a runnable item as now", async () => {
+    setUp(["B-1", "B-2", "B-3"].map((id) => item(id, "fx")).join(""));
+    const { s, pid } = await fxSession();
+    const r = run("prd.sh", ["rotate", "fx"], caps);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`Rotating prd-fx: pid ${pid} (from its record).`);
+    expect(r.stdout).not.toContain("Closing");
+    expect(existsSync(fxDir())).toBe(true);
+    process.kill(pid, "SIGTERM");
+    await s.done;
+  });
+
+  it("rotates a non-standing topic as now, with the registry there", async () => {
+    setUp("");
+    const { s, pid } = await liveSession();
+    const r = run("prd.sh", ["rotate", "w"], caps);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`Rotating prd-w: pid ${pid} (from its record).`);
+    expect(r.stderr).toBe("");
+    process.kill(pid, "SIGTERM");
+    await s.done;
   });
 });
 
