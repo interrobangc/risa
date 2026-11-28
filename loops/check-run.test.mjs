@@ -133,8 +133,14 @@ describe("check-run.sh budget and silence limit", () => {
 
   it("hands the budget the steps it will run, RISA_CHECK_STEPS (RISA-1073)", () => {
     const log = join(root, "steps-log");
+    // The samples' branch is the checkout's own (check-run.sh reads it from its
+    // cwd), so they match the check's branch kind on a slice, prd or detached checkout.
+    const branch = spawnSync("git", ["branch", "--show-current"], {
+      cwd: HERE,
+      encoding: "utf8",
+    }).stdout.trim();
     const line = (secs, steps) =>
-      ["2026-11-01T10:00:00Z", "wt", "slice/x/1", "quick", "", secs, "1", "1", "0"]
+      ["2026-11-01T10:00:00Z", "wt", branch, "quick", "", secs, "1", "1", "0"]
         .concat(Array(8).fill(""), steps)
         .join("\t");
     writeFileSync(log, [5, 6, 7, 8, 9].map((s) => line(s, "check:5")).join("\n") + "\n");
