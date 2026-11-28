@@ -13,7 +13,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | done | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | `loops/skeptics`, `loops/prompts`, `loops/prompt.test.mjs`, `sample-project/prompt-golden.txt`, `loops/slice-fields`, `loops/docs/planner.md`, `loops/docs/backlog.md`, `loops/docs/machinery.md`, `loops/ls`, `loops/dispatch`, `loops/land`, `loops/rotate.test.mjs`, `loops/test-env`, `vitest.config.mjs`, `loops/ask.test.mjs`, `loops/sessions.test.mjs`, `loops/bye.test.mjs`, `loops/tooling-lint`, `package.json`, `loops/status-extra`, `loops/codex-review`, `loops/drain`, `loops/token-price` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
+| `fixes-tooling` | standing | — | — | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
 | `risa-next` | — | — | `loops/flavor`, `loops/machine.mjs`, `loops/captain`, `loops/session.sh`, `loops/session-names`, `loops/ask.mjs`, `loops/prompt.sh`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/peers`, `loops/docs/backlog.md` | — |
 | `risa-next-2` | — | `risa-next` | — | — |
 | `risa-next-3` | — | `risa-next-2` | — | — |
@@ -54,7 +54,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-797 | plan | triaged | risa-next-4 |  | Risa: prove it on a second repo with tests, then make it usable by others |
 | RISA-799 | change | triaged | risa-next |  | Include captain name and backlog agent name so other agents can find it. |
 | RISA-811 | change | triaged | self-recovery-2 |  | Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits |
-| RISA-813 | feature | ready | fixes-tooling | prd/fixes-tooling | Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop |
+| RISA-813 | feature | live | fixes-tooling | prd/fixes-tooling | Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop |
 | RISA-814 | feature | triaged | usage-aware-drain |  | Orchestrator picks the usage drain line from the current Claude plan (e.g. ultra vs smaller plans) instead of one fixed percent |
 | RISA-815 | change | triaged | risa-next |  | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
 | RISA-816 | question | triaged | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
@@ -62,10 +62,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-841 | change | triaged | risa-next-2 |  | Risa: one inbox session for every configured project, lines kept in a private inbox repo |
 | RISA-880 | chore | live | fixes-tooling | prd/fixes-tooling | Planners get the context watch: add plan sessions to the context hook (data-rights peaked 256k, onboarding-2 214k) |
 | RISA-881 | chore | live | fixes-tooling | prd/fixes-tooling | Slice small at planning (elephant carpaccio): a per-slice budget (about 4 files, one test file, expected context under ~100k), each slice names its own narrow check command and runs only that, full pnpm check once at the wave's landing; no two slices in a wave share a test file; the orchestrator splits only a slice that comes back over budget |
-| RISA-882 | chore | ready | fixes-tooling | prd/fixes-tooling | Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now) |
-| RISA-883 | chore | ready | fixes-tooling | prd/fixes-tooling | Token use measured by price: a price-weighted before/after (cache writes ~3% of tokens but ~30% of cost) to judge B-873, B-875, B-876 |
-| RISA-886 | change | ready | fixes-tooling | prd/fixes-tooling | Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call |
-| RISA-889 | feature | ready | fixes-tooling | prd/fixes-tooling | Backlog agent can hand off with instructions the next agent actually follows, continuing the work… |
+| RISA-882 | chore | live | fixes-tooling | prd/fixes-tooling | Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now) |
+| RISA-883 | chore | live | fixes-tooling | prd/fixes-tooling | Token use measured by price: a price-weighted before/after (cache writes ~3% of tokens but ~30% of cost) to judge B-873, B-875, B-876 |
+| RISA-886 | change | live | fixes-tooling | prd/fixes-tooling | Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call |
+| RISA-889 | feature | live | fixes-tooling | prd/fixes-tooling | Backlog agent can hand off with instructions the next agent actually follows, continuing the work… |
 | RISA-911 | chore | live | fixes-tooling | prd/fixes-tooling | pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc) |
 | RISA-912 | plan | triaged | self-recovery-3 |  | Slices as their own headless sessions: started by a prd command, hand-offs to a file the orchestrator watches, so a slice survives an orchestrator rotation and can rotate or resume mid-slice itself |
 | RISA-913 | plan | triaged | self-recovery-3 |  | Any role's long work runs as a job the machinery owns, so a hand-off never interrupts it: commands (check, land, CI waits, deploys, dev servers), watchers with a follow-up action (durable triggers the dispatcher fires), side-work subagents (headless sessions); each writes a result file, the hand-off records job ids, and the next session re-attaches instead of rerunning or re-arming |
@@ -82,12 +82,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-981 | bug | live | fixes-tooling | prd/fixes-tooling | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
 | RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
 | RISA-985 | bug | triaged | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
-| RISA-986 | change | ready | fixes-tooling | prd/fixes-tooling | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
+| RISA-986 | change | live | fixes-tooling | prd/fixes-tooling | PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list) |
 | RISA-987 | bug | live | fixes-tooling | prd/fixes-tooling | tooling-lint.mjs defaults TRUNK to dev, but a repo's trunk comes from its config (Risa's is main) |
 | RISA-989 | bug | live | fixes-tooling | prd/fixes-tooling | backlog/backlog.mjs's own stale-lock takeover (rmSync near line 230) removes a stale lock without a guard, the race RISA-367 fixed in lib.sh's with_backlog_lock |
 | RISA-991 | bug | triaged | fixes-bug |  | risa stack down errors in a repo with no stack hooks ('risa.json: no value for hooks.stackDown') instead of doing nothing, as RISA-985 did for stack up |
 | RISA-993 | bug | live | fixes-tooling | prd/fixes-tooling | config.test 'starts Node once' fails on main too: ENOENT on its temp 'starts' file |
-| RISA-994 | bug | ready | fixes-tooling | prd/fixes-tooling | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
+| RISA-994 | bug | live | fixes-tooling | prd/fixes-tooling | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 | RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
 | RISA-997 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
 | RISA-998 | feature | triaged | self-recovery-3 |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
@@ -98,15 +98,15 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1003 | bug | live | fixes-tooling | prd/fixes-tooling | rotate's standing-close simulated pick omits facts.landed, so a landed-but-planned row can make a standing topic close and then be restarted by the dispatcher (worktree, stack, test db torn down and rebuilt) |
 | RISA-1004 | bug | live | fixes-tooling | prd/fixes-tooling | With RISA_USAGE_WATCH=off, a dead session with an outstanding stall mark is still held out of pick()'s reopen, and resume waits for its recorded reset, so disabling the watch doesn't release it |
 | RISA-1005 | chore | live | fixes-tooling | prd/fixes-tooling | Slice check runs only the slice's named check: a project config key for a one-test-file command (the runner differs per project), risa check --quick on a slice branch runs the plan's Check field through it, the full check stays at the wave's landing; the orchestrator splits a slice that comes back over budget (second half of RISA-881) |
-| RISA-1006 | chore | ready | fixes-tooling | prd/fixes-tooling | A release tag leaves package.json's version behind: v0.1.7 still says 0.1.2; cutting a tag should bump it (or a check should catch the mismatch) |
+| RISA-1006 | chore | live | fixes-tooling | prd/fixes-tooling | A release tag leaves package.json's version behind: v0.1.7 still says 0.1.2; cutting a tag should bump it (or a check should catch the mismatch) |
 | RISA-1007 | plan | triaged | risa-next |  | Multi-machine: Risa runs and coordinates across several machines (sessions, repos, releases, agent discovery); risa-next designs for it, building the cross-machine parts can follow |
 | RISA-1008 | question | triaged | risa-next |  | Should the backlog, PRD registry, plans and inbox move to GitHub issues/gists, as the shared store every machine reaches, instead of git-synced files? |
 | RISA-1009 | feature | live | fixes-tooling | prd/fixes-tooling | A command a backlog agent can run to restart the dispatcher on the current release (stop, then start it in its own tab or detached), so a new pin or install doesn't need the user at the terminal |
 | RISA-1010 | bug | live | fixes-tooling | prd/fixes-tooling | machinery.md ends with a stub '## The context watch' after '## Worktrees and leases' (2b02eab, RISA-880), so a project's additions, which continue the generic doc's last section, merge under the stub: Caretook's worktree lines drop out of risa doc machinery 'Worktrees and leases' and its own 'The context watch' heading appears twice |
-| RISA-1011 | chore | ready | fixes-tooling | prd/fixes-tooling | The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt |
-| RISA-1012 | bug | ready | fixes-tooling | prd/fixes-tooling | risa dispatch --restart stops the dispatcher and starts none when no tab can open (iTerm2 unavailable, headless): open-session.sh falls back to printing the command and exits 0, so the restart waits out its timeout with dispatching stopped; check a tab can open before stopping, or fall back to a detached process |
-| RISA-1013 | bug | ready | fixes-tooling | prd/fixes-tooling | risa status's 'last tick' reads the stuck watch's stuck.lastTickAt, which isn't written while usage-limited, paused or with RISA_STUCK_WATCH=off, so a healthy dispatcher looks stalled; record a heartbeat on every tick and show that |
-| RISA-1014 | change | ready | fixes-tooling | prd/fixes-tooling | risa land skips the Codex re-review when the commits after Codex's approval change only docs or plan files, as the test gate does |
+| RISA-1011 | chore | live | fixes-tooling | prd/fixes-tooling | The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt |
+| RISA-1012 | bug | live | fixes-tooling | prd/fixes-tooling | risa dispatch --restart stops the dispatcher and starts none when no tab can open (iTerm2 unavailable, headless): open-session.sh falls back to printing the command and exits 0, so the restart waits out its timeout with dispatching stopped; check a tab can open before stopping, or fall back to a detached process |
+| RISA-1013 | bug | live | fixes-tooling | prd/fixes-tooling | risa status's 'last tick' reads the stuck watch's stuck.lastTickAt, which isn't written while usage-limited, paused or with RISA_STUCK_WATCH=off, so a healthy dispatcher looks stalled; record a heartbeat on every tick and show that |
+| RISA-1014 | change | live | fixes-tooling | prd/fixes-tooling | risa land skips the Codex re-review when the commits after Codex's approval change only docs or plan files, as the test gate does |
 | RISA-1015 | bug | triaged | fixes-tooling |  | risa slice cuts a slice branch from the committed prd/ tip even when the plan's section for that slice is uncommitted: the slice worktree's plan lacks it, so the narrow slice check (Check: field) silently falls back to the full suite; refuse (or warn) when the slice's heading isn't in the committed plan |
 | RISA-1016 | change | triaged | fixes-tooling |  | risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014 |
 
@@ -368,7 +368,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-813 · feature · Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -455,7 +455,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-882 · chore · Model per role: Sonnet for slices whose plan spells out each edit, Haiku for reading check output (every slice runs on Opus now)
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: a99f7d2
@@ -465,7 +465,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-883 · chore · Token use measured by price: a price-weighted before/after (cache writes ~3% of tokens but ~30% of cost) to judge B-873, B-875, B-876
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -476,7 +476,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-886 · change · Backlog agent shouldn't ask the handoff question; sending a summary or not is the agent's call
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 6645281
@@ -487,7 +487,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-889 · feature · Backlog agent can hand off with instructions the next agent actually follows, continuing the work…
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 6645281
@@ -660,7 +660,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-986 · change · PRD registry: prd status (loops/ls.sh) and dispatch --dry-run print a hold's reason (follow-up of RISA-477, which records it and prints it in prd list)
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -706,7 +706,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-994 · bug · Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 6973aab
@@ -816,7 +816,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1006 · chore · A release tag leaves package.json's version behind: v0.1.7 still says 0.1.2; cutting a tag should bump it (or a check should catch the mismatch)
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -862,7 +862,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1011 · chore · The planner prompt (loops/prompts/plan.sh) and the plan skeptic's SLICE_SIZE_RULE (loops/skeptics.mjs) still say 'about 8 files'; bring them to slice 19's budget (about 4 files, one Check: test file), updating prompt.test, skeptics.test and sample-project/prompt-golden.txt
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 5bff9fa
@@ -871,7 +871,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1012 · bug · risa dispatch --restart stops the dispatcher and starts none when no tab can open (iTerm2 unavailable, headless): open-session.sh falls back to printing the command and exits 0, so the restart waits out its timeout with dispatching stopped; check a tab can open before stopping, or fall back to a detached process
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -880,7 +880,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1013 · bug · risa status's 'last tick' reads the stuck watch's stuck.lastTickAt, which isn't written while usage-limited, paused or with RISA_STUCK_WATCH=off, so a healthy dispatcher looks stalled; record a heartbeat on every tick and show that
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
@@ -889,7 +889,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1014 · change · risa land skips the Codex re-review when the commits after Codex's approval change only docs or plan files, as the test gate does
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 1573463
