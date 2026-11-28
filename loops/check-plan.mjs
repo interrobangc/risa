@@ -1,4 +1,4 @@
-// What `prd check` runs (the mode, the test files the diff itself adds or
+// What `check` runs (the mode, the test files the diff itself adds or
 // edits, whether the tooling tests join) and the CI tier a landing should wait
 // for. Pure: changed files in, a plan out. The CLI at the bottom reads them from stdin,
 // or for --propose with --base computes them (git diff base...head). It checks its
@@ -11,7 +11,7 @@
 //   node check-plan.mjs --plan <plan-file>
 //   → a plan's slice budget (planBudget, below): a warning per slice over it on
 //     stderr, then how its waves were read; exits 0, or 1 when a slice's fields
-//     have an error (an unknown Model, from slice-fields.mjs) (`prd anchors` runs it too)
+//     have an error (an unknown Model, from slice-fields.mjs) (`anchors` runs it too)
 // The three modes (the project's check hook runs them, through check-hook.sh):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
 //          the integration and component test files the slice added or edited.
@@ -384,7 +384,7 @@ export const declaredStatus = (proposed, declared) => checkPlan().declaredStatus
 /** @param {string[]} changed */
 export const planToolingLint = (changed) => checkPlan().planToolingLint(changed);
 
-// A plan's slice budget (`prd doc planner`, The plan's shape): about 4 files, one
+// A plan's slice budget (`doc planner`, The plan's shape): about 4 files, one
 // test file named by the slice's Check field, and no Check file shared by two
 // slices of one wave. It only warns: an old plan without Check still passes. A
 // fields line slice-fields.mjs refuses (an unknown Model) is an error.

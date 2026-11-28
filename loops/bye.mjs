@@ -1,4 +1,4 @@
-// `prd bye`: the hand-over check a session runs when the user says just
+// `bye`: the hand-over check a session runs when the user says just
 // "bye". It works out the calling session's role, gathers what that role may
 // leave open, and either closes the session or lists each open thing.
 //
