@@ -448,6 +448,7 @@ describe("the tick", () => {
       "sessions.mjs",
       "captain.mjs",
       "flavor.mjs",
+      "session-names.mjs",
       "load-gate.mjs",
       "rotate.mjs",
       "open-session.mjs",

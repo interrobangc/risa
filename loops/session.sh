@@ -7,7 +7,8 @@
 # Runs ${RISA_CLAUDE_BIN:-claude} with the args as this script's child, in
 # the foreground (the terminal stays the session's), and keeps
 # .loops/.sessions/<name>.json (sessions.mjs): at start pid, kind, topic,
-# started, the command, the model (claude's --model, if given), remote (its --remote-control), dir (where it runs), auto and
+# started, the command, the model (claude's --model, if given), remote (its --remote-control, as given;
+# claude gets it qualified, session-names.mjs), dir (where it runs), auto and
 # managed (--managed: the dispatcher started it), clearing rotating, ended and exit; when it exits, ended and exit, but
 # only while the record's pid is still this session's (sessions.mjs set
 # --if-pid): a second session opened under the same name keeps its record
@@ -75,14 +76,48 @@ for a in "$@"; do
   prev=$a
 done
 
-# The main backlog session's display name is a captain's (captain.mjs, given as
-# its --remote-control): the tab's title too, which Claude Code is told not to
+# The name the outside sees (session-names.mjs; the only place names are
+# qualified): `<name> (<project>)`, then ` · <Rank> <Name>` for a persona; the main
+# backlog's shows `backlog (<project>)` and the admiral it was given. It replaces
+# claude's --remote-control name and goes as its --name too, unless the args carry
+# one. The record's remote keeps the name as given.
+display=""
+if [[ -n $remote ]]; then
+  display=$(node "$bin/session-names.mjs" display "$name" "$kind" "$remote" "$project_name") ||
+    die "session.sh: couldn't name $name for the outside"
+  has_name=false
+  for a in "$@"; do
+    case $a in --name | --name=* | -n) has_name=true ;; esac
+  done
+  out=() prev=""
+  for a in "$@"; do
+    if [[ $prev == --remote-control ]]; then
+      out+=("$display")
+      $has_name || out+=(--name "$display")
+      has_name=true
+    else
+      case $a in
+        --remote-control=*)
+          out+=("--remote-control=$display")
+          $has_name || out+=(--name "$display")
+          has_name=true
+          ;;
+        *) out+=("$a") ;;
+      esac
+    fi
+    prev=$a
+  done
+  set -- "${out[@]}"
+fi
+
+# The main backlog session's display name carries its admiral (captain.mjs, given
+# as its --remote-control): the tab's title too, which Claude Code is told not to
 # retitle. A session it starts doesn't inherit that.
 if [[ -n ${RISA_CAPTAIN_TITLE:-} ]]; then unset RISA_CAPTAIN_TITLE CLAUDE_CODE_DISABLE_TERMINAL_TITLE; fi
 if [[ $name == backlog && $kind == backlog && -n $remote && $remote != backlog ]]; then
   export RISA_CAPTAIN_TITLE=1 CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
   # The tab's title by escape (OSC 0) when this is a terminal (RISA_TAB_TITLE=always: tests).
-  if [[ -t 1 || ${RISA_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$remote"; fi
+  if [[ -t 1 || ${RISA_TAB_TITLE:-} == always ]]; then printf '\033]0;%s\007' "$display"; fi
 fi
 
 # A brief left from before never leads a later prompt: whoever uses one has
