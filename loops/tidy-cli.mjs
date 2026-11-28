@@ -16,14 +16,26 @@
 // directories and listening ports), `ps` and the backlog's
 // `list --json` and `prd list --json`; it writes nothing. The main checkout is
 // the repo this file is in. Env: TRUNK (dev), RISA_SESSIONS_DIR,
-// RISA_ASKS_DIR, RISA_LEASE_ROOT.
+// RISA_ASKS_DIR, RISA_LEASE_ROOT. The landed topics come from landed.mjs and
+// finish.mjs (landedTopics, landedWithCode), the live claudes from `ps` and
+// each process's cwd (sessions.mjs liveIn), the dispatcher from its lock.
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describeRun, isTopicRun, outstandingRuns } from "../ci/outstanding.mjs";
 import { collectFacts, parentOf } from "./inventory-facts.mjs";
-import { isLive, processOf, readRecords } from "./sessions.mjs";
+import { landedWithCode } from "./finish.mjs";
+import { landedTopics } from "./landed.mjs";
+import {
+  claudeName,
+  cwdOf as cwdOfPid,
+  isLive,
+  liveIn,
+  processOf,
+  processTable,
+  readRecords,
+} from "./sessions.mjs";
 import { formatTidy, reportText, tidy } from "./tidy.mjs";
 import { factList, runHook } from "./hooks.mjs";
 import { branchKinds, loadConfig, toolCmd } from "./config.mjs";
@@ -172,6 +184,9 @@ export function collectTidyFacts({
       git: (args) => git(main, args),
       gh: (args) => hostGh(args, { cwd: main, timeout: 15_000 }),
     }),
+  table = undefined,
+  cwdOf = undefined,
+  claude = undefined,
 } = {}) {
   const trunk = env.TRUNK || "dev";
   const loops = join(main, ".loops");
@@ -332,6 +347,82 @@ export function collectTidyFacts({
   };
 
   const allItems = json(["list", "--all", "--json"]);
+  /** @type {{ topic: string, flags: string[], state: string, waiting: number, notes?: string }[] | null} */
+  const registry = json(["prd", "list", "--json"]);
+
+  // Landed topics with leftovers: every topic the registry or a prd/ worktree names.
+  const kinds = branchKinds();
+  const prdWorktree = (/** @type {string} */ topic) =>
+    worktrees.find((w) => w.branch === kinds.branch("prd", topic))?.name ?? null;
+  const topics = [...new Set([...(registry ?? []).map((r) => r.topic), ...(prdWorktrees ?? [])])];
+  // The configured trunk, as finish.mjs reads it (tidy's own TRUNK default is dev).
+  const landTrunk = env.TRUNK || kinds.trunk;
+  const plain = landedTopics(main, topics, landTrunk);
+  const code = landedWithCode(
+    main,
+    topics.filter((t) => !plain[t]),
+    landTrunk,
+  );
+  const landed = topics
+    .filter((t) => plain[t] || code[t])
+    .map((topic) => {
+      const row = registry?.find((r) => r.topic === topic);
+      return {
+        topic,
+        code: !plain[topic],
+        standing: !!row?.flags.includes("standing"),
+        worktree: prdWorktree(topic),
+        rowDone: row ? row.flags.includes("done") : null,
+      };
+    });
+
+  // Live claudes in each topic's prd/ and slice worktrees.
+  /** @type {{ topic: string, pid: number, worktree: string }[]} */
+  const claudes = [];
+  /** @type {Map<number, { ppid: number, args: string }> | null} */
+  let procs = table ?? null;
+  if (!procs)
+    try {
+      procs = processTable();
+    } catch {
+      procs = null;
+    }
+  if (procs) {
+    const name = claude ?? claudeName();
+    // One lookup per pid: from the lsof sweep above when it worked, else each pid's own.
+    /** @type {Map<string, string>} */ const reals = new Map();
+    const realOf = (/** @type {string} */ p) => {
+      if (!reals.has(p))
+        try {
+          reals.set(p, realpathSync(p));
+        } catch {
+          reals.set(p, p);
+        }
+      return /** @type {string} */ (reals.get(p));
+    };
+    const swept = cwds ? new Map(cwds.map((c) => [c.pid, c.cwd])) : null;
+    /** @type {Map<number, string | null>} */ const seen = new Map();
+    const cwdFor = (/** @type {number} */ pid) => {
+      if (cwdOf) return cwdOf(pid);
+      if (!seen.has(pid)) {
+        const c = swept ? swept.get(pid) : cwdOfPid(pid);
+        seen.set(pid, c ? realOf(c) : null);
+      }
+      return seen.get(pid) ?? null;
+    };
+    for (const w of worktrees) {
+      const topic = kinds.nameOf(w.branch, "prd") ?? kinds.sliceOf(w.branch)?.topic;
+      if (!topic) continue;
+      let dir = join(loops, w.name);
+      try {
+        dir = realpathSync(dir);
+      } catch {
+        continue;
+      }
+      for (const pid of liveIn(dir, { table: procs, cwdOf: cwdFor, claude: name }))
+        claudes.push({ topic, pid, worktree: w.name });
+    }
+  }
 
   return {
     worktrees,
@@ -348,7 +439,10 @@ export function collectTidyFacts({
     // --all: a plain list leaves out live and dropped items, which are what gets archived.
     items: allItems && allItems.filter((/** @type {{ archived?: boolean }} */ i) => !i.archived),
     prdWorktrees,
-    registry: json(["prd", "list", "--json"]),
+    registry,
+    landed,
+    dispatcherRunning: !!base.dispatcher?.running,
+    claudes,
   };
 }
 
