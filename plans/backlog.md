@@ -108,9 +108,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1012 | bug | live | fixes-tooling | prd/fixes-tooling | risa dispatch --restart stops the dispatcher and starts none when no tab can open (iTerm2 unavailable, headless): open-session.sh falls back to printing the command and exits 0, so the restart waits out its timeout with dispatching stopped; check a tab can open before stopping, or fall back to a detached process |
 | RISA-1013 | bug | live | fixes-tooling | prd/fixes-tooling | risa status's 'last tick' reads the stuck watch's stuck.lastTickAt, which isn't written while usage-limited, paused or with RISA_STUCK_WATCH=off, so a healthy dispatcher looks stalled; record a heartbeat on every tick and show that |
 | RISA-1014 | change | live | fixes-tooling | prd/fixes-tooling | risa land skips the Codex re-review when the commits after Codex's approval change only docs or plan files, as the test gate does |
-| RISA-1015 | bug | in-progress | fixes-tooling | prd/fixes-tooling | risa slice cuts a slice branch from the committed prd/ tip even when the plan's section for that slice is uncommitted: the slice worktree's plan lacks it, so the narrow slice check (Check: field) silently falls back to the full suite; refuse (or warn) when the slice's heading isn't in the committed plan |
-| RISA-1016 | change | in-progress | fixes-tooling | prd/fixes-tooling | risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014 |
+| RISA-1015 | bug | ready | fixes-tooling | prd/fixes-tooling | risa slice cuts a slice branch from the committed prd/ tip even when the plan's section for that slice is uncommitted: the slice worktree's plan lacks it, so the narrow slice check (Check: field) silently falls back to the full suite; refuse (or warn) when the slice's heading isn't in the committed plan |
+| RISA-1016 | change | ready | fixes-tooling | prd/fixes-tooling | risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014 |
 | RISA-1017 | plan | triaged | risa-next-5 |  | Risa: usable by others: install without a Risa checkout, docs for outsiders, versioning (risaVersion enforced), hosts other than macOS and iTerm2 (cut from RISA-797 by the risa-next-4 planner) |
+| RISA-1018 | bug | triaged | fixes-tooling |  | check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run) |
 
 ## Items
 
@@ -905,20 +906,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1015 · bug · risa slice cuts a slice branch from the committed prd/ tip even when the plan's section for that slice is uncommitted: the slice worktree's plan lacks it, so the narrow slice check (Check: field) silently falls back to the full suite; refuse (or warn) when the slice's heading isn't in the committed plan
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 04b1309
 
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27, fixes-tooling wave 5: ten slices made before the plan commit; all ran the full suite at once (load 107). slice-fields.mjs warned 'no Slice 34 heading' to /dev/null in check-hook.sh's slice_check.
 - 2026-11-27 (prd/fixes-tooling): Also (slice 38's hand-off): even with Check: read, the slice check adds the whole tooling suite for any diff under loops/ ('the tooling tests join'), so in this repo the narrow check saves nothing; the tooling join should run only the Check file on a slice branch. And (slice 28): check-plan --plan doesn't report an unknown Model: value.
+- 2026-11-28 (prd/fixes-tooling): Wave 6 follow-ups: loops/anchors.mjs calls planBudget but ignores its new errors (prd anchors doesn't show a bad Model, slice 41); in this repo the Check file runs twice, once in the unit step via commands.testFile and again in the narrowed tooling step (slice 40).
 
 ### RISA-1016 · change · risa review and risa ready (review.sh, lib.sh pr_verdict) read a PR whose commits after Codex's approval are docs only as stale; pass codex-review.mjs --docs as land does since RISA-1014
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 04b1309
 
 - 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 36's hand-off (2026-11-27).
 
@@ -930,3 +932,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (plan/risa-next-4): Cut from RISA-797 by plan/risa-next-4 (2026-11-28): risa-next-4 proves Risa on a second repo; this is the release half.
+
+### RISA-1018 · bug · check-run.test.mjs 'waits while busy, starts when the load drops' flakes on CI: the load-drop line reads '-' instead of the stubbed 1 (run 46123266140, fixes-tooling wave 6 tip 04b1309; no wave-6 file touches check-run)
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-tooling): Seen on GitHub Actions run 46123266140: 'The load dropped to - (threshold 4) after 2s'; the stub's load sequence ran out or was read mid-write.
