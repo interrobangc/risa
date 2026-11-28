@@ -435,7 +435,7 @@ case $cmd in
     ((fresh)) && echo "Made $dir for the inbox session. Its first open asks whether you trust this folder: choose Yes, once." >&2
     wrapper=$(cd "$bin" && pwd)/session.sh
     prompt_text=$("$bin/prompt.sh" inbox)
-    cd "$dir" && exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
+    cd "$dir" && RISA_MAIN=$main exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
   hotfix)
