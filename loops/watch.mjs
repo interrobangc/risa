@@ -1,4 +1,4 @@
-// prd watch [<topic>] [--json] [--wait [--timeout <s>]] [--mark <slice> nudged|replied|restarted|left|asked]
+// watch [<topic>] [--json] [--wait [--timeout <s>]] [--mark <slice> nudged|replied|restarted|left|asked]
 // The watch: each slice agent of a topic, its state and the orchestrator's next
 // action, from the worker reader's facts (workers.mjs).
 //

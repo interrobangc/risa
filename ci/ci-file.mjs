@@ -1,4 +1,4 @@
-// ci-file.mjs: part of `prd ci` (ci.mjs has the map). Filing in the
+// ci-file.mjs: part of `ci` (ci.mjs has the map). Filing in the
 // backlog: `ci file` (a verdict's flakes) and `ci zone-file` (a release verdict's
 // second-zone failures; the release gate files through fileZoneVerdict).
 import { sortFlakes } from "./blame.mjs";

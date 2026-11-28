@@ -10,15 +10,15 @@
 # (override the default), --base B (branch from B instead).
 #
 # A slice gets a stack only when its plan says `Stack: yes` (or --stack); add
-# one later with `prd stack up`. Every worktree's integration tests use its
+# one later with `stack up`. Every worktree's integration tests use its
 # own test database (the config's testDb hook: `use`), stack or not.
 #
 # A stacked worktree leases the lowest free slot (1-19); the stack hook
 # (stackUp) makes the stack for it: its env files, ports and data. A stackless
 # one gets the stack hook's stackless env (stackDown). If the branch already exists,
 # it's checked out instead (to resume after rm.sh). At most max_prds (lib.sh: the
-# stored `prd dispatch --cap`, else RISA_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
-# (prd start|slice|plan|hotfix wrap this.)
+# stored `dispatch --cap`, else RISA_MAX_PRDS, else 4) PRD worktrees exist at once. Tear down with rm.sh <name>.
+# (start, slice, plan and hotfix wrap this.)
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
@@ -41,7 +41,7 @@ case $kind in
       echo "already $(prd_count) PRD worktrees (cap $max_prds; from $max_prds_from: ${prd_cmd} dispatch --cap <n> changes it)" >&2; exit 1
     fi ;;
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
-    # The plan's Stack field (`prd doc planner "Slice fields"`) decides: a stack only
+    # The plan's Stack field (`doc planner "Slice fields"`) decides: a stack only
     # for Stack: yes, or --stack. Missing, or no plan: no stack.
     plan_ref=${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md
     plan_text=$(git -C "$main" show "$plan_ref" 2>/dev/null || true)
@@ -80,7 +80,7 @@ dir=$loops/$name
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }
 
 # The drain (drain.mjs): no new slice worktree near or past a usage limit, but while
-# draining the allowance's topic (prd dispatch --allow) still makes them. A reading
+# draining the allowance's topic (dispatch --allow) still makes them. A reading
 # that can't be had never refuses (watching never hurts the work).
 if [[ $kind == slice ]]; then
   drain_rc=0
@@ -111,7 +111,7 @@ if git -C "$main" show-ref --verify --quiet "refs/heads/$branch"; then
 else
   git -C "$main" worktree add -b "$branch" "$dir" "$base"
 fi
-# The run log (run-log.mjs): a slice's start, for prd metrics. Never fails.
+# The run log (run-log.mjs): a slice's start, for the metrics command. Never fails.
 [[ $kind != slice ]] || run_log slice-start "name=$name" "branch=$branch" "slice:=$n" "base=$base"
 cd "$dir"
 # The protection hooks (the config's hooksInstall: core.hooksPath, shared by every

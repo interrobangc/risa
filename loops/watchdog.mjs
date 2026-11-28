@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// prd watchdog: decide whether the machine needs `prd recover`, and
-// run it unattended when it does. The LaunchAgent (`prd autostart
+// watchdog: decide whether the machine needs `recover`, and
+// run it unattended when it does. The LaunchAgent (`autostart
 // install`) runs it at login and every five minutes from the main checkout.
 //
 //   node watchdog.mjs [--main DIR]            decide; on `recover`, run
@@ -13,12 +13,12 @@
 // dispatcher intent, a running recover, the usage reading, the last attempts)
 // in, `recover` or `nothing` and a reason out. It acts only on evidence of a
 // crash or a reboot:
-//   - a down record older than the last boot (prd down, then a restart);
+//   - a down record older than the last boot (down, then a restart);
 //   - the dispatcher's lock with its pid gone, or its kept intent to reopen;
 //   - a hand-opened orchestrator or planner record with no end and its pid gone,
 //     started after the last good recover (an older one is history the last
 //     recover already saw; a managed one is the dispatcher's to reopen).
-// A deliberate stop wins: `prd down --stay` (.loops/.stay-down.json), a
+// A deliberate stop wins: `down --stay` (.loops/.stay-down.json), a
 // paused dispatcher, a down record with no reboot since, or a clean
 // `dispatch --stop` (its lock gone) leave everything alone. So does a usage
 // reading that says limited (a recover would open sessions that spend): the

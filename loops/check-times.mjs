@@ -1,5 +1,5 @@
 // The check log (.loops/.check-times.log, written by check-run.sh) and its
-// summary: `prd check --times [--since <date>]`. Pure functions, plus a
+// summary: `check --times [--since <date>]`. Pure functions, plus a
 // small CLI at the bottom.
 //
 // A line has eighteen tab-separated fields: start, worktree, branch, mode,

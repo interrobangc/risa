@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prd browser: run browser checks from the current worktree, at most four
+# browser: run browser checks from the current worktree, at most four
 # at once machine-wide, so loops don't pile Chrome, Vite and PowerSync on top of
 # each other.
 #
@@ -42,7 +42,7 @@
 # drop below that. A pass on the retry is FLAKY: it counts as passing, and is
 # recorded in $main/.loops/.browser-flakes.log so flaky steps can be fixed.
 # Every check's result also goes to the run log (run-log.mjs, RISA_RUN_LOG)
-# for prd metrics.
+# for the metrics command.
 #
 # Each run holds a browser lease (lease.sh), the directory $main/.loops/.lease/browser/<N>.
 # When every lease is taken it waits, polling every 5 s, and gives up after
@@ -283,7 +283,7 @@ fi
 export SMOKE=$([[ -n $smoke ]] && echo 1 || echo 0)
 
 # ensure_server → the server the checks run against, in a .loops worktree with
-# a stack: a check build (prd serve --built), started if nothing runs,
+# a stack: a check build (`serve --built`), started if nothing runs,
 # swapped in for a dev server, and rebuilt when the source (or the env baked
 # into it) is newer than the build, so checks never run against stale code.
 # With --dev, the dev server instead. The main checkout's server is the user's:

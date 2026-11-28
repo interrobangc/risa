@@ -16,6 +16,19 @@ For a PRD orchestrator: a top-level session, one per PRD, in the integration wor
 
 - **Resuming as orchestrator:** its `--resume` prompt first runs `{{prd}} land --resume prd/<topic>`; **git wins** over _Status_.
 
+## Rules across PRDs
+
+PRDs run side by side and land alone, so each slice keeps out of the others' way:
+
+- **Migrations take the next number** at landing, not when written: renumber on a clash with the trunk; never edit a landed one.
+- **Seeds:** add rows; change one another topic's tests read only in a slice the plan names.
+- **Registries** (a list every topic adds to: a manifest, an index, `CHANGELOG.md`): add your own entry in order; never rewrite the list.
+- **Hot files get regions first:** a running topic's hot files (`{{backlog}} prd list`) are edited only in a region of your own; more waits for a later wave.
+
+## The check gate
+
+`{{prd}} tier` proposes a landing's CI tier and why; `{{prd}} ci run <tier> --wait` runs it, and `land` and `pr` wait for it. Tier none (docs and tooling only) needs just the tooling tests.
+
 ## Starting and steering
 
 - **Starting (the user):** `{{prd}} start <topic>`, then the command it prints.

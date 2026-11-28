@@ -18,7 +18,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CAPTAIN_SESSION, machineFlavor, machinePersona } from "./captain.mjs";
-import { DEFAULT_FLAVOR, ROLES, label, personaOfLabel, poolOf, shortLabel } from "./flavor.mjs";
+import { DEFAULT_FLAVOR, ROLES, label, personaOfLabel, sessionPersona, shortLabel } from "./flavor.mjs";
 
 /** Whether NAME, KIND is the main backlog session (its record name and kind). */
 const isMainBacklog = (/** @type {string} */ name, /** @type {string} */ kind) =>
@@ -50,12 +50,10 @@ export function readDisplayName(display, flavor = DEFAULT_FLAVOR) {
  */
 export function personaOf({ name, kind, remote }, flavor = DEFAULT_FLAVOR) {
   if (kind === "backlog") {
-    // As flavor.mjs's sessionPersona (slice 3) reads it: one word of letters, not `backlog`.
     if (!isMainBacklog(name, kind) || !remote || remote === CAPTAIN_SESSION) return null;
     const read = readDisplayName(remote, flavor);
     if (read) return read.persona;
-    const rank = poolOf("backlog", flavor)[0]?.rank;
-    return rank && /^[A-Za-z]+$/.test(remote) ? { rank, name: remote } : null;
+    return sessionPersona("backlog", remote, flavor);
   }
   // The role's hashed one, stepped past names other live sessions on the machine wear (RISA-1063).
   return ROLES.includes(kind) ? machinePersona(kind, name, flavor) : null;

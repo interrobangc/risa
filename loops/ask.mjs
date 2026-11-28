@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd ask | asks | answer: the asks queue's command line (the store is asks.mjs).
+// ask | asks | answer: the asks queue's command line (the store is asks.mjs).
 //
 //   ask --topic <t> --question <text> [--option <a>]… [--recommend <a|n> --defaults|--waits]
 //                                     file a question; one with a recommendation says whether it

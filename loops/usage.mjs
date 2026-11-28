@@ -30,8 +30,8 @@
 //
 //   node usage.mjs statusline     (stdin) write this session's reading; print a short line
 //   node usage.mjs stop-failure   (stdin) on a rate_limit, mark this session stalled
-//   node usage.mjs [--json]       prd usage: the merged reading
-//   node usage.mjs status         the line prd status prints
+//   node usage.mjs [--json]       usage: the merged reading
+//   node usage.mjs status         the line status prints
 import { toolCmd } from "./config.mjs";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -305,7 +305,7 @@ function stalledNote(
 }
 
 /**
- * `prd status`'s line: each window's use and reset, or unknown. Pure.
+ * `status`'s line: each window's use and reset, or unknown. Pure.
  * @param {ReturnType<typeof mergeReadings>} u
  * @param {{ now: number, staleMs: number, timeZone?: string }} opts
  */
@@ -325,7 +325,7 @@ export function statusLine(u, { now, staleMs, timeZone }) {
 }
 
 /**
- * `prd usage`: the merged reading in lines. Pure.
+ * `usage`: the merged reading in lines. Pure.
  * @param {ReturnType<typeof mergeReadings>} u
  * @param {{ now: number, staleMs: number, timeZone?: string }} opts
  */
