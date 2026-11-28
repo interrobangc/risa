@@ -25,9 +25,14 @@
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
-**Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. All 12 merged; wave gate next. Slices 30–38 merged ahead of 29 (no shared files) so 32 could start. **Slip:** worktrees were cut before the plan commit (964bfdf), so slice checks ran the full suite (load 107); each agent told to merge prd/fixes-tooling first (filed as a bug).
+**Wave 5** (slices 27–38; 27 on sonnet, the rest opus): all merged; CI unit green on 3677558 (run 46112877307); sync skipped (no shared files); slice worktrees removed; PR #12 open, Codex reviewing. Landing next, then `risa rotate` (context past the soft limit).
 
-**Carried over:** a change to Risa's own risa.json needs the release that reads it installed first. Slice checks run red on load timeouts (RISA-994, slices 31–32); the wave's CI run is the gate. machinery.md is at its budget. check-plan's "shares its Check file with slice 25" on 34 is a false wave (25 landed).
+**For the next session:**
+
+- **Ready (triaged, fixes-tooling):** RISA-1015 (slice branches cut before the plan commit fall back to the full check; the tooling join runs the whole tooling suite on any `loops/` diff, so the narrow check saves nothing here; check-plan ignores a bad `Model:`), RISA-1016 (review.sh and ready's pr_verdict don't pass `--docs` as land now does). Check `risa backlog list` for more.
+- **Commit the plan before `risa slice`:** a slice branch takes the committed plan; an uncommitted section means no `Check:` and a full-suite check (wave 5 ran ten at load ~100 until each merged the plan in).
+- **Slice checks under load:** most wave-5 slice checks ran out of their 1200 s budget or lease wait on other files' timeouts; each slice's own test passed directly. The CI run is the gate.
+- Slice 36 chose `docs_re` (Markdown only) over `exempt_re` for the review carry-over: in this repo `loops/` is code.
 
 ## How to run this plan
 
