@@ -8,10 +8,10 @@
 
 | Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-bug-urgent` |
 | ----- | ---- | --------- | ----- | ------- | --------------------------------- |
-| 1     | 1    | RISA-1030 | opus  | written | —                                 |
-| 2     | 1    | RISA-1034 | opus  | written | —                                 |
+| 1     | 1    | RISA-1030 | opus  | running | —                                 |
+| 2     | 1    | RISA-1034 | opus  | running | —                                 |
 
-Wave 1 written 2026-11-28: slices 1 and 2. Hot files set to the paths they touch.
+Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging).
 
 **For the next session:**
 
