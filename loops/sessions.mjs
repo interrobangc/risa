@@ -18,6 +18,8 @@
 //     that session (under `session.sh <name>`, or running in the record's dir),
 //     else the one live claude under `session.sh <name>` in that dir (a reopen
 //     the record doesn't name), else a refusal: never another process.
+//   - liveIn(dir, { table, cwdOf, claude }): the live claude pids whose working
+//     directory is DIR or under it, recorded or not (finish.mjs, tidy).
 //
 // CLI (RISA_SESSIONS_DIR: the records' folder, default .loops/.sessions of
 // the main checkout):
@@ -201,6 +203,23 @@ export function endTarget(name, record, { live, table, claude, cwdOf, caller = n
       ? `a claude neither under session.sh ${name}, nor in ${dir ?? "its record's dir"}, nor this shell's own`
       : `it runs ${row.args.slice(0, 80)}`;
   return { refuse: `pid ${pid} in ${name}'s record isn't its claude (${what}): refusing to end it` };
+}
+
+/**
+ * The live claude processes working in DIR (their cwd is DIR or under it), by pid.
+ * @param {string} dir a real path
+ * @param {{ table: Map<number, { ppid: number, args: string }>, cwdOf: (pid: number) => string | null,
+ *   claude: string }} facts
+ * @returns {number[]}
+ */
+export function liveIn(dir, { table, cwdOf, claude }) {
+  const root = dir.replace(/\/+$/, "");
+  if (!root) return [];
+  return [...table.keys()].filter((pid) => {
+    if (!runs(table.get(pid)?.args ?? "", claude)) return false;
+    const cwd = cwdOf(pid);
+    return !!cwd && (cwd === root || cwd.startsWith(`${root}/`));
+  });
 }
 
 /** PID's working directory (its real path), or null when it can't be read. */
