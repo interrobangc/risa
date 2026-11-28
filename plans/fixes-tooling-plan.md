@@ -10,7 +10,7 @@
 | ----- | ---- | --------- | ----- | --------------------------- | ------------------------------ |
 | 48    | 9    | RISA-1026 | opus  | merged (handed off 172f024) | 46bbadb                        |
 
-Wave 9 in flight: slice 48 (RISA-1026). Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
+Wave 9 green: slice 48 (RISA-1026) merged; tooling only, tier none; `pnpm test` green on fa6a59d (104 files, 2392 tests); PR and Codex review next. Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
 
 **Wave 8 landed** 2026-11-28 in main as 845acf0 through PR #18: slices 45, 46, 47, opus (RISA-1020, RISA-1021, RISA-1022). Tooling only, tier none; `pnpm test` green after a docs-budget fix (104e013); Codex clean on c6043e7; landed on an unsynced tip (main's 5 new commits share no file). Report filed; to-test/2026-11-28-0515-fixes-tooling.md; slice worktrees removed. Docs folded: orchestrator.md (anchors exits 1 on a bad Model).
 
