@@ -4,11 +4,15 @@
 
 ## Status
 
+**From the user:**
+
+- 2026-11-28 (relayed by the backlog session, on the account switch to ~/.claude-personal): "and notify orchesrators"
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                        | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | -------------------------------------------- | ------------------------------ |
-| 53    | 12   | RISA-1073 | opus  | started 2026-11-28 (worktree, agent spawned) | —                              |
+| Slice | Wave | Item      | Model | State                                                                                                                           | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | in flight: 91e56b4, 767ccb8 committed, tree clean; agent ended by a mid-wave rotation (account switch): respawn with --continue | —                              |
 
 Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
