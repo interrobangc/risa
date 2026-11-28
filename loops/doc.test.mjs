@@ -1,7 +1,7 @@
 // pnpm prd doc <role> [section] (doc.mjs): on the sample project (generic alone,
 // generic then additions, a replacement, a section, each error), and on the fixture
 // project's config (fixture-project/): its role is split, printing the core's generic
-// doc and then its additions, and the sections the prompts and docs name in the
+// doc with its additions merged in (a ## section naming a generic one at its end), and the sections the prompts and docs name in the
 // generic docs (loops/docs/) are in the merged text. This repo's own role
 // docs are the project-data check's (project-check.mjs) and its own tests'.
 import { spawnSync } from "node:child_process";
@@ -19,7 +19,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
-import { DocError, GENERIC_DIR, fillNames, roleDoc, sectionOf } from "./doc.mjs";
+import { DocError, GENERIC_DIR, fillNames, mergeAdditions, roleDoc, sectionOf } from "./doc.mjs";
 import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -112,6 +112,28 @@ describe("prd doc on the sample project", () => {
     );
   });
 
+  it("puts an additions ## section at the end of the generic section it names; the rest follow the doc", () => {
+    const config = { roles: { planner: { additions: "targeted.md" } } };
+    writeFileSync(
+      join(repo, "targeted.md"),
+      "Headless first.\n\n## Fields\n\nThe sample's fields.\n\n## Nowhere\n\nUnmatched.\n\n## Shape\n\nThe sample's shape.\n\n```sh\n## Fields\n```\n",
+    );
+    expect(roleDoc("planner", { config, root: repo, genericDir: join(repo, "loops/docs") })).toBe(
+      "# Planner\n\nGeneric intro.\n\n## Shape\n\nGeneric shape.\n\n### Detail\n\nDeep.\n\nThe sample's shape.\n\n```sh\n## Fields\n```\n\n" +
+        "## Fields\n\nGeneric fields.\n\nThe sample's fields.\n\nHeadless first.\n\n## Nowhere\n\nUnmatched.\n",
+    );
+    expect(
+      roleDoc("planner", { config, root: repo, genericDir: join(repo, "loops/docs"), section: "Shape" }),
+    ).toMatch(/^## Shape\n[\s\S]*The sample's shape\.[\s\S]*```\n$/);
+  });
+
+  it("mergeAdditions leaves the generic doc whole when every part is merged", () => {
+    expect(mergeAdditions("# T\n\n## A\n\na\n\n## B\n\nb\n", "## A\n\nmore a\n")).toBe(
+      "# T\n\n## A\n\na\n\nmore a\n\n## B\n\nb\n",
+    );
+    expect(mergeAdditions("# T\n\n## A\n\na\n", "## B\n\nb\n")).toBe("# T\n\n## A\n\na\n\n## B\n\nb\n");
+  });
+
   it("prints a replacement alone, byte for byte", () => {
     expect(ok("loop")).toBe(SLICE);
   });
@@ -188,11 +210,22 @@ describe("the fixture project's roles", () => {
     expect(split.map(([role]) => role)).toEqual(["planner"]);
   });
 
-  it.each(split)("%s prints the core's generic doc, then the project's additions", (role, entry) => {
+  it.each(split)("%s prints the core's generic doc with the project's additions merged in", (role, entry) => {
     const generic = readFileSync(join(HERE, "docs", `${role}.md`), "utf8");
     const additions = readFileSync(join(root, entry.additions), "utf8");
     expect(roleDoc(role, { config, root })).toBe(
-      fillNames(`${generic}\n${additions.replace(/^<!--.*-->\n\n/, "")}`, config),
+      fillNames(mergeAdditions(generic, additions.replace(/^<!--.*-->\n\n/, "")), config),
+    );
+  });
+
+  it("the fixture's skeptic-pass addition ends the generic skeptic pass; its own heading follows the doc", () => {
+    const text = roleDoc("planner", { config, root });
+    expect(roleDoc("planner", { config, root, section: "The skeptic pass" })).toMatch(
+      /\*\*A second send-back\*\*[\s\S]*A skeptic reads the plan and its items cold before anything lands\.\n$/,
+    );
+    expect(text.match(/^## The skeptic pass$/gm)).toHaveLength(1);
+    expect(text).toMatch(
+      /\n# The fixture project's planner additions\n\n## What to ask\n[\s\S]*recommendation\.\n$/,
     );
   });
 
