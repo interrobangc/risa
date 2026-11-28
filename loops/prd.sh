@@ -75,6 +75,9 @@ ${prd_cmd} <command>
                               (finished-looking live sessions, branches without a worktree, registry rows
                               that look done); --yes removes the safe
                               ones and files the ask list as one report (prompt tidy: the haiku brief)
+    finish <topic> [--dry-run] [--json]   a landed topic whose orchestrator stopped short: ends its idle
+                              recorded sessions, then rm <topic> (never --force), and files one report;
+                              a code tail, dirty or busy worktree is kept and reported instead
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover [--at HH:MM] [--wait] [--no-agent] [--unattended]   after a restart, crash or usage limit (one at a
                               time): Docker, stale locks, the test Postgres, stacks one at a time (a cut-off migrate
@@ -290,6 +293,7 @@ case $cmd in
   gc) exec "$bin/gc.sh" "$@" ;;
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
+  finish) exec node "$bin/finish.mjs" "$@" ;;
   ci) exec node "$bin/../ci/ci.mjs" "$@" ;;
   wait)
     kind=check
