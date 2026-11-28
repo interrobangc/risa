@@ -8,11 +8,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1 running: slice 1 worktree `.loops/risa-next-2-1`, agent spawned on opus (2026-11-28). Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
+**Now:** wave 1: slice 1 merged (72d3a64); `risa tier` says none (tooling only), so the gate is the full check on the tip. Slice 1 notes for 2/6: no store CLI yet; find a clone by listing `storeRoot()`; no lock around a clone's fetches. Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
 
 | Slice | Wave | State | Merge into `prd/risa-next-2` |
 | ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | working (opus) | —                            |
+| 1     | 1    | merged (opus, check passed on 7e76dbe) | 72d3a64                            |
 | 2     | 2    | —     | —                            |
 | 3     | 3    | —     | —                            |
 | 5     | 3    | —     | —                            |
