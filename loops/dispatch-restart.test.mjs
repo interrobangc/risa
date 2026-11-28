@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { lockHolder } from "./dispatch.mjs";
+import { dispatcherPart } from "./status-extra.mjs";
 import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -77,6 +78,20 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 setInterval(() => {}, 1000);
+`;
+// Preloaded into a dispatcher (NODE_OPTIONS): once its exit handlers are on, it
+// throws (or rejects) a two-line error from outside any tick. The node processes
+// it runs load it too: they're left alone.
+const THROWER = (
+  /** @type {"throw" | "reject"} */ how,
+) => `if (process.argv[1]?.endsWith("/loops/dispatch.mjs")) {
+const t = setInterval(() => {
+  if (!process.listenerCount("uncaughtException")) return;
+  clearInterval(t);
+  const e = new Error("boom from the test\\nsecond line");
+  ${how === "throw" ? "throw e;" : "Promise.reject(e);"}
+}, 50);
+}
 `;
 
 let root, main, loops, state, env, lock;
@@ -274,5 +289,95 @@ describe("dispatch --restart (RISA-1009)", () => {
     );
     expect(calls("pnpm")).toEqual(["prd dispatch --every 5"]);
     expect(dstate().code).toMatchObject({ pid: now, every: 5 });
+  }, 60_000);
+});
+
+describe("the dispatcher logs why it exits (RISA-1037)", () => {
+  const files = () => ({ lock, state: join(loops, ".dispatch.json"), log: join(loops, ".dispatch.log") });
+  const logText = () => readFileSync(join(loops, ".dispatch.log"), "utf8");
+  /** Starts a real dispatcher and waits for it to hold its lock and record its start. */
+  const start = async (/** @type {NodeJS.ProcessEnv} */ e = env) => {
+    const child = spawn("node", [join(main, "loops/dispatch.mjs"), "--every", "1"], {
+      cwd: main,
+      env: e,
+      stdio: "ignore",
+    });
+    const exited = new Promise((r) => child.on("exit", (code, sig) => r(code ?? sig)));
+    const pid = /** @type {number} */ (child.pid);
+    started.push(pid);
+    const end = Date.now() + 20_000;
+    while (!(lockHolder(lock) === pid && existsSync(files().state) && dstate().code?.pid === pid)) {
+      if (Date.now() > end) throw new Error("the dispatcher never started");
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return { child, pid, exited };
+  };
+  const status = () => dispatcherPart(files(), { current: () => null });
+
+  it("a dispatcher sent SIGTERM logs it, marks the state stopped and frees its lock", async () => {
+    const { child, pid, exited } = await start();
+    child.kill("SIGTERM");
+    expect(await exited).toBe(0);
+    expect(logText()).toMatch(/^\S+Z stopped \(SIGTERM\)$/m);
+    expect(dstate().stopped).toMatchObject({ pid, why: "SIGTERM" });
+    expect(Date.parse(dstate().stopped.stoppedAt)).not.toBeNaN();
+    expect(existsSync(lock)).toBe(false);
+    expect(status()).toMatch(
+      /^DISPATCHER: stopped \(SIGTERM, \d+s ago\): start it in a tab of its own with \S+ prd dispatch\n/,
+    );
+
+    // A start clears the mark; --stop's TERM says who sent it.
+    const next = await start();
+    expect(dstate().stopped).toBeNull();
+    expect(dispatch(["--stop"]).stdout).toContain(`Stopped the dispatcher (pid ${next.pid})`);
+    expect(await next.exited).toBe(0);
+    expect(logText()).toContain("stopped (SIGTERM) by --stop");
+    expect(dstate().stopped).toMatchObject({ pid: next.pid, why: "SIGTERM by --stop" });
+    expect(dstate().stopRequest).toBeNull();
+  }, 60_000);
+
+  it.each([
+    ["throw", "uncaught exception"],
+    ["reject", "unhandled rejection"],
+  ])(
+    "a dispatcher that throws (%s) logs the error's first line and marks the state",
+    async (how, what) => {
+      const pre = join(root, `thrower-${how}.mjs`);
+      writeFileSync(pre, THROWER(/** @type {"throw" | "reject"} */ (how)));
+      const { pid, exited } = await start({ ...env, NODE_OPTIONS: `--import ${pre}` });
+      expect(await exited).toBe(1);
+      const why = `${what}: Error: boom from the test`;
+      expect(logText()).toMatch(new RegExp(`^\\S+Z stopped \\(${why}\\)$`, "m"));
+      expect(logText()).not.toContain("second line");
+      expect(dstate().stopped).toMatchObject({ pid, why });
+      expect(existsSync(lock)).toBe(false);
+      expect(status()).toMatch(new RegExp(`^DISPATCHER: stopped \\(${why}, \\d+s ago\\)`));
+    },
+    60_000,
+  );
+
+  it("one whose lock is removed ends, saying it lost it", async () => {
+    const { pid, exited } = await start();
+    rmSync(lock);
+    expect(await exited).toBe(1);
+    expect(logText()).toContain("stopped (lost its lock (the lock file is gone))");
+    expect(dstate().stopped).toMatchObject({ pid, why: "lost its lock (the lock file is gone)" });
+  }, 60_000);
+
+  it("a SIGKILLed one leaves its lock and no mark: status reads dead", async () => {
+    const { child, pid, exited } = await start();
+    child.kill("SIGKILL");
+    expect(await exited).toBe("SIGKILL");
+    expect(dstate().stopped).toBeNull();
+    expect(logText()).not.toMatch(/stopped \(/);
+    expect(status()).toMatch(new RegExp(`^DISPATCHER: dead \\(pid ${pid} gone; .*no clean stop\\)`));
+    // A mark of another pid is no mark of this one's.
+    writeFileSync(
+      files().state,
+      JSON.stringify({ stopped: { pid: pid + 1, stoppedAt: new Date().toISOString(), why: "SIGTERM" } }),
+    );
+    expect(status()).toMatch(/^DISPATCHER: dead /);
+    rmSync(lock);
+    expect(status()).toMatch(/^DISPATCHER: stopped \(SIGTERM, \d+s ago\)/);
   }, 60_000);
 });

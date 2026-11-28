@@ -38,7 +38,8 @@ ${prd_cmd} <command>
                               exits 1 on a slice's fields error (an unknown Model)
     dispatch [--every <s>]    the dispatcher, left in a tab of its own: every minute it plans, starts and
                               reopens PRDs by itself, one action a tick, in the registry's row order; new code
-                              on the main checkout re-execs it between ticks
+                              on the main checkout re-execs it between ticks. Every exit logs why and marks
+                              .dispatch.json stopped; status reads a gone pid with no mark as dead (a crash)
     dispatch --once|--dry-run one tick; --dry-run only shows the next action and every reason
     dispatch --pause [<why>]|--resume|--stop   the brakes, from any shell (the hold flag is the row's:
                               ${backlog_cmd} prd set <topic> flags+=hold why="<reason>" holds it with its reason)
@@ -186,6 +187,8 @@ ${prd_cmd} <command>
                               holder or queued taker here) is gone; exit 75 at the timeout (default 160 s,
                               under the harness's ~170 s foreground limit), naming it. Wait on a background check
                               with this, never \`pgrep -f\` (it matches itself); on 75, run it again
+                              Then it prints the results since the lease was taken; exit 1 on a failure,
+                              or with no result recorded (rerun the check)
     check --times [--since <date>]   the check log's summary (runs, median and total minutes, failures,
                               by mode, PRD and step, the ten most-failed test files); runs no check,
                               works from any checkout
@@ -435,7 +438,7 @@ case $cmd in
     ((fresh)) && echo "Made $dir for the inbox session. Its first open asks whether you trust this folder: choose Yes, once." >&2
     wrapper=$(cd "$bin" && pwd)/session.sh
     prompt_text=$("$bin/prompt.sh" inbox)
-    cd "$dir" && exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
+    cd "$dir" && RISA_MAIN=$main exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
   hotfix)

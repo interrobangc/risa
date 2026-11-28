@@ -313,6 +313,27 @@ describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", 
     expect(w.out).not.toMatch(/"check":"(old|other)"/);
   });
 
+  it("reads a suite's results since its lease was taken, so a wait begun mid-suite sees an early failure", async () => {
+    const event = (check, result) =>
+      JSON.stringify({ time: "2026-11-28T10:00:00Z", kind: "browser", check, result, worktree: "wt-a" }) +
+      "\n";
+    writeFileSync(env.RISA_RUN_LOG, event("before", "fail"));
+    const h = await hold("browser", "browser suite", wt);
+    expect(readFileSync(join(h.path, "name"), "utf8")).toMatch(/^from=\d+$/m);
+    // The suite's first check fails before anyone waits; the second passes after.
+    appendFileSync(env.RISA_RUN_LOG, event("signup", "fail"));
+    const w = start(["wait", "browser", "--worktree", "wt-a", "--timeout", "30"]);
+    await until(() => w.out.includes("for wt-a's browser:"));
+    await sleep(1200);
+    appendFileSync(env.RISA_RUN_LOG, event("login", "pass"));
+    h.child.stdin.end();
+    await h.exit;
+    expect(await w.exit).toBe(1);
+    expect(w.out).toContain("  signup: fail\n");
+    expect(w.out).toContain("  login: pass\n");
+    expect(w.out).not.toContain('"check":"before"');
+  });
+
   it("exits 75 at its timeout while the lease is held, and ignores other worktrees' holders", async () => {
     const h = await hold("check", "held by a", wt);
     const w = prdWait(["--timeout", "1"]);

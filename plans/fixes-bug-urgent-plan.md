@@ -4,24 +4,31 @@
 
 ## Status
 
+**From the user:**
+
+- 2026-11-28 (relayed by the backlog session), on moving RISA-1032 into fixes-bug-urgent: "Move it in"
+
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                      | Merge into `prd/fixes-bug-urgent` |
-| ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
-| 1     | 1    | RISA-1030 | opus  | merged                                     | ff256da                           |
-| 2     | 1    | RISA-1034 | opus  | merged                                     | 61be90b                           |
-| 3     | 1    | RISA-1033 | opus  | merged                                     | 1f81567                           |
-| 4     | 2    | RISA-1037 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
+| Slice | Wave | Item      | Model | State               | Merge into `prd/fixes-bug-urgent` |
+| ----- | ---- | --------- | ----- | ------------------- | --------------------------------- |
+| 4     | 2    | RISA-1037 | opus  | merged (wave green) | 7db3bce                           |
+| 5     | 2    | RISA-1042 | opus  | merged (wave green) | 42321be                           |
+| 6     | 2    | RISA-1038 | opus  | merged (wave green) | 3fa8ed4                           |
 
-Wave 1 gate: synced with main (58fcc52); tier none (tooling only), so the gate is a full `risa check` on the synced tip: 25 tests in 16 files timed out at load ~27, the 16 files rerun green at load ~8 (533 tests). **Green**; PR and Codex review next. Wave 1 merged 2026-11-28 (slice 1's check ran out of budget under load ~16 in the tooling step, its own tests green: the CI run is the gate). Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging). Slice 3 started too, once self-recovery-2 freed `dispatch-stuck.mjs`. fixes-bug landed in main (3598122): `risa sync` at the wave boundary. Slice 2 handed off (check passed; merges after slice 1, in plan order); at landing fold into `prd.sh`'s `wait` help and the docs that `wait` now prints the result and exits 1 with none recorded. Slice 3 handed off (check passed): it built the question-at-once branch (Risa has no way to wake an idle session) and added a `transcript` field to the heartbeat (`loops/heartbeat.mjs`, now in hot files).
+**Wave 1 landed** 2026-11-28 in main as 232b823 through PR #25: slices 1 (RISA-1030, merge ff256da), 2 (RISA-1034, 61be90b), 3 (RISA-1033, 1f81567), all opus. Tooling only, tier none. Gate: full `risa check` on the synced tip; 25 tests in 16 files timed out at load ~27, and those 16 files reran green at load ~8 (533 tests). Codex: one P2 (browser wait misses a suite's earlier results), tracked as RISA-1042, thread resolved; clean on ca79cb4. Report filed; to-test/2026-11-28-0815-fixes-bug-urgent.md; slice worktrees removed.
 
-**For the next session:**
+**Wave 2 (session 2026-11-28):** self-recovery-2's PR #23 landed in main as 685c78c (self-recovery-2 is closing; it edits `loops/dispatch` and `loops/prd.sh` no more); synced with `--force`. Slice 5 merged; slices 4 and 6 working. Hot files: `loops/lease`, `loops/session`, `loops/lib.sh`, `loops/status-extra`, `loops/dispatch`, `loops/prd.sh`.
 
-- **RISA-1038** (the inbox session finds the wrong project; filed by risa-ca for the next wave): it touches `loops/prd.sh` (self-recovery-2's hot file), `loops/session.sh` and `loops/lib.sh`, so it goes in wave 2 beside slice 4.
-- **Docs fold deferred:** the `wait` help in `loops/prd.sh` and `loops/docs/` are self-recovery-2's hot files, so the note on `wait`'s new output and exit 1 (slice 2) and the `notified` stall (slice 3) waits for wave 2, after self-recovery-2 lands.
-- **Context:** this session passed the soft limit (120k) during wave 1; rotate after wave 1 lands.
-- **self-recovery-2** (2026-11-28) said it won't edit `loops/dispatch.mjs` again (barring a Codex fix) and never touches `loops/dispatch-stuck.mjs`, so slice 3 (RISA-1033) started at once. Its last slice changes `dispatch.mjs` and is in review as PR #23. Slice 4 (RISA-1037) starts once PR #23 is in main and `risa sync` has brought it in; self-recovery-2 will message when it lands, and a background check watches its registry row.
-- RISA-1030's keep-alive (launchd or a watchdog) stays with self-recovery-3, per its note.
+- **Slice 5 hand-off (ba3c5a0):** a browser wait whose results include a fail or timeout now exits 1 (was 0); the name file gains `from=<bytes>`. Fold into the wait docs at landing. Prettier can't parse `.sh`: the slice prompt's format line fails on shell files.
+- **Slice 6 hand-off (d103931):** `session.sh` `cd`s to `RISA_MAIN` to source `lib.sh` when `$PWD` is outside any repo (`find_repo` unchanged); `prd.sh inbox` passes `RISA_MAIN=$main`. Its slice check stopped on this plan's table format (fixed); the rest ran green by hand.
+- **Slice 4 hand-off (4f7ea96):** every exit marks `.dispatch.json` `stopped {pid, stoppedAt, why}` and logs once; SIGHUP and a lost lock are new exits; `--stop`/`--restart` say who; status reads the mark (`stopped (<why>, <age> ago)`, else `dead`). Fold into the machinery doc at landing.
+- **Wave 2 green** 2026-11-28: full `risa check` passed on 3d70a5e (115 files, 2518 tests); synced (up to date); slice worktrees 4–6 removed. Docs fold (waves 1 and 2) went into `prd.sh`'s help (`wait`, `dispatch`): the role docs' budgets have no room, and machinery.md lacks the sections the docs cite (RISA-1051, fixes-nit). Next: PR, Codex review, land.
+- **Wave 3:** RISA-1032 (two fixes topics may run at once when their hot files don't overlap; `loops/dispatch-pick.mjs` plus its test) waits for the next wave: write its slice then.
+- **`risa check` takes no label for a full run** (`--quick "<why>"` only).
+- **Under load (~16–27)** slice and full checks time out in the tooling tests. Rerun just the failed files through the check lease once the load drops.
+- RISA-1030's keep-alive (launchd or a watchdog) stays with self-recovery-3.
+- **Commit no Status after asking Codex** before landing: it costs a re-review round.
 
 ## How to run this plan
 
@@ -66,10 +73,30 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 ## Slice 4: The dispatcher logs why it exits
 
-Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: self-recovery-2's PR #23 in main (then `risa sync`) · Check: loops/dispatch-restart.test.mjs
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-restart.test.mjs
 
 **Build (RISA-1037):** Caretook's dispatcher was gone hours after a normal tick, with no error in its log and its state still naming the dead pid. Every way `loops/dispatch.mjs` can exit (a signal it can catch, an uncaught exception or rejection, a lost lock, a clean stop, `--restart`'s re-exec) writes one line to the dispatch log saying why, with the error's first line, and marks the state stopped (`stoppedAt`, `why`). A clean stop removes the lock as now. Afterwards a gone pid with no stop mark means a crash or a SIGKILL. Then teach the status flag from slice 1 (`loops/status-extra.mjs`) to read the stop mark: a mark means `stopped (<why>, <age> ago)`, no mark means `dead`.
 
 **Acceptance criteria:**
 
 - Unit test (`loops/dispatch-restart.test.mjs`): a dispatcher child sent SIGTERM, and one that throws, each leave a log line and a stop mark; status reads `stopped (…)` with a mark and `dead` without one.
+
+## Slice 5: `risa wait browser` reads the whole suite's results
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/lease.test.mjs
+
+**Build (RISA-1042):** `risa wait browser` (`lease_wait` and `lease_results` in `loops/lease.sh`) reads the run log only from the offset where the wait began. `loops/browser.sh` holds one lease for the whole suite and logs each check separately, so a waiter started, or restarted after exit 75, mid-suite misses the earlier checks: an early failing check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken (the lease's own start, recorded where the lease is held), not since the wait began, falling back to the wait's start only when no lease start is known. Check waits (one line per run, at its end) keep working as now. Don't touch `loops/prd.sh`, `loops/docs/` or `loops/dispatch*` (a running topic's hot files).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/lease.test.mjs`): a browser wait started after a suite's first (failing) check was logged, with a passing check logged after, prints both and exits non-zero; a check wait still prints its one result and exits 0.
+
+## Slice 6: The inbox session finds its own project
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/session.test.mjs
+
+**Build (RISA-1038):** `prd.sh inbox` opens the inbox session in its own directory (`$RISA_INBOX_DIR`, default `~/.risa/inbox`, outside any repo). `loops/session.sh` sources `loops/lib.sh`, whose `find_repo` from that `$PWD` gets no machine entry, so the main checkout comes from `git -C $loops_lib_dir`: the release worktree, Risa's own checkout. `host.mjs claude-session` then reads Risa's machine entry, so the session misses the project's `claudeConfigDir` (it starts on Claude Code's default account) and its session record goes under Risa's `.loops/.sessions` (the project's `risa status` reads it ended while it's live, and the keep-alive may reopen a live inbox). Reproduce it first in a test (a throwaway project repo and machine config in the OS temp dir, a session run from a directory outside any repo). Fix: `prd.sh inbox` passes the project's main checkout through (`RISA_MAIN`), and `session.sh` (or `find_repo`) prefers it when `$PWD` is outside a repo. Keep the `prd.sh` edit to that one pass-through.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/session.test.mjs`, new if none): a session started from a directory outside any repo with `RISA_MAIN` naming a project resolves that project's main, its `claudeConfigDir`, and writes its record under that project's `.loops/.sessions`; without `RISA_MAIN` inside a repo, it resolves as now.
