@@ -6,10 +6,12 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model  | State   | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ------ | ------- | ------------------------------ |
+| 49    | 10   | RISA-1054 | opus   | started |                                |
+| 50    | 10   | RISA-1062 | sonnet | started |                                |
 
-No slice in flight (topic closed after wave 9; slice 48's merge 46bbadb).
+**Wave 10** (2026-11-28): reopened for RISA-1054 and RISA-1062; synced with main (19a7b50) first.
 
 **Wave 9 landed** 2026-11-28 in main as 85bdff7 through PR #24: slice 48, opus (RISA-1026). Tooling only, tier none; `pnpm test` green on fa6a59d; Codex clean on adab17b; landed on an unsynced tip (main's 11 new commits share no file). Report filed; to-test/2026-11-28-0710-fixes-tooling.md; slice worktree removed. Nothing triaged for fixes-tooling after it, so the topic is closed (`risa rm fixes-tooling`) to free its lane, at the backlog session's request.
 
@@ -515,3 +517,23 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - `loops/lease.test.mjs` passes 20 runs in a row under load (for example, alongside a CPU burner such as `yes > /dev/null` on several cores), and its assertions still check the wait line, the holder line and the done line.
+
+## Slice 49: CI fetches tags so docs:headings checks for real
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: ci/workflow.test.mjs
+
+**Build (RISA-1054):** `.github/workflows/ci.yml`'s `actions/checkout` step is shallow and fetches no tags, so `loops/docs-headings.mjs`'s `unloggedHeadingChanges` finds no `v*` tag in CI and passes vacuously. Give the checkout step what the check needs (`fetch-depth: 0`, which brings the history `git show <tag>:…` reads and the tags; or `fetch-tags: true` with enough depth, if that suffices: say which and why in the hand-off). Keep the workflow's flow-style, line-based shape that `ci/workflow.test.mjs` reads.
+
+**Acceptance criteria:**
+
+- Unit test (`ci/workflow.test.mjs`): the checkout step fetches the full history (or tags with what `git show <tag>:path` needs), so a shallow, tagless checkout fails the test.
+
+## Slice 50: Risa's format command ignores unknown files
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: none · Blocked by: none
+
+**Build (RISA-1062):** `risa.json`'s `commands.format` is `pnpm exec prettier --write`, so the slice brief's format step fails when the diff has a shell script. Make it `pnpm exec prettier --write --ignore-unknown`, as `loops/fixture-project/risa.json` already has. Change only that line.
+
+**Acceptance criteria:**
+
+- `pnpm exec prettier --write --ignore-unknown loops/lib.sh AGENTS.md` exits 0 and leaves `loops/lib.sh` unchanged; `pnpm check` passes.
