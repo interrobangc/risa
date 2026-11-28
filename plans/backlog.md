@@ -13,7 +13,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | done | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | `loops/rotate`, `loops/dispatch-pick`, `.github`, `ci/workflow`, `backlog/registry`, `vitest.config.mjs`, `loops/drain`, `loops/usage` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
+| `fixes-tooling` | standing | — | `loops/rotate`, `loops/dispatch`, `.github`, `ci/workflow`, `ci/write-verdict`, `ci/ci-io`, `ci/ci-runs`, `backlog/registry`, `backlog/backlog`, `vitest.config.mjs`, `loops/drain`, `loops/usage`, `loops/check-budget`, `loops/test-limits` | Risa's tool items from Caretook's fixes-tooling (moved 2026-11-27, B-543); Caretook keeps its own. Held until the user releases it. |
 | `fixes-bug` | standing | — | — | Small fixes for wrong behaviour or data (plans/fixes-rules.md) |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | To write. Ship dev to staging in one command, Codex findings filed by tool, a staging to-test report (B-404, B-430, B-436). Cut from orchestration-3; doesn't need the dispatcher |
 | `self-recovery-2` | hold | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560). Held after two skeptic send-backs; the user chose to land it held (a7). |
@@ -69,11 +69,11 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-914 | plan | triaged |  |  | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
 | RISA-915 | bug | triaged | fixes-tooling |  | A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time |
 | RISA-926 | bug | triaged | fixes-tooling |  | The dispatcher's keep-alive and session requests ignore the machine config's work switch: a repo with work off still gets its backlog and inbox sessions opened |
-| RISA-927 | bug | in-progress | fixes-tooling | prd/fixes-tooling | The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers |
+| RISA-927 | bug | ready | fixes-tooling | prd/fixes-tooling | The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers |
 | RISA-933 | chore | live | fixes-tooling | prd/fixes-tooling | test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line |
 | RISA-934 | chore | live | fixes-tooling | prd/fixes-tooling | Archive finished rows out of the PRD registry table (75 done rows clutter it) |
 | RISA-935 | bug | live | fixes-tooling | prd/fixes-tooling | prd tidy lists lease .waiting files as safe to remove, then refuses them as not a lease |
-| RISA-952 | chore | in-progress | fixes-tooling | prd/fixes-tooling | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
+| RISA-952 | chore | ready | fixes-tooling | prd/fixes-tooling | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
 | RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
 | RISA-972 | question | ready | after-split-2 | prd/after-split-2 | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
@@ -89,10 +89,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-994 | bug | triaged | fixes-tooling |  | Run in the main checkout with RISA_*/CLAUDE_CODE_* unset, land, land-force-resume, land-gate, land-unsynced, recover, rotate and stack tests fail (54 of 511); they pass in a worktree |
 | RISA-995 | chore | triaged | fixes-nit |  | Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command |
 | RISA-996 | chore | dropped | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
-| RISA-997 | chore | in-progress | fixes-tooling | prd/fixes-tooling | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
+| RISA-997 | chore | ready | fixes-tooling | prd/fixes-tooling | CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict') |
 | RISA-998 | feature | triaged | risa-next |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
-| RISA-999 | bug | in-progress | fixes-tooling | prd/fixes-tooling | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
-| RISA-1000 | bug | in-progress | fixes-tooling | prd/fixes-tooling | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
+| RISA-999 | bug | ready | fixes-tooling | prd/fixes-tooling | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
+| RISA-1000 | bug | ready | fixes-tooling | prd/fixes-tooling | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
 
 ## Items
 
@@ -544,10 +544,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-927 · bug · The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7bb152
 
 - 2026-11-26 (prd/orchestration-split-3): Carried from orchestration-split-3 wave 3 (slice 7): usage and context follow each session's folder, the drain doesn't yet
 - 2026-11-27 (the Risa move, B-543): Was B-927 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -584,10 +584,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-952 · chore · Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7bb152
 
 - 2026-11-27 (Robert Bo Davis): User 2026-11-27: fixes-ui idled about 4 h after wave 19 (01:56) with only B-325, which waits for Capacitor, left; it blocked fixes-nit, fixes-bug and fixes-perf at cap 1 (dispatcher: no free slot)
 - 2026-11-27 (the Risa move, B-543): Was B-952 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -736,10 +736,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-997 · chore · CI workflow writes a verdict artifact so risa ci run --wait reads its runs (now 'unknown: the run left no verdict')
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7bb152
 
 - 2026-11-27 (prd/fixes-tooling): From fixes-tooling slice 8 (RISA-969): .github/workflows/ci.yml runs pnpm check but uploads no verdict.json, so ci run --wait can't judge its runs.
 
@@ -755,18 +755,19 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-999 · bug · An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7bb152
 
 - 2026-11-27 (prd/fixes-tooling): Codex on PR #7 (thread PRRT_kwDOV9ctaM689rK9, backlog/registry.mjs:421), from RISA-934's prd archive: archiveDone strips After references only to the rows it moves now; a later prd add/set after=<archived> keeps one. Fix: drop or refuse an archived After on write, or have dispatch read the archive.
 
 ### RISA-1000 · bug · Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: b7bb152
 
 - 2026-11-27 (prd/after-split-2): Seen 2026-11-27 by after-split-2: two slice checks and the wave-1 full check failed only on timeouts (ask, bye, tidy-cli, land-unsynced, land-gate, recover, rotate, stack, load-gate, dispatch, sessions…); all pass run alone at load ~7. Fix candidates: scale vitest testTimeout/hookTimeout with load as check-budget does, or lower parallelism under load.
+- 2026-11-27 (Robert Bo Davis): Check log (risa check --times, 2026-11-27): tests failed in 31 of 33 logged runs (full 9/10, slice 22/23; median 6.3 min). The log doesn't record the failing step or test files ('Test failures by step: (not recorded)'), so it can't confirm these were all timeouts.
