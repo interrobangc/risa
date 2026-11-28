@@ -34,7 +34,8 @@ ${prd_cmd} <command>
     start <topic>             create (or resume) a PRD's worktree and stack; prints how to open its orchestrator
     anchors [topic] [--base <ref>]   the plan's anchors on <ref> (default $trunk), run at PRD start: every
                               backticked path in an unmerged slice exists there and every symbol named
-                              beside a path is in that file; only warns (exit 0): the misses, line numbers
+                              beside a path is in that file; warns (exit 0) on misses and line numbers,
+                              exits 1 on a slice's fields error (an unknown Model)
     dispatch [--every <s>]    the dispatcher, left in a tab of its own: every minute it plans, starts and
                               reopens PRDs by itself, one action a tick, in the registry's row order; new code
                               on the main checkout re-execs it between ticks
