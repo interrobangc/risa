@@ -19,9 +19,11 @@
 //     words with spaces are not anchors. Line-number anchors (`file.mjs ~158`)
 //     are warnings (slice-fields.mjs lineAnchors): name the function instead.
 //     Also each unmerged slice's budget (check-plan.mjs planBudget: its Build
-//     files, its Check field, a Check file shared within a wave), as warnings.
-//     Prints each miss and warning. It only warns: exit 0 with or without
-//     misses (it never stops a PRD start), 2 on a usage error.
+//     files, its Check field, a Check file shared within a wave), as warnings,
+//     and its fields errors (an unknown Model), as check-plan --plan prints them.
+//     Prints each miss and warning: exit 0 with or without misses (it never
+//     stops a PRD start), 1 on a fields error (after the anchor lines; the plan
+//     `check-plan --plan` refuses), 2 on a usage error.
 //
 // Pure parts (codeSpans, anchorsOf, mergedSlices, checkAnchors) take text and
 // a view of the base's files; the CLI reads the plan and asks git.
@@ -30,7 +32,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { FILE_EXT, lineAnchors, mergedSlices, sliceSections } from "./slice-fields.mjs";
-import { planBudget } from "./check-plan.mjs";
+import { fieldsErrorLine, planBudget } from "./check-plan.mjs";
 
 /** The backticked spans of one line: { text, start, end } (end is past the closing tick). */
 export function codeSpans(/** @type {string} */ line) {
@@ -238,7 +240,8 @@ function main(/** @type {string[]} */ argv) {
       ? `${r.misses.length} anchor(s) missing on ${ref} (${slices}): fix the plan before the first slice\n`
       : `anchors ok on ${ref} (${slices})\n`,
   );
-  return 0;
+  for (const e of budget.errors) process.stderr.write(`${fieldsErrorLine(e)}\n`);
+  return budget.errors.length ? 1 : 0;
 }
 
 function die(/** @type {string} */ msg, code = 2) {

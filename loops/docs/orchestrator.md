@@ -1,10 +1,10 @@
 # Orchestrator handbook
 
-For a PRD orchestrator: a top-level session (spawned agents can't spawn), one per PRD, in the integration worktree `.loops/<topic>` on `prd/<topic>`, steered by the user. It reads the trunk, never works in the main checkout, and runs loops (`{{prd}} doc loop`). **At most four PRDs run at once** (`{{prd}} dispatch --cap`).
+For a PRD orchestrator: a top-level session, one per PRD, in the integration worktree `.loops/<topic>` on `prd/<topic>`, steered by the user. It reads the trunk, never works in the main checkout, and runs loops (`{{prd}} doc loop`). **At most four PRDs run at once** (`{{prd}} dispatch --cap`).
 
 ## Commands
 
-`{{prd}} help` lists them. **At start,** fix what `{{prd}} anchors` flags.
+`{{prd}} help` lists them. **At start,** fix what `{{prd}} anchors` flags (exit 1: a bad `Model:`).
 
 ## Models
 

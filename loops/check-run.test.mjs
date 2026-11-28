@@ -323,6 +323,23 @@ describe("check-run.sh and the load gate", () => {
     quiet();
   });
 
+  it("keeps waiting through an unread load once busy, then starts when it drops (RISA-1022)", async () => {
+    busy();
+    const done = runAsync("waits through unread");
+    await sleep(1000);
+    setLoad("not a load\n");
+    await sleep(1000);
+    quiet();
+    const r = await done;
+    expect(r.status).toBe(0);
+    expect(r.out).toMatch(/machine is busy \(5-minute load 9, over 4\)/);
+    expect(r.out).not.toMatch(/load dropped to -/);
+    expect(r.out).toMatch(/load dropped to 1 \(threshold 4\) after \d+s: starting the check/);
+    expect(r.out.indexOf("load dropped")).toBeLessThan(r.out.indexOf("ran"));
+    expect(last()).toMatchObject({ reason: "waits through unread", exit: 0 });
+    expect(last().loadWaited).toBeGreaterThanOrEqual(1);
+  });
+
   it("isn't busy when the load can't be read", async () => {
     const r = await runAsync("unread", {
       RISA_LOAD_FILE: join(root, "no-such-file"),
