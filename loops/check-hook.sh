@@ -34,7 +34,9 @@
 # TOOLING is 2), with the same rerun rules and state files (step `tooling`, its
 # seconds and slowest files in `times` and `slowest`). After the slice's own check
 # above (RISA-1015), only its Check files, those among the tooling tests (the
-# others run nothing more), never the whole suite.
+# others run nothing more), never the whole suite; and of those, none the `unit`
+# step already ran and passed (RISA-1021: --ran, check-tooling.mjs), so a Check
+# file that is also a tooling test (Risa's own repo) runs once.
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=lib.sh
@@ -85,8 +87,9 @@ harness=()
 [[ $tooling != 2 ]] || harness=(--harness)
 only=()
 if [[ -n ${own_files+x} ]]; then
-  echo "The tooling step runs only the slice's Check file(s) among the tooling tests: ${own_files[*]}."
+  echo "The tooling step runs only the slice's Check file(s) among the tooling tests, but none the unit step ran: ${own_files[*]}."
   for f in "${own_files[@]}"; do only+=(--file "$f"); done
+  only+=(--ran)
 fi
 exec node "$here/check-tooling.mjs" ${harness[@]+"${harness[@]}"} ${only[@]+"${only[@]}"} \
   --state "${RISA_CHECK_STATE:-}" --rerun-max "${RISA_CHECK_RERUN_MAX:-20}"
