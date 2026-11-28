@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// prd queue <topic>: put a topic first in the PRD registry (row order is
+// queue <topic>: put a topic first in the PRD registry (row order is
 // the priority, so the dispatcher takes it next when it may run) and return at
 // once. It prints one line: that the running dispatcher will take it, or that
 // none is running (start one, or start the topic by hand).
 //
-// The move is `backlog prd move <topic> --first` (one backlog commit on
+// The move is the registry's move (`<topic> --first`; one backlog commit on
 // dev); a topic already first isn't moved again. Nothing waits and nothing is
 // started here: the dispatcher (dispatch.mjs) does the starting.
 import { toolCmd } from "./config.mjs";

@@ -1,8 +1,8 @@
-// The cleanup sorter behind `prd tidy`: the one place that decides what a
+// The cleanup sorter behind `tidy`: the one place that decides what a
 // leftover is and whether it may go without asking. Pure: a facts object in
 // (tidy-cli.mjs collects one), three lists out.
 //
-//   safe  removed by `prd tidy --yes`, each with how:
+//   safe  removed by `tidy --yes`, each with how:
 //         - a slice worktree merged into its prd/ branch, clean, with nothing
 //           running in it (rm.sh);
 //         - a plan/<topic> worktree landed in dev and level with it, clean, with
@@ -20,7 +20,7 @@
 //         - quarantine entries whose backlog item is done;
 //         - finished backlog items: dropped ones always, others once their
 //           topic has no prd/ worktree (backlog archive <ids>).
-//   ask   reported only (one `prd ask --report`):
+//   ask   reported only (one `ask --report`):
 //         - a live session whose worktree is gone or whose branch landed in dev
 //           (it looks finished: ask it, then the user closes it);
 //         - a local branch with no worktree: merged ones are named for
@@ -28,7 +28,7 @@
 //         - PRD registry rows that look done (not on hold, standing or running);
 //         - a landed topic (landedTopics, or landedWithCode: code past its
 //           landing) with a worktree or a row not done while no dispatcher
-//           runs: `prd finish <topic>` is the fix; never a standing topic;
+//           runs: `finish <topic>` is the fix; never a standing topic;
 //         - a topic with more than one live claude across its worktrees (the
 //           pids and where each works).
 //   kept  a safe candidate held back, with why: a dirty worktree, one with

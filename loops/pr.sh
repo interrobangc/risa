@@ -18,7 +18,7 @@
 #      read only: the landing requests the run), and that plans
 #      and the backlog are written outside review. Rerun it after every push.
 # It prints the PR's URL. Codex reviews each push by itself: then
-# `prd review <topic> --wait`.
+# `review <topic> --wait`.
 #
 # Test seam: RISA_PR_THROWAWAY=1 (a branch with "throwaway" in its name
 # only) never pushes dev and measures the sync against origin/dev instead, so a
