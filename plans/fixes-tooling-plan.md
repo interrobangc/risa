@@ -6,12 +6,14 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 49    | 10   | RISA-1054 | opus  | merged | daced0a                        |
-| 50    | 10   | RISA-1062 | opus  | merged | 879b606                        |
+| Slice | Wave | Item      | Model | State                                                                                | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------ |
+| 51    | 11   | RISA-1066 | opus  | merged (81db42a; check stopped at budget in tooling step, no failure)                | 423f066                        |
+| 52    | 11   | RISA-1068 | opus  | merged (ca5850b; check stopped at 600s budget in tooling step, load ~21; no failure) | 9b04e99                        |
 
-**Wave 10** (2026-11-28): reopened for RISA-1054 and RISA-1062; synced with main (19a7b50) first. Both slices merged; CI unit green on 97836d7 (run 46162434569); sync a no-op; slice worktrees removed; PR and Codex review next. RISA-1066 (triaged since) waits for wave 11.
+**Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file. Gate: tier none (tooling only); `pnpm test` green on 4b86c75 (124 files, 2585 tests); sync skipped (main shares no file); slice worktrees removed. Next: PR, Codex review, land.
+
+**Wave 10 landed** 2026-11-28 in main as 8448fee through PR #31: slices 49, 50, opus (RISA-1054, RISA-1062). Synced with main (19a7b50) first; CI unit green on 97836d7 (run 46162434569); Codex clean on 90e51cb. Report filed; to-test/2026-11-28-1104-fixes-tooling.md; slice worktrees removed. CI now checks out full history, so docs:headings bites there too.
 
 **Wave 9 landed** 2026-11-28 in main as 85bdff7 through PR #24: slice 48, opus (RISA-1026). Tooling only, tier none; `pnpm test` green on fa6a59d; Codex clean on adab17b; landed on an unsynced tip (main's 11 new commits share no file). Report filed; to-test/2026-11-28-0710-fixes-tooling.md; slice worktree removed. Nothing triaged for fixes-tooling after it, so the topic is closed (`risa rm fixes-tooling`) to free its lane, at the backlog session's request.
 
@@ -537,3 +539,23 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: none · Blocked by: none
 **Acceptance criteria:**
 
 - `pnpm exec prettier --write --ignore-unknown loops/lib.sh AGENTS.md` exits 0 and leaves `loops/lib.sh` unchanged; `pnpm check` passes.
+
+## Slice 51: recover.test.mjs splits along its describe groups
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1066):** `loops/recover.test.mjs` (about 1,100 lines, five top-level `describe` groups) runs as one slow file. Split it as `land.test.mjs` was: move the shared throwaway repo, fakes (`FAKE_LSOF`, `FAKES`, the stub hook config) and helpers into `loops/recover-fixture.mjs` (a header comment saying what it sets up, a `useRecoverRepo()`-style hook like `land-fixture.mjs`'s `useLandRepo()`), and give each group or pair of groups its own file: `recover.test.mjs` (the dry run), `recover-down.test.mjs` (down and recover, with and without the dispatcher), `recover-down-stuck.test.mjs` (down when the dispatcher won't stop) and `recover-unattended.test.mjs` (the lock, the gated dispatcher, its intent, the migrate marker), or a grouping close to it. Move tests verbatim: no test added, dropped or weakened; only imports and the setup move. Each new file keeps a header comment saying what it covers.
+
+**Acceptance criteria:**
+
+- The same test names pass before and after (`pnpm exec vitest run loops/recover` lists every old test once); no new file is over about 400 lines; `pnpm check` passes.
+
+## Slice 52: rotate.test.mjs splits along its describe groups
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1068):** `loops/rotate.test.mjs` (about 1,300 lines, six top-level `describe` groups) runs as one slow file. Split it as `land.test.mjs` was: the shared throwaway repo, stub claude, `plan()` and the other helpers into `loops/rotate-fixture.mjs` (a header comment saying what it sets up), and the groups into files such as `rotate.test.mjs` (the pure part, `pnpm prd rotate`, its standing-topic run), `rotate-into.test.mjs` (`rotate-into.sh`), `rotate-self.test.mjs` (`--self`, the inbox session) and `rm-done.test.mjs` (`pnpm prd rm` marks a finished PRD done), or a grouping close to it. Every new test file keeps the scaled waits (`import { BASE, scaledWait } from "./test-limits.mjs";` and its `vi.setConfig(…)` line, RISA-994), and `loops/test-limits.test.mjs`'s "scales %s's waits" list names each of them in place of `rotate.test.mjs` alone. Move tests verbatim: no test added, dropped or weakened.
+
+**Acceptance criteria:**
+
+- The same test names pass before and after (`pnpm exec vitest run loops/rotate loops/rm-done` lists every old test once); `loops/test-limits.test.mjs` passes naming each new file; no new file is over about 400 lines; `pnpm check` passes.
