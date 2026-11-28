@@ -4,14 +4,38 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/risa-next-4` |
-| ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | —     | —                            |
-| 2     | 2    | —     | —                            |
-| 4     | 2    | —     | —                            |
-| 3     | 3    | —     | —                            |
-| 5     | 4    | —     | —                            |
-| 6     | 5    | —     | —                            |
+| Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
+| ----- | ---- | --------------------------------------------- | ---------------------------- |
+| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
+| 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | dd41acb                      |
+| 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | ca49316                      |
+| 3     | 3    | landed 2026-11-28 (PR 41, main ca063ec; opus) | 32bb4ed                      |
+| 5     | 4    | landed 2026-11-28 (PR 42, main 657f1da; opus) | ff49347                      |
+| 6     | 5    | landed 2026-11-28 (PR 44, main 458aaf6; opus) | 3410f93                      |
+
+**From the user:** nothing yet beyond the start itself.
+
+**Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
+
+**Wave 5 (2026-11-28, a fresh session after an interruption):** no cut-off landing; git matched _Status_; ingest found nothing new; `risa sync` needed no merge. Slice 6 started: worktree `.loops/risa-next-4-6` on `slice/risa-next-4/6`, one opus agent, the watch running. Slice 6 handed off (2f6b2d7, two new files, slice check green) and is merged at 3410f93; RISA-797 marked done. `risa tier`: none, and the gate, a full `risa check`, is green on 6a618fa (134 files, 2674 tests); the sync after it merged main in (main had moved), and a second full `risa check` is green on the synced tip 5df7c0d (135 files, 2716 tests); slice worktree removed. PR #44 is open and Codex is clean on it. Wave 5 landed in main through PR #44 (458aaf6, tier none; land took an unsynced tip, main had 1 commit sharing no file). **Every wave is landed and the topic is done**; nothing in flight, nothing to fold into the docs. Last step: `risa rm risa-next-4`. Its six init gaps (hooks.check unset, project-data check needs preferences and role docs, no prefix flag, rule-file shapes, refPrefix, `config check` outside a repo) are filed: a note on RISA-1090, RISA-1091 (`fixes-bug`), RISA-1092 (`risa-next-5`, proposed). Next: `risa pr`, `risa review --wait`, land (tier none), `risa rm risa-next-4-6`, then `risa rm risa-next-4`.
+
+**Before wave 5:** waves 1 to 4 are landed. Wave 4 (slice 5) landed in main through PR #42 (main at 657f1da, tier none, full `risa check` green on the merged tip: 133 files, 2672 tests; report a72; slice worktree removed). Land took the unsynced tip (main had 4 commits sharing no file). Codex's two P2s were verified, filed and resolved: RISA-1089 (migrate half-done on a git-ignored rule file) and RISA-1090 (a fresh init's check can't run without `.risa/check-plan.json` and `.risa/tiers.json`), both `fixes-bug`, triaged. RISA-796 is done; RISA-797 stays claimed. Nothing in flight. Next session: `risa backlog ingest` and `list`, `risa sync`, then wave 5, the last: slice 6 alone (opus; RISA-797 `done` after it), `risa watch risa-next-4 --wait` in the background; after its landing `risa rm risa-next-4`. Slice 6 edits only new files (`loops/second-repo*`). Nothing to fold into the docs this wave (slice 5 wrote README's _Start a project_).
+
+**For slice 6 (from slice 5):** a bare `init` repo fails the project-data check until it has `AGENTS.md` and a tracked file under `docs/` (init names them when missing); init writes but doesn't stage (`git add .risa plans`); its archive has `## Items`; defaults: every command `true`, prefixes `prd/ slice/ plan/ hotfix/`, id prefix the name uppercased; `setup.mjs` exports `cli(argv, cwd)` returning `{ out, err, code }`. Beyond the plan: migrate refuses a `risa.json` the loader rejects and an untracked moved file, and any `paths.tooling` entry that was a moved file becomes `.risa`.
+
+**From slice 3:** the backlog route's config lookup is in `loops/backlog-config.sh` (`bin/risa` only sources it, so slice 5's `bin/risa` routing is the first edit there); two comments in `loops/lib.sh` (lines 22, 638) still say `risa.json`. **For slice 6:** a `makeRepo` repo's `work/archive.md` has no `## Items` heading, which `backlog prd list` needs; `makeRepo` copies only `loops/`, not `backlog/`.
+
+**Wave 2's gate, for the next ones:** `pnpm check`'s test pass was whole on the merged tip; `risa check`'s tooling rerun of the same files failed twice with 20 s timeouts at load near 50 while `fixes-bug`'s full check ran beside it (25 then 31 tests, different sets; RISA-1088, fixes-test), and PR 39's GitHub run had the one known failure RISA-1085 (`check-run.test.mjs` on every `pull_request` run). Both waived on the backlog session's advice ("No objection"; "No reason not to"). Start a full check when the other check lease is free and load is low. Nothing to fold into the docs: slice 4 wrote the folder form and `where` into `loops/docs/project-config.md`.
+
+**For slice 3 (from slice 2):** `machine.mjs repo` prints a `.risa/config.json` path in the folder form and exits 2 with one line when a checkout has both forms; `makeRepo({ folder: true })` builds a folder-form sample repo. **For slice 5 (from slice 4):** import `RULE_FILES` from `config.mjs`; a folder-form `loadConfig().config` is a copy, so migrate reads the file itself; `loops/docs/project-config.md` has 2 B of budget left.
+
+**Lessons for the gate:** a full check takes no label: `env -u CLAUDE_CONFIG_DIR risa check > <log outside the worktree> 2>&1` in the background (about 8 minutes at load 20+), then `risa wait check`; with `CLAUDE_CONFIG_DIR` set, RISA-1076 fails about 20 tests. `loops/land-unsynced.test.mjs` can time out under load and passes alone. Commit _Status_ before `risa pr`: land refuses a local tip the PR's head trails.
+
+**From slice 1:** both forms present throws a bare `ConfigError` from `configPath`; bash uses `node loops/config.mjs where <dir>` (exit 1 none, 2 both); `config get`'s error lines still say `risa.json:` on purpose.
+
+**Slice models:** all six are coding with real logic: opus.
+
+**Open issues:** none.
 
 **Backlog:** claim each slice's item as it starts. Slices 1 to 4: RISA-796. Slice 5: RISA-796 (`done` after it) and RISA-797. Slice 6: RISA-797 (`done` after it).
 

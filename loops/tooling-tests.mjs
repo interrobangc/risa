@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPlan } from "./check-plan.mjs";
 import { branchKinds, loadConfig } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const git = (root, ...args) => spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
@@ -60,7 +61,7 @@ export function toolingProjects(changed, named = [], { config = loadConfig().con
   return projects;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const named = process.argv.slice(2);
   const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
   const checked = spawnSync(process.execPath, [join(HERE, "project-check.mjs")], { stdio: "inherit" });

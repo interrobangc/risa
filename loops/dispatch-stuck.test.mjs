@@ -181,3 +181,30 @@ describe("the notified stall", () => {
     expect(again).toEqual([]);
   });
 });
+
+describe("a machine that lost the home (RISA-1084)", () => {
+  const AWAY = "the home is the fictional machine Galileo";
+  // Asked and answered "rotate it now": the next tick rotates, unless a gate holds it.
+  const entries = {
+    "prd-x": { pid: 100, since: msAgo(11), askId: "a1", answer: /** @type {const} */ ("rotate") },
+  };
+  const rotations = (/** @type {object} */ gates) =>
+    decide({ entries, gates }).filter((a) => a.type === "rotate" || a.type === "gated");
+
+  it("doesn't rotate a stuck session while the project's home is away, and says why", () => {
+    expect(rotations({ project: AWAY, inbox: null })).toEqual([
+      { type: "gated", session: "prd-x", why: AWAY },
+    ]);
+  });
+
+  it("rotates as before with the home here, or with only the inbox gate closed", () => {
+    const rotate = [{ type: "rotate", session: "prd-x", pid: 100, topic: "x" }];
+    expect(rotations({ project: null, inbox: null })).toEqual(rotate);
+    expect(rotations({})).toEqual(rotate);
+    expect(rotations({ project: null, inbox: "the inbox home is Galileo" })).toEqual(rotate);
+  });
+
+  it("still asks about a stall: the question opens no session", () => {
+    expect(asks({ gates: { project: AWAY } })).toHaveLength(1);
+  });
+});

@@ -197,6 +197,7 @@ export function useDispatchRepo() {
       "open-session.mjs",
       "host.mjs",
       "planner-model.mjs",
+      "pin.mjs",
       "config.mjs",
       "machine.mjs",
       "drain.mjs",

@@ -41,7 +41,7 @@
 // sessions: { <name>: StuckEntry }, reported: [<key>…] }.
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { awaitsAnswer } from "./asks.mjs";
-import { runsPrdCommand } from "./dispatch-context.mjs";
+import { rotationGate, runsPrdCommand } from "./dispatch-context.mjs";
 
 /** The `session` of the stuck questions and reports: apart from the reopen and context ones. */
 export const STUCK_SESSION = "dispatch-stuck";
@@ -182,7 +182,7 @@ const mins = (/** @type {number} */ n) => `${Math.max(0, Math.round(n / MIN))}m`
 
 /**
  * @typedef {{ pid: number, since: number, askId?: string, answer?: "rotate" | "leave",
- *   triedAt?: number, reported?: boolean }} StuckEntry
+ *   triedAt?: number, reported?: boolean, gated?: string }} StuckEntry
  * @typedef {{ name: string, pid: number, kind?: string, topic?: string, managed?: boolean,
  *   auto?: boolean, live: boolean, rotating?: boolean, notifiedAt?: number | null }} StuckSession
  *   `notifiedAt`: notifiedAtOf its transcript's end
@@ -191,6 +191,7 @@ const mins = (/** @type {number} */ n) => `${Math.max(0, Math.round(n / MIN))}m`
  *   | { type: "ask", session: string, pid: number, topic: string, text: string, since: number }
  *   | { type: "answered", session: string, answer: "rotate" | "leave", askId: string }
  *   | { type: "rotate", session: string, pid: number, topic: string }
+ *   | { type: "gated", session: string, why: string }
  *   | { type: "report", key: string, sessions: string[], text: string }} StuckAction
  */
 
@@ -260,9 +261,11 @@ export function stallOf(
  * @param {{ sessions: StuckSession[], heartbeats?: any[], running?: Set<string>, asks?: any[],
  *   watch?: Record<string, { state: WatchState, marks: { slice: string, at: string }[] }>,
  *   entries?: Record<string, StuckEntry>, reported?: string[], paused?: boolean,
- *   clockFrom?: number | null, limitMs: number, notifiedMs?: number, now: number }} facts `heartbeats`: every
+ *   clockFrom?: number | null, limitMs: number, notifiedMs?: number, now: number,
+ *   gates?: import("./dispatch-context.mjs").RotationGates }} facts `heartbeats`: every
  *   record (heartbeat.mjs), stale ones too; `running`: sessions with a busy command under
- *   them; `asks`: every ask; `watch`: each topic's watch state and marks
+ *   them; `asks`: every ask; `watch`: each topic's watch state and marks; `gates`: what stops
+ *   a rotation on this machine (rotationGate)
  * @returns {StuckAction[]}
  */
 export function stuckDecision({
@@ -278,6 +281,7 @@ export function stuckDecision({
   limitMs,
   notifiedMs = 10 * MIN,
   now,
+  gates = {},
 }) {
   if (paused) return [];
   /** @type {StuckAction[]} */
@@ -327,8 +331,14 @@ export function stuckDecision({
       answer = a?.answeredAt ? stuckAnswer(a.answer) : "leave";
       actions.push({ type: "answered", session: s.name, answer, askId: e.askId });
     }
-    if (answer === "rotate" && !(e.triedAt && now - e.triedAt < limitMs))
-      actions.push({ type: "rotate", session: s.name, pid: s.pid, topic });
+    if (answer === "rotate" && !(e.triedAt && now - e.triedAt < limitMs)) {
+      const gated = rotationGate(s.kind, gates);
+      actions.push(
+        gated
+          ? { type: "gated", session: s.name, why: gated }
+          : { type: "rotate", session: s.name, pid: s.pid, topic },
+      );
+    }
   }
 
   // An entry whose stall is over, or whose session is gone or another, clears first.

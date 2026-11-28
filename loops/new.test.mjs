@@ -1,7 +1,8 @@
 // new.sh slice reads the slice's section from the committed plan on the prd/ tip: a
 // slice whose heading is only in the working tree's plan is refused, no branch made
 // (RISA-1015); once committed it starts, and a topic with no plan file starts as
-// before. A throwaway repo with the stub stack hook and fake pnpm, lsof and nvm.
+// before. prd.sh's <command> --help prints that command's usage and its new.sh
+// wrappers refuse an unknown flag, making nothing (RISA-1086). A throwaway repo with the stub stack hook and fake pnpm, lsof and nvm.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -37,14 +38,25 @@ describe("new.sh slice and the committed plan", () => {
   let root, main, loops, env;
   const git = (cwd, ...a) =>
     execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
-  const newSlice = (topic, n) => {
-    const r = spawnSync("bash", [join(main, "loops/new.sh"), "slice", topic, String(n)], {
+  const newSh = (...args) => {
+    const r = spawnSync("bash", [join(main, "loops/new.sh"), ...args], {
       cwd: main,
       env,
       encoding: "utf8",
     });
     return { status: r.status, out: `${r.stdout}${r.stderr}` };
   };
+  const newSlice = (topic, n) => newSh("slice", topic, String(n));
+  const prdSh = (...args) => {
+    const r = spawnSync("bash", [join(main, "loops/prd.sh"), ...args], {
+      cwd: main,
+      env,
+      encoding: "utf8",
+    });
+    return { status: r.status, stdout: r.stdout, out: `${r.stdout}${r.stderr}` };
+  };
+  const heads = () => git(main, "for-each-ref", "--format=%(refname:short)", "refs/heads/");
+  const loopsDirs = () => (existsSync(loops) ? readdirSync(loops).sort() : []);
   const branch = (b) => git(main, "branch", "--list", b);
 
   beforeAll(() => {
@@ -123,10 +135,81 @@ describe("new.sh slice and the committed plan", () => {
     expect(existsSync(join(loops, "t-2"))).toBe(true);
   });
 
+  it("refuses a topic that starts with a dash, making no worktree and no branch (RISA-1070)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [kind, topic] of [
+      ["plan", "--help"],
+      ["plan", "-x"],
+      ["prd", "-a"],
+    ]) {
+      const r = newSh(kind, topic);
+      expect(r.status, r.out).not.toBe(0);
+      expect(r.out).toContain(
+        `refused: topic "${topic}": lowercase letters, digits and dashes, starting with a letter or digit`,
+      );
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("starts a plan worktree for a valid topic, as before", () => {
+    const r = newSh("plan", "v-1");
+    expect(r.status, r.out).toBe(0);
+    expect(branch("plan/v-1")).not.toBe("");
+    expect(existsSync(join(loops, "plan-v-1"))).toBe(true);
+  });
+
   it("starts a slice of a topic with no plan file, as before", () => {
     const r = newSlice("u", 1);
     expect(r.status, r.out).toBe(0);
     expect(r.out).toContain("plan: slice 1 says Stack: no");
     expect(existsSync(join(loops, "u-1"))).toBe(true);
+  });
+
+  it("prints a command's usage for <command> --help or -h, making nothing (RISA-1086)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [args, line] of [
+      [["plan", "--help"], /^ {4}plan <topic> \[--open\]/m],
+      [["slice", "-h"], /^ {4}slice <topic> <n> /m],
+      [["land", "--help"], /^ {4}land <topic> \[-m subject\]/m],
+    ]) {
+      const r = prdSh(...args);
+      expect(r.status, r.out).toBe(0);
+      expect(r.stdout).toMatch(line);
+      // Only that command's lines, not the whole text.
+      expect(r.stdout).not.toContain("See what's going on");
+      expect(r.out).not.toContain("refused");
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("refuses an unknown flag to plan, start, slice and hotfix, making nothing (RISA-1086)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [args, flag] of [
+      [["plan", "--bogus", "topic"], "--bogus"],
+      [["start", "-x"], "-x"],
+      [["slice", "t", "3", "--stack"], "--stack"],
+      [["hotfix", "h-1", "--nope"], "--nope"],
+    ]) {
+      const r = prdSh(...args);
+      expect(r.status, r.out).not.toBe(0);
+      expect(r.out).toContain(`${args[0]}: unknown flag ${flag}`);
+      expect(r.out).toMatch(new RegExp(`^ {4}${args[0]} <`, "m"));
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("keeps risa help and a valid plan <topic> as before (RISA-1086)", () => {
+    let r = prdSh("help");
+    expect(r.status, r.out).toBe(0);
+    expect(r.stdout).toContain("See what's going on");
+    expect(r.stdout).toMatch(/^ {4}land <topic>/m);
+    r = prdSh("plan", "w-1");
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toContain("Start its planning session");
+    expect(branch("plan/w-1")).not.toBe("");
+    expect(existsSync(join(loops, "plan-w-1"))).toBe(true);
   });
 });
