@@ -14,10 +14,14 @@ const setupFiles = [fileURLToPath(new URL("./loops/test-setup.mjs", import.meta.
 // Off for every spawned script (they pass process.env on): new.sh and check-run.sh
 // would otherwise poll the real machine's load. The gate's own tests set it back.
 const env = { RISA_LOAD_GATE: "off" };
+// In CI (.github/workflows/ci.yml), a JSON report as well: ci/write-verdict.mjs names its failed tests.
+const report = process.env.RISA_CI_REPORT;
+const reporting = report ? { reporters: ["default", "json"], outputFile: { json: report } } : {};
 
 export default defineConfig({
   test: {
     globalSetup,
+    ...reporting,
     projects: [
       {
         test: {
