@@ -77,6 +77,8 @@ ${prd_cmd} <command>
     finish <topic> [--dry-run] [--json]   a landed topic whose orchestrator stopped short: ends its idle
                               recorded sessions, then rm <topic> (never --force), and files one report;
                               a code tail, dirty or busy worktree is kept and reported instead
+    cost [<topic>] [--json]   tokens by model for a topic's planning, orchestration and each slice, from its
+                              transcripts and its ledger (.loops/.cost/<topic>.json, kept by rm); no topic: a line each
     test-db status|up|down|list|use   the shared test Postgres (a database per worktree, :5436)
     recover [--at HH:MM] [--wait] [--no-agent] [--unattended]   after a restart, crash or usage limit (one at a
                               time): Docker, stale locks, the test Postgres, stacks one at a time (a cut-off migrate
@@ -293,6 +295,7 @@ case $cmd in
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
   finish) exec node "$bin/finish.mjs" "$@" ;;
+  cost) exec node "$bin/cost.mjs" report "$@" ;;
   ci) exec node "$bin/../ci/ci.mjs" "$@" ;;
   wait)
     kind=check
