@@ -16,7 +16,7 @@
 | 2     | 1    | RISA-1075 | opus  | written |                             |
 | 3     | 1    | RISA-1088 | opus  | written |                             |
 
-**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
+**Wave 1** (slices 1–3, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). None of the three touches a running topic's hot files (risa-next-4). Slices 1 and 3 both edit `loops/check-tooling.mjs` (1 only its last-lines main guard): merge 1 first. `risa anchors` warns slice 1 names 11 files: a one-line guard edit in nine of them, kept as is. Items claimed, hot files set. When RISA-1048 ships, tell Caretook's backlog session which version or commit has it (the item's note).
 
 ## How to run this plan
 
@@ -32,7 +32,7 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit tests (`loops/is-main.test.mjs`): `isMain` is true for the real path and for a symlink to the module, false for another script and for no `argv[1]`; one of the nine entry points, run with `node` through a symlink in a temp dir, does its work (prints its usage or output) and no longer exits 0 silently.
+- Unit tests (`loops/is-main.test.mjs` (new)): `isMain` is true for the real path and for a symlink to the module, false for another script and for no `argv[1]`; one of the nine entry points, run with `node` through a symlink in a temp dir, does its work (prints its usage or output) and no longer exits 0 silently.
 - No `file://${process.argv[1]}` guard left in `loops/` (`grep`).
 
 ## Slice 2: The dispatch-restart test stops every dispatcher it starts
@@ -54,5 +54,5 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit tests (`loops/test-limits.test.mjs`, and `loops/check-tooling.test.mjs` if the step changes): at the reported load (50 on 16 cores) the limits the tooling run and its rerun get are well above 20 s, and at an idle load they are unchanged; any wait added is bounded and tested with an injected load reading, never the machine's real load.
+- Unit tests (`loops/test-limits.test.mjs`, and `loops/check-tooling.test.mjs` (new) if the step changes): at the reported load (50 on 16 cores) the limits the tooling run and its rerun get are well above 20 s, and at an idle load they are unchanged; any wait added is bounded and tested with an injected load reading, never the machine's real load.
 - The hand-off says what the cause was and what still could time out.
