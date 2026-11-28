@@ -21,7 +21,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten, span } from "./asks.mjs";
 import { contextDirOf, hardLimitFor, limitOf, sizeNote, sizeRecord } from "./context.mjs";
-import { codeHash, lockHolder, mainCheckout, pathsOf, readState, staleCode } from "./dispatch.mjs";
+import {
+  codeHash,
+  codeTarget,
+  linkedRoot,
+  lockHolder,
+  mainCheckout,
+  pathsOf,
+  readState,
+  staleCode,
+} from "./dispatch.mjs";
 import { branchKind, readData, usualTime } from "./metrics.mjs";
 import { pendingPart } from "./session-requests.mjs";
 import { isLive, processOf, readRecords } from "./sessions.mjs";
@@ -53,46 +62,67 @@ export function lastEntry(/** @type {string} */ file) {
   return heads.length ? heads[heads.length - 1] : null;
 }
 
+/** The tool folder status runs from: a dispatcher's own when its record predates `root`. */
+const STATUS_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
 /**
- * The dispatcher's code against the tool's checkout's (CURRENT: its hash, null
- * unreadable): "" when unknown, else ", code current" or ", code stale …". A
- * running dispatcher with no code record of its pid started before the check (B-809).
+ * The folder a running dispatcher compares its code with (dispatch.mjs's
+ * codeTarget): the one the `risa` link points to now when it follows the link (a
+ * release install), else its own folder.
  * @param {import("./dispatch.mjs").DispatchState["code"]} code
- * @param {number} pid @param {string | null} current
  */
-export function codePart(code, pid, current) {
+export const targetOf = (code) =>
+  codeTarget(code?.root ?? STATUS_ROOT, code?.follows, code?.follows ? linkedRoot() : null);
+
+/**
+ * The dispatcher's code against its target's (ROOT, the folder; CURRENT: its hash,
+ * null unreadable): "" when unknown, else ", code current" or ", code stale …",
+ * naming the dispatch.mjs it re-execs onto. A running dispatcher with no code
+ * record of its pid started before the check (B-809).
+ * @param {import("./dispatch.mjs").DispatchState["code"]} code
+ * @param {number} pid @param {string | null} current @param {string} [root]
+ */
+export function codePart(code, pid, current, root = STATUS_ROOT) {
   if (!code || code.pid !== pid)
     return `, code unknown (it predates the code check: ${toolCmd.prd} dispatch --stop, then ${toolCmd.prd} dispatch)`;
   if (!current) return "";
+  const where = code.follows ? "the release installed now" : "the tool's checkout";
   return staleCode(code.hash, current)
-    ? `, code stale (${code.hash}; the tool's checkout has ${current}: it re-execs before its next tick)`
+    ? `, code stale (${code.hash}; ${where} has ${current}: it re-execs onto ${join(root, "loops", "dispatch.mjs")} before its next tick)`
     : ", code current";
 }
 
 /**
  * The dispatcher's part: its state from its lock (a live pid: running), its
- * code (current or stale) and its state file (paused and why), and its log's last entry.
+ * code (current or stale against targetOf's folder) and its state file (paused and
+ * why), its log's last entry (the last logged change) and its last tick's time.
  * @param {{ main?: string, lock: string, state: string, log: string }} files
- * @param {{ now?: number, holder?: (lock: string) => number | null, current?: () => string | null }} [opts]
+ * @param {{ now?: number, holder?: (lock: string) => number | null,
+ *   target?: (code: import("./dispatch.mjs").DispatchState["code"]) => string,
+ *   current?: (root: string) => string | null }} [opts]
  */
 export function dispatcherPart(
   files,
-  {
-    now = Date.now(),
-    holder = lockHolder,
-    current = () => codeHash(fileURLToPath(new URL("..", import.meta.url))),
-  } = {},
+  { now = Date.now(), holder = lockHolder, target = targetOf, current = codeHash } = {},
 ) {
   const pid = holder(files.lock);
   const st = readState(files.state);
   const paused = st.paused;
   const since = paused?.at && !Number.isNaN(Date.parse(paused.at)) ? `, ${age(paused.at, now)} ago` : "";
   const why = paused ? `paused${since}: ${paused.why || "by hand"}` : "";
+  const root = pid && st.code?.pid === pid ? target(st.code) : STATUS_ROOT;
+  const code = pid ? codePart(st.code, pid, st.code?.pid === pid ? current(root) : null, root) : "";
   const state = pid
-    ? `running (pid ${pid})${codePart(st.code, pid, current())}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
+    ? `running (pid ${pid})${code}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
     : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
   const last = lastEntry(files.log);
-  return [`DISPATCHER: ${state}`, ...(last ? [`last: ${shorten(last, 120)}`] : []), ""].join("\n") + "\n";
+  const tickAt = st.stuck?.lastTickAt;
+  const tick =
+    typeof tickAt === "number" && Number.isFinite(tickAt)
+      ? `last tick ${span(now - tickAt)} ago (${new Date(tickAt).toISOString().replace(/\.\d+Z$/, "Z")})`
+      : "";
+  const lines = last ? [`last: ${shorten(last, 120)}${tick ? ` · ${tick}` : ""}`] : tick ? [tick] : [];
+  return [`DISPATCHER: ${state}`, ...lines, ""].join("\n") + "\n";
 }
 
 /**

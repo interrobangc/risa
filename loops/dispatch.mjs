@@ -11,6 +11,9 @@
 //   prd dispatch --resume              undo --pause
 //   prd dispatch --stop                end the running dispatcher (TERM; waits
 //                                           RISA_DISPATCH_STOP_SECS, 10, for it to go)
+//   prd dispatch --restart [--every <s>] stop it as --stop does, then start one through the tool's
+//                                           command (its current release) in a background tab, keeping
+//                                           its --every and keep-alive state; none running: starts one
 //   prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
@@ -79,12 +82,16 @@
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
 // Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
-// non-test .mjs files of loops/ and backlog/, hashed at its start)
-// with the main checkout's; when a landing or the pickup changed it, it logs one
-// line and re-execs itself (process.execve: the same pid, tab and lock) on the main
-// checkout's dispatch.mjs, so it never runs old code past one tick (B-809). Its
-// start writes the hash into .dispatch.json (`code`), and `prd status` says
-// whether the running one's code is current or stale.
+// non-test .mjs files of loops/ and backlog/, hashed at its start) with its target's
+// (staleness): a dispatcher run from a checkout targets that checkout, which a landing
+// or the pickup changes; one run from a release install (~/.risa/releases/<tag>, or
+// the folder the `risa` link resolved to at its start) targets the folder `risa` now
+// points to (`risa --root`: bin/risa's own resolution), so a new install moves it
+// (RISA-981). Changed, it logs one line and re-execs (process.execve: the same pid,
+// tab and lock) on the target's dispatch.mjs, so it never runs old code past one tick
+// (B-809). Its start writes the hash, its folder and whether it follows the link into
+// .dispatch.json (`code`), and `prd status` says whether the running one's code is
+// current or stale against the same target.
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
@@ -106,13 +113,15 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
 import { CAPTAIN_SESSION, nextCaptain } from "./captain.mjs";
@@ -138,7 +147,7 @@ import {
   stalledSessions,
 } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
-import { workSwitch } from "./machine.mjs";
+import { MACHINE_DIR, workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
 import { landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
@@ -296,8 +305,69 @@ export function codeHash(/** @type {string} */ root) {
   }
 }
 
+/** This dispatcher's own tool folder: a checkout or a release install. */
+const OWN_ROOT = join(HERE, "..");
+
 /** The hash this dispatcher's code had when it started (read now, before any landing). */
-const CODE_AT_START = codeHash(join(HERE, ".."));
+const CODE_AT_START = codeHash(OWN_ROOT);
+
+/** A path with its symlinks resolved, when it exists. @param {string} p */
+const real = (p) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+};
+
+/**
+ * The tool folder the `risa` on PATH runs from now, asked of bin/risa itself
+ * (`risa --root` prints the folder its own link resolution found), so a moved
+ * install link is seen; null when no `risa` answers with one.
+ */
+export function linkedRoot(env = process.env) {
+  try {
+    const out = execFileSync("risa", ["--root"], {
+      env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10_000,
+    }).trim();
+    return out && !out.includes("\n") && isAbsolute(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a dispatcher whose code is in OWN follows the `risa` link: it runs from
+ * a release install (a folder of HOME/.risa/releases) or from the folder the link
+ * (LINKED: linkedRoot's) resolves to now. A checkout elsewhere follows its own code.
+ * @param {string} own @param {string | null} linked @param {string} [home]
+ */
+export function followsLink(own, linked, home = homedir()) {
+  const o = real(own);
+  return (linked !== null && real(linked) === o) || dirname(o) === real(join(home, MACHINE_DIR, "releases"));
+}
+
+/** The folder a dispatcher compares and re-execs into: the link's when it follows one that answers, else its own. */
+export const codeTarget = (
+  /** @type {string} */ own,
+  /** @type {boolean | undefined} */ follows,
+  /** @type {string | null} */ linked,
+) => (follows && linked ? linked : own);
+
+/**
+ * The staleness check between ticks: the target folder (codeTarget, the link read
+ * now when FOLLOWS), its code's hash, whether that differs from STARTED, and the
+ * dispatch.mjs a re-exec runs.
+ * @param {{ started: string | null, own: string, follows: boolean, env?: NodeJS.ProcessEnv }} o
+ */
+export function staleness({ started, own, follows, env = process.env }) {
+  const root = codeTarget(own, follows, follows ? linkedRoot(env) : null);
+  const hash = codeHash(root);
+  return { root, hash, stale: staleCode(started, hash), script: join(root, "loops", "dispatch.mjs") };
+}
 
 /** Stale: both hashes known and different (an unreadable one is never stale). */
 export const staleCode = (
@@ -384,7 +454,8 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
- *   code?: { hash: string | null, pid: number, at: string } }} DispatchState */
+ *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
+ *     every?: number } }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -495,6 +566,27 @@ export function takeLock(
       }
     }
   }
+}
+
+/**
+ * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free LOCK:
+ * true once it has. It releases the lock on its way out (a zombie still answers kill 0).
+ */
+async function stopHolder(/** @type {string} */ lock, /** @type {number} */ holder) {
+  process.kill(holder, "SIGTERM");
+  const held = () => lockHolder(lock) === holder;
+  const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
+  for (let i = 0; i < waits && held(); i++) await new Promise((r) => setTimeout(r, 100));
+  return !held();
+}
+
+/** The running dispatcher's --every: the one its start wrote, else its command line's, else null. */
+export function everyOf(/** @type {number} */ pid, /** @type {DispatchState} */ state) {
+  const kept = state.code?.pid === pid ? Number(state.code?.every) : 0;
+  if (kept > 0) return kept;
+  const r = spawnSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" });
+  const m = /(?:^|\s)--every\s+([0-9.]+)(?:\s|$)/.exec(r.stdout ?? "");
+  return m && Number(m[1]) > 0 ? Number(m[1]) : null;
 }
 
 const releaseLock = (/** @type {string} */ lock) => {
@@ -1082,6 +1174,7 @@ function requestStep(
     max: positive(env.RISA_MAX_BACKLOG_SESSIONS, DEFAULT_MAX_BACKLOG_SESSIONS),
     now,
     claude: claudeName(env),
+    work: g.facts.work,
   });
   if (d.action === "none") {
     if (dryRun && d.why !== "no pending request") out(`session request: waits (${d.why})`);
@@ -1615,11 +1708,12 @@ export function tick(
     };
   }
   for (const s of facts.sessions) if (resume?.resuming.has(s.name)) s.resuming = true;
-  // A dead session stalled on a limit still ahead (its own account's) waits for the resume.
+  // A dead session stalled on a limit still ahead (its own account's) waits for the resume;
+  // with the usage watch off (RISA_USAGE_WATCH=off) none does: the pick reopens it.
   /** @type {Set<string>} */
   let stalls = new Set();
   try {
-    stalls = p.usage ? stalledSessions(readReadings(p.usage), facts.now) : stalls;
+    if (p.usage && !drainSettings(env).off) stalls = stalledSessions(readReadings(p.usage), facts.now);
   } catch {
     /* no readings: none stalled */
   }
@@ -1713,6 +1807,7 @@ export function tick(
     off: env.RISA_KEEP_SESSIONS === "off",
     now,
     claude: claudeName(env),
+    work: facts.work,
   });
   for (const d of keepDecisions)
     if (dryRun || d.action !== "none")
@@ -1965,6 +2060,9 @@ function parse(/** @type {string[]} */ argv) {
     pause: /** @type {string | null} */ (null),
     resume: false,
     stop: false,
+    restart: false,
+    everySet: false,
+    restarted: /** @type {string | null} */ (null),
     cap: /** @type {string | null} */ (null),
     reexec: /** @type {string | null} */ (null),
   };
@@ -1973,11 +2071,15 @@ function parse(/** @type {string[]} */ argv) {
     if (a === "--every") {
       o.every = Number(argv[++i]);
       if (!(o.every > 0)) throw new Error("--every takes a number of seconds");
+      o.everySet = true;
     } else if (a === "--once") o.once = true;
     else if (a === "--dry-run") o.dryRun = true;
     else if (a === "--pause") o.pause = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "";
     else if (a === "--resume") o.resume = true;
     else if (a === "--stop") o.stop = true;
+    else if (a === "--restart") o.restart = true;
+    else if (a === "--restarted") o.restarted = argv[++i] ?? "";
+    // (internal: the stopped one's pid, passed by --restart: its keep-alive stops are kept)
     else if (a === "--cap") {
       const v = argv[++i] ?? "";
       if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
@@ -1988,7 +2090,7 @@ function parse(/** @type {string[]} */ argv) {
     else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
-        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --cap <n>|default)`,
+        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --restart, --cap <n>|default)`,
       );
   }
   return o;
@@ -2006,7 +2108,7 @@ async function main() {
     const text = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n");
     console.log(
       text
-        .slice(1, 13)
+        .slice(1, 17)
         .map((l) => l.replace(/^\/\/ ?/, ""))
         .join("\n"),
     );
@@ -2071,15 +2173,56 @@ async function main() {
       console.log("No dispatcher is running.");
       return;
     }
-    process.kill(holder, "SIGTERM");
-    // It releases the lock on its way out (a zombie still answers kill 0).
-    const held = () => lockHolder(p.lock) === holder;
-    const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
-    for (let i = 0; i < waits && held(); i++) await new Promise((r) => setTimeout(r, 100));
     console.log(
-      held()
-        ? `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`
-        : `Stopped the dispatcher (pid ${holder}).`,
+      (await stopHolder(p.lock, holder))
+        ? `Stopped the dispatcher (pid ${holder}).`
+        : `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`,
+    );
+    return;
+  }
+  if (o.restart) {
+    const was = lockHolder(p.lock);
+    const every = o.everySet ? o.every : (was && everyOf(was, readState(p.state))) || 60;
+    if (was && !(await stopHolder(p.lock, was))) {
+      console.error(
+        `${toolCmd.prd}: sent TERM to the dispatcher (pid ${was}); it hasn't exited, so none was started`,
+      );
+      process.exit(1);
+    }
+    // Through the tool's command, so the new one runs the release it points to now.
+    const line = `cd ${sh(p.main)} && ${toolCmd.prd} dispatch --every ${every}${was ? ` --restarted ${was}` : ""}`;
+    const r = run(
+      "bash",
+      [join(HERE, "open-session.sh"), "--command", line, "--title", "dispatch", "--background"],
+      {
+        cwd: p.main,
+      },
+    );
+    if (!r.ok) {
+      console.error(
+        `${toolCmd.prd}: couldn't open the dispatcher's tab: ${(r.err || r.out).split("\n").pop()}`,
+      );
+      process.exit(1);
+    }
+    const limit = Number(process.env.RISA_DISPATCH_START_SECS || 60) * 1000;
+    const deadline = Date.now() + limit;
+    /** @type {{ pid: number, hash: string | null } | null} */
+    let now = null;
+    while (!now && Date.now() < deadline) {
+      const pid = lockHolder(p.lock);
+      const code = readState(p.state).code;
+      if (pid && pid !== was && code?.pid === pid) now = { pid, hash: code.hash };
+      else await new Promise((res) => setTimeout(res, 100));
+    }
+    if (!now) {
+      console.error(
+        `${toolCmd.prd}: the new dispatcher didn't take its lock within ${limit / 1000}s (its tab opened)`,
+      );
+      process.exit(1);
+    }
+    log([`restart: pid ${was ?? "none"} -> ${now.pid}, code ${now.hash ?? "unknown"}`], nowOf());
+    console.log(
+      `Restarted the dispatcher: pid ${was ?? "none"} -> ${now.pid}, code ${now.hash ?? "unknown"} (every ${every}s${was ? ", keep-alive kept" : ""}).`,
     );
     return;
   }
@@ -2112,24 +2255,39 @@ async function main() {
   process.on("exit", () => releaseLock(p.lock));
 
   const reexeced = o.reexec;
+  // Whether it follows the `risa` link (a release install) or its own checkout.
+  const follows = !o.once && followsLink(OWN_ROOT, linkedRoot());
   if (!o.once) {
-    // A start begins again after "stop keeping it alive" (a re-exec is no start).
+    // A start begins again after "stop keeping it alive" (a re-exec or a --restart is no start).
     updateState(p.state, (s) => {
-      if (s.keepAlive && !reexeced) s.keepAlive = clearKeepStops(s.keepAlive);
-      s.code = { hash: CODE_AT_START, pid: process.pid, at: stamp(nowOf()) };
+      if (s.keepAlive && !reexeced && o.restarted === null) s.keepAlive = clearKeepStops(s.keepAlive);
+      s.code = {
+        hash: CODE_AT_START,
+        pid: process.pid,
+        at: stamp(nowOf()),
+        root: OWN_ROOT,
+        follows,
+        every: o.every,
+      };
     });
-    const what = reexeced ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; ` : "started (";
+    const what = reexeced
+      ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; `
+      : o.restarted !== null
+        ? `restarted (was pid ${o.restarted}; `
+        : "started (";
     log([`${what}pid ${process.pid}, every ${o.every}s)`], nowOf());
     console.log(
       `Dispatcher ${reexeced ? `re-exec'd on new code ${CODE_AT_START}` : "running"} (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
     );
   }
   let last = "";
+  /** @type {ReturnType<typeof staleness> | null} */
+  let check = null;
   const end = await runLoop({
     every: o.every,
     once: o.once,
     started: CODE_AT_START,
-    current: () => codeHash(join(HERE, "..")),
+    current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
     step: () => {
       const now = nowOf();
       const quiet = [];
@@ -2143,10 +2301,17 @@ async function main() {
     },
   });
   if (end.stale) {
-    log([`re-exec: the tool's code changed (${end.from} -> ${end.to}); restarting between ticks`], nowOf());
-    console.log(`${stamp(nowOf())} re-exec: new code ${end.to} in the tool's checkout (was ${end.from})`);
+    log(
+      [
+        `re-exec: the tool's code changed (${end.from} -> ${end.to}); restarting between ticks on ${check?.script}`,
+      ],
+      nowOf(),
+    );
+    const script = check?.script ?? join(HERE, "dispatch.mjs");
+    console.log(
+      `${stamp(nowOf())} re-exec: new code ${end.to} in ${dirname(dirname(script))} (was ${end.from})`,
+    );
     const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
-    const script = join(HERE, "dispatch.mjs");
     const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
     const env = process.env;
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.
