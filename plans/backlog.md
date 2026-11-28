@@ -155,6 +155,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1085 | bug | triaged | fixes-tooling |  | loops/check-run.test.mjs fails on GitHub's pull_request runs: it expects the logged branch not to be empty, and a PR run checks out a detached merge commit (run 46172609471 on PR #36: expected '' not to be '') |
 | RISA-1086 | bug | triaged | fixes-bug |  | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
 | RISA-1087 | bug | triaged | fixes-bug |  | risa usage keeps a session's old account's 5-hour reading after the session switches account |
+| RISA-1088 | bug | triaged | fixes-test |  | Full risa check: the tooling test rerun times out when two full checks overlap at high load (1-minute load near 50 on 16 cores, both check leases held: risa-next-4 and fixes-bug): 25 then 31 tests failed across 15 and 21 files, a different set each run, nearly all 20 s test or hook timeouts in land*, recover*, rotate*, stack and load-gate tests, while the same files passed whole (131 files, 2654 tests) in pnpm check's own pass |
 
 ## Items
 
@@ -1296,3 +1297,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: After the 2026-11-28 rollover to ~/.claude-personal, .loops/.usage/<session>.json for backlog, inbox, prd-fixes-tooling and prd-risa-next-2 kept fiveHour 94% (at 17:27Z, business account) beside account=/Users/bo/.claude-personal and fresh sevenDay readings, so risa usage and the usage watch reported 94% for the personal account until the window reset at 18:40Z. A window read under a different account (or before the account field changed) should be dropped, not merged.
 - 2026-11-28 (Robert Bo Davis): Stale fiveHour window merged across an account switch; misleads the rollover watch. Normal urgency: clears itself at the window's reset.
+
+### RISA-1088 · bug · Full risa check: the tooling test rerun times out when two full checks overlap at high load (1-minute load near 50 on 16 cores, both check leases held: risa-next-4 and fixes-bug): 25 then 31 tests failed across 15 and 21 files, a different set each run, nearly all 20 s test or hook timeouts in land*, recover*, rotate*, stack and load-gate tests, while the same files passed whole (131 files, 2654 tests) in pnpm check's own pass
+
+- status: triaged
+- prd: fixes-test
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-4): Seen 2026-11-28 on prd/risa-next-4 wave 2 (PR 39); waived there as load flakiness on the backlog session's advice. Ideas: scale the test timeouts by load, have the load gate hold a second full check, or stop running the same 131 files twice in one risa check.
