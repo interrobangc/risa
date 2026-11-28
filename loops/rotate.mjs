@@ -10,6 +10,15 @@
 //     session's size record is past the hard limit. Each one cut off comes back
 //     as a --continue agent that reloads its base and reruns its check (B-877:
 //     a 166k mid-wave rotation ended five slices waiting on their hand-off checks).
+//   - standingClose(facts, topic): why a standing topic's hand-over closes it
+//     (`prd rm`) instead of opening a fresh session, or null to rotate as now
+//     (RISA-952: fixes-ui idled 4 h holding the one lane with only an item that
+//     waited on another topic). Decided by the dispatcher's own pick
+//     (dispatch-pick.mjs) on the facts as they'd be with the topic closed:
+//     nothing waiting; or the pick wouldn't start it even with a lane free (an
+//     After not done, a hot file a running topic shares, another fixes topic
+//     running, `hold`); or it has fewer than caps.fixesMin waiting and the pick
+//     would start another topic in its place. A non-standing topic: null.
 //
 // CLI:
 //   node rotate.mjs clears-hot <topic>        stdin: `backlog prd list
@@ -22,12 +31,18 @@
 //   node rotate.mjs context-hold <plan file> <session name> <pid> <n>...
 //                                             prints the slices at work and exits
 //                                             1 when a context rotation waits
+//   node rotate.mjs standing-close <topic> <main checkout>
+//                                             exit 0 and prints why when the
+//                                             hand-over closes the topic; exit 1
+//                                             to rotate; exit 2 when the facts
+//                                             can't be read (rotate as now)
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { contextDirOf, hardLimitOf, sizeRecord } from "./context.mjs";
 import { runThrough } from "./open-session.mjs";
 import { defaultDir } from "./sessions.mjs";
 import { sliceStates } from "./landed.mjs";
+import { DEFAULT_CAPS, pick, worktreeKind } from "./dispatch-pick.mjs";
 
 // The plan and registry reads rm.sh and land.sh share live in landed.mjs (B-431).
 export { doneFlags, sliceStates, slicesLeft } from "./landed.mjs";
@@ -71,6 +86,54 @@ export function contextHold({ planText, slices, record = null, hard = hardLimitO
   return slices.filter((n) => !DONE_WITH.test(states.get(n) ?? ""));
 }
 
+/**
+ * Why a standing topic's hand-over closes it rather than opening a fresh session, or null to rotate.
+ * Call it with no slice in flight.
+ * @param {import("./dispatch-pick.mjs").PickFacts} facts the dispatcher's (dispatch.mjs's gather)
+ * @param {string} topic
+ * @returns {string | null}
+ */
+export function standingClose(facts, topic) {
+  const rows = facts.rows ?? [];
+  const row = rows.find((r) => r.topic === topic);
+  if (!row?.flags?.includes("standing")) return null;
+  const waiting = row.waiting ?? 0;
+  if (!waiting) return "no waiting items";
+  // The facts with this topic closed: its prd/ worktree gone, its row back to what the registry
+  // says of a standing topic with no worktree. Sessions are left out (a reopen isn't a start), and
+  // so is its own open question (a fresh session would carry it).
+  const worktrees = (facts.worktrees ?? []).filter((w) => {
+    const k = worktreeKind(w.branch);
+    return !(k?.kind === "prd" && k.topic === topic);
+  });
+  const ours = { ...row, state: row.flags.includes("hold") ? "hold" : "planned" };
+  const asks = (facts.asks ?? []).filter((a) => a.topic !== topic);
+  const caps = facts.caps ?? {};
+  const whyOf = (/** @type {import("./dispatch-pick.mjs").Pick} */ p) =>
+    p.reasons.find((r) => r.topic === topic)?.why ?? p.why ?? "not started";
+  // Alone, with a lane free: what keeps the pick from starting it, whatever else waits.
+  const solo = pick({
+    rows: rows.map((r) =>
+      r.topic === topic
+        ? ours
+        : r.state === "planned" || r.state === "to-write"
+          ? { ...r, state: "idle" }
+          : r,
+    ),
+    worktrees,
+    asks,
+    caps: { ...caps, prds: Infinity },
+  });
+  if (!(solo.action === "start" && solo.topic === topic)) return `nothing it could start: ${whyOf(solo)}`;
+  // Short of the fixes minimum: the pick prefers another topic, which the lane it frees would start.
+  const min = caps.fixesMin ?? DEFAULT_CAPS.fixesMin;
+  if (waiting >= min) return null;
+  const all = pick({ rows: rows.map((r) => (r.topic === topic ? ours : r)), worktrees, asks, caps });
+  if (all.action === "start" && all.topic !== topic)
+    return `${waiting} waiting, under ${min}, and ${all.topic} would start in its lane`;
+  return null;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const [cmd, arg, ...more] = process.argv.slice(2);
   const read = (/** @type {string} */ f) => {
@@ -110,9 +173,25 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       }
       break;
     }
+    case "standing-close":
+      // The dispatcher's own facts. dispatch.mjs imports this module, so it loads once this one has
+      // (a top-level await here would wait on itself).
+      import("./dispatch.mjs")
+        .then(({ gather, pathsOf }) => standingClose(gather(pathsOf(more[0] ?? "")).facts, arg ?? ""))
+        .then(
+          (why) => {
+            if (!why) process.exit(1);
+            console.log(why);
+          },
+          (e) => {
+            console.log(String(e?.message ?? e).split("\n")[0]);
+            process.exit(2);
+          },
+        );
+      break;
     default:
       console.error(
-        "usage: rotate.mjs clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>...",
+        "usage: rotate.mjs clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>... | standing-close <topic> <main>",
       );
       process.exit(2);
   }
