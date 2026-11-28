@@ -6,11 +6,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                      | Merge into `prd/fixes-bug-urgent` |
-| ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
-| 4     | 2    | RISA-1037 | opus  | agent working (spawned 2026-11-28)         | —                                 |
-| 5     | 2    | RISA-1042 | opus  | merged (worktree kept until wave green)    | 42321be                           |
-| 6     | 2    | RISA-1038 | opus  | agent working (spawned 2026-11-28)         | —                                 |
+| Slice | Wave | Item      | Model | State                                   | Merge into `prd/fixes-bug-urgent` |
+| ----- | ---- | --------- | ----- | --------------------------------------- | --------------------------------- |
+| 4     | 2    | RISA-1037 | opus  | agent working (spawned 2026-11-28)      | —                                 |
+| 5     | 2    | RISA-1042 | opus  | merged (worktree kept until wave green) | 42321be                           |
+| 6     | 2    | RISA-1038 | opus  | agent working (spawned 2026-11-28)      | —                                 |
 
 **Wave 1 landed** 2026-11-28 in main as 232b823 through PR #25: slices 1 (RISA-1030, merge ff256da), 2 (RISA-1034, 61be90b), 3 (RISA-1033, 1f81567), all opus. Tooling only, tier none. Gate: full `risa check` on the synced tip; 25 tests in 16 files timed out at load ~27, and those 16 files reran green at load ~8 (533 tests). Codex: one P2 (browser wait misses a suite's earlier results), tracked as RISA-1042, thread resolved; clean on ca79cb4. Report filed; to-test/2026-11-28-0815-fixes-bug-urgent.md; slice worktrees removed.
 
