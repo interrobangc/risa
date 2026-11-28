@@ -1,5 +1,6 @@
-// The project config: risa.json at the root of the repo the tooling works on.
-// Everything a repo tells the tooling about itself is in that one file: its name,
+// The project config: .risa/config.json (the folder form) or risa.json at the root of
+// the repo the tooling works on. Everything a repo tells the tooling about itself is in
+// that one file: its name,
 // what the tool's commands are called, its paths, branches, commands and hooks.
 // This module is the only code that knows where the file lives. Node code calls
 // loadConfig(); bash reads it through lib.sh's config_get, which runs `dump`
@@ -11,23 +12,32 @@
 //   node config.mjs dump        every set value, one `key=value` line each (a
 //                               list: key.0, key.1, …), for lib.sh
 //   node config.mjs check       loads it; prints each problem; exit 2 on any
+//   node config.mjs where [dir] the config file in DIR (default: the current
+//                               directory), for bash; exit 1 when it has none
 //
-// Where it lives: RISA_CONFIG (a path; tests and sample projects set it), else
-// risa.json at the root of the checkout this file is in. When the tool is
-// installed as a package (under node_modules), that file is the tool's own config,
-// not the project's: then it's risa.json at the root of the checkout the current
-// directory is in (a project importing the tool, or running it in CI with no
-// machine config), and the tool's own only outside one.
+// A checkout's config (configIn): .risa/config.json when that folder has one, else
+// risa.json; both is an error naming both. The loaded `root` is the repo's root in
+// either form (the folder's parent for .risa/config.json).
+//
+// Where it lives: RISA_CONFIG (a file, or a .risa folder: its config.json; tests
+// and sample projects set it), else the config of the checkout this file is in.
+// When the tool is installed as a package (under node_modules), that file is the
+// tool's own config, not the project's: then it's the config of the checkout the
+// current directory is in (a project importing the tool, or running it in CI with
+// no machine config), and the tool's own only outside one.
 //
 // The shape is SHAPE below, one line per key, so two slices never edit the same
 // line. A key ending in `?` is optional: the slice that builds what reads it
 // sets it in risa.json. An unknown key is an error, so a typo can't hide.
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** The file's name, here and nowhere else. */
 export const CONFIG_NAME = "risa.json";
+/** The folder form's folder at the repo's root, and its config file there. */
+export const CONFIG_DIR = ".risa";
+export const CONFIG_FILE = "config.json";
 
 /** An id prefix (B, RISA, R2): the loader's type and backlogIds both test it with this. */
 const ID_PREFIX = /^[A-Z][A-Z0-9]*$/;
@@ -327,9 +337,33 @@ function checkoutRoot(dir) {
 }
 
 /**
- * Where the config is: RISA_CONFIG, else risa.json at the root of the tool's own
- * checkout, unless the tool is an installed package: then at the root of CWD's
- * checkout when it has one.
+ * The config file in DIR: `<dir>/.risa/config.json` when it exists, else
+ * `<dir>/risa.json` when it exists, else null. Both: a ConfigError naming both.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+export function configIn(dir) {
+  const folder = join(resolve(dir), CONFIG_DIR, CONFIG_FILE);
+  const file = join(resolve(dir), CONFIG_NAME);
+  const hasFolder = existsSync(folder);
+  const hasFile = existsSync(file);
+  if (hasFolder && hasFile) throw new ConfigError([`${folder} and ${file}: two project configs; keep one`]);
+  return hasFolder ? folder : hasFile ? file : null;
+}
+
+/** Whether PATH is a folder. @param {string} path */
+const isDir = (path) => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Where the config is: RISA_CONFIG (a file, or a .risa folder: its config file),
+ * else the config of the tool's own checkout (configIn; risa.json there when it has
+ * none), unless the tool is an installed package: then CWD's checkout's when it has one.
  * @param {Record<string, string | undefined>} [env]
  * @param {string} [cwd]
  * @param {string} [toolRoot] the tool's own folder (tests pass one)
@@ -340,19 +374,24 @@ export function configPath(
   cwd = process.cwd(),
   toolRoot = join(dirname(fileURLToPath(import.meta.url)), ".."),
 ) {
-  if (env.RISA_CONFIG) return resolve(env.RISA_CONFIG);
+  if (env.RISA_CONFIG) {
+    const named = resolve(env.RISA_CONFIG);
+    return isDir(named) ? join(named, CONFIG_FILE) : named;
+  }
   if (resolve(toolRoot).split(sep).includes("node_modules")) {
     const root = checkoutRoot(cwd);
-    if (root && existsSync(join(root, CONFIG_NAME))) return join(root, CONFIG_NAME);
+    const found = root && configIn(root);
+    if (found) return found;
   }
-  return join(toolRoot, CONFIG_NAME);
+  return configIn(toolRoot) ?? join(toolRoot, CONFIG_NAME);
 }
 
 /**
  * The config, checked. Throws a ConfigError naming every missing or wrong field.
  * @param {{ path?: string, env?: Record<string, string | undefined> }} [opts]
  * @returns {{ config: Record<string, any>, path: string, root: string }} the values,
- *   the file, and the repo root its paths start from
+ *   the file, and the repo root its paths start from (the folder's parent for
+ *   `.risa/config.json`, else the file's folder)
  */
 export function loadConfig({ path, env = process.env } = {}) {
   const file = path ?? configPath(env);
@@ -360,7 +399,9 @@ export function loadConfig({ path, env = process.env } = {}) {
   try {
     text = readFileSync(file, "utf8");
   } catch {
-    throw new ConfigError([`${file}: no project config (${CONFIG_NAME}) there`]);
+    throw new ConfigError([
+      `${file}: no project config (${CONFIG_NAME}) there; a repo's is ${CONFIG_DIR}/${CONFIG_FILE} or ${CONFIG_NAME}`,
+    ]);
   }
   let raw;
   try {
@@ -370,8 +411,14 @@ export function loadConfig({ path, env = process.env } = {}) {
   }
   const problems = configProblems(raw);
   if (problems.length) throw new ConfigError(problems.map((p) => `${file}: ${p}`));
-  return { config: raw, path: file, root: dirname(file) };
+  return { config: raw, path: file, root: rootOf(file) };
 }
+
+/** The repo root a config file's paths start from. @param {string} file */
+const rootOf = (file) =>
+  basename(file) === CONFIG_FILE && basename(dirname(file)) === CONFIG_DIR
+    ? dirname(dirname(file))
+    : dirname(file);
 
 /**
  * loadConfig for a command: a config that doesn't load prints one `<who>: …` line
@@ -621,10 +668,25 @@ const isMain = () => {
 
 if (isMain()) {
   const [verb, key] = process.argv.slice(2);
-  if (!["get", "dump", "check"].includes(verb ?? "") || (verb === "get") !== (key !== undefined)) {
-    console.error("usage: config.mjs get <key> | dump | check");
+  const usage = () => {
+    console.error("usage: config.mjs get <key> | dump | check | where [dir]");
     process.exit(2);
+  };
+  if (verb === "where") {
+    if (process.argv.length > 4) usage();
+    let found;
+    try {
+      found = configIn(key ?? process.cwd());
+    } catch (e) {
+      if (!(e instanceof ConfigError)) throw e;
+      console.error(e.message);
+      process.exit(2);
+    }
+    if (!found) process.exit(1);
+    console.log(found);
+    process.exit(0);
   }
+  if (!["get", "dump", "check"].includes(verb ?? "") || (verb === "get") !== (key !== undefined)) usage();
   let loaded;
   try {
     loaded = loadConfig();
@@ -634,8 +696,10 @@ if (isMain()) {
     process.exit(2);
   }
   if (verb === "dump") {
-    // _path: the config's own file, for lib.sh's stack_hook (not a config key).
+    // _path: the config's own file, for lib.sh's stack_hook; _root: the repo root its
+    // paths start from (neither a config key).
     console.log(`_path=${loaded.path}`);
+    console.log(`_root=${loaded.root}`);
     for (const [k, v] of flatten(loaded.config)) console.log(`${k}=${v}`);
   } else if (verb === "get") {
     const got = getValue(loaded.config, key);
