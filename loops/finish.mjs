@@ -34,11 +34,22 @@
 //   acts on the decision: end-session.sh for each recorded session, then rm.sh
 //   <topic> from the main checkout (never --force), then one report (session
 //   `finish`) naming what it ended and rm's lines, or what it kept and why.
-//   --dry-run prints the decision and changes nothing; --json prints JSON.
+//   --dry-run prints the decision and changes nothing; --json prints JSON. Its
+//   report keys are the dispatcher's (.loops/.dispatch.json `finish.reported`):
+//   it reads them and adds each report's it files, so an unchanged reason is
+//   reported once whichever of the two files it.
 // Env: TRUNK, RISA_MAIN, RISA_SESSIONS_DIR (the heartbeat folder beside it),
 // RISA_LANDING_DIR, RISA_ASKS_DIR, RISA_FINISH_IDLE_MIN (10).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { branchKinds, toolCmd } from "./config.mjs";
@@ -467,6 +478,37 @@ export function applyFinish(d, { main, env = process.env, name = d.topic }) {
   return { ok: ok && r.status === 0, ended, report: text.join("\n"), filed: r.status === 0 };
 }
 
+/** The dispatcher's state file in MAIN (dispatch.mjs pathsOf `state`). */
+const stateFile = (/** @type {string} */ main) => join(main, ".loops", ".dispatch.json");
+
+/** The report keys filed so far: the dispatcher's `finish.reported`, [] when unreadable. */
+export function readReported(/** @type {string} */ main) {
+  try {
+    const r = JSON.parse(readFileSync(stateFile(main), "utf8"))?.finish?.reported;
+    return Array.isArray(r) ? r.filter((k) => typeof k === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Adds KEY to the dispatcher's `finish.reported` (re-read, then a temp file and a rename). */
+export function addReported(/** @type {string} */ main, /** @type {string} */ key) {
+  const file = stateFile(main);
+  /** @type {any} */ let s = {};
+  try {
+    s = JSON.parse(readFileSync(file, "utf8")) ?? {};
+  } catch {
+    /* none yet */
+  }
+  const reported = Array.isArray(s.finish?.reported) ? s.finish.reported : [];
+  if (reported.includes(key)) return;
+  s.finish = { ...s.finish, reported: [...reported, key] };
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(s, null, 2)}\n`);
+  renameSync(tmp, file);
+}
+
 function main() {
   const argv = process.argv.slice(2);
   let dry = false;
@@ -490,7 +532,7 @@ function main() {
   const mainDir =
     process.env.RISA_MAIN ||
     (tryGit(HERE, ["worktree", "list", "--porcelain"]) ?? "").split("\n")[0].replace(/^worktree /, "");
-  const facts = gatherFinish(topic, { main: mainDir });
+  const facts = gatherFinish(topic, { main: mainDir, reported: readReported(mainDir) });
   const d = finishDecision(facts);
   if (dry || !d || !["act", "report"].includes(d.kind)) {
     if (json) console.log(JSON.stringify({ decision: d }, null, 2));
@@ -498,6 +540,7 @@ function main() {
     return;
   }
   const did = applyFinish(d, { main: mainDir, name: facts.worktree?.name ?? topic });
+  if (d.kind === "report" && did.filed) addReported(mainDir, d.key);
   if (json) console.log(JSON.stringify({ decision: d, ...did }, null, 2));
   else console.log(did.report ?? formatDecision(d, topic).join("\n"));
   if (!did.ok) process.exit(1);

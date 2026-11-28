@@ -8,7 +8,9 @@
 // A topic's transcripts are in the projects folders of its worktrees
 // (<main>/.loops/<topic>, plan-<topic>, <topic>-<n>, in Claude Code's encoding:
 // every character but a letter or digit as `-`), each session's .jsonl and the
-// subagents/agent-*.jsonl beside it with its meta.json. The projects folder is
+// subagents/agent-*.jsonl beside it with its meta.json. A plan-<topic> folder is
+// the planning only while no registry row or prd/plan-<topic> branch makes
+// plan-<topic> a topic of its own (isTopic). The projects folder is
 // RISA_CLAUDE_PROJECTS, else $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects
 // (host.mjs's claudeProjects). The ledger, .loops/.cost/<topic>.json, keeps the rows
 // (by message id: model, the four counts, the line) after the transcripts are gone.
@@ -30,7 +32,8 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { branchKinds } from "./config.mjs";
+import { parseRegistry } from "../backlog/registry.mjs";
+import { branchKinds, loadConfig } from "./config.mjs";
 import { claudeProjects, projectFolder } from "./host.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -119,12 +122,16 @@ const escape = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\
  * "planning"; a subagent's go to the slice its description names (`slice 2`),
  * else the slice worktree its first prompt names (.loops/<topic>-<n>); a slice
  * worktree's own session to its slice; the rest are "orchestration". A row that
- * already has a line (the ledger's) keeps it. Each row out is the ledger's
- * shape: id, model, the four counts, line.
+ * already has a line (the ledger's) keeps it. With PLANTOPIC (plan-<topic> is a
+ * topic of its own: planTopic), a plan-<topic> worktree's rows are that topic's,
+ * not this one's planning, and are left out. Each row out is the ledger's shape:
+ * id, model, the four counts, line.
  * @param {Row[]} rows
  * @param {string} topic
+ * @param {{ planTopic?: boolean }} [opts]
  */
-export function attribute(rows, topic) {
+export function attribute(rows, topic, { planTopic = false } = {}) {
+  if (planTopic) rows = rows.filter((r) => r.line || r.worktree !== `plan-${topic}`);
   const named = new RegExp(`\\.loops/${escape(topic)}-(\\d+)(?![\\w.-])`);
   const sliceDir = new RegExp(`^${escape(topic)}-(\\d+)$`);
   return rows.map((r) => {
@@ -264,15 +271,42 @@ function branchOf(/** @type {string} */ folder) {
 const loopsPrefix = (/** @type {string} */ main) => `${projectFolder(join(main, ".loops"))}-`;
 
 /**
+ * Whether NAME is a topic in MAIN: a registry row names it, or a prd/<name>
+ * branch is there. Never throws: an unreadable registry or repo is no.
+ */
+export function isTopic(/** @type {string} */ main, /** @type {string} */ name, kinds = branchKinds()) {
+  try {
+    execFileSync(
+      "git",
+      ["-C", main, "rev-parse", "--verify", "--quiet", `refs/heads/${kinds.branch("prd", name)}`],
+      {
+        stdio: "ignore",
+      },
+    );
+    return true;
+  } catch {
+    /* no branch */
+  }
+  try {
+    const reg = parseRegistry(readFileSync(join(main, loadConfig().config.paths.backlog), "utf8"));
+    return reg.format === "new" && reg.rows.some((r) => r.topic === name);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The projects folders of TOPIC's worktrees under PROJECTS, each with its
  * worktree's name. A folder whose sessions' branch says it is another kind (a
- * <topic>-<n> folder that is topic <topic>-<n>'s own, say) is left out.
+ * <topic>-<n> folder that is topic <topic>-<n>'s own, say) is left out, and so
+ * is the plan-<topic> folder when PLANTOPIC (plan-<topic> is a topic of its own).
  */
 export function topicFolders(
   /** @type {string} */ main,
   /** @type {string} */ topic,
   /** @type {string} */ projects,
   kinds = branchKinds(),
+  planTopic = isTopic(main, `plan-${topic}`, kinds),
 ) {
   const prefix = loopsPrefix(main);
   const want = projectFolder(topic);
@@ -284,7 +318,13 @@ export function topicFolders(
     const folder = join(projects, name);
     const slice = rest.startsWith(`${want}-`) ? /^(\d+)$/.exec(rest.slice(want.length + 1))?.[1] : undefined;
     const worktree =
-      rest === want ? topic : rest === `plan-${want}` ? `plan-${topic}` : slice ? `${topic}-${slice}` : null;
+      rest === want
+        ? topic
+        : rest === `plan-${want}` && !planTopic
+          ? `plan-${topic}`
+          : slice
+            ? `${topic}-${slice}`
+            : null;
     if (!worktree) continue;
     const branch = branchOf(folder);
     const s = kinds.sliceOf(branch);
@@ -324,12 +364,15 @@ export function readLedger(/** @type {string} */ main, /** @type {string} */ top
 
 /** TOPIC's rows (the ledger's, then the transcripts', attributed) and the malformed count. */
 export function collect(/** @type {string} */ main, /** @type {string} */ topic, env = process.env) {
-  const parsed = topicFolders(main, topic, claudeProjects(env)).flatMap(({ folder, worktree }) =>
-    readFolder(folder, worktree),
+  const kinds = branchKinds();
+  const planTopic = isTopic(main, `plan-${topic}`, kinds);
+  const parsed = topicFolders(main, topic, claudeProjects(env), kinds, planTopic).flatMap(
+    ({ folder, worktree }) => readFolder(folder, worktree),
   );
   const fresh = attribute(
     parsed.flatMap((p) => p.rows),
     topic,
+    { planTopic },
   );
   return {
     rows: mergeRows(readLedger(main, topic), fresh),

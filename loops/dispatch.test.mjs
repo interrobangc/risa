@@ -365,6 +365,7 @@ beforeAll(() => {
     "drain.mjs",
     "usage.mjs",
     "land-journal.mjs",
+    "finish.mjs",
     "landed.mjs",
     "resume.mjs",
   ])

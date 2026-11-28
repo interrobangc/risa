@@ -312,4 +312,33 @@ describe("finishStep (dispatch.mjs)", () => {
     // prd-doc was never ended.
     expect(existsSync(join(state, "term-prd-doc"))).toBe(false);
   });
+
+  it("with TRUNK set to a branch other than the configured trunk, a topic landed only into it is a candidate", () => {
+    // alt: a trunk from the first commit, so doc and code (landed in dev) aren't in it.
+    const init = git(main, "rev-list", "--max-parents=0", "dev");
+    const alt = join(root, "alt");
+    git(main, "worktree", "add", "-q", "-b", "alt", alt, init);
+    const dir = join(loops, "other");
+    git(main, "worktree", "add", "-q", "-b", "prd/other", dir, init);
+    writeFileSync(join(dir, "other.txt"), "work\n");
+    writeFileSync(join(dir, "plans/other-plan.md"), PLAN);
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", "feat(other): work");
+    git(alt, "merge", "-q", "--no-ff", "-m", "feat(other): land", "prd/other");
+    mkdirSync(join(dir, "docs"), { recursive: true });
+    writeFileSync(join(dir, "docs/notes.md"), "# Notes\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-q", "-m", "docs(other): landed");
+
+    const would = (extra) =>
+      dispatch(["--dry-run"], { RISA_FINISH_IDLE_MIN: "1000", ...extra })
+        .stdout.split("\n")
+        .filter((l) => l.startsWith("finish: would"));
+    expect(would({ TRUNK: "alt" })).toEqual([
+      expect.stringMatching(/^finish: would end no session, rm other \(/),
+    ]);
+    // In dev (the configured trunk) other never landed.
+    expect(would({}).join("\n")).not.toMatch(/rm other/);
+    expect(existsSync(dir)).toBe(true);
+  });
 });
