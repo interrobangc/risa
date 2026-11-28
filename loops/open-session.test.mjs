@@ -141,6 +141,7 @@ beforeAll(() => {
     "sessions.mjs",
     "captain.mjs",
     "flavor.mjs",
+    "session-names.mjs",
     "machine.mjs",
   ])
     copyFileSync(join(HERE, f), join(main, "loops", f));
