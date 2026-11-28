@@ -59,7 +59,7 @@ export function runningRelease(root, home = homedir()) {
  * @param {string} root @param {NodeJS.ProcessEnv} [env]
  */
 export function pinWarningAt(root, env = process.env) {
-  let pin = null;
+  let pin;
   try {
     pin = loadConfig({ env }).config.risaVersion ?? null;
   } catch {
