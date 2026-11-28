@@ -16,7 +16,7 @@
 //                              workers' worktrees, heartbeats, leases (RISA_LEASE_ROOT,
 //                              RISA_BROWSER_LEASES) and logs (RISA_RUN_LOG,
 //                              RISA_CHECK_LOG) are beside the sessions folder
-import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { age, awaitsAnswer, listAsks, shorten, span } from "./asks.mjs";
@@ -93,35 +93,72 @@ export function codePart(code, pid, current, root = STATUS_ROOT) {
 }
 
 /**
- * The dispatcher's part: its state from its lock (a live pid: running), its
+ * The pid a lock file names, alive or not: null with no lock or no pid in it. The
+ * dispatcher removes its lock on a clean stop (SIGTERM, SIGINT, exit), so a lock
+ * naming a gone pid is one that died (RISA-1030).
+ */
+export function lockPid(/** @type {string} */ lock) {
+  try {
+    const pid = Number(readFileSync(lock, "utf8").trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether PID is a live process (EPERM: alive, someone else's). */
+const pidAlive = (/** @type {number} */ pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return /** @type {NodeJS.ErrnoException} */ (e).code === "EPERM";
+  }
+};
+
+/**
+ * The dispatcher's part: its state from its lock (a live pid: running; a gone
+ * one: dead, no clean stop; none: stopped), its
  * code (current or stale against targetOf's folder) and its state file (paused and
  * why), its log's last entry (the last logged change) and its last tick's time.
  * @param {{ main?: string, lock: string, state: string, log: string }} files
  * @param {{ now?: number, holder?: (lock: string) => number | null,
  *   target?: (code: import("./dispatch.mjs").DispatchState["code"]) => string,
- *   current?: (root: string) => string | null }} [opts]
+ *   current?: (root: string) => string | null, raw?: (lock: string) => number | null,
+ *   alive?: (pid: number) => boolean }} [opts] raw: the lock's pid, alive or not
  */
 export function dispatcherPart(
   files,
-  { now = Date.now(), holder = lockHolder, target = targetOf, current = codeHash } = {},
+  {
+    now = Date.now(),
+    holder = lockHolder,
+    target = targetOf,
+    current = codeHash,
+    raw = lockPid,
+    alive = pidAlive,
+  } = {},
 ) {
   const pid = holder(files.lock);
+  const named = pid ? null : raw(files.lock);
+  const gone = named !== null && !alive(named) ? named : null;
   const st = readState(files.state);
   const paused = st.paused;
   const since = paused?.at && !Number.isNaN(Date.parse(paused.at)) ? `, ${age(paused.at, now)} ago` : "";
   const why = paused ? `paused${since}: ${paused.why || "by hand"}` : "";
   const root = pid && st.code?.pid === pid ? target(st.code) : STATUS_ROOT;
   const code = pid ? codePart(st.code, pid, st.code?.pid === pid ? current(root) : null, root) : "";
-  const state = pid
-    ? `running (pid ${pid})${code}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
-    : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
-  const last = lastEntry(files.log);
   // The tick's own heartbeat; a state an older release wrote has only the stuck watch's.
   const tickAt = typeof st.lastTickAt === "number" ? st.lastTickAt : st.stuck?.lastTickAt;
-  const tick =
-    typeof tickAt === "number" && Number.isFinite(tickAt)
-      ? `last tick ${span(now - tickAt)} ago (${new Date(tickAt).toISOString().replace(/\.\d+Z$/, "Z")})`
-      : "";
+  const ticked = typeof tickAt === "number" && Number.isFinite(tickAt);
+  const state = pid
+    ? `running (pid ${pid})${code}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
+    : gone
+      ? `dead (pid ${gone} gone; ${ticked ? `last tick ${span(now - tickAt)} ago, ` : ""}no clean stop)${paused ? `, and ${why}` : ""}: restart it with ${toolCmd.prd} dispatch --restart`
+      : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
+  const last = lastEntry(files.log);
+  const tick = ticked
+    ? `last tick ${span(now - tickAt)} ago (${new Date(tickAt).toISOString().replace(/\.\d+Z$/, "Z")})`
+    : "";
   const lines = last ? [`last: ${shorten(last, 120)}${tick ? ` · ${tick}` : ""}`] : tick ? [tick] : [];
   return [`DISPATCHER: ${state}`, ...lines, ""].join("\n") + "\n";
 }
