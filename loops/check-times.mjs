@@ -12,6 +12,7 @@
 // Older lines have nine to seventeen, and none of what they lack.
 import { existsSync, readFileSync } from "node:fs";
 import { branchKinds } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
 
 /** @typedef {{ start: string, worktree: string, branch: string, mode: string, reason: string, seconds: number,
  *   loadStart: number | null, loadEnd: number | null, exit: number, filesRun: number | null, filesAll: number | null,
@@ -208,7 +209,7 @@ export function formatSummary(s, { since } = {}) {
   return lines.join("\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   let since;
   let file = process.env.RISA_CHECK_LOG;

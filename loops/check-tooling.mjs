@@ -24,6 +24,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
+import { testLoad } from "./test-limits.mjs";
 
 /**
  * The failed test files of a Vitest JSON report, relative to cwd, sorted; none
@@ -103,12 +105,13 @@ export function unhandledError(text) {
  * @param {string} cmd
  * @param {string[]} args
  * @param {string} cwd
+ * @param {NodeJS.ProcessEnv} [env]
  * @returns {Promise<{ code: number, out: string }>}
  */
-const streamed = (cmd, args, cwd) =>
+const streamed = (cmd, args, cwd, env = process.env) =>
   new Promise((done) => {
     let out = "";
-    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
     child.stdout.on("data", (b) => {
       out += b;
       process.stdout.write(b);
@@ -179,7 +182,12 @@ export function projectFiles({ root, projects, files, vitest }) {
  * those files of the projects (none of them there: nothing runs, and it passes);
  * with `ran` too, those files already passed on their own, so the projects' own
  * among them are skipped (none left: nothing runs, and it passes).
- * @param {{ root: string, projects: string[], files?: string[], ran?: boolean, state?: string, rerunMax?: number, vitest?: string }} opts
+ *
+ * The rerun's Vitest limits (test-limits.mjs) scale for the higher of the load
+ * `load` read before the first run and the load it reads before the rerun, passed
+ * as RISA_TEST_LOAD (RISA-1088): a rerun of files that timed out under load never
+ * gets lower limits than the run they failed in. The first run reads its own.
+ * @param {{ root: string, projects: string[], files?: string[], ran?: boolean, state?: string, rerunMax?: number, vitest?: string, load?: () => number | null }} opts
  * @returns {Promise<number>} the step's exit code
  */
 export async function toolingStep({
@@ -190,6 +198,7 @@ export async function toolingStep({
   state = "",
   rerunMax = 20,
   vitest,
+  load = testLoad,
 }) {
   const bin = vitest ?? join(root, "node_modules/.bin/vitest");
   const work = mkdtempSync(join(tmpdir(), "tooling-step-"));
@@ -215,6 +224,7 @@ export async function toolingStep({
         if (!files.length) return 0;
       }
     }
+    const before = load();
     const first = join(work, "first.json");
     const run = await streamed(
       bin,
@@ -260,6 +270,8 @@ export async function toolingStep({
     }
     console.log(`tooling: rerunning the ${failed.length} failed file(s) alone: ${failed.join(" ")}`);
     const again = join(work, "again.json");
+    const peak = Math.max(before ?? 0, load() ?? 0);
+    const rerunEnv = peak > 0 ? { ...process.env, RISA_TEST_LOAD: String(peak) } : process.env;
     const rerun = await streamed(
       bin,
       [
@@ -272,6 +284,7 @@ export async function toolingStep({
         `--outputFile.json=${again}`,
       ],
       root,
+      rerunEnv,
     );
     if (rerun.code === 0) {
       console.log(`tooling: passed alone, logged as flaky: ${failed.join(" ")}`);
@@ -294,7 +307,7 @@ export async function toolingStep({
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
   const opt = (/** @type {string} */ name) => {
