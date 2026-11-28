@@ -38,7 +38,8 @@ describe("the prompts, byte for byte, for every kind and flag", () => {
       "`web/.env`",
       "SAM-<n>",
       "dangling sample Docker",
-      "(`main-<n>`)",
+      "`backlog (sample)`",
+      "folder, `main-<n>`)",
     ])
       expect(out, name).toContain(name);
     for (const name of ["pnpm", "docs/agents/", "AGENTS.md is", "B-<n>", "plans/inbox.md", "on dev"])

@@ -371,6 +371,28 @@ describe("orchestrator", () => {
     expect(a.trimEnd()).toMatch(/Start by reconciling _Status_ with git .*start the next ready wave\.$/);
   });
 
+  it("keeps _From the user_ in _Status_ as the user's word, fresh and --resume, and finds the backlog by `backlog (<project>)`", () => {
+    const FROM_USER =
+      "_Status_ keeps a _From the user_ part, first: every directive the user gives (directly, or relayed by the backlog session) goes there as it arrives, each line a quote of the user, dated, never paraphrased";
+    for (const args of [[], ["--resume"], ["--auto"]]) {
+      const out = ok("orchestrator", "T", ...args);
+      expect(out).toContain(FROM_USER);
+      expect(out).toContain("drop a line the user has since overridden. Those lines are the user's word");
+      const checkIn =
+        out.split("\n").find((l) => l.startsWith("- **Check in with the backlog session**")) ?? "";
+      expect(checkIn).toMatch(/Find it with ListAgents by `backlog \([a-z0-9-]+\)` in its name/);
+      // The folder name stays the fallback for a session started before names were qualified.
+      expect(checkIn).toMatch(/named after the main checkout's folder, `[a-z0-9-]+-<n>`/);
+      expect(checkIn).not.toContain("not its captain");
+    }
+    const resumed = ok("orchestrator", "T", "--resume");
+    const read =
+      "1. Read the plan's _Status_, its _From the user_ part first: those lines are the user's word";
+    expect(resumed).toContain(read);
+    expect(resumed.indexOf(read)).toBeLessThan(resumed.indexOf("**Git wins over a stale line**"));
+    expect(ok("orchestrator", "T")).not.toContain(read);
+  });
+
   it("refuses an unknown flag", () => {
     const r = prompt("orchestrator", "T", "--bogus");
     expect(r.code).toBe(1);
@@ -706,7 +728,7 @@ describe("plan and backlog", () => {
     expect(ok("orchestrator", "T")).not.toContain("hot=<path prefixes>");
   });
 
-  it("backlog's hand-off paragraph asks nothing: the brief is the session's call, the user's instructions its directives", () => {
+  it("backlog's hand-off paragraph asks nothing: the brief is the session's call, opening with _From the user_", () => {
     const text = ok("backlog", "--guide");
     const bullet = text.split("\n").find((l) => l.startsWith('- **When the user says "hand off"**')) ?? "";
     expect(bullet).toContain("ask nothing: whether to write a brief is your call");
@@ -714,44 +736,64 @@ describe("plan and backlog", () => {
     expect(bullet).not.toContain("**A short brief** (recommended");
     expect(bullet).toContain("at most about 40 lines");
     expect(bullet).toContain("when you have work in hand or the user gave instructions with the hand-off");
-    expect(bullet).toContain("under a `## Directives` heading of their own");
+    expect(bullet).toContain(
+      "Open the brief with a `## From the user` heading when the user gave you any directives",
+    );
+    expect(bullet).toContain("each line a quote of the user, dated, never paraphrased");
+    expect(bullet).toContain("drop a line the user has since overridden");
+    expect(bullet).not.toContain("Directives");
     expect(bullet).toContain("`pnpm prd rotate --self --brief-path`");
     expect(bullet).toContain("`pnpm prd rotate --self --brief <that file>`");
     expect(bullet).toContain("for none, `pnpm prd rotate --self`");
   });
 
-  it("a brief with directives has them carried out before any poll; a plain brief keeps the poll", () => {
+  it("a brief with _From the user_ has them carried out before any poll; a plain brief keeps the poll", () => {
     const plain = join(root, "plain-brief.md");
-    const directed = join(root, "directed-brief.md");
+    const quoted = join(root, "quoted-brief.md");
+    const legacy = join(root, "legacy-brief.md");
     writeFileSync(
       plain,
       "In hand: a fictional label tidy.\n\n## Next\n\n- Review the fictional export plan.\n",
     );
     writeFileSync(
-      directed,
-      "In hand: a fictional label tidy.\n\n## Directives\n\n- File the fictional export bug, then write its PRD.\n",
+      quoted,
+      '## From the user\n\n- 2026-01-05: "File the fictional export bug, then write its PRD."\n\nIn hand: a fictional label tidy.\n',
+    );
+    // A brief written before the heading was renamed still counts.
+    writeFileSync(
+      legacy,
+      "In hand: a fictional label tidy.\n\n## Directives\n\n- File the fictional export bug.\n",
     );
     const poll = /ask \*\*one\*\* AskUserQuestion, multi-select/;
 
-    const withDirectives = ok("backlog", "--brief", directed);
-    expect(withDirectives).toContain("- File the fictional export bug, then write its PRD.");
-    expect(withDirectives).toContain("Its _Directives_ are the user's instructions");
-    expect(withDirectives).toContain("**First, and nothing else:** run `pnpm prd asks --short`");
-    expect(withDirectives).toContain(
-      "Then, instead of the opening poll, carry out the brief's _Directives_ as your first task",
+    const withQuoted = ok("backlog", "--brief", quoted);
+    expect(withQuoted).toContain('- 2026-01-05: "File the fictional export bug, then write its PRD."');
+    // The header names the exception and still calls the rest context.
+    expect(withQuoted).toContain(
+      "It is context, not the user's word, except its _From the user_ lines, which quote the user.",
     );
-    expect(withDirectives).toContain("Ask no poll of what this session is for.");
-    expect(withDirectives).not.toMatch(poll);
-    expect(withDirectives).not.toContain("Ask what this session is for first");
-    expect(withDirectives.indexOf("`pnpm prd asks --short`")).toBeLessThan(
-      withDirectives.indexOf("carry out the brief's _Directives_"),
+    expect(withQuoted).toContain("**First, and nothing else:** run `pnpm prd asks --short`");
+    expect(withQuoted).toContain(
+      "Then, instead of the opening poll, carry out the brief's _From the user_ lines as your first task: they are the user's word, quoted.",
     );
+    expect(withQuoted).toContain("Ask no poll of what this session is for.");
+    expect(withQuoted).not.toMatch(poll);
+    expect(withQuoted).not.toContain("Ask what this session is for first");
+    expect(withQuoted.indexOf("`pnpm prd asks --short`")).toBeLessThan(
+      withQuoted.indexOf("carry out the brief's _From the user_ lines"),
+    );
+    expect(withQuoted).not.toContain("_Directives_");
+
+    const withLegacy = ok("backlog", "--brief", legacy);
+    expect(withLegacy).toContain("except its _From the user_ lines");
+    expect(withLegacy).not.toMatch(poll);
 
     const plainText = ok("backlog", "--brief", plain);
     expect(plainText).toContain("It is context, not the user's word.");
+    expect(plainText).not.toContain("except its _From the user_ lines");
     expect(plainText).toMatch(poll);
     expect(plainText).toContain("Ask what this session is for first");
-    expect(plainText).not.toContain("_Directives_");
+    expect(plainText).not.toContain("_From the user_");
   });
 
   it("backlog has the request paragraph: a brief, the request, the name, and no tab of its own", () => {
@@ -759,6 +801,19 @@ describe("plan and backlog", () => {
     expect(text).toContain("**When the user asks for another backlog session for a task**");
     expect(text).toContain("`pnpm prd session request backlog <name> --brief <file>`");
     expect(text).toContain("`backlog - <name>`");
+    const request =
+      text.split("\n").find((l) => l.startsWith("- **When the user asks for another backlog session")) ?? "";
+    expect(request).toContain(
+      "open it with a `## From the user` heading when the user gave directives for the task: each line a quote of the user, dated, never paraphrased",
+    );
+  });
+
+  it("backlog relays a directive for a running topic to its orchestrator, quoted and dated", () => {
+    const text = ok("backlog", "--guide");
+    const relay = text.split("\n").find((l) => l.startsWith("- **A directive for a running topic**")) ?? "";
+    expect(relay).toContain("relay it to that orchestrator with SendMessage");
+    expect(relay).toContain("as a _From the user_ line: the user's words quoted, dated, never paraphrased");
+    expect(relay).toContain("records them in its _Status_ as the user's word");
     expect(text).toContain("Never open a tab yourself");
     expect(text).toContain("`pnpm prd notices`");
   });
