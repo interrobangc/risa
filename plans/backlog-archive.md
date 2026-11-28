@@ -254,6 +254,7 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 
 - 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook's main checkout (on dev) from its backlog session, on v0.1.3 with RISA_CONFIG and RISA_MAIN pointing at Caretook; ingest itself still ran. fixes-bug: wrong behaviour in a released install
 - 2026-11-27 (Robert Bo Davis): Still seen 2026-11-28 on v0.1.8 (pin f5ce80a58) in Caretook's main checkout on dev, from its backlog session; the inbox was empty, so nothing was lost.
+- 2026-11-28 (Robert Bo Davis): Seen again 2026-11-28 ~12:45Z on v0.1.8 in Caretook's main checkout on dev, reported by Caretook's backlog session (Garrett). Already fixed on main in a0e31b2; reaches Caretook with the next release.
 
 ### RISA-982 · bug · Fixes orchestrators keep waiting for new work when they run out
 
