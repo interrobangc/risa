@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gitInit, withOldGit } from "../loops/git-init.mjs";
 import { REFUSED } from "./candidate.mjs";
 import { EXIT, main } from "./ci.mjs";
+import { applyFindings } from "./filing.mjs";
 import { releasePasses } from "./gate.mjs";
 import { tierData } from "./tier-data.mjs";
 
@@ -44,6 +45,7 @@ const gitEnv = () => ({
 /** @type {string[][]} */ let ghCalls;
 /** @type {string[]} */ let lines;
 /** @type {any} */ let world;
+/** @type {{ items: any[] }} */ let backlog;
 
 const run = (/** @type {string} */ cwd, /** @type {string[]} */ args) => {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", env: gitEnv() });
@@ -131,6 +133,25 @@ const io = () => ({
   now: () => 0,
   log: (/** @type {string} */ line) => lines.push(line),
   pollMs: 1,
+  // The backlog's locked write, on an in-memory backlog.
+  fileFindings: (/** @type {any[]} */ findings) => ({
+    ...applyFindings(backlog, null, findings, {
+      add: (/** @type {any} */ f) => {
+        const item = {
+          id: `X-${backlog.items.length + 1}`,
+          title: f.title,
+          status: "triaged",
+          notes: f.note,
+        };
+        backlog.items.push(item);
+        return item;
+      },
+      note: (/** @type {any} */ item, /** @type {string} */ text) => {
+        item.notes += `\n${text}`;
+      },
+    }),
+    pushed: null,
+  }),
 });
 const promote = (/** @type {string[]} */ ...argv) => main(["promote", ...argv], /** @type {any} */ (io()));
 
@@ -176,6 +197,7 @@ function setUp() {
   ghCalls = [];
   lines = [];
   world = {};
+  backlog = { items: [] };
   gitInit(["-q", "--bare", "-b", "dev", origin], { cwd: root, env: gitEnv() });
   run(root, ["clone", "-q", origin, repo]);
   git(["checkout", "-q", "-B", "dev"]);
@@ -257,6 +279,27 @@ describe("promote merges", () => {
     addRun(1, baseVerdict(flakeOf(false)));
     expect(await promote()).toBe(0);
     expect(onOrigin(BRANCH)).toBe("");
+  });
+
+  it("files a passing flake's test, and a second promotion of it notes that item", async () => {
+    addRun(1, baseVerdict(flakeOf(false)));
+    expect(await promote()).toBe(0);
+    expect(backlog.items).toHaveLength(1);
+    expect(backlog.items[0].notes).toContain("https://example.test/runs/1");
+    expect(lines).toContain("  filed X-1");
+
+    // The next candidate: staging (now with the first merge) merged into a new rc/ tip.
+    git(["fetch", "-q", "origin", "staging"]);
+    tip = git(["commit-tree", `${tip}^{tree}`, "-p", tip, "-p", "FETCH_HEAD", "-m", "chore(release): next"]);
+    git(["push", "-q", "origin", `${tip}:refs/heads/${BRANCH}`, `${tip}:refs/heads/${CI_REF}`]);
+    prs = [{ ...prs[0], number: 201, headRefOid: tip, merged: undefined }];
+    runs = [];
+    lines = [];
+    addRun(2, baseVerdict(flakeOf(false)));
+    expect(await promote()).toBe(0);
+    expect(backlog.items).toHaveLength(1);
+    expect(backlog.items[0].notes).toContain("https://example.test/runs/2");
+    expect(lines).toContain("  noted on X-1");
   });
 
   it("finishes the cleanup when the merge's answer is lost", async () => {

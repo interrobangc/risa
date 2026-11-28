@@ -6,21 +6,26 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
+**Wave 2** (started 2026-11-27): slices 8–13, all opus. Wave 1 landed in main as c4ae22d (PR #5); its table is in the history once trimmed.
+
 | Slice | Wave | Item     | Model | State  | Merge into `prd/fixes-tooling` |
 | ----- | ---- | -------- | ----- | ------ | ------------------------------ |
-| 1     | 1    | RISA-935 | opus  | merged | 182c26b                        |
-| 2     | 1    | RISA-933 | opus  | merged | 9ed410c                        |
-| 3     | 1    | RISA-367 | opus  | merged | 634f5dd                        |
-| 4     | 1    | RISA-477 | opus  | merged | 5e2515c                        |
-| 5     | 1    | RISA-911 | opus  | merged | 06d42e8                        |
-| 6     | 1    | RISA-880 | opus  | merged | 57c983b                        |
-| 7     | 1    | RISA-721 | opus  | merged | bb7b20d                        |
+| 8     | 2    | RISA-969 | opus  | merged | 6202184                        |
+| 9     | 2    | RISA-681 | opus  | merged | 7796fbc                        |
+| 10    | 2    | RISA-934 | opus  | merged | 4c91c61                        |
+| 11    | 2    | RISA-987 | opus  | merged | 00269bb                        |
+| 12    | 2    | RISA-989 | opus  | merged | ee78763                        |
+| 13    | 2    | RISA-993 | opus  | merged | 7451bdd                        |
 
-**Wave 1** (2026-11-27): all seven merged (tip bb7b20d); gate green 2026-11-27 (`pnpm check`, `RISA_*`/`CLAUDE_CODE_*`/`CLAUDECODE` unset: 6 load timeouts passed on rerun; dispatch.test's RISA_MAIN case fails on main too in any linked worktree, filed RISA-990). Synced (no-op), pushed. Synced main (RISA-988 hotfix, 86aea22); the synced tip is green on `pnpm check` with `RISA_*`/`CLAUDE_CODE_*` unset (`risa check` itself still fails ~259 inside a session on the RISA_CONFIG leak, after-split slice 1's to fix; bye and prompt-golden timeouts passed on rerun; RISA-990 is after-split's). PR #5 open (https://github.com/interrobangc/risa/pull/5); `risa review fixes-tooling --wait` running. Codex didn't review within 20 min (twice); the user said (2026-11-27, in session): "Land it and review codex later". `risa land --tier unit --no-review --by-user` refused: no unit verdict, since Risa has no CI runner (RISA-969); `--tier none` is refused below the proposed `unit`; `--force --by-user` was blocked by the permission classifier. **Waiting for the user** to choose how it lands (run the land line themselves, or another way). Then: Codex findings on PR #5 to triage later, docs, status-trim, rotate. Docs at landing: RISA-911 (wait default 160 s) for the loop doc and RISA-880 (plan sessions get the context hook) for machinery: `loops/docs/` is after-split's hot file, so fold them in a later wave. Slice worktrees 1 to 7 kept until landed. Follow-ups filed: RISA-986, 987, 989 (RISA-990 moved to after-split by the backlog session). Slices 1 to 7, no shared file among them; all seven on opus, spawned 2026-11-27 with `risa watch fixes-tooling --wait` in the background.
+**Notes:**
 
-**Open issue:** `risa check` can't run here (risa.json has no `paths.checkPlanRules`; `loops/check-plan.mjs`), so slices hand off on hand-run vitest, eslint and prettier; the inherited `RISA_CONFIG` leaks into fixtures (unset `RISA_*` for test runs); `loops/prompt.test.mjs` has 47 failures on the base. Backlog session (risa-2a), on the user's word: a hotfix fixes the check-plan rules (RISA-988, `hotfix/check-plan-rules`), and it will say when that lands; until then slices merge on hand-run tests and the wave gate is `pnpm test` with `RISA_*` and `CLAUDE_CODE_*` unset (the prompt.test failures are that same leak).
-
-**Waiting, later waves:** RISA-681 and RISA-934 (wave 2: they share `ci/ci-file.mjs` and `backlog/registry.mjs` with slices 7 and 4). After-split's hot files (`loops/dispatch*`, `loops/machine*`, `loops/docs/`, `package.json`…): RISA-813, 915, 926, 927, 952, 882, 886. RISA-722, 780, 459: the user overrode a6: they go to Caretook's backlog, not fixed here (taken out of fixes-tooling 2026-11-27; Caretook isn't on this machine, so filing them there is left to the user). RISA-969 (a GitHub workflow): the user said yes (ask a5): a later wave. From the user via the backlog session: RISA-720 dropped; RISA-968 moved out (no topic); RISA-881, 883, 886, 889 stay here, in a wave after after-split lands (they touch `loops/docs/` and the prompts).
+- **Gate:** `risa check` inside a session fails ~259 tests on the `RISA_CONFIG` leak until after-split's slice 1 lands; gate with every `RISA_*`, `CLAUDE_CODE_*`, `CLAUDECODE` unset, rerun failing files once (load timeouts). No CI until slice 8's workflow is on main: landing wave 2 needs `--force` (ask the user, `--waits`) unless the workflow runs on the PR.
+- **Wave 3 first (the user, via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982, as wave 3's first slice right after wave 2 lands; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold). Main's b5c4391: land skeptics run on Opus (`model: "opus"`), not Fable: pick it up at the next sync.
+- **Waiting:** RISA-994 (may share after-split slice 1's cause: check after it lands); RISA-996 (Codex review of wave 1's landed diff: do it at wave 2's PR); after after-split lands: RISA-813, 915, 926, 927, 952, 882, 886, 881, 883, 889, 986, plus wave 1's docs (loop doc: `wait check` 160 s, RISA-911; machinery: plan sessions get the context hook, RISA-880; backlog doc: `prd set … why=`, RISA-477).
+- Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
+- RISA-997 filed (slice 8): the workflow writes no verdict artifact, so `risa ci run --wait` reads its runs as unknown.
+- Context past the soft limit (120k): rotate at this wave's boundary.
+- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). Gate run 1 (load 75): 18 failures, mostly timeouts. Rerun of 4 files on main vs the branch: `loops/land-unsynced.test.mjs` times out on both (pre-existing, noted on RISA-994); `loops/tidy-cli.test.mjs` fails only on the branch (its fixture doesn't copy slice 12's new `backlog/lock.mjs`): **sent back to slice 12**. Slice 12's fix merged as 4323007. Gate run 3 (load to 29): 34 timeouts; rerun of those 19 files at load ~8: only `land-unsynced` (fails on main too) and one `recover` timeout, both RISA-994's: **green**. Docs folded (a46d9fb: loop doc 160 s wait; backlog doc `why=` and `prd archive`); the RISA-880 machinery line is still to fold. **PR #7** open; Codex: one P2 (RISA-999, replied, resolved), then clean on 5bd92ed. First land refused: the unit run (https://github.com/interrobangc/risa/actions/runs/46084230316) concluded **success** on 5bd92ed but left no verdict (RISA-997), and main had moved. Synced again as 0634bd0 (plans/backlog.md conflict: took main's). Next: CI run + Codex on 0634bd0, then a land skeptic (Opus, b5c4391) on `--force` (evidence in the session scratchpad's land-evidence.md), `risa land fixes-tooling --tier unit --force --skeptic <id>`; a `no` means ask the user (`--waits`). RISA-996: asked Codex on merged PR #5 by comment; triage what it finds. Then status-trim, the RISA-880 machinery doc line, rotate. after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
 
 ## How to run this plan
 
@@ -97,3 +102,63 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - Unit test (beside `ci/ci-file.mjs`): a landed item whose fix is missing from the tested commit gets a note, not a new item; one whose fix is in it gets a new item.
+
+## Slice 8: A GitHub Actions CI workflow runs the checks
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-969):** add `.github/workflows/ci.yml`, the workflow `risa ci run` already expects (`ci/ci-io.mjs`: its name, the inputs `ci run` dispatches with, the ref it pushes): `pnpm check` on push to `main`, on PRs to `main` and on `ci run`'s dispatch. Pin Node and pnpm exactly (read `package.json`'s `packageManager`/engines; don't edit `package.json`, another topic's hot file) and pin each action to a full commit SHA with its version in a comment. The runner has no Claude session, so no `RISA_*` setup; if a test needs git identity, set it in the workflow. Update AGENTS.md's "There is no CI yet; the tests run locally." to say what runs where. No paid service beyond GitHub's own runners; a new dependency stops the slice (ask in the hand-off).
+
+**Acceptance criteria:**
+
+- Unit test (a new `ci/workflow.test.mjs`): the workflow's name and dispatch inputs match what `ci/ci-io.mjs` uses, its triggers cover push and PRs to `main`, and every `uses:` is pinned to a 40-character SHA.
+
+## Slice 9: Promotion files a passing flake's tests
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-681):** `risa ci promote` merges on a passing flake and only prints the flaky tests. File them in the backlog the way `ci file` files a zone's failures (`ci/filing.mjs`: one item per flaky test, a note on an open one that already covers it, the run linked), and print the ids it filed or noted (`ci/promote.mjs`).
+
+**Acceptance criteria:**
+
+- Unit test (`ci/promote.test.mjs`): a promotion with a flaky test files one item; a second promotion with the same flake notes that item instead of filing another.
+
+## Slice 10: Archive done rows out of the PRD registry
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-934):** `risa backlog prd archive` moves `done` rows out of the registry table into an archive file beside it, as `risa backlog archive` does for items (`backlog/registry.mjs` and its CLI). Lookups that read a topic's row (`prd show`, a name already taken) still find an archived one; `prd list` leaves them out. Don't touch `loops/dispatch*` or `loops/ls.sh` (another topic's hot files): if they read done rows, say so in the hand-off.
+
+**Acceptance criteria:**
+
+- Unit test (`backlog/registry.test.mjs` or `registry.cli.test.mjs`): archive moves only done rows, `prd list` no longer shows them, a lookup still finds one, and a second archive is a no-op.
+
+## Slice 11: tooling-lint reads the repo's trunk
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-987):** `loops/tooling-lint.mjs` defaults `TRUNK` to `dev`; a repo's trunk comes from its config (Risa's is `main`). Default it from the repo config the way the other commands read the trunk (find the helper; don't copy it), with `TRUNK` still overriding.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/tooling-lint.test.mjs`): a fixture repo whose config names `main` lints against `main` with no `TRUNK` set; `TRUNK` still wins.
+
+## Slice 12: backlog.mjs takes a stale lock over safely
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-989):** `backlog/backlog.mjs`'s lock (near line 230) removes a stale lock with `rmSync` and no guard, so two waiters can both take it: the race RISA-367 fixed in `loops/lib.sh`'s `with_backlog_lock`. Take it over the same way (read that fix first), so the two locks agree on what stale means and who wins.
+
+**Acceptance criteria:**
+
+- Unit test (beside `backlog/backlog.mjs`): two waiters on a stale lock; exactly one takes it, the other waits and then takes it after release.
+
+## Slice 13: config.test's "starts Node once" passes
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-993):** `loops/config.test.mjs`'s "starts Node once" fails on main too, ENOENT on its temp `starts` file (seen under load 8–46). Find the cause (a missing directory, a race with the started process, a timing assumption) and fix the test or the code it found wrong; don't just raise a timeout. Leave `loops/test-setup.mjs` and `loops/test-env*` alone (another topic's hot files): if the cause is there, say so in the hand-off.
+
+**Acceptance criteria:**
+
+- Unit test: `loops/config.test.mjs` passes ten runs in a row (`--repeat` or a loop), with and without `RISA_*` variables set.

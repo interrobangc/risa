@@ -74,23 +74,27 @@
 //                                            commit with scripts/ci/quarantine.txt (ci/filing.mjs)
 //
 // The PRD registry (the "## PRDs" table; row order is the priority; backlog/registry.mjs):
-//   backlog prd list [--json]           each topic with its worked-out state
+//   backlog prd list [--json]           each topic with its worked-out state (not the archived ones)
+//   backlog prd show <topic> [--json]   one topic's row, archived or not
 //   backlog prd add <topic> [--first|--last|--before T|--after T] [flags=… after=… hot=… notes=…]
 //   backlog prd set <topic> flags=… after=… hot=… notes=…   comma-separated; — clears
 //   backlog prd set <topic> flags+=hold | flags-=hold   adds or removes flags, keeping the others
 //   backlog prd set <topic> flags+=hold why="<reason>"   a hold with its reason and today's date
 //                                            (list prints it under the row); clearing the hold clears it
 //   backlog prd move <topic> --first|--last|--before T|--after T
+//   backlog prd archive                 move done rows (but one with a prd/ worktree) to the archive's
+//                                            PRD table; the rows left drop them from After
 //
 // Env: BACKLOG_BY (who's writing; default your branch, or git user.name on dev),
 // BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { withLock as withLockAt } from "./lock.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
@@ -212,34 +216,8 @@ const readArchive = (opts) => {
   return text === null ? null : fmt.parse(text, opts);
 };
 
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-
-/** Run `fn` under the lock; a lock older than 30 s is from a crashed writer and is taken over. */
-function withLock(fn) {
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      mkdirSync(lockDir);
-      break;
-    } catch (e) {
-      if (e.code !== "EEXIST") throw e;
-      let age;
-      try {
-        age = Date.now() - statSync(lockDir).mtimeMs;
-      } catch {
-        continue; // released between the two calls
-      }
-      if (age > 30_000) rmSync(lockDir, { recursive: true, force: true });
-      else if (Date.now() > deadline) throw new fmt.BacklogError(`backlog is locked (${lockDir}); try again`);
-      else sleep(150);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    rmSync(lockDir, { recursive: true, force: true });
-  }
-}
+/** Run `fn` under the backlog lock (lock.mjs: a stale one is taken over under its guard, as lib.sh does). */
+const withLock = (fn) => withLockAt(lockDir, fn, { Error: fmt.BacklogError });
 
 /** Every file a backlog write commits. */
 const BACKLOG_FILES = [REL, INBOX_REL, ARCHIVE_REL];
@@ -1005,7 +983,7 @@ function findings() {
 
   // The PRD registry (an old prose table is no one's to check).
   const registry = reg.parseRegistry(b.preamble);
-  if (registry.format === "new") out.push(...reg.findings(registry.rows, b.items));
+  if (registry.format === "new") out.push(...reg.findings(registry.rows, b.items, archivedRows()));
   return out;
 }
 
@@ -1031,6 +1009,12 @@ function registryFacts(items) {
     if (i.prd && i.status === "triaged") waiting.set(i.prd, (waiting.get(i.prd) ?? 0) + 1);
   return { plans, worktrees, waiting };
 }
+
+/** The archive's PRD rows (none without an archive or its table). */
+const archivedRows = () => {
+  const a = readArchive({ lenient: true });
+  return a ? reg.archivedRowsOf(a.preamble) : [];
+};
 
 /** "--first", "--last", "--before T", "--after T" → a position (or `fallback`). */
 function position(opts, fallback) {
@@ -1100,9 +1084,57 @@ function prd(pos, opts) {
     case "add": {
       const p = position(opts, { last: true });
       writeRegistry("prd add", `prd add ${topic}`, (rows) =>
-        reg.addRow(rows, topic, pairs, p, { today: today() }),
+        reg.addRow(rows, topic, pairs, p, { today: today(), archived: archivedRows().map((r) => r.topic) }),
       );
       return console.log(`added ${topic}`);
+    }
+    case "show": {
+      if (!topic) throw new fmt.BacklogError("usage: prd show <topic> [--json]");
+      const b = read();
+      const live = reg.rowsOf(b.preamble).find((r) => r.topic === topic);
+      const r = live ?? archivedRows().find((a) => a.topic === topic);
+      if (!r) throw new fmt.BacklogError(`no PRD row "${topic}" (${toolCmd.backlog} prd list)`);
+      const facts = registryFacts(b.items);
+      const out = {
+        ...r,
+        state: reg.stateOf(r, facts),
+        waiting: facts.waiting.get(r.topic) ?? 0,
+        archived: !live,
+      };
+      if (opts.json) return console.log(JSON.stringify(out));
+      console.log(`${r.topic} · ${out.state}${live ? "" : ` (archived in ${ARCHIVE_REL})`}`);
+      console.log(`  flags: ${r.flags.join(", ") || "—"}`);
+      if (r.held) console.log(`  on hold since ${reg.heldText(r)}`);
+      console.log(`  after: ${r.after.join(", ") || "—"}`);
+      console.log(`  waiting: ${out.waiting}`);
+      console.log(`  hot files: ${r.hot.join(", ") || "—"}`);
+      console.log(`  notes: ${r.notes || "—"}`);
+      return;
+    }
+    case "archive": {
+      if (topic) throw new fmt.BacklogError("usage: prd archive (it moves every done row)");
+      const res = write(
+        "prd archive",
+        (x) => ({
+          ids: [],
+          text: `prd archive ${x.moved.length} done row${x.moved.length === 1 ? "" : "s"}: ${x.moved.map((r) => r.topic).join(", ")}`,
+        }),
+        (b, c) => {
+          const x = reg.archiveDone(reg.rowsOf(b.preamble), registryFacts(b.items).worktrees);
+          if (!x.moved.length) return x;
+          b.preamble = reg.withRows(b.preamble, x.rows);
+          const a = c.archive();
+          a.preamble = reg.withArchivedRows(a.preamble, [...reg.archivedRowsOf(a.preamble), ...x.moved]);
+          return x;
+        },
+      );
+      console.log(
+        res.moved.length
+          ? `archived ${res.moved.length} done PRD row${res.moved.length === 1 ? "" : "s"} to ${ARCHIVE_REL}: ${res.moved.map((r) => r.topic).join(", ")}`
+          : "no done PRD rows to archive",
+      );
+      if (res.kept.length) console.log(`kept ${res.kept.join(", ")}: a prd/ worktree is still there`);
+      return;
     }
     case "set":
       if (!topic) throw new fmt.BacklogError("usage: prd set <topic> key=value…");
@@ -1125,7 +1157,7 @@ function prd(pos, opts) {
       return console.log(`moved ${topic} ${where}`);
     }
     default:
-      throw new fmt.BacklogError(`unknown prd command "${sub}" (list, add, set, move)`);
+      throw new fmt.BacklogError(`unknown prd command "${sub}" (list, show, add, set, move, archive)`);
   }
 }
 
