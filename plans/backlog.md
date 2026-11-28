@@ -1364,6 +1364,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-test): From fixes-test slice 1's hand-off (RISA-1048, 2026-11-28): slice-brief.mjs tested, usage printed directly and nothing through a symlink. Through the risa command the paths are real (bin/risa resolves them), so only a direct node call through node_modules is hit. More than 12 files: split in two slices; loops/dispatch.mjs and others may be hot for a running topic.
+- 2026-11-28 (Robert Bo Davis): Caretook awaits (2026-11-28, Adm Nogura · backlog (caretook)): its B-1069 rechecks the realpath wrapper in pnpm test:tooling once this is in a release tag; send it a notice when tagged.
 
 ### RISA-1094 · bug · A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it
 
