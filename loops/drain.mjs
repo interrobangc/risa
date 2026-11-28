@@ -18,6 +18,9 @@
 // never drains: with a session live longer than that, it files one report per incident.
 // RISA_USAGE_WATCH=off: always normal.
 //
+// sessionDrains (pure): each session's drain on its own account's readings (a reading's
+// `account`, usage.mjs), so a session on another Claude config folder is drained, and ended
+// when limited, on that account's numbers, not the dispatcher's.
 // limitActions (pure): what a limited tick does to each live session.
 // landingUnder (pure): whether a session runs a landing (land.sh, or a landing journal's pid,
 // among its descendants).
@@ -27,7 +30,7 @@
 //                             limited; else 0 (and 0 on any error: watching never hurts the work)
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
-import { clock, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
+import { clock, mergeReadings, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
 export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
@@ -136,6 +139,38 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
   return normal("under the drain line");
 }
 
+/**
+ * Each session's drain, from its own account's readings only. A session's account is its
+ * reading's (`account`, absent for Claude Code's default); one with no reading takes ACCOUNT
+ * (the dispatcher's own: host.mjs claudeAccount). Pure.
+ * @param {any[]} readings every session's (usage.mjs readReadings)
+ * @param {string[]} names the sessions
+ * @param {{ drain: number, stop: number, off?: boolean, now: number, staleMs: number,
+ *   timeZone?: string, account?: string | null }} opts
+ * @returns {Record<string, Drain>}
+ */
+export function sessionDrains(readings, names, { account = null, ...opts }) {
+  /** @type {Map<string, string | null>} */
+  const accountOf = new Map();
+  for (const r of readings)
+    if (r && typeof r === "object") accountOf.set(String(r.session), r.account ?? null);
+  /** @type {Map<string | null, Drain>} */
+  const byAccount = new Map();
+  /** @type {Record<string, Drain>} */
+  const out = {};
+  for (const name of names) {
+    const a = accountOf.has(name) ? (accountOf.get(name) ?? null) : account;
+    let d = byAccount.get(a);
+    if (!d) {
+      const mine = readings.filter((r) => (r?.account ?? null) === a);
+      d = drainDecision(mergeReadings(mine, { now: opts.now, staleMs: opts.staleMs }), opts);
+      byAccount.set(a, d);
+    }
+    out[name] = d;
+  }
+  return out;
+}
+
 /** Whether anything may run a claude to probe the limit (`claude -p`): never while limited. Pure. */
 export const probeAllowed = (/** @type {Drain} */ d) => d.state !== "limited";
 
@@ -183,9 +218,10 @@ export function isLanding(/** @type {string} */ args) {
  * What a limited tick does to each live session. Pure.
  * @param {{ sessions: LimitSession[], landing: Set<string>,
  *   stalls: Record<string, { pid?: number | null, at?: string | number | null, error?: string } | null | undefined>,
- *   reported?: string[], drain: Drain, now: number, endWaitMs?: number }} facts
+ *   reported?: string[], drain: Drain, drains?: Record<string, Drain>, now: number, endWaitMs?: number }} facts
  *   stalls: each session's stall mark (its usage reading's); reported: hand-opened sessions
- *   already named in this incident's report
+ *   already named in this incident's report; drains: each session's own (sessionDrains),
+ *   DRAIN for one it leaves out
  * @returns {LimitAction[]}
  */
 export function limitActions({
@@ -194,17 +230,22 @@ export function limitActions({
   stalls,
   reported = [],
   drain,
+  drains = {},
   now,
   endWaitMs = END_WAIT_MS,
 }) {
-  if (drain.state !== "limited") return [];
   /** @type {LimitAction[]} */
   const out = [];
   const hand = [];
+  /** @type {string[]} */
+  const whys = [];
   for (const s of sessions) {
     if (!s.live || !s.pid) continue;
+    const own = drains[s.name] ?? drain;
+    if (own.state !== "limited") continue;
     if (!s.managed) {
       hand.push(s.name);
+      if (!reported.includes(s.name) && !whys.includes(own.why)) whys.push(own.why);
       continue;
     }
     if (landing.has(s.name)) {
@@ -223,7 +264,7 @@ export function limitActions({
     out.push({
       type: "report",
       sessions: fresh,
-      text: `Usage is limited (${drain.why}). The dispatcher ended its managed sessions, but never ends one opened by hand: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
+      text: `Usage is limited (${whys.join("; ")}). The dispatcher ended its managed sessions, but never ends one opened by hand: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
     });
   return out;
 }

@@ -13,6 +13,9 @@ import { createNotice, listNotices, withdrawNotice } from "../loops/notices.mjs"
 
 /** The workflow's name. Runs are filtered by it: `gh run list --workflow` 404s until ci.yml is on the default branch. */
 export const WORKFLOW_NAME = "CI";
+/** The artifact a run's verdict is uploaded as, and the file in it (ci/write-verdict.mjs writes it). */
+export const VERDICT_ARTIFACT = "verdict";
+export const VERDICT_FILE = "verdict.json";
 export const EXIT = {
   green: 0,
   brake: 1,
