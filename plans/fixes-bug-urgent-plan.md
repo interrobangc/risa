@@ -10,10 +10,10 @@
 | ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
 | 1     | 1    | RISA-1030 | opus  | running                                    | —                                 |
 | 2     | 1    | RISA-1034 | opus  | handed off 0e69990                         | —                                 |
-| 3     | 1    | RISA-1033 | opus  | running                                    | —                                 |
+| 3     | 1    | RISA-1033 | opus  | handed off 0a9637d                         | —                                 |
 | 4     | 2    | RISA-1037 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
 
-Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging). Slice 3 started too, once self-recovery-2 freed `dispatch-stuck.mjs`. fixes-bug landed in main (3598122): `risa sync` at the wave boundary. Slice 2 handed off (check passed; merges after slice 1, in plan order); at landing fold into `prd.sh`'s `wait` help and the docs that `wait` now prints the result and exits 1 with none recorded.
+Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging). Slice 3 started too, once self-recovery-2 freed `dispatch-stuck.mjs`. fixes-bug landed in main (3598122): `risa sync` at the wave boundary. Slice 2 handed off (check passed; merges after slice 1, in plan order); at landing fold into `prd.sh`'s `wait` help and the docs that `wait` now prints the result and exits 1 with none recorded. Slice 3 handed off (check passed): it built the question-at-once branch (Risa has no way to wake an idle session) and added a `transcript` field to the heartbeat (`loops/heartbeat.mjs`, now in hot files).
 
 **For the next session:**
 
