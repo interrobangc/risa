@@ -103,7 +103,9 @@
 // tab and lock) on the target's dispatch.mjs, so it never runs old code past one tick
 // (B-809). Its start writes the hash, its folder and whether it follows the link into
 // .dispatch.json (`code`), and `prd status` says whether the running one's code is
-// current or stale against the same target.
+// current or stale against the same target. Its start (and each re-exec's) logs
+// pin.mjs's warning when the project pins another risa than the release it runs
+// from (RISA-1050), never per tick.
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
@@ -199,6 +201,7 @@ import {
   itermApp,
 } from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
+import { pinWarningAt } from "./pin.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import { heldText } from "../backlog/registry.mjs";
 import {
@@ -2458,6 +2461,13 @@ function parse(/** @type {string[]} */ argv) {
   return o;
 }
 
+/**
+ * The log entry a start (or a re-exec, or a restart) writes: HEAD, then PIN (pin.mjs's
+ * warning that the project pins another risa than the release running) when there is one.
+ * @param {string} head @param {string | null} pin
+ */
+export const startLines = (head, pin) => (pin ? [head, pin] : [head]);
+
 async function main() {
   let o;
   try {
@@ -2709,7 +2719,9 @@ async function main() {
       : o.restarted !== null
         ? `restarted (was pid ${o.restarted}; `
         : "started (";
-    log([`${what}pid ${process.pid}, every ${o.every}s)`], nowOf());
+    const pin = pinWarningAt(OWN_ROOT);
+    log(startLines(`${what}pid ${process.pid}, every ${o.every}s)`, pin), nowOf());
+    if (pin) console.log(pin);
     console.log(
       `Dispatcher ${reexeced ? `re-exec'd on new code ${CODE_AT_START}` : "running"} (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
     );
