@@ -1,4 +1,4 @@
-// The worker reader: each worker's facts, for `prd status` and the watch.
+// The worker reader: each worker's facts, for `status` and the watch.
 // A worker is a worktree under the main checkout's .loops with what works in it:
 //
 //   agents     its heartbeat records (heartbeat.mjs) of live sessions: each agent's

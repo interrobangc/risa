@@ -161,7 +161,30 @@ describe("prd doc on the sample project", () => {
   });
 
   it("with no role, prints the usage and the roles", () => {
-    expect(fails()).toMatch(/usage: prd doc <role> \[section\][\s\S]*machinery/);
+    expect(fails()).toMatch(/usage: risa doc <role> \[section\][\s\S]*machinery/);
+  });
+
+  it("names the configured command in its usage and errors, never prd", () => {
+    const renamed = join(tmp, "renamed");
+    makeRepo(renamed, { files: { "loops/docs/machinery.md": MACHINERY } });
+    const config = JSON.parse(readFileSync(join(renamed, "risa.json"), "utf8"));
+    config.tool = { ...config.tool, prd: "samplectl", backlog: "samplectl backlog" };
+    writeFileSync(join(renamed, "risa.json"), JSON.stringify(config));
+    const run = (/** @type {string[]} */ ...args) => {
+      const env = { ...process.env };
+      delete env.RISA_CONFIG;
+      return spawnSync(process.execPath, [join(renamed, "loops/doc.mjs"), ...args], {
+        encoding: "utf8",
+        env,
+      });
+    };
+    const usage = run();
+    expect(usage.status).toBe(2);
+    expect(usage.stderr).toMatch(/^usage: samplectl doc <role> \[section\]/);
+    const unknown = run("nosuchrole");
+    expect(unknown.status).toBe(2);
+    expect(unknown.stderr).toMatch(/^samplectl doc: /);
+    expect(usage.stderr + unknown.stderr).not.toMatch(/\bprd doc\b/);
   });
 });
 

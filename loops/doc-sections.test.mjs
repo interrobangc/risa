@@ -2,6 +2,7 @@
 // the generic doc's last section (loops/doc.mjs), so a fold-in must not move it.
 import { readdirSync, readFileSync } from "node:fs";
 import { expect, it } from "vitest";
+import { sectionOf } from "./doc.mjs";
 
 const docs = new URL("./docs/", import.meta.url);
 
@@ -44,3 +45,37 @@ for (const [file, heading] of Object.entries(LAST)) {
     ).toBe(heading);
   });
 }
+
+// Docs and prompts send readers to a section (`{{prd}} doc machinery "The dispatcher"`;
+// a prompt's `role_doc orchestrator "Models"`): each must name a generic doc's heading,
+// or `prd doc` prints "no section" (RISA-1051).
+const REFS = [
+  /(?:\{\{prd\}\}|\$prd_cmd|\brisa) doc ([a-z-]+) \\?"([^"\\]+)\\?"/g,
+  /\brole_doc ([a-z-]+) (?:"([^"]+)"|(\w+)\))/g,
+];
+
+const refsIn = (/** @type {URL} */ dir) =>
+  readdirSync(dir)
+    .filter((f) => /\.(md|sh)$/.test(f))
+    .flatMap((f) => {
+      const text = readFileSync(new URL(f, dir), "utf8");
+      return REFS.flatMap((re) =>
+        [...text.matchAll(re)].map((m) => ({ from: f, role: m[1], section: m[2] ?? m[3] })),
+      );
+    });
+
+const refs = [
+  ...refsIn(docs).map((r) => ({ ...r, from: `loops/docs/${r.from}` })),
+  ...refsIn(new URL("../docs/", import.meta.url)).map((r) => ({ ...r, from: `docs/${r.from}` })),
+  ...refsIn(new URL("./prompts/", import.meta.url)).map((r) => ({ ...r, from: `loops/prompts/${r.from}` })),
+];
+
+it("finds the section references", () => {
+  expect(refs.map((r) => `${r.role} ${r.section}`)).toContain("machinery The dispatcher");
+  expect(refs.map((r) => `${r.role} ${r.section}`)).toContain("orchestrator Models");
+});
+
+it.each(refs)("$from: $role doc's $section section exists", ({ role, section }) => {
+  const text = readFileSync(new URL(`${role}.md`, docs), "utf8");
+  expect(sectionOf(text, section), `loops/docs/${role}.md has no "${section}" section`).toBeDefined();
+});

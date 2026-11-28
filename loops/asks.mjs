@@ -1,6 +1,6 @@
 // The asks store: questions and reports for the dev keeper, one JSON file per
 // ask in a directory (`.loops/.asks/<id>.json` in the main checkout; machine
-// local, untracked). `ask.mjs` is its command line (`prd ask`, `asks`,
+// local, untracked). `ask.mjs` is its command line (`ask`, `asks`,
 // `answer`); this module only reads and writes the files it is handed.
 //
 // An ask: { id, kind: "question" | "report", session, topic, text, options,
@@ -474,7 +474,7 @@ export function countdown(ask, now = Date.now()) {
     : `takes "${ask.recommended}": due (still answerable)`;
 }
 
-/** One line on what waits on the user (`prd asks --short`): open questions oldest first, then counts. */
+/** One line on what waits on the user (`asks --short`): open questions oldest first, then counts. */
 export function formatAsksShort(asks, now = Date.now()) {
   if (!asks.length) return "No open asks.";
   const decided = asks.filter((a) => a.defaulted).length;
@@ -489,7 +489,7 @@ export function formatAsksShort(asks, now = Date.now()) {
   return `${open}, ${reports} report${reports === 1 ? "" : "s"}, ${decided} decided for you.`;
 }
 
-/** The `prd asks` listing of asks (as listAsks returns them): open ones, then the defaulted. */
+/** The `asks` listing of asks (as listAsks returns them): open ones, then the defaulted. */
 export function formatAsks(asks, now = Date.now()) {
   if (!asks.length) return "No open asks.";
   const one = (a) => {

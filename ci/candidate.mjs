@@ -1,4 +1,4 @@
-// `prd ci candidate`: a release candidate, a fixed dev commit on an rc/ branch
+// `ci candidate`: a release candidate, a fixed dev commit on an rc/ branch
 // with its PR into staging.
 //
 //   candidate cut [<commit>] [--wait [min]]   dev's tip by default

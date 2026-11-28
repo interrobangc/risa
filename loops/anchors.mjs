@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// prd anchors: a plan's file and symbol anchors, checked against the base
+// anchors: a plan's file and symbol anchors, checked against the base
 // before the first slice starts (B-874). A plan written ahead of its PRD names
 // files and functions that may have moved since; the orchestrator runs this at
-// PRD start and fixes the plan's misses (`prd doc orchestrator`).
+// PRD start and fixes the plan's misses (`doc orchestrator`).
 //
 //   node anchors.mjs <topic> [--base <ref>] [--repo <dir>] [--plans <dir>]
 //     For every slice not yet merged (its row in the plan's or history's

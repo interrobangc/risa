@@ -28,6 +28,7 @@ import {
   statusPart,
   withdrawNotice,
 } from "./notices.mjs";
+import { toolCmd } from "./config.mjs";
 import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -165,6 +166,13 @@ describe("gateLines and statusPart", () => {
     expect(lines[3]).toContain("n4");
     expect(lines[4]).toBe("… and 4 more: pnpm prd notices");
     expect(gateLines(many.slice(0, 5), null, { now: NOW })).toHaveLength(5);
+  });
+
+  it("names the configured command in its messages, not a literal one", () => {
+    expect(() => withdrawNotice(mkdtempSync(join(tmpdir(), "notices-cmd-")), "n9")).toThrow(
+      `${toolCmd.prd} notices lists them`,
+    );
+    expect(statusPart([notice("n1", "prd-a")])).toContain(`(${toolCmd.prd} notices)`);
   });
 
   it("status prints only the count, and nothing when there are none", () => {

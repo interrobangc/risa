@@ -8,12 +8,14 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   DEFAULT_FLAVOR,
   FLAVORS,
+  PACKS,
   ROLES,
   drawAdmiral,
   flavorLine,
   flavorOf,
   label,
   namesOf,
+  packLine,
   personaFor,
   personaOfLabel,
   poolOf,
@@ -159,9 +161,28 @@ describe("label and flavorLine", () => {
     const line = flavorLine("prd", persona);
     expect(line.startsWith(`- You are ${label(persona)}: `)).toBe(true);
     expect(line).toContain("your replies to the user");
-    expect(line).toContain("address the user as Fleet Admiral");
-    expect(line).toContain("never inside questions, options or commands");
+    expect(line).toContain("address the user as Fleet Admiral only when speaking to them directly");
+    expect(line).toContain("never goes inside questions, options or commands");
     expect(line.split("\n")).toHaveLength(1);
+  });
+
+  it("writes the session's own narration to the pack's log, the starfleet captain's log (RISA-1041)", () => {
+    const line = flavorLine("backlog", { rank: "Admiral", name: "Morrow" });
+    expect(line).toContain("narration of your own work as an entry in your captain's log");
+    expect(line).toContain(
+      "address the user as Fleet Admiral only when speaking to them directly (an answer to their message, a question to them)",
+    );
+  });
+
+  it("keeps a plain report voice, no log wording, for a pack with no log", () => {
+    const { log, ...plain } = PACKS.starfleet;
+    expect(log).toBe("captain's log");
+    const persona = { rank: "Captain", name: "Sisko" };
+    const line = packLine(plain, "prd", persona);
+    expect(line.startsWith("- You are Captain Sisko: ")).toBe(true);
+    expect(line).not.toMatch(/\blog\b|narration|entry/);
+    expect(line).toContain("address the user as Fleet Admiral only when speaking to them directly");
+    expect(packLine(PACKS.starfleet, "prd", persona)).toBe(flavorLine("prd", persona));
   });
 
   it("is empty under none, with no persona, or for a role the pack doesn't name", () => {

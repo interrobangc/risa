@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd project-check: the project's own data, loaded through the core's readers. The
+// project-check: the project's own data, loaded through the core's readers. The
 // core's tests run on the sample and fixture projects, never on the project the
 // tool serves; this command checks that project's files instead. One line per
 // problem, each naming its file (relative to the project's root):

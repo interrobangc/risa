@@ -1,4 +1,4 @@
-// ci-gate.mjs: part of `prd ci` (ci.mjs has the map). `ci gate`, the landing
+// ci-gate.mjs: part of `ci` (ci.mjs has the map). `ci gate`, the landing
 // gate: the verdict that still vouches for the tip, a run requested when there is
 // none, blame when it's needed, then the decision (the pure rules are gate.mjs).
 import { toolCmd } from "../loops/config.mjs";

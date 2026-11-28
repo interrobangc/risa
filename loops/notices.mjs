@@ -1,7 +1,7 @@
 // The notice board's store: one-way, advisory lines sessions post for each
 // other ("landed X: sync at your next wave boundary"), one JSON file per notice
 // in a directory (`.loops/.notices/<id>.json` in the main checkout; machine
-// local, untracked). `notice.mjs` is its command line (`prd notice`,
+// local, untracked). `notice.mjs` is its command line (`notice`,
 // `notices`); this module only reads and writes the files it is handed.
 //
 // A notice: { id, session, topic, text, postedAt, expiresAt }. Ids are n1, n2,
@@ -193,7 +193,7 @@ export function formatNotice(n, now = Date.now()) {
   return `${n.id}  ${n.session ?? "-"}  ${n.topic ?? "-"}  ${age(n.postedAt, now)} ago, ${left(n.expiresAt, now)} left: ${n.text}`;
 }
 
-/** The `prd notices` listing. */
+/** The `notices` listing. */
 export function formatNotices(notices, now = Date.now()) {
   if (!notices.length) return "No live notices.";
   return notices.map((n) => formatNotice(n, now)).join("\n");
@@ -215,7 +215,7 @@ export function gateLines(notices, self, { now = Date.now(), max = 5 } = {}) {
   return [...shown, `… and ${others.length - shown.length} more: ${toolCmd.prd} notices`];
 }
 
-/** `prd status`'s part: the live notices' count, or "" when there are none. */
+/** `status`'s part: the live notices' count, or "" when there are none. */
 export function statusPart(notices) {
   if (!notices.length) return "";
   return `NOTICES: ${notices.length} (${toolCmd.prd} notices)\n`;

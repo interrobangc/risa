@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// prd autostart install|remove|status: the one per-user LaunchAgent that
-// runs the watchdog (`prd watchdog`, watchdog.mjs) at login and every five
+// autostart install|remove|status: the one per-user LaunchAgent that
+// runs the watchdog (`watchdog`, watchdog.mjs) at login and every five
 // minutes, from the main checkout. Nothing else installs it: only the user's
-// own `prd autostart install`.
+// own `autostart install`.
 //
 //   node autostart.mjs install --main DIR   write the plist and load it (a job
 //       already loaded is unloaded first, so a second install changes nothing

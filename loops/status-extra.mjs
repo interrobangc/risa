@@ -1,4 +1,4 @@
-// The parts `prd status` prints after the worktree table: the dispatcher
+// The parts `status` prints after the worktree table: the dispatcher
 // (running, its code current or stale, paused and why, or stopped, and its log's last entry), the recorded
 // sessions (.loops/.sessions: name, kind, live or ended, age, run-through or not,
 // managed by the dispatcher or opened by hand) and the open asks (the count,
@@ -264,7 +264,7 @@ export function prdCommands(table, sessions) {
     const up = ancestorsOf(p.ppid, table);
     const session = up.find((pid) => sessions.has(pid));
     if (session === undefined) continue;
-    // A prd above this one, below the session: this is its prd.sh.
+    // A dispatcher above this one, below the session: this is its prd.sh.
     const below = up.slice(0, up.indexOf(session));
     if (below.some((pid) => prdArgs(byPid.get(pid)?.command ?? "") !== null)) continue;
     out.push({ session: sessions.get(session) ?? "?", pid: p.pid, args, ageSeconds: p.ageSeconds });
@@ -285,7 +285,7 @@ export function againstUsual(
   return seconds > u.slowestSeconds ? "slow" : "";
 }
 
-/** A call or process "Bash: prd check --quick" for an agent's state. */
+/** A call or process "Bash: check --quick" for an agent's state. */
 const callNote = (/** @type {any} */ c) =>
   shorten(
     c.command ? `${c.source === "process" ? `pid ${c.pid}` : c.tool}: ${c.command}` : (c.tool ?? "?"),

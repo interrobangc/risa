@@ -1,4 +1,4 @@
-// What rotation and `prd rm` decide from a plan and the registry. Pure;
+// What rotation and `rm` decide from a plan and the registry. Pure;
 // rotate-into.sh and rm.sh hand it the facts.
 //
 //   - slicesLeft and doneFlags: landed.mjs's, re-exported.
@@ -11,7 +11,7 @@
 //     as a --continue agent that reloads its base and reruns its check (B-877:
 //     a 166k mid-wave rotation ended five slices waiting on their hand-off checks).
 //   - standingClose(facts, topic): why a standing topic's hand-over closes it
-//     (`prd rm`) instead of opening a fresh session, or null to rotate as now
+//     (`rm`) instead of opening a fresh session, or null to rotate as now
 //     (RISA-952: fixes-ui idled 4 h holding the one lane with only an item that
 //     waited on another topic). Decided by the dispatcher's own pick
 //     (dispatch-pick.mjs) on the facts as they'd be with the topic closed:
@@ -23,7 +23,7 @@
 //     counts as it does in the dispatcher's.
 //
 // CLI:
-//   node rotate.mjs clears-hot <topic>        stdin: `backlog prd list
+//   node rotate.mjs clears-hot <topic>        stdin: the registry's `list
 //                                             --json`; exit 0 when
 //                                             rm.sh clears the row's hot files
 //   node rotate.mjs run-through <plan file>   exit 0 when _Status_ records the
@@ -34,7 +34,7 @@
 //                                             prints the slices at work and exits
 //                                             1 when a context rotation waits
 //   node rotate.mjs standing-close <topic> <main checkout>
-//                                             stdin: `backlog prd list --json`;
+//                                             stdin: the registry's `list --json`;
 //                                             exit 0 and prints why when the
 //                                             hand-over closes the topic; exit 1
 //                                             to rotate; exit 2 when the facts
@@ -70,7 +70,7 @@ export function briefProblem(/** @type {string} */ file) {
 }
 
 /**
- * @param {{ topic: string, flags: string[], hot?: string[] }[]} rows the registry (`prd list --json`)
+ * @param {{ topic: string, flags: string[], hot?: string[] }[]} rows the registry (`list --json`)
  * @param {string} topic
  */
 export function clearsHot(rows, topic) {
