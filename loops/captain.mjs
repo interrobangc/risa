@@ -15,6 +15,8 @@
 // comes from the pool minus those; any other role's persona (machinePersona) starts
 // at its hash and steps to the next free entry, keeping a stepped one in its own
 // record's `persona` so it stays while the session that held its hashed one ends.
+// A starting session's first record already carries it (keptPersona, RISA-1064):
+// session.sh draws the persona for its display name before that record exists.
 // With every name held, the draw is today's. No machine config: nothing is held.
 //
 // CLI: node captain.mjs next   a new captain for the main backlog session,
@@ -170,7 +172,7 @@ export function machinePersona(role, name, flavor = machineFlavor(), facts = {})
   const entry = kept && !held.includes(kept) ? poolOf(role, flavor).find((q) => q.name === kept) : null;
   const p = entry ? { rank: entry.rank, name: entry.name } : personaFor(role, name, flavor, held);
   if (!p) return null;
-  const keep = p.name === personaFor(role, name, flavor)?.name ? undefined : p.name;
+  const keep = keptPersona(role, name, p, flavor);
   if (record && sessions && keep !== (kept ?? undefined)) {
     try {
       writeRecord(sessions, name, { persona: keep });
@@ -179,6 +181,21 @@ export function machinePersona(role, name, flavor = machineFlavor(), facts = {})
     }
   }
   return p;
+}
+
+/**
+ * The persona the ROLE session NAME's record keeps when it wears P: P's name when
+ * that is a name off its hash in the role's pool, else undefined (the hash needs
+ * no keeping; the backlog's admiral lives in its remote). session.sh writes it into
+ * a starting session's first record (session-names.mjs start, RISA-1064), so the
+ * other sessions' draws (machineHeld) read the stepped one from the start.
+ * @param {string} role @param {string} name @param {import("./flavor.mjs").Persona | null | undefined} p
+ * @returns {string | undefined}
+ */
+export function keptPersona(role, name, p, flavor = machineFlavor()) {
+  if (role === "backlog" || !p?.name) return undefined;
+  if (p.name === personaFor(role, name, flavor)?.name) return undefined;
+  return poolOf(role, flavor).some((q) => q.name === p.name) ? p.name : undefined;
 }
 
 /**
