@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 2: slice 2 (opus, RISA-1057–1060 done in it) merged as 9a783a1; tier none, so the gate is `pnpm test`: 4 fails (tidy-cli ×3, ls holds) from backlog.mjs's new static imports; sent back to slice 2's agent as a fix (lazy-load the store modules). Then: second merge, `pnpm test`, sync, PR + Codex review, land. Before: wave 1 landed in main through PR #28 (36eee3e, tier none, Codex clean on 3cf4b59); to-test `to-test/2026-11-28-1041-risa-next-2.md`. Told prd-fixes-bug (risa). **Next session: wave 2** = slice 2 on opus, its brief plus RISA-1057–1060 (fixes in `backlog/inbox-store.mjs`: hashed clone name, absolute temp index, clear tracking ref on an empty remote, safe first-use clone); claim RISA-1057–1060 when it starts.
+**Now:** wave 2 green: slice 2 merged 9a783a1, its fix (lazy store imports) 641b29b; `pnpm test` 2563/2563 on 641b29b; sync needed no merge; slice worktree removed. Next: PR + Codex review, land (tier none). Before: wave 1 landed in main through PR #28 (36eee3e).
 
 | Slice | Wave | State         | Merge into `prd/risa-next-2` |
 | ----- | ---- | ------------- | ---------------------------- |
