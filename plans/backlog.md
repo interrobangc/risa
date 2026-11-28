@@ -20,7 +20,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `self-recovery-3` | — | `self-recovery-2` | `loops/session`, `loops/open-session`, `loops/dispatch`, `loops/prd.sh` | Headless sessions and machinery-owned jobs (RISA-438, RISA-912, RISA-913), cut from self-recovery-2 |
 | `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Also moved to the bottom of the queue by the user 2026-11-24. Released 2026-11-23 by the user. The backlog session as go-between for every agent's questions, and asks queue hygiene. Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic) |
 | `risa-next` | hold | — | — | — |
-| `usage-aware-drain` | — | — | — | Plan-aware drain line, after the orchestrator split |
+| `usage-aware-drain` | hold | — | — | Plan-aware drain line, after the orchestrator split |
 | `after-split-2` | done | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
 
 ## Summary
@@ -96,6 +96,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1001 | bug | triaged | fixes-bug |  | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
 | RISA-1002 | feature | triaged | usage-aware-drain |  | Backup Claude account: when the current account reaches 99% usage on this machine, or on the user's word, Risa pauses work, swaps every session to the other account (work or personal) and resumes there |
 | RISA-1003 | bug | triaged | fixes-tooling |  | rotate's standing-close simulated pick omits facts.landed, so a landed-but-planned row can make a standing topic close and then be restarted by the dispatcher (worktree, stack, test db torn down and rebuilt) |
+| RISA-1004 | bug | triaged | fixes-tooling |  | With RISA_USAGE_WATCH=off, a dead session with an outstanding stall mark is still held out of pick()'s reopen, and resume waits for its recorded reset, so disabling the watch doesn't release it |
 
 ## Items
 
@@ -805,3 +806,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/fixes-tooling): Codex P2 on PR #10 (thread PRRT_kwDOV9ctaM68-zC2, loops/rotate.mjs:139), from RISA-952: pass the gathered landed-topic facts into standingClose's simulated pick, as dispatch-pick's landedWhy() uses them.
+
+### RISA-1004 · bug · With RISA_USAGE_WATCH=off, a dead session with an outstanding stall mark is still held out of pick()'s reopen, and resume waits for its recorded reset, so disabling the watch doesn't release it
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): Codex P2 on PR #10 (thread PRRT_kwDOV9ctaM68-5-h, loops/dispatch.mjs:1622), from RISA-927 fix 2: apply drainSettings' watch-off override to the stalled-session lookup too.
