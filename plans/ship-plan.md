@@ -14,12 +14,12 @@
 
 **For slices 2 and 3:** facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed; `loops/config.mjs` exports `isVersion`; a lock naming no pid is refused, never taken over. Codex's open finding is RISA-1097 (`fixes-bug`: a killed runner leaves its hook alive and its lock takeable).
 
-| Slice | Wave | State                | Merge into `prd/ship` |
-| ----- | ---- | -------------------- | --------------------- |
-| 1     | 1    | merged               | `bde2083`             |
-| 2     | 2    | agent working (opus) | —                     |
-| 4     | 2    | agent working (opus) | —                     |
-| 3     | 3    | —                    | —                     |
+| Slice | Wave | State                                                      | Merge into `prd/ship` |
+| ----- | ---- | ---------------------------------------------------------- | --------------------- |
+| 1     | 1    | merged                                                     | `bde2083`             |
+| 2     | 2    | agent working (opus)                                       | —                     |
+| 4     | 2    | handed off (`df52d59`, quick check passed), merges after 2 | —                     |
+| 3     | 3    | —                                                          | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
