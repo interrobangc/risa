@@ -18,7 +18,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createAsk, getAsk, listAsks } from "./asks.mjs";
-import { CAPTAINS } from "./captain.mjs";
+import { namesOf } from "./flavor.mjs";
 import {
   CONTEXT_OPTIONS,
   CONTEXT_SESSION,
@@ -30,6 +30,9 @@ import {
 } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, MAX_REOPENS, pick } from "./dispatch-pick.mjs";
 import "./config-fixture.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIN = 60_000;
@@ -444,6 +447,7 @@ describe("the tick", () => {
       "doc.mjs",
       "sessions.mjs",
       "captain.mjs",
+      "flavor.mjs",
       "load-gate.mjs",
       "rotate.mjs",
       "open-session.mjs",
@@ -636,7 +640,7 @@ describe("the tick", () => {
       ).exec(rotationLines()[0]);
       expect(m).not.toBeNull();
       // The main backlog session comes back as a new captain, its tab titled the same, never the last one.
-      expect(CAPTAINS).toContain(m?.[1]);
+      expect(ADMIRALS).toContain(m?.[1]);
       expect(m?.[2]).toBe(m?.[1]);
       expect(m?.[1]).not.toBe("Kirk");
     });

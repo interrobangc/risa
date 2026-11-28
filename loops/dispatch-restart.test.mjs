@@ -38,6 +38,7 @@ const MODULES = [
   "doc.mjs",
   "sessions.mjs",
   "captain.mjs",
+  "flavor.mjs",
   "load-gate.mjs",
   "rotate.mjs",
   "open-session.mjs",

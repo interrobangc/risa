@@ -19,7 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPTAINS } from "./captain.mjs";
+import { namesOf } from "./flavor.mjs";
 import {
   ancestorClaude,
   endTarget,
@@ -37,6 +37,9 @@ import {
 } from "./sessions.mjs";
 import "./config-fixture.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
 
 // RISA-994: a busy machine slows every spawned node and shell, so the waits
 // below scale with load (unchanged at a load of 15 or under).
@@ -363,6 +366,8 @@ beforeAll(() => {
     "sessions.mjs",
     "host.mjs",
     "captain.mjs",
+    "flavor.mjs",
+    "machine.mjs",
     "end-session.sh",
     "prompt.sh",
     "planner-model.mjs",
@@ -725,7 +730,7 @@ describe("sessions start through the wrapper", () => {
     const args = readFileSync(join(state, "args"), "utf8").split("\n");
     expect(args.slice(2, 5)).toEqual(["--model", "sonnet", "--remote-control"]);
     // Its display name is a captain's; the record stays backlog and remembers it.
-    expect(CAPTAINS).toContain(args[5]);
+    expect(ADMIRALS).toContain(args[5]);
     expect(record("backlog").remote).toBe(args[5]);
   });
 
@@ -735,7 +740,7 @@ describe("sessions start through the wrapper", () => {
       const r = run("prd.sh", ["plan"], { RISA_TAB_TITLE: "always" });
       expect(r.status).toBe(0);
       const captain = readFileSync(join(state, "args"), "utf8").split("\n")[5];
-      expect(CAPTAINS).toContain(captain);
+      expect(ADMIRALS).toContain(captain);
       expect(captain).not.toBe(last);
       expect(r.stdout).toContain(`\x1b]0;${captain}\x07`);
       expect(record("backlog")).toMatchObject({ kind: "backlog", remote: captain });
