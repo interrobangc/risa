@@ -162,7 +162,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1092 | feature | triaged | risa-next-5 |  | risa init: a flag for the branch prefixes (today branches.prefixes is edited by hand after init), and config.mjs check run from a Risa install with RISA_CONFIG unset checks Risa's own checkout config, not the repo in the current directory, which surprises a second repo's user (say which config it checked, or prefer the cwd's repo) |
 | RISA-1093 | bug | triaged | fixes-test |  | Entry points guarded with pathToFileURL(process.argv[1]).href are a silent no-op through a symlink (about 20 in loops/: slice-brief, status-trim, dispatch, finish, context, drain, bye, cost, host and others): run directly they work, through a symlink they print nothing and exit 0; switch them to isMain from loops/is-main.mjs |
 | RISA-1094 | bug | triaged | fixes-bug |  | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
-| RISA-1095 | feature | inbox |  |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
+| RISA-1095 | feature | triaged | fixes-tooling |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
 
 ## Items
 
@@ -1036,6 +1036,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "The eventual goal is that this machine runs on my business claude account with the personal as backup and the other runs on my personal with the business as backup. In the current flow, this will break inter-machine communication. How are we going to get there?" Chose: a new topic after risa-next-2 (it builds the inbox repo and home claims), with usage-aware-drain (RISA-1002 account swap) after it.
 - 2026-11-28 (plan/ship): The ship topic's Risa notify hook (release/ship.mjs notify) tells only pinned projects on this machine and prints elsewhere=cross-machine-messages; this topic gives it the cross-machine sender (ship planner, 2026-11-28)
+- 2026-11-28 (plan/cross-machine-messages): Planned: plans/cross-machine-messages-prd.md and -plan.md, five slices (planner, 2026-11-28)
 
 ### RISA-1056 · feature · Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults
 
@@ -1374,9 +1375,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1095 · feature · Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),…
 
-- status: inbox
-- prd:
+- status: triaged
+- prd: fixes-tooling
 - owner:
 - commit:
 
 - 2026-11-28 (plan/cross-machine-messages): From the inbox: Ship's notify hook tells projects on other machines through risa message (cross-machine-messages), not only pinned projects here / Run after ship and cross-machine-messages both land; triage to fixes-tooling (cross-machine-messages planner, 2026-11-28)
+- 2026-11-28 (plan/cross-machine-messages): Waits for ship and cross-machine-messages to land; the notify hook's elsewhere line becomes risa message sends (cross-machine-messages planner, 2026-11-28)
