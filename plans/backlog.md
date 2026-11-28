@@ -154,6 +154,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1084 | bug | triaged | fixes-bug |  | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
 | RISA-1085 | bug | triaged | fixes-tooling |  | loops/check-run.test.mjs fails on GitHub's pull_request runs: it expects the logged branch not to be empty, and a PR run checks out a detached merge commit (run 46172609471 on PR #36: expected '' not to be '') |
 | RISA-1086 | bug | triaged | fixes-bug |  | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
+| RISA-1087 | bug | triaged | fixes-bug |  | risa usage keeps a session's old account's 5-hour reading after the session switches account |
 
 ## Items
 
@@ -1285,3 +1286,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-bug): Follow-up of RISA-1070 (slice 14, 9b490d4), which only stops the worktree being made (new.sh refuses a dash-led topic). Needs loops/prd.sh, hot for risa-next-2 when written; proposed by prd-fixes-bug for the user's review.
+
+### RISA-1087 · bug · risa usage keeps a session's old account's 5-hour reading after the session switches account
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: After the 2026-11-28 rollover to ~/.claude-personal, .loops/.usage/<session>.json for backlog, inbox, prd-fixes-tooling and prd-risa-next-2 kept fiveHour 94% (at 17:27Z, business account) beside account=/Users/bo/.claude-personal and fresh sevenDay readings, so risa usage and the usage watch reported 94% for the personal account until the window reset at 18:40Z. A window read under a different account (or before the account field changed) should be dropped, not merged.
+- 2026-11-28 (Robert Bo Davis): Stale fiveHour window merged across an account switch; misleads the rollover watch. Normal urgency: clears itself at the window's reset.
