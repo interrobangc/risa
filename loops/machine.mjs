@@ -39,17 +39,18 @@
 //   node machine.mjs repo --cwd <dir>       the main checkout of DIR's repo when the
 //                                           file lists it, then its project config's
 //                                           path (configFor: DIR's checkout's own
-//                                           risa.json, else the main checkout's);
-//                                           exit 1 when it doesn't
+//                                           config in either form, else the main
+//                                           checkout's); exit 1 when it doesn't; 2,
+//                                           one line, when a checkout has both forms
 //   node machine.mjs work --main <m> [--who <cmd>]   exit 0 when the switch is on;
 //                                           off: one line naming the switch and the
 //                                           variable on stderr, exit 3
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_NAME, loadConfig } from "./config.mjs";
+import { CONFIG_NAME, ConfigError, configIn, loadConfig } from "./config.mjs";
 import { FLAVORS } from "./flavor.mjs";
 
 /** The file's name, and its folder under the home: here and in lib.sh's machine_file. */
@@ -281,14 +282,20 @@ function mainOf(dir) {
 }
 
 /**
- * The project config a checkout reads: its own risa.json when it has one (a
- * worktree's, so a branch's config change shows there), else the main checkout's.
- * @param {{ top: string, main: string, exists: (path: string) => boolean }} facts
- *   TOP, the checkout's root; MAIN, the repo's main checkout; EXISTS, whether a file is there
+ * The project config a checkout reads: its own when it has one, in either form (a
+ * worktree's, so a branch's config change shows there), else the main checkout's;
+ * with neither, the main checkout's risa.json (the path the loader then names).
+ * @param {{ top: string, main: string, exists?: (path: string) => boolean,
+ *   find?: (dir: string) => string | null }} facts TOP, the checkout's root; MAIN, the
+ *   repo's main checkout; FIND, a checkout's config (config.mjs configIn, which throws
+ *   a ConfigError on both forms); EXISTS, a test's stand-in for the disk, which sees
+ *   the risa.json form only
  */
-export function configFor({ top, main, exists }) {
-  const own = join(top, CONFIG_NAME);
-  return exists(own) ? own : join(main, CONFIG_NAME);
+export function configFor({ top, main, exists, find }) {
+  const own = (/** @type {string} */ dir) =>
+    exists?.(join(dir, CONFIG_NAME)) ? join(dir, CONFIG_NAME) : null;
+  const look = find ?? (exists ? own : configIn);
+  return look(top) ?? look(main) ?? join(main, CONFIG_NAME);
 }
 
 /** The root of the checkout DIR is in, or null outside one. @param {string} dir */
@@ -346,7 +353,13 @@ if (isMain()) {
     const main = mainOf(cwd);
     const entry = main ? repoEntry(m, main) : null;
     if (!entry || !main) process.exit(1);
-    console.log(`${main}\n${configFor({ top: topOf(cwd) ?? main, main, exists: existsSync })}`);
+    try {
+      console.log(`${main}\n${configFor({ top: topOf(cwd) ?? main, main })}`);
+    } catch (e) {
+      if (!(e instanceof ConfigError)) throw e;
+      process.stderr.write(`machine.mjs: ${e.problems.join("; ")}\n`);
+      process.exit(2);
+    }
   } else if (verb === "work") {
     const main = opt("--main") ?? usage();
     const m = loadOrExit();

@@ -5,7 +5,7 @@
 //   tooling:browser  loops/browser.test.mjs alone: the browser gate, which waits on
 //                    checks that hang on purpose
 // Each reads the fixture project's config (loops/test-setup.mjs), never a checkout's.
-// The test (20 s) and hook (10 s) limits grow with the machine's 5-minute load above 15,
+// The test (20 s) and hook (10 s) limits grow with the machine's load above 15 (the higher of its 1- and 5-minute loads),
 // up to three times, as the check budget does (loops/test-limits.mjs; RISA_TEST_LOAD sets it).
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";

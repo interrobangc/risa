@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { FAILURE_COLUMNS, failureCounts, parseLog as parseCheckLine, prdOf } from "./check-times.mjs";
 import { branchKinds } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -385,7 +386,7 @@ export function readData({ runLog, checkLog, flakeLog }) {
   return loadData({ runLog: read(runLog), checkLog: read(checkLog), flakeLog: read(flakeLog) });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   let since;
   let json = false;

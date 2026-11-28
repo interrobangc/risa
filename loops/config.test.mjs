@@ -16,11 +16,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  CONFIG_DIR,
+  CONFIG_FILE,
   CONFIG_NAME,
   ConfigError,
   backlogIds,
   branchKinds,
   SHAPE,
+  configIn,
   configPath,
   configProblems,
   flatten,
@@ -267,6 +270,106 @@ describe("the loader", () => {
   });
 });
 
+describe("the folder form (.risa/config.json)", () => {
+  const fixture = readFileSync(FILE, "utf8");
+  /** A temp repo (a .git folder) with the folder form, risa.json, both or neither. */
+  const repoWith = (name, { folder = false, file = false } = {}) => {
+    const dir = realpathSync(mkdtempSync(join(tmp, `${name}-`)));
+    mkdirSync(join(dir, ".git"));
+    if (folder) {
+      mkdirSync(join(dir, CONFIG_DIR));
+      writeFileSync(join(dir, CONFIG_DIR, CONFIG_FILE), fixture);
+    }
+    if (file) writeFileSync(join(dir, CONFIG_NAME), fixture);
+    return dir;
+  };
+  const where = (args, cwd) =>
+    spawnSync(process.execPath, [join(HERE, "config.mjs"), "where", ...args], {
+      cwd,
+      encoding: "utf8",
+      env: env(),
+    });
+
+  it("names the folder and its file beside risa.json", () => {
+    expect([CONFIG_DIR, CONFIG_FILE, CONFIG_NAME]).toEqual([".risa", "config.json", "risa.json"]);
+  });
+
+  it("finds the folder's file, else risa.json, else none; both is an error naming both", () => {
+    const folder = repoWith("folder", { folder: true });
+    expect(configIn(folder)).toBe(join(folder, ".risa/config.json"));
+    const file = repoWith("file", { file: true });
+    expect(configIn(file)).toBe(join(file, "risa.json"));
+    expect(configIn(repoWith("neither"))).toBeNull();
+    // A .risa folder with no config.json in it is not the folder form.
+    const empty = repoWith("empty", { file: true });
+    mkdirSync(join(empty, CONFIG_DIR));
+    expect(configIn(empty)).toBe(join(empty, "risa.json"));
+    const both = repoWith("both", { folder: true, file: true });
+    let error;
+    try {
+      configIn(both);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(error.message).toContain(join(both, ".risa/config.json"));
+    expect(error.message).toContain(join(both, "risa.json"));
+  });
+
+  it("takes RISA_CONFIG as a file or a .risa folder, else the tool root's folder form", () => {
+    const folder = repoWith("env", { folder: true });
+    expect(configPath({ RISA_CONFIG: join(folder, "risa.json") })).toBe(join(folder, "risa.json"));
+    expect(configPath({ RISA_CONFIG: join(folder, CONFIG_DIR) })).toBe(join(folder, ".risa/config.json"));
+    expect(configPath({ RISA_CONFIG: join(folder, CONFIG_DIR, CONFIG_FILE) })).toBe(
+      join(folder, ".risa/config.json"),
+    );
+    // Unset: the tool's own checkout in the folder form, and an installed package's project.
+    expect(configPath({}, tmp, folder)).toBe(join(folder, ".risa/config.json"));
+    const pkg = join(folder, "node_modules/risa");
+    mkdirSync(pkg, { recursive: true });
+    expect(configPath({}, join(folder, "sub"), pkg)).toBe(join(folder, ".risa/config.json"));
+    // Neither form in the tool's root: its risa.json, as before.
+    const neither = repoWith("bare");
+    expect(configPath({}, tmp, neither)).toBe(join(neither, "risa.json"));
+  });
+
+  it("gives the repo's root as root in both forms", () => {
+    const folder = repoWith("root-folder", { folder: true });
+    expect(loadConfig({ env: { RISA_CONFIG: join(folder, CONFIG_DIR) } })).toMatchObject({
+      path: join(folder, ".risa/config.json"),
+      root: folder,
+    });
+    expect(loadConfig({ path: join(folder, ".risa/config.json") }).root).toBe(folder);
+    const file = repoWith("root-file", { file: true });
+    expect(loadConfig({ path: join(file, "risa.json") }).root).toBe(file);
+  });
+
+  it("names both forms when there is no config", () => {
+    const missing = join(tmp, "nowhere", CONFIG_NAME);
+    expect(() => loadConfig({ path: missing })).toThrow(/\.risa\/config\.json or risa\.json/);
+  });
+
+  it("prints a checkout's config with `where`, and exits 1 with none, 2 with both", () => {
+    const folder = repoWith("where-folder", { folder: true });
+    const file = repoWith("where-file", { file: true });
+    expect(where([folder])).toMatchObject({ status: 0, stdout: `${join(folder, ".risa/config.json")}\n` });
+    expect(where([file])).toMatchObject({ status: 0, stdout: `${join(file, "risa.json")}\n` });
+    expect(where([], folder)).toMatchObject({ status: 0, stdout: `${join(folder, ".risa/config.json")}\n` });
+    expect(where([repoWith("where-none")])).toMatchObject({ status: 1, stdout: "" });
+    const both = where([repoWith("where-both", { folder: true, file: true })]);
+    expect(both.status).toBe(2);
+    expect(both.stderr).toMatch(/two project configs/);
+    expect(where(["a", "b"]).status).toBe(2);
+  });
+
+  it("dumps the folder form's repo root as _root", () => {
+    const folder = repoWith("dump", { folder: true });
+    const r = cli(["dump"], { RISA_CONFIG: join(folder, CONFIG_DIR) });
+    const [path, root] = r.stdout.split("\n");
+    expect([path, root]).toEqual([`_path=${join(folder, ".risa/config.json")}`, `_root=${folder}`]);
+  });
+});
+
 describe("the inbox group", () => {
   const REPO = "git@github.com:someone/ideas.git";
 
@@ -460,9 +563,10 @@ describe("config get", () => {
   });
 
   it("dumps its file, then every set value as key=value, a list one item a line", () => {
-    const [path, ...lines] = cli(["dump"]).stdout.trimEnd().split("\n");
-    // First the config's own file (_path, for lib.sh's stack_hook), then the values.
+    const [path, root, ...lines] = cli(["dump"]).stdout.trimEnd().split("\n");
+    // First the config's own file (_path, for lib.sh's stack_hook) and its repo root, then the values.
     expect(path).toMatch(/^_path=\/.+\.json$/);
+    expect(root).toBe(`_root=${dirname(FILE)}`);
     expect(lines).toEqual(flatten(config).map(([k, v]) => `${k}=${v}`));
     expect(lines).toContain("branches.protected.0=main");
     expect(lines).toContain("backlog.prdsHeading=## PRDs");

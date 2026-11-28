@@ -131,7 +131,9 @@ echo "$?" > "$STUB_STATE/code"
   for (const f of readdirSync(HERE).filter(
     (f) =>
       f.endsWith(".sh") ||
-      ["slice-fields.mjs", "config.mjs", "run-log.mjs", "sessions.mjs", "host.mjs"].includes(f),
+      ["slice-fields.mjs", "config.mjs", "run-log.mjs", "is-main.mjs", "sessions.mjs", "host.mjs"].includes(
+        f,
+      ),
   ))
     copyFileSync(join(HERE, f), join(main, "loops", f));
   env.RISA_CONFIG = stubHookConfig(main, { copy: true });
