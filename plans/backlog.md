@@ -163,6 +163,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1093 | bug | triaged | fixes-test |  | Entry points guarded with pathToFileURL(process.argv[1]).href are a silent no-op through a symlink (about 20 in loops/: slice-brief, status-trim, dispatch, finish, context, drain, bye, cost, host and others): run directly they work, through a symlink they print nothing and exit 0; switch them to isMain from loops/is-main.mjs |
 | RISA-1094 | bug | triaged | fixes-bug |  | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
 | RISA-1095 | feature | triaged | fixes-tooling |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
+| RISA-1096 | bug | triaged | fixes-tooling |  | Tests time out at high load even with the load-aware limits: prd-ship's full check at load 37-40 had 15 failures and 22 timeout lines (land-unsynced 5, recover-down 2, stack 2, ask, project-check, recover-unattended, rotate, rotate-into, rotate-standing; rotate tests ran 45-77 s); the check should wait out the load gate or the limits should scale further |
 
 ## Items
 
@@ -1206,6 +1207,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - 2026-11-28 (prd/fixes-tooling): Seen 2026-11-28 at wave 12's gate on b60d88c after the account switch: pnpm test 10 failed; env -u CLAUDE_CONFIG_DIR pnpm exec vitest run loops/usage.test.mjs loops/drain.test.mjs: 51 passed. CI has no such variable, so it is green there. Likely fix in loops/test-env* or test-setup.mjs (scrub CLAUDE_CONFIG_DIR), or the fixtures writing readings for the folder the code reads (RISA-927).
 - 2026-11-28 (prd/fixes-bug): Seen again 2026-11-28 by prd-fixes-bug: wave 5's risa check on 24ac588 failed the same 10 tests in usage, drain and dispatch tests under CLAUDE_CONFIG_DIR=~/.claude-personal; the three files pass (163 tests) with it unset.
 - 2026-11-28 (prd/risa-next-4): seen again 2026-11-28 in prd/risa-next-4's full check from a session with CLAUDE_CONFIG_DIR set: 21 tests in 12 files failed; with it unset 20 of them pass (the other, a 28 s timeout in loops/land-unsynced.test.mjs 'lands when dev's tip reads file' at load 20+, passes alone)
+- 2026-11-28 (Robert Bo Davis): prd-ship wave 1 (2026-11-28, prd/ship 221bff2): 11 failed, not 10: dispatch.test.mjs 8, drain.test.mjs 2, usage.test.mjs 1.
 
 ### RISA-1077 · bug · inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it…
 
@@ -1384,3 +1386,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (plan/cross-machine-messages): From the inbox: Ship's notify hook tells projects on other machines through risa message (cross-machine-messages), not only pinned projects here / Run after ship and cross-machine-messages both land; triage to fixes-tooling (cross-machine-messages planner, 2026-11-28)
 - 2026-11-28 (plan/cross-machine-messages): Waits for ship and cross-machine-messages to land; the notify hook's elsewhere line becomes risa message sends (cross-machine-messages planner, 2026-11-28)
+
+### RISA-1096 · bug · Tests time out at high load even with the load-aware limits: prd-ship's full check at load 37-40 had 15 failures and 22 timeout lines (land-unsynced 5, recover-down 2, stack 2, ask, project-check, recover-unattended, rotate, rotate-into, rotate-standing; rotate tests ran 45-77 s); the check should wait out the load gate or the limits should scale further
+
+- status: triaged
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From Capt Freeman · prd-ship, 2026-11-28, prd/ship 221bff2; follows RISA-1088 (test limits under load, v0.2.3).
