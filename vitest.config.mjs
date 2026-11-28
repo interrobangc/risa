@@ -1,6 +1,6 @@
 // The tool's tests, in three projects (the names projects' risa.json files use):
 //   core:unit        the check plan, the check times and the CI modules
-//   tooling:unit     the rest of loops/ and backlog/, against throwaway git repos in
+//   tooling:unit     the rest of loops/ and backlog/, and release/ (Risa's ship hooks), against throwaway git repos in
 //                    the OS temp dir; each runs dozens of git commands, so 20 s each
 //   tooling:browser  loops/browser.test.mjs alone: the browser gate, which waits on
 //                    checks that hang on purpose
@@ -39,7 +39,7 @@ export default defineConfig({
       {
         test: {
           name: "tooling:unit",
-          include: ["loops/**/*.test.mjs", "backlog/**/*.test.mjs"],
+          include: ["loops/**/*.test.mjs", "backlog/**/*.test.mjs", "release/**/*.test.mjs"],
           exclude: ["loops/check-times.test.mjs", "loops/check-plan.test.mjs", "loops/browser.test.mjs"],
           testTimeout,
           hookTimeout,

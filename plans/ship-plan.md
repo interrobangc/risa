@@ -8,14 +8,20 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Now (2026-11-28):** wave 1: slice 1 (opus) handed off at `937185a` (slice check green, 15 tests) and merged as `bde2083`. `risa tier`: none (tooling only), so the gate is the full check on the synced tip. `risa sync` needed no merge. The local full check can't go green here: run 1 failed 11 tests in dispatch, drain and usage (RISA-1076: this session sets `CLAUDE_CONFIG_DIR`); run 2 with it unset passed those and failed 15 others on timeouts at load 37 to 40 (land-unsynced, recover-down, stack, rotate and others); no file fails in both and `loops/ship.test.mjs` passed in both. So the gate is `ci.yml` on PR 47 (https://github.com/interrobangc/risa/pull/47), told to the backlog session. The backlog session agreed (its advice: a PR run failing only on RISA-1085 counts as green; the load timeouts are RISA-1096). Codex round 1 on `221bff2`: two findings, both verified real and sent to slice 1's agent as one fix (a fix in flight: no rotation): P1 thread `PRRT_kwDOV9ctaM69IG2S` (`.lock` is created empty then written, so a second ship can take over a live lock) and P2 thread `PRRT_kwDOV9ctaM69IG2a` (`--from` saves the rewound record only after its first hook). The fix: `d5583b5` on the slice (slice check green, 18 tests), merged as `aa46ca1` and pushed; both threads answered with the fixing commit. Out now: Codex round 2 (`risa review ship --again --wait`) and PR 47's CI run on `aa46ca1`. Next: resolve threads that are current, land on a green PR run and a clean review (`risa land ship`), docs, `status-trim`, rotate (past the soft context limit: rotate at this wave boundary).
+**Now (2026-11-28):** wave 1 landed in main through PR 47 (`f0bb832`). **Wave 2 merged:** slice 2 as `d6456cd` (opus; hook keys out of `risa.json`, `release` kept in `paths.tooling`), slice 4 as `d4d9c3b` (opus). `risa tier` proposes unit (`risa.json`, a file no rule covers); the wave's run `risa ci run unit --wait` is out. Worktrees `ship-2` and `ship-4` stay until it is green. Next: PR (`risa pr ship`), Codex review, land, report, `risa status-trim ship`, `risa rm ship-2`/`ship-4`, then rotate for wave 3 (slice 3, opus).
 
-| Slice | Wave | State  | Merge into `prd/ship` |
-| ----- | ---- | ------ | --------------------- |
-| 1     | 1    | merged | `bde2083`             |
-| 2     | 2    | —      | —                     |
-| 4     | 2    | —      | —                     |
-| 3     | 3    | —      | —                     |
+**Open issue, the hooks in `risa.json`:** the linked install (v0.2.3, `008e6ff`) predates slice 1 and refuses `hooks.ship*` as unknown keys, so with them in this repo's `risa.json` every `risa` command here fails (seen in `ship-2`). Decision: slices 2 and 3 land without the four hook keys; they go into `risa.json` as a last small change once a release containing `f0bb832` or later is installed and `~/.local/bin/risa` links to it (the release and relink aren't ours). The backlog session agrees with the order (and against any window on the checkout's `bin/risa`); v0.2.4 isn't cut, it is asking the user and will message this session when it is installed and linked. Slice 3's brief needs the same: no `hooks.shipSmoke`/`hooks.shipNotify` in `risa.json` until then.
+
+**Gate on this machine:** the local full check can't go green: RISA-1076 (this session sets `CLAUDE_CONFIG_DIR`: dispatch, drain, usage tests fail) and, with it unset, load timeouts (RISA-1096). Wave 1's gate was `ci.yml` on the PR, agreed with the backlog session; its one failure was RISA-1085 (`loops/check-run.test.mjs` on pull-request runs), known, and `risa land` at tier none landed on Codex's clean verdict. Do the same until those land.
+
+**For slices 2 and 3:** facts are stored per phase as raw `key=value` lines keeping repeats; the report's resume line uses `tool.prd`; `--from` needs every earlier phase passed; `loops/config.mjs` exports `isVersion`; a lock naming no pid is refused, never taken over. Codex's open finding is RISA-1097 (`fixes-bug`: a killed runner leaves its hook alive and its lock takeable).
+
+| Slice | Wave | State                     | Merge into `prd/ship` |
+| ----- | ---- | ------------------------- | --------------------- |
+| 1     | 1    | merged                    | `bde2083`             |
+| 2     | 2    | merged (fix `98ee143` in) | `d6456cd`             |
+| 4     | 2    | merged                    | `d4d9c3b`             |
+| 3     | 3    | —                         | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
