@@ -145,6 +145,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1075 | bug | triaged | fixes-test |  | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
 | RISA-1076 | bug | triaged | fixes-tooling |  | Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables |
 | RISA-1077 | bug | triaged | fixes-bug |  | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
+| RISA-1078 | bug | triaged | fixes-bug |  | Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim |
+| RISA-1079 | bug | triaged | fixes-bug |  | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
+| RISA-1080 | bug | triaged | fixes-bug |  | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
+| RISA-1081 | bug | triaged | fixes-bug |  | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
 
 ## Items
 
@@ -1191,3 +1195,39 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it by hand / During the account rollover (2026-11-28 ~12:29) the backlog session (Admiral Marcus) told the risa inbox session to run risa rotate --self because the business account's 5h usage was at 93%. The inbox agent declined: its prompt lets it hand off only on the user's word or a context-watch reminder, never on a peer's request. The user had to exit it and let the dispatcher's keep-alive reopen it. Expected: a rollover or rotate request from the project's backlog session (or a dispatcher-driven rollover) rotates the inbox session without the user. Transcript: ~/.claude/projects/-Users-bo--risa-inbox/9d2e8124-bba2-4375-9338-3b1cf0a4ee63.jsonl
 - 2026-11-28 (Robert Bo Davis): Inbox prompt allows rotate only on the user's word; a backlog or dispatcher rollover request should rotate it. Normal urgency: rollovers are rare and exiting by hand works.
+
+### RISA-1078 · bug · Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnH, loops/home.mjs:197); verified by reading homeTick: the claim loop has no work check.
+
+### RISA-1079 · bug · Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnI, loops/dispatch.mjs:2107); verified in the code. Base inbox readiness on the keeper choice and the inbox claim only.
+
+### RISA-1080 · bug · Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnJ, loops/home.mjs:209); verified in the code: fail-open.
+
+### RISA-1081 · bug · backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnL, backlog/inbox-move.mjs:172); verified in the code: the retry's store edit only appends.
