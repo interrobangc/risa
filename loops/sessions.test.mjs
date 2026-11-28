@@ -18,7 +18,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CAPTAINS } from "./captain.mjs";
 import {
   ancestorClaude,
@@ -36,6 +36,11 @@ import {
   writeRecord,
 } from "./sessions.mjs";
 import "./config-fixture.mjs";
+import { BASE, scaledWait } from "./test-limits.mjs";
+
+// RISA-994: a busy machine slows every spawned node and shell, so the waits
+// below scale with load (unchanged at a load of 15 or under).
+vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -286,8 +291,8 @@ case \${STUB_MODE:-exit} in
   exit) exit "\${STUB_EXIT:-0}" ;;
   ancestor) bash -c 'node "$SESSIONS_MJS" ancestor; echo "exit $?"' > "$STUB_STATE/ancestor" ;;
   end) bash "$PRD_SH" end > "$STUB_STATE/end.out" 2>&1; sleep 5 ;;
-  wait) touch "$STUB_STATE/ready"; for i in $(seq 100); do sleep 0.1; done ;;
-  stubborn) trap '' TERM; touch "$STUB_STATE/ready"; for i in $(seq 100); do sleep 0.1; done ;;
+  wait) touch "$STUB_STATE/ready"; for i in $(seq "\${STUB_TICKS:-100}"); do sleep 0.1; done ;;
+  stubborn) trap '' TERM; touch "$STUB_STATE/ready"; for i in $(seq "\${STUB_TICKS:-100}"); do sleep 0.1; done ;;
 esac
 `;
 
@@ -298,9 +303,22 @@ const stubPid = () => Number(readFileSync(join(state, "pid"), "utf8").trim());
 const run = (script, args, extra = {}, cwd = main) =>
   spawnSync("bash", [scripts(script), ...args], { cwd, encoding: "utf8", env: { ...env, ...extra } });
 
-/** Starts a command in the background; resolves {code, signal, stdout, stderr} when it exits. */
+/** The children start() made: each in its own process group, killed whole after its test. */
+const started = [];
+/**
+ * Starts a command in the background; resolves {code, signal, stdout, stderr} when it exits.
+ * A waiting stub lives STUB_TICKS tenths of a second: 10 s, scaled, so a slow
+ * `prd end` under load still finds it running.
+ */
 function start(cmd, args, extra = {}, cwd = main) {
-  const child = spawn(cmd, args, { cwd, env: { ...env, ...extra }, stdio: ["ignore", "pipe", "pipe"] });
+  const ticks = String(Math.round(scaledWait(10_000) / 100));
+  const child = spawn(cmd, args, {
+    cwd,
+    env: { ...env, STUB_TICKS: ticks, ...extra },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  started.push(child);
   let stdout = "",
     stderr = "";
   child.stdout.on("data", (d) => (stdout += d));
@@ -311,7 +329,7 @@ function start(cmd, args, extra = {}, cwd = main) {
   return { child, done };
 }
 const until = async (what, ms = 10_000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + scaledWait(ms);
   while (!what()) {
     if (Date.now() > end) throw new Error("timed out waiting");
     await new Promise((r) => setTimeout(r, 50));
@@ -372,11 +390,21 @@ beforeAll(() => {
     SESSIONS_MJS: scripts("sessions.mjs"),
     PRD_SH: scripts("prd.sh"),
   };
-}, 60_000);
+}, scaledWait(60_000));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   rmSync(state, { recursive: true, force: true });
   rmSync(sessions, { recursive: true, force: true });
+});
+// A failed test's stub would still run under session.sh prd-t, and the next
+// test's `prd end` would find two live sessions or end the wrong one.
+afterEach(() => {
+  for (const c of started.splice(0))
+    try {
+      process.kill(-(/** @type {number} */ (c.pid)), "SIGKILL");
+    } catch {
+      /* gone */
+    }
 });
 
 describe("session.sh", () => {

@@ -18,11 +18,16 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAsk, dismissAsk, getAsk } from "./asks.mjs";
 import { byeLines, byeVerdict } from "./bye.mjs";
 import { createNotice } from "./notices.mjs";
 import "./config-fixture.mjs";
+import { BASE, scaledWait } from "./test-limits.mjs";
+
+// RISA-994: a busy machine slows every spawned node and shell, so the waits
+// below scale with load (unchanged at a load of 15 or under).
+vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -154,7 +159,9 @@ const scripts = (f) => join(main, "loops", f);
 
 /** Runs the stub to its end: the bye output, its exit code (null when the session was ended) and whether it was ended. */
 function bye(extra = {}) {
-  const child = spawn(stub, [], { env: { ...env, ...extra }, stdio: "ignore" });
+  // end-session.sh's TERM-to-KILL wait: 5 s, scaled, so a stub slow to run its TERM trap isn't killed first.
+  const endWait = String(Math.round(scaledWait(5_000) / 1000));
+  const child = spawn(stub, [], { env: { ...env, RISA_END_WAIT: endWait, ...extra }, stdio: "ignore" });
   return new Promise((resolve) =>
     child.on("close", () => {
       const read = (f) => (existsSync(join(state, f)) ? readFileSync(join(state, f), "utf8") : null);
@@ -163,7 +170,7 @@ function bye(extra = {}) {
   );
 }
 const until = async (what, ms = 10_000) => {
-  const end = Date.now() + ms;
+  const end = Date.now() + scaledWait(ms);
   while (!what()) {
     if (Date.now() > end) throw new Error("timed out waiting");
     await new Promise((r) => setTimeout(r, 50));
@@ -222,14 +229,13 @@ beforeAll(() => {
     RISA_ASKS_DIR: asksDir,
     RISA_NOTICES_DIR: noticesDir,
     RISA_LEASE_ROOT: leaseRoot,
-    RISA_END_WAIT: "5",
     RISA_SESSION: "",
     STUB_STATE: state,
     STUB_CWD: main,
     PRD_SH: scripts("prd.sh"),
     SESSIONS_MJS: scripts("sessions.mjs"),
   };
-}, 60_000);
+}, scaledWait(60_000));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   for (const d of [state, leaseRoot, asksDir, noticesDir, join(loops, ".sessions")])
