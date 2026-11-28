@@ -36,6 +36,11 @@ describe("hermeticEnv", () => {
       expect(env).not.toHaveProperty(name);
   });
 
+  it("drops an inherited CLAUDE_CONFIG_DIR (RISA-1076)", () => {
+    const env = hermeticEnv({ ...SESSION, CLAUDE_CONFIG_DIR: "/home/sam/.claude-second" });
+    expect(env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+  });
+
   it("keeps RISA_TEST_CONFIG as the config", () => {
     const env = hermeticEnv({ ...SESSION, RISA_TEST_CONFIG: "/tmp/test/risa.json" });
     expect(env.RISA_CONFIG).toBe("/tmp/test/risa.json");

@@ -22,6 +22,8 @@ export const SESSION_VARS = [
   "RISA_DISPATCH_MAIN",
   "RISA_CONFIG_FOUND",
   "CLAUDECODE",
+  // The session's Claude account folder: a test that needs one sets its own (RISA-1076).
+  "CLAUDE_CONFIG_DIR",
 ];
 /** A session's state variables, by prefix: the usage watch's and Claude Code's own. */
 export const SESSION_PREFIXES = ["RISA_USAGE_", "CLAUDE_CODE_"];
