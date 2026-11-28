@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -23,11 +24,13 @@ import {
   END_WAIT_MS,
   STOP_PERCENT,
   drainDecision,
+  drainHolds,
   drainSettings,
   isLanding,
   landingUnder,
   limitActions,
   probeAllowed,
+  readAllowance,
   sessionAccount,
   sessionDrains,
   stalledSessions,
@@ -199,6 +202,113 @@ describe("the pick while draining or limited", () => {
 
   it("a pause still wins", () => {
     expect(pick({ ...facts("draining"), paused: true }).why).toBe("the dispatcher is paused");
+  });
+});
+
+describe("the allowance (dispatch --allow): one topic past the drain line", () => {
+  const facts = (percent, allow, extra = {}) => {
+    const d = decide(usageOf({ fiveHour: { percent } }), { allow });
+    return {
+      rows: [
+        { topic: "a", state: "planned" },
+        { topic: "b", state: "planned" },
+        { topic: "p", state: "to-write", waiting: 3 },
+      ],
+      now: NOW,
+      drain: { state: d.state, why: d.why, allow: d.allow ?? null },
+      ...extra,
+    };
+  };
+
+  it("at 96% the allowed topic starts and another doesn't; the drain says so", () => {
+    const d = decide(usageOf({ fiveHour: { percent: 96 } }), { allow: "b" });
+    expect(d.state).toBe("draining");
+    expect(d.allow).toBe("b");
+    expect(d.why).toContain("b is allowed past it");
+    expect(drainHolds(d, "b")).toBe(false);
+    expect(drainHolds(d, "a")).toBe(true);
+    const p = pick(facts(96, "b"));
+    expect(p.action).toBe("start");
+    expect(p.topic).toBe("b");
+    const why = Object.fromEntries(p.reasons.map((r) => [r.topic, r.why]));
+    expect(why.a).toMatch(/^no start while usage is draining/);
+    expect(why.p).toMatch(/^no plan while usage is draining/);
+    // Without it, nothing starts.
+    expect(pick(facts(96, null)).action).toBe("none");
+  });
+
+  it("at 96% the allowed topic is planned, and its dead orchestrator reopened", () => {
+    const planned = pick(facts(96, "p"));
+    expect(planned.action).toBe("plan");
+    expect(planned.topic).toBe("p");
+    const dead = {
+      rows: [{ topic: "d", state: "running" }],
+      worktrees: [{ name: "d", branch: "prd/d" }],
+      sessions: [{ name: "prd-d", live: false, managed: true }],
+    };
+    expect(pick(facts(96, "d", dead)).action).toBe("reopen");
+    expect(pick(facts(96, "a", dead)).action).toBe("none");
+  });
+
+  it("at 98% neither starts: the allowance ends at the stop", () => {
+    const d = decide(usageOf({ fiveHour: { percent: 98 } }), { allow: "b" });
+    expect(d.state).toBe("limited");
+    expect(d.why).toContain("the allowance for b ends here");
+    expect(drainHolds(d, "b")).toBe(true);
+    expect(drainHolds(d, "a")).toBe(true);
+    const p = pick(facts(98, "b"));
+    expect(p.action).toBe("none");
+    const why = Object.fromEntries(p.reasons.map((r) => [r.topic, r.why]));
+    expect(why.a).toMatch(/^no start while usage is limited/);
+    expect(why.b).toMatch(/^no start while usage is limited/);
+  });
+
+  it("under the line it changes nothing, and never holds", () => {
+    const d = decide(usageOf({ fiveHour: { percent: 50 } }), { allow: "b" });
+    expect(d.state).toBe("normal");
+    expect(drainHolds(d, "a")).toBe(false);
+    expect(pick(facts(50, "b")).topic).toBe("a");
+  });
+
+  it("the resume of the allowed topic's session goes ahead while draining; another waits", () => {
+    const base = {
+      marks: [],
+      sessions: [
+        { name: "prd-a", live: false, managed: true },
+        { name: "prd-b", live: false, managed: true },
+      ],
+      worktrees: [
+        { name: "a", branch: "prd/a" },
+        { name: "b", branch: "prd/b" },
+      ],
+      claimed: {
+        "prd-a": { at: NOW - MIN, since: NOW - 60 * MIN, pid: 1, error: "limited" },
+        "prd-b": { at: NOW - MIN, since: NOW - 60 * MIN, pid: 2, error: "limited" },
+      },
+      now: NOW,
+    };
+    const d = decide(usageOf({ fiveHour: { percent: 96 } }), { allow: "b" });
+    const r = resumeDecision({ ...base, drain: d });
+    expect(r.waits).toContainEqual({ session: "prd-a", why: "usage is draining" });
+    expect(r.waits.map((w) => w.session)).not.toContain("prd-b");
+    expect(r.acts.map((a) => a.session)).toContain("prd-b");
+  });
+
+  it("reads a stored topic; none, an empty or a bad one is no allowance", () => {
+    const dir = mkdtempSync(join(tmpdir(), "drain-allow-"));
+    try {
+      const f = join(dir, ".drain-allow");
+      expect(readAllowance(f)).toBe(null);
+      expect(readAllowance(null)).toBe(null);
+      writeFileSync(f, "fixes-tooling\n");
+      expect(readAllowance(f)).toBe("fixes-tooling");
+      writeFileSync(f, "a b\n");
+      expect(readAllowance(f)).toBe(null);
+      writeFileSync(f, "");
+      expect(readAllowance(f)).toBe(null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -583,6 +693,62 @@ describe("new.sh slice while draining", () => {
       } finally {
         fresh();
       }
+    }
+  });
+
+  it("--allow lets one topic's slice past the drain line, never the stop; --allow none clears it", () => {
+    const dispatch = (...args) =>
+      spawnSync("node", [join(HERE, "dispatch.mjs"), ...args], {
+        cwd: main,
+        env: { ...env, RISA_MAIN: main },
+        encoding: "utf8",
+      });
+    const allowFile = join(loops, ".drain-allow");
+    try {
+      reading(96);
+      const set = dispatch("--allow", "t");
+      expect(set.status, set.stderr).toBe(0);
+      expect(set.stdout).toContain(
+        "drain allowance: t starts, plans, reopens and resumes past the drain line",
+      );
+      expect(set.stdout).toContain("(was none)");
+      expect(readFileSync(allowFile, "utf8")).toBe("t\n");
+      expect(readFileSync(join(loops, ".dispatch.log"), "utf8")).toContain("drain allowance: t");
+      let r = newSlice();
+      expect(r.status, r.out).toBe(0);
+      expect(existsSync(join(loops, "t-1"))).toBe(true);
+      fresh();
+
+      // Another topic's allowance doesn't let t past.
+      expect(dispatch("--allow", "other").stdout).toContain("(was t)");
+      r = newSlice();
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain("refused: slice t-1: usage is draining");
+      fresh();
+
+      // At the stop the allowance ends.
+      dispatch("--allow", "t");
+      reading(99);
+      r = newSlice();
+      expect(r.status, r.out).toBe(1);
+      expect(r.out).toContain("refused: slice t-1: usage is limited");
+      fresh();
+
+      // none clears it.
+      const cleared = dispatch("--allow", "none");
+      expect(cleared.stdout).toContain("drain allowance: none (was t)");
+      expect(existsSync(allowFile)).toBe(false);
+      reading(96);
+      r = newSlice();
+      expect(r.status, r.out).toBe(1);
+      fresh();
+
+      const bad = dispatch("--allow", "a b");
+      expect(bad.status).toBe(2);
+      expect(bad.stderr).toContain("--allow takes a topic, or none");
+    } finally {
+      rmSync(allowFile, { force: true });
+      fresh();
     }
   });
 

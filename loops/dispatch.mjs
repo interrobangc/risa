@@ -16,6 +16,8 @@
 //                                           its --every and keep-alive state; none running: starts one;
 //                                           no iTerm2: refuses before stopping anything
 //   prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
+//   prd dispatch --allow <topic>|none  between the drain line and the stop, TOPIC still starts, plans,
+//                                           reopens and resumes (read every tick; drain.mjs drainHolds)
 //
 // The actions:
 //   - start: `new.sh prd <topic>`, then a managed, run-through orchestrator
@@ -65,7 +67,8 @@
 //
 // Each tick first takes the drain decision (drain.mjs) from the usage readings
 // (usage.mjs, .loops/.usage/): draining (RISA_USAGE_DRAIN, 85%) holds starts,
-// plans, reopens and the keep-alive (--resume doesn't override it); limited
+// plans, reopens and the keep-alive (--resume doesn't override it; --allow <topic> lets that
+// one topic start, plan, reopen and resume, .loops/.drain-allow); limited
 // (RISA_USAGE_STOP, 98%, overage, or a session stopped on a limit) also ends
 // each managed prd or plan session not running a landing (marked stalled; KILL a tick
 // later if it ignored TERM), files one report naming the live hand-opened, backlog and
@@ -139,11 +142,13 @@ import {
 } from "./dispatch-stuck.mjs";
 import {
   LIMITED_ERROR,
+  allowableTopic,
   drainDecision,
   drainSettings,
   landingUnder,
   limitActions,
   sessionAccount,
+  readAllowance,
   sessionDrains,
   stalledSessions,
 } from "./drain.mjs";
@@ -418,6 +423,7 @@ export function pathsOf(/** @type {string} */ main, env = process.env) {
     requests: env.RISA_REQUESTS_DIR || join(loops, ".requests"),
     notices: env.RISA_NOTICES_DIR || join(loops, ".notices"),
     cap: join(loops, ".prd-cap"),
+    allow: join(loops, ".drain-allow"),
     watch: env.RISA_WATCH_DIR || join(loops, ".watch"),
     usage: env.RISA_USAGE_DIR || join(dirname(env.RISA_SESSIONS_DIR || join(loops, ".sessions")), ".usage"),
     landing: env.RISA_LANDING_DIR || join(loops, ".landing"),
@@ -454,7 +460,7 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   stuck?: { lastTickAt?: number, clockFrom?: number | null,
  *     sessions?: Record<string, import("./dispatch-stuck.mjs").StuckEntry>, reported?: string[] },
  *   keepAlive?: import("./keep-alive.mjs").KeepState,
- *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
+ *   drain?: { state?: string, unknownReported?: boolean, reported?: string[], allow?: string | null },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
  *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
@@ -1298,6 +1304,7 @@ function drainOf(
     now,
     staleMs: staleMsOf(env),
     sessions: g.records.map((r) => ({ live: r.live, startedMs: Date.parse(r.record.started ?? "") })),
+    allow: readAllowance(p.allow),
   });
 }
 
@@ -1431,12 +1438,33 @@ function drainStep(
       }
     }
   }
-  if (!dryRun && (prev.state !== drain.state || prev.unknownReported !== unknownReported || acted))
+  const allow = drain.allow ?? null;
+  const allowChanged = (prev.allow ?? null) !== allow;
+  if (
+    !dryRun &&
+    (prev.state !== drain.state || prev.unknownReported !== unknownReported || acted || allowChanged)
+  )
     updateState(p.state, (s) => {
-      s.drain = { state: drain.state, unknownReported, reported };
+      s.drain = { state: drain.state, unknownReported, reported, allow };
     });
-  if (prev.state !== drain.state && (prev.state !== undefined || drain.state !== "normal"))
+  if (
+    (prev.state !== drain.state && (prev.state !== undefined || drain.state !== "normal")) ||
+    (allowChanged && drain.state === "draining")
+  )
     out(`usage: now ${drain.state}: ${drain.why}`);
+  if (dryRun) {
+    const stored = readAllowance(p.allow);
+    if (stored)
+      out(
+        `usage: allowance: ${stored} (${toolCmd.prd} dispatch --allow) ${
+          drain.state === "draining"
+            ? "starts, plans, reopens and resumes past the drain line"
+            : drain.state === "limited"
+              ? "ended at the stop: nothing starts"
+              : "not in use: under the drain line"
+        }`,
+      );
+  }
   return acted;
 }
 
@@ -1694,7 +1722,7 @@ export function tick(
 
   // The drain decision (drain.mjs): near a limit nothing new opens; past it, nothing opens a claude.
   const drain = drainOf(p, g, env);
-  facts.drain = { state: drain.state, why: drain.why };
+  facts.drain = { state: drain.state, why: drain.why, allow: drain.allow ?? null };
   const limited = drain.state === "limited";
   // The resume after a limit: its claims before the pick, so the pick never counts them.
   /** @type {ReturnType<typeof resumePrep>} */
@@ -2089,6 +2117,7 @@ function parse(/** @type {string[]} */ argv) {
     everySet: false,
     restarted: /** @type {string | null} */ (null),
     cap: /** @type {string | null} */ (null),
+    allow: /** @type {string | null} */ (null),
     reexec: /** @type {string | null} */ (null),
   };
   for (let i = 0; i < argv.length; i++) {
@@ -2110,12 +2139,16 @@ function parse(/** @type {string[]} */ argv) {
       if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
         throw new Error(`--cap takes a number from 1 to ${MAX_CAP}, or default`);
       o.cap = v;
+    } else if (a === "--allow") {
+      const v = argv[++i] ?? "";
+      if (v !== "none" && !allowableTopic(v)) throw new Error("--allow takes a topic, or none");
+      o.allow = v;
     } else if (a === "--reexec") o.reexec = argv[++i] ?? "";
     // (internal: the old code's hash, passed by the re-exec)
     else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
-        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --restart, --cap <n>|default)`,
+        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --restart, --cap <n>|default, --allow <topic>|none)`,
       );
   }
   return o;
@@ -2133,7 +2166,7 @@ async function main() {
     const text = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n");
     console.log(
       text
-        .slice(1, 17)
+        .slice(1, 19)
         .map((l) => l.replace(/^\/\/ ?/, ""))
         .join("\n"),
     );
@@ -2175,6 +2208,28 @@ async function main() {
           ? `none start until fewer than ${after.cap} remain (running ones finish)`
           : `${after.cap - running} more may start`
       }; ${holder ? `the dispatcher (pid ${holder}) reads it on its next tick` : "no dispatcher is running"}.`,
+    );
+    return;
+  }
+  if (o.allow !== null) {
+    const now = nowOf();
+    const before = readAllowance(p.allow);
+    mkdirSync(p.loops, { recursive: true });
+    if (o.allow === "none") {
+      if (existsSync(p.allow)) unlinkSync(p.allow);
+    } else {
+      const tmp = `${p.allow}.${process.pid}`;
+      writeFileSync(tmp, `${o.allow}\n`);
+      renameSync(tmp, p.allow);
+    }
+    const after = readAllowance(p.allow);
+    const line = after
+      ? `drain allowance: ${after} starts, plans, reopens and resumes past the drain line, until the stop (was ${before ?? "none"})`
+      : `drain allowance: none (was ${before ?? "none"})`;
+    log([line], now);
+    const holder = lockHolder(p.lock);
+    console.log(
+      `${line}; ${holder ? `the dispatcher (pid ${holder}) reads it on its next tick` : "no dispatcher is running"}.`,
     );
     return;
   }

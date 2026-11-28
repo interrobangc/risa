@@ -2042,6 +2042,33 @@ describe("the drain", () => {
     expect(ok(["--once"])).toMatch(/^\S+Z reopen prd-d/);
   });
 
+  it("--allow: the allowed topic starts while draining, shown in --dry-run and the drain's log line (RISA-813)", () => {
+    reading(96);
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "b", state: "planned" },
+    ]);
+    try {
+      expect(ok(["--once"], on)).toMatch(/^\S+Z nothing: usage is draining/);
+      expect(ok(["--allow", "b"])).toContain("drain allowance: b");
+      const dry = ok(["--dry-run"], on);
+      expect(dry).toMatch(/^start b:/m);
+      expect(dry).toContain("a: no start while usage is draining");
+      expect(dry).toContain(
+        "usage: allowance: b (pnpm prd dispatch --allow) starts, plans, reopens and resumes",
+      );
+      const out = ok(["--once"], on);
+      expect(out).toMatch(/^\S+Z start b/);
+      expect(out).toContain("usage: now draining: 5h 96%");
+      expect(out).toContain("b is allowed past it");
+      expect(dstate().drain).toMatchObject({ state: "draining", allow: "b" });
+      expect(ok(["--allow", "none"])).toContain("drain allowance: none (was b)");
+      expect(ok(["--dry-run"], on)).not.toContain("usage: allowance");
+    } finally {
+      rmSync(join(loops, ".drain-allow"), { force: true });
+    }
+  });
+
   it("draining ends nothing, and a session in a landing is never stopped", () => {
     reading(96);
     const s = liveSession("prd-x", { kind: "prd", topic: "x" });

@@ -17,7 +17,9 @@
 //      mark's reset is still ahead (`stalled`: ended on its own account's limit while the
 //      dispatcher's is normal): the resume takes it after that reset.
 //   3. Busy: no start and no plan (reopens still happen). Draining or limited
-//      (drain.mjs, facts.drain): no start, plan, reopen or reopen ask.
+//      (drain.mjs, facts.drain): no start, plan, reopen or reopen ask, except that
+//      while draining the allowance's topic (facts.drain.allow: `prd dispatch --allow`)
+//      still may (drain.mjs drainHolds).
 //   4. A `planned` topic may `start` when a slot is free, every `After` topic
 //      is `done`, no running topic shares a hot-file prefix with it, no
 //      `alone` topic runs (and nothing runs when it is the `alone` one), and
@@ -82,7 +84,7 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
  * @typedef {{ rows: PickRow[], worktrees?: PickWorktree[], sessions?: PickSession[],
  *   asks?: PickAsk[], reopens?: Record<string, number>, busy?: boolean, paused?: boolean,
  *   caps?: Partial<typeof DEFAULT_CAPS>, now?: number,
- *   drain?: { state: "normal" | "draining" | "limited", why: string },
+ *   drain?: { state: "normal" | "draining" | "limited", why: string, allow?: string | null },
  *   landed?: Record<string, { sha: string }>, work?: { on: boolean, why: string } }} PickFacts
  * @typedef {{ topic?: string, why: string }} Reason
  * @typedef {{ action: "start" | "plan" | "reopen" | "ask" | "resume" | "none", topic?: string,
@@ -134,6 +136,9 @@ export function pick(facts) {
   // Near or past a usage limit: nothing new opens (drain.mjs).
   const held = facts.drain && facts.drain.state !== "normal" ? facts.drain : null;
   const heldWhy = held ? `usage is ${held.state}: ${held.why}` : "";
+  // Whether the drain holds TOPIC: as drain.mjs drainHolds (not imported: drain.mjs imports keep-alive.mjs, which imports this).
+  const holds = (/** @type {string} */ topic) =>
+    !!held && !(held.state === "draining" && held.allow && held.allow === topic);
   // The work switch (rule 9): off, nothing new starts or is planned in this repo.
   const workOff =
     facts.work && !facts.work.on
@@ -190,7 +195,7 @@ export function pick(facts) {
       why = `${what} stopped on a usage limit: not reopened before its reset (the resume brings it back)`;
     else if (s.rotating && (Number.isNaN(rotatedAt) || now - rotatedAt < ROTATING_GRACE_MS))
       why = `${what} is being rotated`;
-    else if (held) why = `${what} died; not reopened while ${heldWhy}`;
+    else if (holds(w.topic)) why = `${what} died; not reopened while ${heldWhy}`;
     else if ((reopens[w.session] ?? 0) >= MAX_REOPENS) {
       const open = reopenAskOf(w.topic);
       if (open) why = `${what} died after ${MAX_REOPENS} reopens; waits on ask ${open.id}`;
@@ -254,7 +259,7 @@ export function pick(facts) {
   };
 
   const planned = rows.filter((r) => r.state === "planned" && !running.has(r.topic) && !landedWhy(r.topic));
-  const mayStart = planned.filter((r) => !startBlock(r));
+  const mayStart = planned.filter((r) => !startBlock(r) && !holds(r.topic));
   const short = (/** @type {PickRow} */ r) =>
     flags(r).includes("standing") && (r.waiting ?? 0) < caps.fixesMin;
   const strong = mayStart.filter((r) => !short(r));
@@ -286,11 +291,11 @@ export function pick(facts) {
     return null;
   };
   const toWrite = rows.filter((r) => r.state === "to-write");
-  const planPick = toWrite.find((r) => !planBlock(r)) ?? null;
+  const planPick = toWrite.find((r) => !planBlock(r) && !holds(r.topic)) ?? null;
 
   const chosen = reopen
     ? null
-    : workOff || held || facts.busy
+    : workOff || facts.busy
       ? null
       : startPick
         ? { action: /** @type {const} */ ("start"), row: startPick }
@@ -314,7 +319,7 @@ export function pick(facts) {
     else if (workOff && (r.state === "planned" || r.state === "to-write")) why = workOff;
     else if (r.state === "planned") {
       why = startBlock(r);
-      if (!why && held) why = `no start while ${heldWhy}`;
+      if (!why && holds(r.topic)) why = `no start while ${heldWhy}`;
       if (!why && short(r))
         why = `${r.waiting ?? 0} waiting, under ${caps.fixesMin}, and ${startPick?.topic ?? "another topic"} may start`;
       if (!why && facts.busy) why = "the machine is busy";
@@ -322,7 +327,7 @@ export function pick(facts) {
       if (!why) why = `waits a tick: ${startPick?.topic} starts first`;
     } else if (r.state === "to-write") {
       why = planBlock(r);
-      if (!why && held) why = `no plan while ${heldWhy}`;
+      if (!why && holds(r.topic)) why = `no plan while ${heldWhy}`;
       if (!why && facts.busy) why = "the machine is busy";
       if (!why && reopen) why = `waits a tick: ${reopen.why}`;
       if (!why)
