@@ -69,7 +69,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-911 | chore | live | fixes-tooling | prd/fixes-tooling | pnpm prd wait check's default timeout outlasts the harness's ~170 s foreground limit, so a foreground wait is itself moved to the background; default it under 170 s (or say so in the loop doc) |
 | RISA-912 | plan | triaged | self-recovery-3 |  | Slices as their own headless sessions: started by a prd command, hand-offs to a file the orchestrator watches, so a slice survives an orchestrator rotation and can rotate or resume mid-slice itself |
 | RISA-913 | plan | triaged | self-recovery-3 |  | Any role's long work runs as a job the machinery owns, so a hand-off never interrupts it: commands (check, land, CI waits, deploys, dev servers), watchers with a follow-up action (durable triggers the dispatcher fires), side-work subagents (headless sessions); each writes a result file, the hand-off records job ids, and the next session re-attaches instead of rerunning or re-arming |
-| RISA-914 | plan | triaged | risa-next |  | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
+| RISA-914 | plan | in-progress | risa-next | prd/risa-next | Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President |
 | RISA-926 | bug | live | fixes-tooling | prd/fixes-tooling | The dispatcher's keep-alive and session requests ignore the machine config's work switch: a repo with work off still gets its backlog and inbox sessions opened |
 | RISA-927 | bug | live | fixes-tooling | prd/fixes-tooling | The drain reads usage only from its own environment's Claude account, so sessions on another CLAUDE_CONFIG_DIR are drained on the wrong account's numbers |
 | RISA-933 | chore | live | fixes-tooling | prd/fixes-tooling | test:tooling runs tooling-lint.mjs before the project-data check, so broken tier data prints an uncaught TierDataError stack trace before the check's one line |
@@ -531,9 +531,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-914 · plan · Flavor packs: every role gets a rank and a name from a swappable pack (default starfleet): backlog Admiral, orchestrator Captain, slice Pilot, inbox a random officer, hotfix chief engineer, planner science officer, recovery doctor; the user is the President
 
-- status: triaged
+- status: in-progress
 - prd: risa-next
-- owner:
+- owner: prd/risa-next
 - commit:
 
 - 2026-11-26 (Robert Bo Davis): 2026-11-26: the user's word (discussed, not planned deeply). Frame: the user is the Starfleet President on vacation on Risa; the orchestration is Starfleet. Core: roles, ranks and a pack interface (per role: rank, a canon name pool, how to address the President); config flavor: starfleet | none | another pack; default starfleet for now. Canon character names. Names stick for a while: a captain keeps theirs for the PRD, a pilot for the slice (not redrawn each rotation). Flavor only in replies to the user, at most one touch per reply, never in questions, options, commands, commits, backlog, PRs, docs, asks or what another agent reads; bad news may carry it. Push notifications carry the name as a label (Captain Sisko · nested todos: wave 2 landed). Builds on B-733 (scripts/loops/captain.mjs, prompts/backlog.sh); the backlog session moves from Captain to Admiral. After orchestration-split-3; Risa work for the work account.
