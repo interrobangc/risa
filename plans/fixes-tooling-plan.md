@@ -10,13 +10,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------- | ------------------------------ |
-| 54    | 13   | RISA-1076 | opus  | merged  | 8533d43                        |
-| 55    | 13   | RISA-1085 | opus  | merged  | 99e0432                        |
-| 56    | 13   | RISA-1069 | opus  | started |                                |
+| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
+| 54    | 13   | RISA-1076 | opus  | merged | 8533d43                        |
+| 55    | 13   | RISA-1085 | opus  | merged | 99e0432                        |
+| 56    | 13   | RISA-1069 | opus  | merged | dcc597a                        |
 
-Wave 13 (2026-11-28): slices 54, 55, 56 written and started, each agent on opus; 54 and 55 handed off (checks passed) and merged, 56 still at work. RISA-1069 runs now: no running topic holds `loops/dispatch`. Waiting: RISA-1095 (until ship and cross-machine-messages land).
+Wave 13 (2026-11-28): slices 54, 55, 56 written and started, each agent on opus; all three merged. 54 and 55's slice checks passed; 56's failed only in untouched files under load 29-39 (its 9 dispatch files pass alone, 112 tests). Next: the wave gate, then PR, Codex, land. RISA-1069 runs now: no running topic holds `loops/dispatch`. Waiting: RISA-1095 (until ship and cross-machine-messages land).
 
 **Wave 12 landed** 2026-11-28 in main as c49040a through PR #37: slice 53, opus (RISA-1073; merged twice, a9eb9ec and 68950ed: its steps test passed only on a slice branch). Synced with main (b60d88c) first; tooling only, tier none; `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed; Codex clean on 466ed83. Report filed (a65); to-test/2026-11-28-1254-fixes-tooling.md; slice worktree removed. Takes effect with the next release tag.
 
