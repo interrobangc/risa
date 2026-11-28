@@ -21,7 +21,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | **On hold 2026-11-24: planning paused by the user to save credits while away (nothing wrong with the topic).** Also moved to the bottom of the queue by the user 2026-11-24. Released 2026-11-23 by the user. The backlog session as go-between for every agent's questions, and asks queue hygiene. Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic) |
 | `risa-next` | hold | — | — | — |
 | `usage-aware-drain` | hold | — | — | Plan-aware drain line, after the orchestrator split |
-| `after-split-2` | — | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
+| `after-split-2` | done | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
 
 ## Summary
 
@@ -76,7 +76,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-952 | chore | ready | fixes-tooling | prd/fixes-tooling | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
 | RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
-| RISA-972 | question | ready | after-split-2 | prd/after-split-2 | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
+| RISA-972 | question | live | after-split-2 | prd/after-split-2 | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
 | RISA-980 | bug | triaged | fixes-bug |  | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | triaged | fixes-bug |  | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
 | RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
@@ -615,7 +615,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-972 · question · In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile
 
-- status: ready
+- status: live
 - prd: after-split-2
 - owner: prd/after-split-2
 - commit: e32da3c
