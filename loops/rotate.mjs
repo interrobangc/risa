@@ -32,6 +32,7 @@
 //                                             prints the slices at work and exits
 //                                             1 when a context rotation waits
 //   node rotate.mjs standing-close <topic> <main checkout>
+//                                             stdin: `backlog prd list --json`;
 //                                             exit 0 and prints why when the
 //                                             hand-over closes the topic; exit 1
 //                                             to rotate; exit 2 when the facts
@@ -173,7 +174,19 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       }
       break;
     }
-    case "standing-close":
+    case "standing-close": {
+      let rows;
+      try {
+        rows = JSON.parse(readFileSync(0, "utf8"));
+      } catch (e) {
+        console.log(
+          `the registry didn't read: ${String(/** @type {Error} */ (e)?.message ?? e).split("\n")[0]}`,
+        );
+        process.exit(2);
+      }
+      // A rotation of any other topic stays as cheap as before: no dispatcher facts.
+      const row = rows.find((/** @type {{ topic: string }} */ r) => r.topic === arg);
+      if (!row?.flags?.includes("standing")) process.exit(1);
       // The dispatcher's own facts. dispatch.mjs imports this module, so it loads once this one has
       // (a top-level await here would wait on itself).
       import("./dispatch.mjs")
@@ -189,6 +202,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
           },
         );
       break;
+    }
     default:
       console.error(
         "usage: rotate.mjs clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>... | standing-close <topic> <main>",

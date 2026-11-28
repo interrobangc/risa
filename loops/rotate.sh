@@ -156,9 +156,10 @@ fi
 # A standing topic with no slice in flight and nothing runnable waiting closes instead (RISA-952):
 # a fresh session would hold the lane idle. Its rm (from the main checkout, so no shell is left in
 # a removed directory) leaves the row standing, not done; then the session ends here.
-if [[ -z $slices ]]; then
+# The registry first: only a standing row loads the dispatcher's facts. No registry: rotate as now.
+if [[ -z $slices ]] && rows=$(cd "$main" && node "$bin/../backlog/backlog.mjs" prd list --json 2>/dev/null); then
   rc=0
-  why=$(node "$bin/rotate.mjs" standing-close "$topic" "$main") || rc=$?
+  why=$(node "$bin/rotate.mjs" standing-close "$topic" "$main" <<<"$rows") || rc=$?
   case $rc in
     0)
       echo "Closing $name instead of rotating: $why (the dispatcher starts it again when it has work)."
