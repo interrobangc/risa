@@ -4,12 +4,18 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/ship` |
-| ----- | ---- | ----- | --------------------- |
-| 1     | 1    | —     | —                     |
-| 2     | 2    | —     | —                     |
-| 4     | 2    | —     | —                     |
-| 3     | 3    | —     | —                     |
+**From the user:** nothing yet beyond the start (run-through, 2026-11-28).
+
+**Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
+
+**Now (2026-11-28):** wave 1 started: slice 1 on opus (real logic). No running topic holds its hot files (`fixes-tooling` holds only test files). Next: watch, merge, CI run, PR, Codex review, land, rotate.
+
+| Slice | Wave | State          | Merge into `prd/ship` |
+| ----- | ---- | -------------- | --------------------- |
+| 1     | 1    | started (opus) | —                     |
+| 2     | 2    | —              | —                     |
+| 4     | 2    | —              | —                     |
+| 3     | 3    | —              | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
