@@ -3,7 +3,7 @@
 // drainDecision (pure) turns the usage reading (usage.mjs mergeReadings) into one of
 //   normal    nothing held;
 //   draining  a plan window (5-hour or weekly) at RISA_USAGE_DRAIN (95%) or more:
-//             no start, plan or reopen (`prd dispatch --resume` doesn't override it),
+//             no start, plan or reopen (`dispatch --resume` doesn't override it),
 //             and a new slice worktree is refused (new.sh slice runs `drain.mjs check`);
 //   limited   a plan window at RISA_USAGE_STOP (98%) or more, a reading showing overage
 //             (a plan window at 100%: extra usage, if it's on, is being spent), or a session
@@ -17,7 +17,7 @@
 // with the reset time. An unknown reading (none, or all over RISA_USAGE_STALE_MIN old)
 // never drains: with a session live longer than that, it files one report per incident.
 // RISA_USAGE_WATCH=off: always normal.
-// The allowance (`prd dispatch --allow <topic>`, .loops/.drain-allow, read every tick): while
+// The allowance (`dispatch --allow <topic>`, .loops/.drain-allow, read every tick): while
 // draining, that one topic still starts, plans, reopens, resumes and makes slice worktrees
 // (drainHolds); at the stop (limited) it ends like the rest.
 //
@@ -42,7 +42,7 @@ import { clock, mergeReadings, readUsage, stallHolds, staleMsOf, timeOf, usageDi
 
 export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
-/** A session sent TERM this long ago and still live is sent KILL (as `prd end`). */
+/** A session sent TERM this long ago and still live is sent KILL (as `end` does). */
 export const END_WAIT_MS = 10_000;
 /** The stall error the dispatcher's own stop writes. */
 export const LIMITED_ERROR = "limited";
@@ -65,7 +65,7 @@ const TOPIC_RE = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
 /** Whether TEXT is a topic an allowance may name. */
 export const allowableTopic = (/** @type {string} */ text) => TOPIC_RE.test(text);
 
-/** The stored allowance (`prd dispatch --allow`, .loops/.drain-allow): its topic, or null when none. */
+/** The stored allowance (`dispatch --allow`, .loops/.drain-allow): its topic, or null when none. */
 export function readAllowance(/** @type {string | null | undefined} */ file) {
   if (!file) return null;
   let text;
@@ -241,7 +241,7 @@ export function stalledSessions(readings, now) {
 export const probeAllowed = (/** @type {Drain} */ d) => d.state !== "limited";
 
 /**
- * Whether a session runs a landing: a land.sh (or `prd land`) process, or a landing journal's
+ * Whether a session runs a landing: a land.sh (or the land command) process, or a landing journal's
  * live pid, among PID's descendants. Pure.
  * @param {number} pid
  * @param {Map<number, { ppid: number, args: string }>} table
@@ -263,7 +263,7 @@ export function landingUnder(pid, table, journalPids = new Set()) {
   return false;
 }
 
-/** A ps command line that runs a landing: land.sh (as a script), or `prd land`. */
+/** A ps command line that runs a landing: land.sh (as a script), or the land command. */
 export function isLanding(/** @type {string} */ args) {
   const [first = "", second = ""] = args.trim().split(/\s+/);
   const base = (/** @type {string} */ w) => w.slice(w.lastIndexOf("/") + 1);
