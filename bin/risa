@@ -13,19 +13,12 @@ if [[ ${1:-} == --root ]]; then
 fi
 if [[ ${1:-} == backlog ]]; then
   shift
-  # prd.sh finds the repo through lib.sh; the backlog takes its config from here:
-  # the main checkout's risa.json, never a worktree's (the backlog is the main
-  # checkout's), unless RISA_CONFIG is a pin (set, and not the found mark).
-  machine=${RISA_MACHINE_CONFIG-$HOME/.risa/machine.json}
-  if [[ -z ${RISA_CONFIG:-} || ${RISA_CONFIG} == "${RISA_CONFIG_FOUND:-}" ]] && [[ -n $machine && -f $machine ]]; then
-    rc=0
-    listed=$(node "$root/loops/machine.mjs" repo --cwd "$PWD") || rc=$?
-    case $rc in
-      0) RISA_CONFIG=$(sed -n 1p <<< "$listed")/risa.json && export RISA_CONFIG ;;
-      1) ;;
-      *) exit 2 ;;
-    esac
-  fi
+  # prd.sh finds the repo through lib.sh; the backlog takes its config from
+  # backlog_config (the main checkout's risa.json, unless RISA_CONFIG is a pin),
+  # as lib.sh's backlog_run does for the loop scripts.
+  # shellcheck source=../loops/backlog-config.sh
+  source "$root/loops/backlog-config.sh"
+  backlog_config "$root" || exit 2
   exec node "$root/backlog/backlog.mjs" "$@"
 fi
 exec bash "$root/loops/prd.sh" "$@"

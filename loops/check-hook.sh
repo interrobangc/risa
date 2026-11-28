@@ -32,7 +32,9 @@
 #
 # The tooling tests, when TOOLING isn't 0 and the hook passed: check-tooling.mjs, the config's testProjects.tooling (and its browserHarness when
 # TOOLING is 2), with the same rerun rules and state files (step `tooling`, its
-# seconds and slowest files in `times` and `slowest`).
+# seconds and slowest files in `times` and `slowest`). After the slice's own check
+# above (RISA-1015), only its Check files, those among the tooling tests (the
+# others run nothing more), never the whole suite.
 set -uo pipefail
 here=$(dirname "${BASH_SOURCE[0]}")
 # shellcheck source=lib.sh
@@ -81,5 +83,10 @@ fi
 [[ $tooling != 0 ]] || exit 0
 harness=()
 [[ $tooling != 2 ]] || harness=(--harness)
-exec node "$here/check-tooling.mjs" ${harness[@]+"${harness[@]}"} \
+only=()
+if [[ -n ${own_files+x} ]]; then
+  echo "The tooling step runs only the slice's Check file(s) among the tooling tests: ${own_files[*]}."
+  for f in "${own_files[@]}"; do only+=(--file "$f"); done
+fi
+exec node "$here/check-tooling.mjs" ${harness[@]+"${harness[@]}"} ${only[@]+"${only[@]}"} \
   --state "${RISA_CHECK_STATE:-}" --rerun-max "${RISA_CHECK_RERUN_MAX:-20}"

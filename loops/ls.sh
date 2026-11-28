@@ -62,7 +62,7 @@ echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)
 
 # The held PRDs (prd list's rows), each with its hold's date and reason when it has
 # one (registry.mjs's heldText); nothing, heading included, when none is held.
-holds=$(cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd list --json 2>/dev/null |
+holds=$(cd "$main" && backlog_run prd list --json 2>/dev/null |
   RISA_REGISTRY="$loops_lib_dir/../backlog/registry.mjs" node --input-type=module -e '
     const { heldText } = await import(process.env.RISA_REGISTRY);
     let text = ""; for await (const c of process.stdin) text += c;

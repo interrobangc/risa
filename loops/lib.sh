@@ -608,11 +608,12 @@ pr_state() {
 }
 
 # pr_verdict NUMBER [--line|--text] → Codex's verdict on the PR's head (JSON,
-# one line, or the line and the findings); a clean one carries over dev merges.
+# one line, or the line and the findings); a clean one carries over dev merges
+# and over docs-only commits after the approval (docs_re, as land.sh passes it).
 pr_verdict() {
   local state
   state=$(pr_state "$1") || return 1
-  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" ${2:+"$2"} <<< "$state"
+  node "$loops_lib_dir/codex-review.mjs" --repo="$main" --trunk="$trunk" --docs="$docs_re" ${2:+"$2"} <<< "$state"
 }
 
 # The PR path (pr.sh, land.sh): landing subjects, pushing dev, and dev-sync.
@@ -628,12 +629,27 @@ land_dir() {
   esac
 }
 
+# backlog_run ARGS… → backlog/backlog.mjs ARGS on the config `risa backlog` would
+# take (backlog-config.sh, shared with bin/risa: the main checkout's risa.json unless
+# RISA_CONFIG is a pin), not the checkout's own that find_repo found, so a worktree
+# whose config names another paths.backlog still reads the main checkout's backlog.
+# Every loop script's backlog call goes through it. Sourced here, when called, so a
+# test that copies only lib.sh doesn't need the file.
+backlog_run() {
+  (
+    # shellcheck source=backlog-config.sh
+    source "$loops_lib_dir/backlog-config.sh"
+    backlog_config "$loops_lib_dir/.." || exit 2
+    exec node "$loops_lib_dir/../backlog/backlog.mjs" "$@"
+  )
+}
+
 # land_subject BRANCH → the subject `land` gives a branch without -m:
 # feat(<topic>): land prd/<topic> (B-1, B-2), fix(…) when every ready item is a
 # bug or for a hotfix, docs(…) for a plan branch.
 land_subject() {
   local topic=${1#*/} ids type
-  ids=$(node "$loops_lib_dir/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
+  ids=$(backlog_run list --all --prd "$topic" --status ready --json |
     node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));
       const t=r.length&&r.every(i=>i.type==="bug")?"fix":"feat";
       console.log(t+"\t"+r.map(i=>i.id).join(", "))')

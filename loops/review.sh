@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Codex's review of a branch's open PR into dev: the verdict on its current
 # head (codex-review.mjs) and the open findings. A clean verdict carries over
-# a dev merge that leaves the PR's diff alone (the three rules there), even
-# while Codex reviews the merged head by itself, so a sync needs no new wait;
+# a dev merge that leaves the PR's diff alone (the three rules there), and
+# commits after it that change only Markdown (lib.sh's docs_re, as land.sh),
+# even while Codex reviews the new head by itself, so a sync needs no new wait;
 # --again asks for a review of the head and waits for that one.
 #
 #   review.sh <topic|branch> [--json] [--wait [min]] [--again] [--resolve <threadId>]…
@@ -28,6 +29,7 @@
 # Each answer on a head goes to the run log once (run-log.mjs), for prd metrics.
 # Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
 # answered with its usage-limit comment), 75 when --wait times out, 3 for
+# too long to read whole (codex-review.mjs's too-long: never clean) or
 # anything else (no open PR, gh failing, a bad argument).
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -71,10 +73,11 @@ done
 field() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[process.argv[1]] ?? ""))' "$1" <<< "$v"; }
 
 # codex_verdict [--line|--text] → the verdict on the PR's state (stdin). A clean one
-# carries over dev merges, unless --again asked for a review of this head.
+# carries over dev merges and docs-only commits (docs_re), unless --again asked
+# for a review of this head.
 codex_verdict() {
   if ((again)); then node "$(dirname "$0")/codex-review.mjs" "$@"; return; fi
-  node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$trunk" "$@"
+  node "$(dirname "$0")/codex-review.mjs" --repo="$main" --trunk="$trunk" --docs="$docs_re" "$@"
 }
 
 # verdict → sets raw (the PR's state), v (the verdict's JSON) and state.
@@ -137,4 +140,4 @@ else
   echo "PR #$number $(field url)"
   codex_verdict --text <<< "$raw"
 fi
-case $state in clean) exit 0 ;; findings) exit 1 ;; out-of-credits) exit 4 ;; *) exit 2 ;; esac
+case $state in clean) exit 0 ;; findings) exit 1 ;; out-of-credits) exit 4 ;; too-long) exit 3 ;; *) exit 2 ;; esac

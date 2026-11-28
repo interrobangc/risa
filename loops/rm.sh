@@ -103,12 +103,12 @@ if [[ -n $registry && $branch == "$prd_prefix"* ]]; then
   elif left=$(node "$(dirname "$0")/landed.mjs" slices-left "$dir/plans/$topic-plan.md"); then
     if [[ -n $left ]]; then
       echo "Not marking $topic done: slices $left are still to run (plans/$topic-plan.md)"
-    elif rows_read=1 && ! rows=$(cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd list --json 2>&1); then
+    elif rows_read=1 && ! rows=$(cd "$main" && backlog_run prd list --json 2>&1); then
       rows_read=failed
       echo "Not marking $topic done: ${rows##*$'\n'}"
     elif hot_rows=$rows && ! flags=$(node "$(dirname "$0")/landed.mjs" done-flags "$topic" <<<"$rows"); then
       echo "Not marking $topic done: $flags"
-    elif ! items=$(cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" list --all --prd "$topic" --json 2>/dev/null |
+    elif ! items=$(cd "$main" && backlog_run list --all --prd "$topic" --json 2>/dev/null |
       node "$(dirname "$0")/landed.mjs" items-left 2>/dev/null); then
       echo "Not marking $topic done: ${items:-its items (unreadable)} aren't landed yet"
     else
@@ -126,7 +126,7 @@ clear_hot=""
 # The registry read above is reused; it is read here only when that step didn't get to it.
 if [[ -z $rows_read && -n $registry && $branch == "$prd_prefix"* ]]; then
   rows_read=1
-  hot_rows=$(cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd list --json 2>/dev/null) || hot_rows=""
+  hot_rows=$(cd "$main" && backlog_run prd list --json 2>/dev/null) || hot_rows=""
 fi
 if [[ -n $registry && $branch == "$prd_prefix"* && -n $hot_rows ]] &&
   node "$(dirname "$0")/rotate.mjs" clears-hot "${branch#"$prd_prefix"}" <<<"$hot_rows"; then
@@ -194,7 +194,7 @@ esac
 # Mark it done through the main checkout's backlog tool (one commit on dev); a
 # failure here doesn't undo the removal.
 if [[ -n $mark_done ]]; then
-  if (cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd set "$mark_done" "flags=$flags" >/dev/null); then
+  if (cd "$main" && backlog_run prd set "$mark_done" "flags=$flags" >/dev/null); then
     echo "Marked $mark_done done in the PRD registry (flags $flags)"
   else
     echo "couldn't mark $mark_done done (${backlog_cmd} prd set $mark_done flags=$flags)" >&2
@@ -202,7 +202,7 @@ if [[ -n $mark_done ]]; then
 fi
 
 if [[ -n $clear_hot ]]; then
-  if (cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd set "$clear_hot" "hot=—" >/dev/null); then
+  if (cd "$main" && backlog_run prd set "$clear_hot" "hot=—" >/dev/null); then
     echo "Cleared $clear_hot's hot files in the PRD registry (its wave is over)"
   else
     echo "couldn't clear $clear_hot's hot files (${backlog_cmd} prd set $clear_hot hot=—)" >&2

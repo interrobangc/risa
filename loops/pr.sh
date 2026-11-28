@@ -76,7 +76,7 @@ tip=$(git -C "$main" rev-parse --short "$branch")
 echo "pushed $branch ($tip)"
 
 [[ -n $msg ]] || msg=$(land_subject "$branch")
-items=$(node "$(dirname "$0")/../backlog/backlog.mjs" list --all --prd "$topic" --status ready --json |
+items=$(backlog_run list --all --prd "$topic" --status ready --json |
   node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8"));
     console.log(r.map(i=>`- ${i.id} (${i.type}): ${i.title}`).join("\n"))')
 [[ -n $items ]] || items="- none marked ready for \`$topic\`"
