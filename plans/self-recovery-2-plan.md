@@ -15,7 +15,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Hand-over (2026-11-28):** wave 1 (slices 1, 2) landed in main as 3c11cf9 through PR #20 (tier none, Codex clean; report filed). Wave 2 (slices 3, 4, 5) is merged at 3c6214c and **green**: full `risa check` passed 2487/2487 on 3c6214c (load ~6); slice worktrees 3, 4, 5 removed. Next: `risa sync` (recheck only if it merges), `risa pr self-recovery-2`, `risa review --wait`, triage, land, report. Then slice 6 (blocked by 3, merged; RISA-789, claim it; opus) as wave 3. Check runs at load above ~15 fail on timeouts; rerun when quieter.
+**Hand-over (2026-11-28):** wave 1 (slices 1, 2) landed in main as 3c11cf9 through PR #20 (tier none, Codex clean; report filed). Wave 2 (slices 3, 4, 5) is merged at 3c6214c and **green**: full `risa check` passed 2487/2487 on 3c6214c (load ~6); slice worktrees 3, 4, 5 removed. Sync skipped (up to date, no recheck); PR #21 open, `risa review --wait` out; then triage, land (tier none), report. Then slice 6 (blocked by 3, merged; RISA-789, claim it; opus) as wave 3. Check runs at load above ~15 fail on timeouts; rerun when quieter.
 
 **Open:** **message `fixes-tooling-3e` when the landing carrying slice 3 reaches main** (it holds RISA-1025 on our dispatch/finish files). Codex findings from PR #20, triaged into this PRD: RISA-1027 (the finish CLI re-files reports; no persisted keys) and RISA-1028 (cost counts a `plan-<x>` topic's transcripts as `<x>`'s planning); the user decides whether they join a wave. RISA-1025 and RISA-1026 (lease.test flake) filed under fixes-tooling. The handbook names no _Docs at landing_ section; each slice wrote its own doc bullet.
 
