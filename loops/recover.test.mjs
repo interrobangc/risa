@@ -27,7 +27,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { stubHookConfig } from "./config-fixture.mjs";
-import { sharedNames } from "./config.mjs";
+import { loadConfig, sharedNames } from "./config.mjs";
+import { displayName } from "./session-names.mjs";
+
+/** The recovery agent's Remote Control name as session.sh shows it (session-names.mjs). */
+const RECOVER = displayName({
+  name: "recover",
+  kind: "recovery",
+  remote: "recover",
+  project: loadConfig().config.name,
+});
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -507,7 +516,7 @@ describe("down and recover", () => {
       "stack start t-2",
       "serve t",
       "serve t-2",
-      "claude --remote-control recover (agent)",
+      `claude --remote-control ${RECOVER} (agent)`,
     ]);
     expect(out).toMatch(/• stack t-2\n {2}up and migrated \(sample-loop2\)/);
     expect(existsSync(record())).toBe(false);
@@ -520,8 +529,8 @@ describe("down and recover", () => {
     expect(out).toMatch(/Opening the recovery agent/);
     const [cwd, ...args] = readFileSync(join(state, "agent-args"), "utf8").split("\n");
     expect(cwd).toBe(main);
-    expect(args.slice(0, 2)).toEqual(["--remote-control", "recover"]);
-    expect(args[2]).toMatch(/^You are the recovery agent\./);
+    expect(args.slice(0, 4)).toEqual(["--remote-control", RECOVER, "--name", RECOVER]);
+    expect(args[4]).toMatch(/^You are the recovery agent\./);
     expect(args.join("\n")).toMatch(/ListAgents/);
     // Through the wrapper: recorded as a recovery session.
     const rec = JSON.parse(readFileSync(join(loops, ".sessions/recover.json"), "utf8"));
@@ -547,7 +556,7 @@ describe("down and recover", () => {
     expect(r.stderr).toMatch(/Didn't recover:\n {2}stack t/);
     expect(r.stdout).toMatch(/Not opening the recovery agent/);
     expect(r.stdout).not.toMatch(/Recovered\./);
-    expect(effects()).not.toContain("claude --remote-control recover (agent)");
+    expect(effects()).not.toContain(`claude --remote-control ${RECOVER} (agent)`);
     expect(existsSync(join(state, "agent-args"))).toBe(false);
   });
 
@@ -716,7 +725,7 @@ describe("down and recover with the dispatcher", () => {
     const e = effects();
     expect(e.indexOf("osascript dispatch")).toBeGreaterThan(e.indexOf("test-db up"));
     // The agent opened only once the new dispatcher held its lock.
-    expect(e.at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
+    expect(e.at(-1)).toBe(`claude --remote-control ${RECOVER} (agent) [dispatcher locked]`);
     expect(readFileSync(join(state, "tab-line"), "utf8").trim()).toBe(
       `cd ${main} && exec ${join(main, "loops/prd.sh")} dispatch`,
     );
@@ -896,7 +905,7 @@ describe("recover unattended: the lock, the gated dispatcher, its intent, the mi
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/• the dispatcher \(it was running\)/);
     expect(tabs()).toEqual(["osascript dispatch"]);
-    expect(effects().at(-1)).toBe("claude --remote-control recover (agent) [dispatcher locked]");
+    expect(effects().at(-1)).toBe(`claude --remote-control ${RECOVER} (agent) [dispatcher locked]`);
     expect(existsSync(intent())).toBe(false);
   });
 
