@@ -17,7 +17,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `risa-next` | — | — | `loops/flavor`, `loops/machine.mjs`, `loops/captain`, `loops/session.sh`, `loops/session-names`, `loops/ask.mjs`, `loops/prompt.sh`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/peers`, `loops/docs/backlog.md` | — |
 | `risa-next-2` | — | `risa-next` | — | — |
 | `risa-next-3` | — | `risa-next-2` | — | — |
-| `risa-next-4` | — | — | — | — |
+| `risa-next-4` | — | — | `loops/config`, `loops/machine.mjs`, `loops/skeptics.mjs`, `loops/project-check`, `loops/sample-project/repo.mjs`, `bin/risa`, `loops/rm.sh`, `loops/lib.sh`, `loops/setup`, `loops/second-repo`, `loops/docs/project-config.md`, `README.md` | — |
 | `fixes-bug` | standing | — | `loops/codex-review`, `loops/review.sh`, `backlog/backlog.mjs`, `backlog/origin.test.mjs`, `loops/stack`, `loops/lib.sh`, `loops/pr`, `loops/ready.sh`, `loops/land.sh`, `loops/land.test.mjs`, `loops/rm.sh`, `bin/risa` | Small fixes for wrong behaviour or data (plans/fixes-rules.md) |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | To write. Ship dev to staging in one command, Codex findings filed by tool, a staging to-test report (B-404, B-430, B-436). Cut from orchestration-3; doesn't need the dispatcher |
 | `self-recovery-2` | — | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560). Held after two skeptic send-backs; the user chose to land it held (a7). |
@@ -79,7 +79,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-952 | chore | live | fixes-tooling | prd/fixes-tooling | Standing PRD with only blocked items (held, waiting on another topic) holds a lane idle: after a landing with nothing runnable it should close itself (prd rm) so the dispatcher starts the next topic |
 | RISA-968 | feature | triaged |  |  | Time gates read their limits and fallbacks from the project's config (Risa's side of Caretook's B-837 and B-859; Caretook keeps its limit values, tiers and quick-check target as config) |
 | RISA-969 | chore | live | fixes-tooling | prd/fixes-tooling | CI workflow on GitHub: lint, prettier and the tests on push and on PRs to main |
-| RISA-980 | bug | in-progress | fixes-bug | prd/fixes-bug | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
+| RISA-980 | bug | ready | fixes-bug | prd/fixes-bug | Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa |
 | RISA-981 | bug | live | fixes-tooling | prd/fixes-tooling | A dispatcher started from a release install never re-execs onto a newer release, though risa status says 'code stale … it re-execs before its next tick': dispatch.mjs hashes its own frozen release folder at start and each tick (always equal), while status compares the current tool's checkout; a re-exec would rerun the old release's dispatch.mjs anyway. Re-exec into the release risa points to, or have status say to restart it by hand. Also: status 'last:' is the last logged line (logged only on change), so show lastTickAt beside it |
 | RISA-984 | change | triaged | risa-next |  | Tell backlog agents they can communicate with each other |
 | RISA-985 | bug | live | fixes-bug |  | A repo with no stackStatus hook can't start any PRD: slot_busy reads the hook's empty output as in use, so new.sh dies 'all 19 slots are taken' (RISA-973 fixed new.sh and rm.sh but missed stack-lib.sh slot_busy) |
@@ -626,10 +626,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-980 · bug · Under a release install, backlog ingest skips its inbox pickup: 'pickup skipped: ~/.risa/releases/v0.1.3/loops/lib.sh belongs to another checkout than <project>'; the same-checkout check compares the release worktree's lib.sh with the project's checkout, so pickup may never run in a project that installs Risa
 
-- status: in-progress
+- status: ready
 - prd: fixes-bug
 - owner: prd/fixes-bug
-- commit:
+- commit: 1e9259e
 
 - 2026-11-27 (Robert Bo Davis): Seen 2026-11-27 in Caretook's main checkout (on dev) from its backlog session, on v0.1.3 with RISA_CONFIG and RISA_MAIN pointing at Caretook; ingest itself still ran. fixes-bug: wrong behaviour in a released install
 - 2026-11-27 (Robert Bo Davis): Still seen 2026-11-28 on v0.1.8 (pin f5ce80a58) in Caretook's main checkout on dev, from its backlog session; the inbox was empty, so nothing was lost.
@@ -778,6 +778,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-27 (prd/after-split-2): Codex P2 on PR #9 (after-split-2), https://github.com/interrobangc/risa/pull/9#discussion_r4724774993; Codex reproduced it with paths.backlog=plans/new-backlog.md in a worktree
+- 2026-11-28 (prd/fixes-bug): fixes-bug slice 4 merged at c5163aa (part 1: backlog_run helper; pr, ready, lib.sh). Part 2 (land, rm, ls, rotate) is slice 5.
 
 ### RISA-1002 · feature · Backup Claude account: when the current account reaches 99% usage on this machine, or on the user's word, Risa pauses work, swaps every session to the other account (work or personal) and resumes there
 
