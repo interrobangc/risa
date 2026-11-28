@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { FIXTURE_CONFIG } from "../loops/config-fixture.mjs";
+import { keyNote, lineKey, newInboxEntries } from "./format.mjs";
 
 const BACKLOG = new URL("./backlog.mjs", import.meta.url).pathname;
 const STORE_CLI = new URL("./inbox-store.mjs", import.meta.url).pathname;
@@ -145,6 +146,33 @@ describe("backlog inbox with an inbox store", () => {
     expect(r.err).toContain("unfiled inbox line  Dark mode for the dashboard");
     expect(storeCommits()).toBe(before);
     expect(backlog("inbox", "add", "feature", "Dark mode for the dashboard", "--anyway").status).toBe(0);
+  });
+
+  it("refuses edit, move and remove of a line whose key an item holds (filed, its removal pending)", () => {
+    backlog("inbox", "add", "change", "Reports load the whole year at once");
+    const line = newInboxEntries(onStore("sample.md")).find((e) => e.text.startsWith("Reports load"));
+    expect(
+      backlog("note", "B-1", `From the inbox ${keyNote(lineKey(/** @type {any} */ (line)))}`).status,
+    ).toBe(0);
+    const before = storeCommits();
+    for (const [args, then] of [
+      [
+        ["edit", "whole year", "--to", "Reports load a month"],
+        "change the item instead, in the backlog session",
+      ],
+      [["move", "whole year", "bug"], "change the item instead: pnpm backlog set B-1 type=bug"],
+      [["remove", "whole year"], "drop the item instead, in the backlog session"],
+    ]) {
+      const r = backlog("inbox", ...args);
+      expect(r.status).toBe(1);
+      expect(r.err).toBe(`backlog: "Reports load the whole year at once" is filed as B-1: ${then}`);
+    }
+    const cli = storeCli("remove", "--project", "sample", "whole year");
+    expect(cli.status).toBe(1);
+    expect(cli.err).toBe(
+      'inbox-store: "Reports load the whole year at once" is filed as B-1: drop the item instead, in the backlog session',
+    );
+    expect(storeCommits()).toBe(before);
   });
 });
 
