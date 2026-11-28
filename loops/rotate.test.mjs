@@ -25,6 +25,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { CAPTAINS } from "./captain.mjs";
 import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
+import { pick } from "./dispatch-pick.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const git = (cwd, ...a) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
@@ -141,6 +142,23 @@ describe("the pure part", () => {
           asks: [{ id: "a1", kind: "question", topic: "fx", session: "prd-fx" }],
         }),
       ).toBeNull();
+    });
+
+    it("decides on a landed-but-planned row as the dispatcher's pick would (RISA-1003)", () => {
+      const rows = [fx({ waiting: 1 }), row("old")];
+      const landed = { old: { sha: "abc1234def" } };
+      // Without the landed guard, old would take the lane fx frees.
+      expect(close(rows)).toBe("1 waiting, under 3, and old would start in its lane");
+      // With it, the dispatcher never starts old, so fx rotates: the pick on the same facts with
+      // fx closed starts fx itself, not old.
+      expect(close(rows, { landed })).toBeNull();
+      const closed = pick({
+        rows: [fx({ waiting: 1, state: "planned" }), row("old")],
+        worktrees: [],
+        landed,
+        caps,
+      });
+      expect(closed).toMatchObject({ action: "start", topic: "fx" });
     });
 
     it("rotates one whose wave's items are still claimed, though none waits", () => {
