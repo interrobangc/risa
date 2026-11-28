@@ -1,8 +1,9 @@
 // The origin writer and the inbox commands (`pnpm backlog inbox add|move|edit|remove`,
 // `inbox`, `ingest`'s pickup), against a throwaway main checkout, a bare origin
 // and a second clone standing in for another device. The scripts are copied
-// into the checkout, so the pickup's lib.sh belongs to it; nothing here reaches
-// the real repository, its origin or its asks.
+// into the checkout, and the fixture project's config with them (the pickup runs
+// only on the checkout its config is in); nothing here reaches the real
+// repository, its origin or its asks.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -19,7 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import "../loops/config-fixture.mjs";
+import { FIXTURE_CONFIG } from "../loops/config-fixture.mjs";
 import { loadConfig } from "../loops/config.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -66,11 +67,20 @@ const remote = (edit, msg = "chore: from elsewhere") => {
   gitIn(other, "push", "-q", "origin", "dev");
   return sha;
 };
-const cli = (args, env = {}) => {
-  const r = spawnSync("node", [join(repo, "backlog/backlog.mjs"), ...args], {
+/** The fixture project's config, as copied into the checkout. */
+const repoConfig = () => join(repo, "loops/fixture-project/risa.json");
+const cli = (args, env = {}, script = join(repo, "backlog/backlog.mjs")) => {
+  const r = spawnSync("node", [script, ...args], {
     cwd: repo,
     encoding: "utf8",
-    env: { ...process.env, BACKLOG_BY: "", GIT_AUTHOR_NAME: "T", GIT_COMMITTER_NAME: "T", ...env },
+    env: {
+      ...process.env,
+      BACKLOG_BY: "",
+      GIT_AUTHOR_NAME: "T",
+      GIT_COMMITTER_NAME: "T",
+      RISA_CONFIG: repoConfig(),
+      ...env,
+    },
   });
   return { status: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
 };
@@ -391,6 +401,57 @@ describe("the pickup and the listing", () => {
     expect(r.err).not.toMatch(/locked/);
     expect(r.out).toMatch(/B-\d+ +question +Pushed from the phone/);
     expect(read()).toMatch(/- Pushed from the phone \(B-\d+\)/);
+  });
+
+  it("ingest from a script in another repo (a release install) picks up into the project, not the script's repo", () => {
+    // The release: its own repo with the scripts, on dev and behind its own origin,
+    // so a dev-sync run on it would move it.
+    const rel = join(root, "release");
+    const relOrigin = join(root, "release-origin.git");
+    execFileSync("git", ["init", "-q", "--bare", "-b", "dev", relOrigin]);
+    execFileSync("git", ["init", "-q", "-b", "dev", rel]);
+    for (const [k, v] of [
+      ["user.email", "t@example.com"],
+      ["user.name", "T"],
+      ["core.hooksPath", "/dev/null"],
+      ["commit.gpgsign", "false"],
+    ])
+      gitIn(rel, "config", k, v);
+    for (const dir of ["loops", "backlog"])
+      cpSync(join(HERE, "..", dir), join(rel, dir), {
+        recursive: true,
+        filter: (src) => !src.endsWith(".test.mjs"),
+      });
+    commitIn(rel, { [INBOX]: BASE_INBOX }, "release");
+    gitIn(rel, "remote", "add", "origin", relOrigin);
+    commitIn(rel, { "b.txt": "b\n" }, "release 2");
+    gitIn(rel, "push", "-q", "-u", "origin", "dev");
+    gitIn(rel, "reset", "-q", "--hard", "HEAD^");
+    const relHead = gitIn(rel, "rev-parse", "dev");
+    rmSync(join(repo, "loops/lib.sh")); // the project's own copy can't be the one that runs
+
+    remote((t) => ({ [INBOX]: t.replace("## Questions\n", "## Questions\n\n- Pushed from the phone\n") }));
+    const script = join(rel, "backlog/backlog.mjs");
+    const r = cli(["ingest"], {}, script);
+    expect(r.status, r.err).toBe(0);
+    expect(r.err).not.toMatch(/pickup skipped/);
+    expect(r.err).toContain("dev-sync: fast-forwarded dev");
+    expect(r.out).toMatch(/B-\d+ +question +Pushed from the phone/);
+    expect(gitIn(rel, "rev-parse", "dev")).toBe(relHead);
+    expect(gitIn(rel, "status", "--porcelain")).toBe("");
+
+    // A config that names another project (not in this checkout) still skips.
+    remote((t) => ({ [INBOX]: t.replace("## Questions\n", "## Questions\n\n- Pushed again\n") }));
+    const other = cli(["ingest"], { RISA_CONFIG: FIXTURE_CONFIG }, script);
+    expect(other.status, other.err).toBe(0);
+    expect(other.err).toMatch(/pickup skipped: the config .* belongs to another checkout than /);
+    expect(other.out).not.toMatch(/Pushed again/);
+    expect(gitIn(rel, "rev-parse", "dev")).toBe(relHead);
+    expect(read()).not.toContain("Pushed again");
+    // So does a RISA_MAIN naming another checkout.
+    const pinned = cli(["ingest"], { RISA_MAIN: rel }, script);
+    expect(pinned.err).toMatch(/pickup skipped: RISA_MAIN \(.*\) names another checkout/);
+    expect(gitIn(rel, "rev-parse", "dev")).toBe(relHead);
   });
 
   it("ingest files what is local when the pickup can't run, and says so", () => {

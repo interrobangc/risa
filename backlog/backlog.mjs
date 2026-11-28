@@ -100,7 +100,7 @@ import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
 import { loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 
-const { config } = loadConfigOrExit("backlog");
+const { config, path: CONFIG_FILE } = loadConfigOrExit("backlog");
 const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = config.paths.backlog;
@@ -484,12 +484,31 @@ function ingest(b, inbox) {
 
 // ---- the inbox on origin/dev ----------------------------------------------
 
+/** The main checkout of the repo DIR is in (its first worktree), or null outside one. */
+const mainOf = (dir) =>
+  tryGit(dir, "worktree", "list", "--porcelain")
+    ?.split("\n")[0]
+    .replace(/^worktree /, "") || null;
+/** Whether two paths name one folder (both real paths), false when either is missing. */
+const sameDir = (a, b) => {
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * The pickup: `prd dev-sync` (loops/lib.sh), best effort. Its
  * output goes to stderr; a refusal (the checkout off dev, mid-merge, other
- * edits in the way) prints why it skipped, and the command carries on. It
- * runs only when this script's lib.sh belongs to the same main checkout, so
- * a run against another repository never moves this one's dev.
+ * edits in the way) prints why it skipped, and the command carries on. lib.sh
+ * may live anywhere (a release install, `~/.risa/releases/<tag>/`, is a worktree
+ * of Risa's own repo): it runs on this command's project, the main checkout the
+ * current directory is in, and only when the project's config (the file this
+ * command loaded, RISA_CONFIG's) is in that checkout and RISA_MAIN, when set,
+ * names it, so a run against another repository never moves this one's dev.
+ * lib.sh finds its repo from that checkout (find_repo, as `risa` does) and reads
+ * that config.
  * @param {string} why
  */
 function pickup(why) {
@@ -497,16 +516,25 @@ function pickup(why) {
   const lib = fileURLToPath(new URL("../loops/lib.sh", import.meta.url));
   const skip = (reason) => console.error(`pickup skipped: ${reason}`);
   if (!existsSync(lib)) return skip(`no ${lib}`);
-  const libMain = tryGit(dirname(lib), "worktree", "list", "--porcelain")
-    ?.split("\n")[0]
-    .replace(/^worktree /, "");
-  if (!libMain || realpathSync(libMain) !== realpathSync(mainCheckout))
-    return skip(`${lib} belongs to another checkout than ${mainCheckout}`);
+  const configMain = mainOf(dirname(CONFIG_FILE));
+  if (!configMain || !sameDir(configMain, mainCheckout))
+    return skip(`the config ${CONFIG_FILE} belongs to another checkout than ${mainCheckout}`);
+  const pinned = process.env.RISA_MAIN;
+  if (pinned && !sameDir(mainOf(pinned) ?? pinned, mainCheckout))
+    return skip(`RISA_MAIN (${pinned}) names another checkout than ${mainCheckout}`);
   if (REMOTE !== "origin") return skip(`dev-sync works with origin, not ${REMOTE}`);
   if (tryGit(mainCheckout, "remote", "get-url", REMOTE) === null) return skip(`no ${REMOTE} remote`);
-  const r = spawnSync("bash", ["-c", 'source "$0" && dev_sync "$1"', lib, why], {
+  const script = [
+    'source "$0" || exit 1',
+    'find_repo "$1" && [[ $main -ef $1 ]] || die "dev-sync: lib.sh found $main, not $1"',
+    'dev_sync "$2"',
+  ].join("\n");
+  const env = { ...process.env, TRUNK, RISA_CONFIG: CONFIG_FILE, RISA_MAIN: mainCheckout };
+  delete env.RISA_CONFIG_FOUND; // a pin: lib.sh's find_repo keeps it
+  const r = spawnSync("bash", ["-c", script, lib, mainCheckout, why], {
+    cwd: mainCheckout,
     encoding: "utf8",
-    env: { ...process.env, TRUNK },
+    env,
     timeout: GIT_TIMEOUT_MS,
   });
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
