@@ -43,9 +43,18 @@ case $kind in
   slice) n=${3:?slice number}; [[ $n =~ ^[0-9]+$ ]] || { echo "slice number: digits" >&2; exit 1; }
     # The plan's Stack field (`prd doc planner "Slice fields"`) decides: a stack only
     # for Stack: yes, or --stack. Missing, or no plan: no stack.
-    plan_text=$(git -C "$main" show "${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md" 2>/dev/null || true)
+    plan_ref=${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md
+    plan_text=$(git -C "$main" show "$plan_ref" 2>/dev/null || true)
     planned=no model=opus
     if [[ -n $plan_text ]]; then
+      # A new slice branch needs its section in the committed plan: cut without
+      # it, the branch has no Check field and its slice check runs everything
+      # (RISA-1015). Resuming an existing branch is never refused.
+      if ! git -C "$main" show-ref --verify --quiet "refs/heads/$slice_prefix$topic/$n" &&
+        ! grep -Eqi "^#{2,4}[[:space:]]+slice[[:space:]]+0*$((10#$n))([^[:alnum:]_]|$)" <<<"$plan_text"; then
+        echo "refused: slice $topic-$n: no \"Slice $n\" section in the committed plan ($plan_ref); commit the plan first" >&2
+        exit 1
+      fi
       planned=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
       # The Model field: the model its agent is spawned on; an unknown one refuses.
       if ! model=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get model <<<"$plan_text" 2>/dev/null); then
