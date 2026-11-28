@@ -8,8 +8,13 @@
 
 | Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
 | ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| 14 | 3 | RISA-952 | opus | started | |
+| 15 | 3 | RISA-997 | opus | started | |
+| 16 | 3 | RISA-999 | opus | started | |
+| 17 | 3 | RISA-1000 | opus | started | |
+| 18 | 3 | RISA-927 | opus | started | |
 
-No slice in flight (idle hand-over after wave 2).
+**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs), 996 (Codex on PR #5, orchestrator chore).
 
 **Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
 
@@ -157,3 +162,53 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - Unit test: `loops/config.test.mjs` passes ten runs in a row (`--repeat` or a loop), with and without `RISA_*` variables set.
+
+## Slice 14: An idle standing topic closes itself after a landing
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-952, folding in RISA-982):** after a landing, a standing (fixes) topic whose waiting items are all blocked (its items held, or waiting on another topic; none the next wave could start) keeps its session and lane, so at cap 1 the dispatcher starts nothing else. Make the hand-over close it instead: `risa rotate` (`loops/rotate.sh`, `loops/rotate.mjs`) on a standing topic with no slice in flight and nothing runnable waiting runs the topic's `rm` (which already leaves a standing row not done) rather than opening a fresh session, and says why in one line. Decide "runnable" from the backlog and registry the way the dispatcher counts a fixes topic's waiting items (`loops/dispatch-pick.mjs`; reuse, don't copy). Don't edit `loops/rm.sh`, `loops/lib.sh` or `loops/docs/` (another topic's hot files); call rm as it is. The orchestrator folds the handbook line in at landing.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/rotate.test.mjs` or beside `rotate.mjs`): a standing topic with only blocked waiting items closes (rm called, no new session); one with a runnable item rotates as now; a non-standing topic rotates as now.
+
+## Slice 15: The CI workflow writes a verdict
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-997):** `.github/workflows/ci.yml` runs `pnpm check` but uploads no verdict, so `risa ci run --wait` reads "unknown: the run left no verdict" and `risa land`'s CI gate needs `--force`. Have the workflow write and upload the verdict artifact `ci run --wait` reads (its name, file and shape from `ci/ci-io.mjs` and `ci/verdict.fixtures`), green or failing with the failing tests, also when `pnpm check` fails (`if: always()`). Pin any new action to a full SHA with its version in a comment. No paid service; a new dependency stops the slice.
+
+**Acceptance criteria:**
+
+- Unit test (`ci/workflow.test.mjs`): the workflow uploads an artifact under the name `ci-io.mjs` reads, on success and failure, and a verdict it would write parses with the reader `ci run --wait` uses.
+
+## Slice 16: An After on an archived topic counts as done
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-999):** `prd add/set after=<topic>` on a topic already archived (RISA-934) passes doctor, but the dispatcher reads only `prd list`, so the dependent topic waits forever. Make an archived After count as done: either the write drops it (saying so) or the registry's reader that dispatch uses treats an archived topic as done (`backlog/registry.mjs`; `loops/dispatch*` only if the reader can't carry it). Pick one, say why in the hand-off.
+
+**Acceptance criteria:**
+
+- Unit test (`backlog/registry.test.mjs` or `registry.cli.test.mjs`): a topic with `after=<archived>` reads as not waiting on it; doctor and the dispatcher's view agree.
+
+## Slice 17: Test timeouts scale with load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1000):** under a 5-minute load of 20–35 the tooling unit suite times out in 5–19 files (20 s test, 10 s hook limits) that pass alone. Scale vitest's `testTimeout` and `hookTimeout` with load the way `check-budget` scales its budget (find it; reuse its load read, don't copy it), or lower parallelism under load, in `vitest.config.mjs`. Don't edit `loops/test-env*` or `loops/test-setup.mjs`. Don't just raise the fixed limits.
+
+**Acceptance criteria:**
+
+- Unit test: the limits the config computes rise with a given load (through a knob, not the machine's real load) and stay at today's values at low load.
+
+## Slice 18: The drain reads each session's own account
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-927):** the drain (`loops/drain.mjs`) reads usage only from its own environment's Claude account, so a session on another `CLAUDE_CONFIG_DIR` is drained on the wrong account's numbers. Read usage per session's config folder, as usage and context already follow each session's folder (`loops/usage.mjs`, `loops/host.mjs`), and drain each session on its own account's numbers. Don't touch `loops/machine*` or `loops/lib.sh` (another topic's hot files).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/drain.test.mjs`): two sessions on two config folders, one over the drain line and one under; only the one over drains.
