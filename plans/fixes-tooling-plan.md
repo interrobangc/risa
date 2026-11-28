@@ -6,10 +6,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model | State                                        | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | -------------------------------------------- | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | started 2026-11-28 (worktree, agent spawned) | —                              |
 
-No slice in flight (wave 11 landed; next session plans wave 12 for RISA-1073; RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file).
+Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
 **Wave 11 landed** 2026-11-28 in main as 7c89472 through PR #35: slices 51, 52, opus (RISA-1066, RISA-1068; RISA-1066 cut by test file, dispatch to RISA-1069). Tooling only, tier none; `pnpm test` green on 4b86c75; Codex clean on 96796e9; landed on an unsynced tip (main's 4 new commits share no file). Report filed (a62); to-test/2026-11-28-1153-fixes-tooling.md; slice worktrees removed. Both slice checks stopped at their budget in the tooling step with nothing failed: filed as RISA-1073.
 
