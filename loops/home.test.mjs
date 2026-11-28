@@ -142,6 +142,8 @@ beforeAll(() => {
   const bin = join(root, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "claude-stub"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o755 });
+  // A stub osascript, as dispatch.test.mjs has: none on Linux, and never the real one here.
+  writeFileSync(join(bin, "osascript"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
   mkdirSync(join(root, "iTerm.app"));
   const inboxDir = join(root, "home/.risa/inbox");
   mkdirSync(inboxDir, { recursive: true });
