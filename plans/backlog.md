@@ -20,7 +20,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `risa-next-3` | — | `risa-next-2` | — | — |
 | `risa-next-4` | — | — | `loops/config`, `loops/machine.mjs`, `loops/skeptics.mjs`, `loops/project-check`, `loops/sample-project/repo.mjs`, `bin/risa`, `loops/rm.sh`, `loops/lib.sh`, `loops/setup`, `loops/second-repo`, `loops/docs/project-config.md`, `README.md` | — |
 | `fixes-test` | standing | — | — | Test fixes: flakes, the test harness, timeouts under load, ranked apart from other fixes. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
-| `fixes-bug` | standing | — | `loops/new`, `loops/rotate`, `loops/open-session` | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
+| `fixes-bug` | standing | — | `loops/home`, `loops/dispatch`, `loops/ls`, `loops/prompts/inbox.sh`, `loops/inbox-prompt`, `backlog/inbox-move`, `loops/prd.sh`, `loops/usage` | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | Held to be rethought (the user, 2026-11-28): written for Caretook's dev and staging branches, which Risa doesn't have (main is the only trunk). Items RISA-404, RISA-430, RISA-436, RISA-584; RISA-241 moved to fixes-bug. Cut from orchestration-3. |
 | `self-recovery-2` | done | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560); RISA-1025, 1027-1029 follow-ups. Planned held after two skeptic send-backs (a7); since released. |
 | `self-recovery-3` | — | `self-recovery-2` | `backlog/registry`, `loops/prompts/plan.sh`, `loops/sample-project/prompt-golden.txt`, `loops/rotate`, `loops/rm.sh`, `loops/new.sh`, `loops/run-log`, `loops/dispatch`, `loops/land-idle`, `loops/finish` | Replan state (RISA-998), the land-idle backstop (RISA-1040) and a background-session spike for self-recovery-4 |
@@ -122,7 +122,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1046 | feature | triaged | flavor-packs |  | Flavor pack: Dune. A Great House: the user as the Padishah Emperor or a Duke, backlog = Dukes or House heads, prd = Swordmasters or Warmasters, slice = ornithopter pilots, inbox = Fremen messengers, hotfix = water engineers or Fremen craftsmen, plan = Mentats, recovery = Suk doctors |
 | RISA-1047 | feature | triaged | flavor-packs |  | Flavor pack: Lord of the Rings. The user as a Wizard of the White Council, backlog = Wizards and Elf-lords, prd = kings and stewards, slice = Rangers and Riders, inbox = hobbits and messengers, hotfix = dwarf smiths, plan = Ents and loremasters, recovery = Elvish healers |
 | RISA-1048 | bug | triaged | fixes-test |  | pnpm test:tooling runs no tests and exits 0 (a false green) from a project's node_modules: loops/tooling-tests.mjs's main guard compares import.meta.url with file://argv[1], and under pnpm argv[1] is the symlink while import.meta.url is the real .pnpm path; compare realpaths (as session-names.mjs's isMain does) here and in the other entry points with the same guard |
-| RISA-1050 | change | triaged | fixes-bug |  | Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning) |
+| RISA-1050 | change | in-progress | fixes-bug | prd/fixes-bug | Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning) |
 | RISA-1052 | bug | triaged | fixes-bug-urgent |  | session.sh resolves its own directory (bin=$(cd "$(dirname "$0")" && pwd)) before sourcing lib.sh, whose unset CDPATH now comes too late: with CDPATH set and a relative $0, cd prints the matched path and bin gets it twice, so source "$bin/lib.sh" fails. Unset CDPATH first |
 | RISA-1053 | feature | triaged | ship |  | A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion) |
 | RISA-1054 | bug | live | fixes-tooling | prd/fixes-tooling | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
@@ -137,24 +137,24 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1067 | bug | live | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
 | RISA-1068 | change | live | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 | RISA-1069 | change | triaged | fixes-tooling |  | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
-| RISA-1070 | bug | ready | fixes-bug | prd/fixes-bug | risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help |
+| RISA-1070 | bug | live | fixes-bug | prd/fixes-bug | risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help |
 | RISA-1071 | bug | live | risa-next-2 | prd/risa-next-2 | Inbox store: a filed line still in the store (cleanup delayed by an unpushed user commit) accepts inbox edit/move/remove, since findUnfiled refuses only id-tagged lines; an edit changes its key and the next ingest files a duplicate. Refuse lines whose inbox key a backlog item holds |
 | RISA-1072 | bug | live | risa-next-2 | prd/risa-next-2 | prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop |
 | RISA-1073 | bug | live | fixes-tooling | prd/fixes-tooling | The slice check's time budget doesn't allow for the tooling step: on a slice touching loops/ it comes from slice runs with a 15s median (705s), so the tooling step that follows the unit run is stopped (exit 124) with no test failed, as both wave-11 slices of fixes-tooling were at load ~21 |
 | RISA-1074 | feature | triaged | usage-aware-drain |  | risa account setup\|use\|status: set up a second Claude config folder, point a repo's sessions at it,… |
 | RISA-1075 | bug | triaged | fixes-test |  | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
 | RISA-1076 | bug | triaged | fixes-tooling |  | Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables |
-| RISA-1077 | bug | triaged | fixes-bug |  | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
-| RISA-1078 | bug | triaged | fixes-bug |  | Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim |
-| RISA-1079 | bug | triaged | fixes-bug |  | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
-| RISA-1080 | bug | triaged | fixes-bug |  | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
-| RISA-1081 | bug | triaged | fixes-bug |  | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
-| RISA-1082 | bug | ready | fixes-bug | prd/fixes-bug | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
-| RISA-1083 | bug | triaged | fixes-bug |  | Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears |
-| RISA-1084 | bug | triaged | fixes-bug |  | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
+| RISA-1077 | bug | in-progress | fixes-bug | prd/fixes-bug | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
+| RISA-1078 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim |
+| RISA-1079 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
+| RISA-1080 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
+| RISA-1081 | bug | in-progress | fixes-bug | prd/fixes-bug | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
+| RISA-1082 | bug | live | fixes-bug | prd/fixes-bug | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
+| RISA-1083 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears |
+| RISA-1084 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
 | RISA-1085 | bug | triaged | fixes-tooling |  | loops/check-run.test.mjs fails on GitHub's pull_request runs: it expects the logged branch not to be empty, and a PR run checks out a detached merge commit (run 46172609471 on PR #36: expected '' not to be '') |
-| RISA-1086 | bug | triaged | fixes-bug |  | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
-| RISA-1087 | bug | triaged | fixes-bug |  | risa usage keeps a session's old account's 5-hour reading after the session switches account |
+| RISA-1086 | bug | in-progress | fixes-bug | prd/fixes-bug | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
+| RISA-1087 | bug | in-progress | fixes-bug | prd/fixes-bug | risa usage keeps a session's old account's 5-hour reading after the session switches account |
 | RISA-1088 | bug | triaged | fixes-test |  | Full risa check: the tooling test rerun times out when two full checks overlap at high load (1-minute load near 50 on 16 cores, both check leases held: risa-next-4 and fixes-bug): 25 then 31 tests failed across 15 and 21 files, a different set each run, nearly all 20 s test or hook timeouts in land*, recover*, rotate*, stack and load-gate tests, while the same files passed whole (131 files, 2654 tests) in pnpm check's own pass |
 
 ## Items
@@ -982,9 +982,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1050 · change · Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning)
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): Asked by Caretook's backlog session 2026-11-28: this machine ran v0.2.0 while Caretook's package.json still pinned v0.1.8 (730639ee), which its tests check against; nothing warned.
@@ -1131,7 +1131,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1070 · bug · risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 9b490d4
@@ -1198,9 +1198,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1077 · bug · inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it…
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it by hand / During the account rollover (2026-11-28 ~12:29) the backlog session (Admiral Marcus) told the risa inbox session to run risa rotate --self because the business account's 5h usage was at 93%. The inbox agent declined: its prompt lets it hand off only on the user's word or a context-watch reminder, never on a peer's request. The user had to exit it and let the dispatcher's keep-alive reopen it. Expected: a rollover or rotate request from the project's backlog session (or a dispatcher-driven rollover) rotates the inbox session without the user. Transcript: ~/.claude/projects/-Users-bo--risa-inbox/9d2e8124-bba2-4375-9338-3b1cf0a4ee63.jsonl
@@ -1208,43 +1208,43 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1078 · bug · Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnH, loops/home.mjs:197); verified by reading homeTick: the claim loop has no work check.
 
 ### RISA-1079 · bug · Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnI, loops/dispatch.mjs:2107); verified in the code. Base inbox readiness on the keeper choice and the inbox claim only.
 
 ### RISA-1080 · bug · Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnJ, loops/home.mjs:209); verified in the code: fail-open.
 
 ### RISA-1081 · bug · backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnL, backlog/inbox-move.mjs:172); verified in the code: the retry's store edit only appends.
 
 ### RISA-1082 · bug · risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: c8dac71
@@ -1254,18 +1254,18 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1083 · bug · Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69Gjta, loops/dispatch.mjs:2586); verified: loadHome runs once before the loop, and the code hash covers only .mjs files.
 
 ### RISA-1084 · bug · Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GmA8, loops/dispatch.mjs:2018); verified: homeBlocked is read at the pick, the keep-alive, the session request and the resume only.
@@ -1281,18 +1281,18 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1086 · bug · risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (prd/fixes-bug): Follow-up of RISA-1070 (slice 14, 9b490d4), which only stops the worktree being made (new.sh refuses a dash-led topic). Needs loops/prd.sh, hot for risa-next-2 when written; proposed by prd-fixes-bug for the user's review.
 
 ### RISA-1087 · bug · risa usage keeps a session's old account's 5-hour reading after the session switches account
 
-- status: triaged
+- status: in-progress
 - prd: fixes-bug
-- owner:
+- owner: prd/fixes-bug
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: After the 2026-11-28 rollover to ~/.claude-personal, .loops/.usage/<session>.json for backlog, inbox, prd-fixes-tooling and prd-risa-next-2 kept fiveHour 94% (at 17:27Z, business account) beside account=/Users/bo/.claude-personal and fresh sevenDay readings, so risa usage and the usage watch reported 94% for the personal account until the window reset at 18:40Z. A window read under a different account (or before the account field changed) should be dropped, not merged.
