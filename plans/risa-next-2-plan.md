@@ -10,14 +10,14 @@
 
 **Now:** wave 2 started 2026-11-28: slice 2 (opus), with RISA-1057–1060 in its brief and claimed; synced (no merge needed). Before: wave 1 landed in main through PR #28 (36eee3e, tier none, Codex clean on 3cf4b59); to-test `to-test/2026-11-28-1041-risa-next-2.md`. Told prd-fixes-bug (risa). **Next session: wave 2** = slice 2 on opus, its brief plus RISA-1057–1060 (fixes in `backlog/inbox-store.mjs`: hashed clone name, absolute temp index, clear tracking ref on an empty remote, safe first-use clone); claim RISA-1057–1060 when it starts.
 
-| Slice | Wave | State         | Merge into `prd/risa-next-2` |
-| ----- | ---- | ------------- | ---------------------------- |
-| 1     | 1    | landed (opus) | 72d3a64                      |
-| 2     | 2    | started (opus) | —                           |
-| 3     | 3    | —             | —                            |
-| 5     | 3    | —             | —                            |
-| 4     | 4    | —             | —                            |
-| 6     | 4    | —             | —                            |
+| Slice | Wave | State          | Merge into `prd/risa-next-2` |
+| ----- | ---- | -------------- | ---------------------------- |
+| 1     | 1    | landed (opus)  | 72d3a64                      |
+| 2     | 2    | started (opus) | —                            |
+| 3     | 3    | —              | —                            |
+| 5     | 3    | —              | —                            |
+| 4     | 4    | —              | —                            |
+| 6     | 4    | —              | —                            |
 
 **Backlog:** RISA-1057–1060 (Codex on PR #28, `backlog/inbox-store.mjs`) taken into this PRD at fixes-bug's request: add them to slice 2's brief. Promised prd-fixes-bug (risa): a message when wave 1 lands in main, and when `backlog/` and `loops/dispatch` stop being hot. Claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
