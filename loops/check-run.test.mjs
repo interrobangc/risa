@@ -6,6 +6,8 @@
 // the local measure armed). The slice's own check (check-hook.sh, RISA-1005): on
 // a slice branch of a sample repo whose plan names a slice's Check file, only that
 // file through the config's testFile. And the lease's default of two check slots.
+// The checks run in a throwaway repo on a named branch, never this checkout, whose
+// branch is empty on a detached one (a GitHub pull_request run, RISA-1085).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -26,7 +28,9 @@ import { fixtureTierData } from "./config-fixture.mjs";
 import { SAMPLE_CONFIG, makeRepo } from "./sample-project/repo.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
-let root, logFile, loadFile;
+let root, logFile, loadFile, repo;
+const BRANCH = "slice/t/7";
+const git = (...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" });
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "check-run-")));
@@ -34,6 +38,20 @@ beforeAll(() => {
   // Never the real machine's load: a quiet one unless a test says otherwise.
   loadFile = join(root, "load");
   writeFileSync(loadFile, "1 1 1\n");
+  repo = join(root, "repo");
+  mkdirSync(repo);
+  git("init", "-q", "-b", BRANCH);
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "start",
+  );
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -43,7 +61,7 @@ const inState = (name) => `"$RISA_CHECK_STATE/${name}"`;
 // clock: the fake clock's file (none: the real clock).
 const run = (mode, why, cmd, { clock = "", ...extra } = {}) =>
   spawnSync("bash", [join(HERE, "check-run.sh"), mode, why, "--", "sh", "-c", cmd], {
-    cwd: HERE,
+    cwd: repo,
     encoding: "utf8",
     env: {
       ...process.env,
@@ -85,7 +103,20 @@ describe("check-run.sh", () => {
       filesAll: 90,
     });
     expect(runs[1].seconds).toBeGreaterThanOrEqual(0);
-    expect(runs[1].branch).not.toBe("");
+    expect(runs[1].branch).toBe(BRANCH);
+  });
+
+  it("logs an empty branch on a detached checkout (RISA-1085)", () => {
+    git("checkout", "-q", "--detach");
+    try {
+      expect(run("quick", "detached", "exit 0").status).toBe(0);
+    } finally {
+      git("checkout", "-q", BRANCH);
+    }
+    expect(parseLog(readFileSync(logFile, "utf8")).runs.at(-1)).toMatchObject({
+      reason: "detached",
+      branch: "",
+    });
   });
 });
 
@@ -133,21 +164,16 @@ describe("check-run.sh budget and silence limit", () => {
 
   it("hands the budget the steps it will run, RISA_CHECK_STEPS (RISA-1073)", () => {
     const log = join(root, "steps-log");
-    // The samples' branch is the checkout's own (check-run.sh reads it from its
-    // cwd), so they match the check's branch kind on a slice, prd or detached checkout.
-    const branch = spawnSync("git", ["branch", "--show-current"], {
-      cwd: HERE,
-      encoding: "utf8",
-    }).stdout.trim();
+    // The samples are on the throwaway repo's branch (check-run.sh reads it from its cwd).
     const line = (secs, steps) =>
-      ["2026-11-01T10:00:00Z", "wt", branch, "quick", "", secs, "1", "1", "0"]
+      ["2026-11-01T10:00:00Z", "wt", BRANCH, "quick", "", secs, "1", "1", "0"]
         .concat(Array(8).fill(""), steps)
         .join("\t");
     writeFileSync(log, [5, 6, 7, 8, 9].map((s) => line(s, "check:5")).join("\n") + "\n");
     const said = (steps) =>
       run("quick", "steps", "exit 0", { RISA_CHECK_LOG: log, RISA_CHECK_STEPS: steps }).stdout;
     expect(said("check")).toMatch(
-      /^Check budget 10m00s \(from 5 passing quick runs on \w+ branches that ran check,/m,
+      /^Check budget 10m00s \(from 5 passing quick runs on slice branches that ran check,/m,
     );
     expect(said("check,tooling")).toMatch(/^Check budget 20m00s \(the hard limit: 0 passing quick run/m);
   });
