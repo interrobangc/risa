@@ -156,16 +156,18 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1086 | bug | live | fixes-bug | prd/fixes-bug | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
 | RISA-1087 | bug | live | fixes-bug | prd/fixes-bug | risa usage keeps a session's old account's 5-hour reading after the session switches account |
 | RISA-1088 | bug | live | fixes-test | prd/fixes-test | Full risa check: the tooling test rerun times out when two full checks overlap at high load (1-minute load near 50 on 16 cores, both check leases held: risa-next-4 and fixes-bug): 25 then 31 tests failed across 15 and 21 files, a different set each run, nearly all 20 s test or hook timeouts in land*, recover*, rotate*, stack and load-gate tests, while the same files passed whole (131 files, 2654 tests) in pnpm check's own pass |
-| RISA-1089 | bug | ready | fixes-bug | prd/fixes-bug | risa config migrate leaves a half-done move when a rule file it moves is git-ignored (or untracked with status.showUntrackedFiles=no): the dirty preflight (git status --porcelain) shows nothing, risa.json is moved and staged, git mv then fails on the rule file, and the next run refuses because .risa/ exists; check every source is tracked (git ls-files --error-unmatch) before any move |
-| RISA-1090 | bug | ready | fixes-bug | prd/fixes-bug | risa init writes a config whose check can't run: risa check calls the check planner first (loops/prd.sh), and check-plan.mjs refuses with 'the project config sets no paths.checkPlanRules', then the tier data is needed too; init should write usable .risa/check-plan.json and .risa/tiers.json defaults, or print the step that adds them |
-| RISA-1091 | bug | ready | fixes-bug | prd/fixes-bug | risa init writes a repo that fails the project-data check: project-check.mjs needs paths.preferences (a doc with a 'Default on silence … Never (--waits)' line), a planner role doc with What to ask and The skeptic pass, and <plans>/fixes-rules.md, and every other .md beside the preferences doc must be named by a role; init writes none of them (beyond the AGENTS.md and docs/ file it already names when missing), so init should write working defaults or print each step |
+| RISA-1089 | bug | live | fixes-bug | prd/fixes-bug | risa config migrate leaves a half-done move when a rule file it moves is git-ignored (or untracked with status.showUntrackedFiles=no): the dirty preflight (git status --porcelain) shows nothing, risa.json is moved and staged, git mv then fails on the rule file, and the next run refuses because .risa/ exists; check every source is tracked (git ls-files --error-unmatch) before any move |
+| RISA-1090 | bug | live | fixes-bug | prd/fixes-bug | risa init writes a config whose check can't run: risa check calls the check planner first (loops/prd.sh), and check-plan.mjs refuses with 'the project config sets no paths.checkPlanRules', then the tier data is needed too; init should write usable .risa/check-plan.json and .risa/tiers.json defaults, or print the step that adds them |
+| RISA-1091 | bug | live | fixes-bug | prd/fixes-bug | risa init writes a repo that fails the project-data check: project-check.mjs needs paths.preferences (a doc with a 'Default on silence … Never (--waits)' line), a planner role doc with What to ask and The skeptic pass, and <plans>/fixes-rules.md, and every other .md beside the preferences doc must be named by a role; init writes none of them (beyond the AGENTS.md and docs/ file it already names when missing), so init should write working defaults or print each step |
 | RISA-1092 | feature | triaged | risa-next-5 |  | risa init: a flag for the branch prefixes (today branches.prefixes is edited by hand after init), and config.mjs check run from a Risa install with RISA_CONFIG unset checks Risa's own checkout config, not the repo in the current directory, which surprises a second repo's user (say which config it checked, or prefer the cwd's repo) |
 | RISA-1093 | bug | triaged | fixes-test |  | Entry points guarded with pathToFileURL(process.argv[1]).href are a silent no-op through a symlink (about 20 in loops/: slice-brief, status-trim, dispatch, finish, context, drain, bye, cost, host and others): run directly they work, through a symlink they print nothing and exit 0; switch them to isMain from loops/is-main.mjs |
-| RISA-1094 | bug | ready | fixes-bug | prd/fixes-bug | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
+| RISA-1094 | bug | live | fixes-bug | prd/fixes-bug | A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it |
 | RISA-1095 | feature | triaged | fixes-tooling |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
 | RISA-1096 | bug | triaged | fixes-tooling |  | Tests time out at high load even with the load-aware limits: prd-ship's full check at load 37-40 had 15 failures and 22 timeout lines (land-unsynced 5, recover-down 2, stack 2, ask, project-check, recover-unattended, rotate, rotate-into, rotate-standing; rotate tests ran 45-77 s); the check should wait out the load gate or the limits should scale further |
 | RISA-1097 | bug | triaged | fixes-bug |  | risa ship: a runner killed (SIGTERM) while a hook runs leaves the hook alive (runHook's spawnSync forwards no signal), and the dead runner's pid lets a second ship take over the lock, so two ships' hooks can run at once; keep the lock for the hook's lifetime (record the hook's pid or process group in the lock and check it at takeover) or stop and wait for the hook on termination |
 | RISA-1098 | bug | triaged | fixes-bug |  | A dispatcher command that times out leaves its descendants running: run() (loops/dispatch.mjs) SIGKILLs only spawnSync's direct child, so after new.sh's setup timeout the dispatcher's undo removes the worktree while an install or stack hook under it may still be writing; run bounded commands in their own process group and end the group before the failure path and cleanup |
+| RISA-1099 | bug | triaged | fixes-bug |  | risa ship (Risa's hook, release/ship.mjs): when the release commit is pushed to main but the tag push fails, and a backlog-only commit then lands on main, a retry doesn't see the earlier release commit (it checks only the tip), pushes a second chore(release) commit with a duplicate changelog heading, then refuses on the local tag; find the pushed release commit beneath later backlog-only commits and tag it |
+| RISA-1100 | bug | triaged | fixes-bug |  | risa ship (release/ship.mjs compareVersions): pre-release suffixes compare as whole strings, so 0.3.0-rc.10 sorts below 0.3.0-rc.9; compare dot-separated identifiers, numeric ones numerically (highestTag and the not-above check use it) |
 
 ## Items
 
@@ -1326,7 +1328,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1089 · bug · risa config migrate leaves a half-done move when a rule file it moves is git-ignored (or untracked with status.showUntrackedFiles=no): the dirty preflight (git status --porcelain) shows nothing, risa.json is moved and staged, git mv then fails on the rule file, and the next run refuses because .risa/ exists; check every source is tracked (git ls-files --error-unmatch) before any move
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: a0ca4d7
@@ -1335,7 +1337,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1090 · bug · risa init writes a config whose check can't run: risa check calls the check planner first (loops/prd.sh), and check-plan.mjs refuses with 'the project config sets no paths.checkPlanRules', then the tier data is needed too; init should write usable .risa/check-plan.json and .risa/tiers.json defaults, or print the step that adds them
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 210789d
@@ -1345,7 +1347,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1091 · bug · risa init writes a repo that fails the project-data check: project-check.mjs needs paths.preferences (a doc with a 'Default on silence … Never (--waits)' line), a planner role doc with What to ask and The skeptic pass, and <plans>/fixes-rules.md, and every other .md beside the preferences doc must be named by a role; init writes none of them (beyond the AGENTS.md and docs/ file it already names when missing), so init should write working defaults or print each step
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 24c2145
@@ -1373,7 +1375,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1094 · bug · A dispatcher whose backlog command hangs freezes and ignores SIGTERM: dispatch.mjs's run()/backlog() spawnSync has no timeout, so the tick blocks, the event loop never turns and the stop handler never runs; give the call a timeout and end the tick on it
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: d56c7f4
@@ -1416,3 +1418,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-bug): Codex P2 on PR 49 (fixes-bug wave 7, slice 29, RISA-1094), thread PRRT_kwDOV9ctaM69IRAh, loops/dispatch.mjs:751; verified against the code, and slice 29's hand-off named the same gap (spawnSync has no documented detached). Codex reproduced it with a nested shell that kept writing after ETIMEDOUT. Not breaking: before RISA-1094 the same hang froze the dispatcher for good; the undo-after-timeout applies only past new.sh's 30-minute limit.
+
+### RISA-1099 · bug · risa ship (Risa's hook, release/ship.mjs): when the release commit is pushed to main but the tag push fails, and a backlog-only commit then lands on main, a retry doesn't see the earlier release commit (it checks only the tip), pushes a second chore(release) commit with a duplicate changelog heading, then refuses on the local tag; find the pushed release commit beneath later backlog-only commits and tag it
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/ship): Codex P2 on PR 50 (ship wave 2), verified in the code: ship() tests only HEAD's subject and version. Fix before the first real ship: the hooks aren't wired into risa.json yet. https://github.com/interrobangc/risa/pull/50#discussion_r4728904084
+
+### RISA-1100 · bug · risa ship (release/ship.mjs compareVersions): pre-release suffixes compare as whole strings, so 0.3.0-rc.10 sorts below 0.3.0-rc.9; compare dot-separated identifiers, numeric ones numerically (highestTag and the not-above check use it)
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/ship): Codex P2 on PR 50 (ship wave 2), verified: the config's version shape accepts a pre-release, and compareVersions ends on ra < rb. No pre-release tag exists on origin today. https://github.com/interrobangc/risa/pull/50#discussion_r4728904089
