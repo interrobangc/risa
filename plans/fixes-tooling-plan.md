@@ -13,6 +13,8 @@
 | 21    | 4    | RISA-1003 | opus  | handed off (ad28f74; check failed only on the plan format, fixed 95b17c9); merges after 19 |                                |
 | 22    | 4    | RISA-1004 | opus  | started                                                                                    |                                |
 | 23    | 4    | RISA-926  | opus  | started                                                                                    |                                |
+| 24    | 4    | RISA-981  | opus  | started (high priority, the user via the backlog session)                                  |                                |
+| 25    | 4    | RISA-1009 | opus  | started                                                                                    |                                |
 
 **Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running.
 
@@ -263,3 +265,24 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/keep-alive.test.mjs`, plus `loops/session-requests.test.mjs` for its half): with work off, neither opens a session and each says why; with work on, both act as now.
+
+## Slice 24: A dispatcher re-execs onto the release risa points to
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-release.test.mjs
+
+**Build (RISA-981, high priority on the user's word):** a dispatcher started from a release install (`~/.risa/releases/<tag>/`) hashes its own frozen release folder at start and each tick (`codeHash`, `CODE_AT_START` in `loops/dispatch.mjs`), so it never sees a new install, while `risa status` (`loops/status-extra.mjs`) compares the current tool's checkout and says "it re-execs before its next tick", an hour on. Between ticks, resolve the code `risa` now points to (the same resolution `bin/risa` uses for the installed release link; reuse it, don't copy) and compare that folder's hash; changed, re-exec into that folder's `dispatch.mjs` (`process.execve`, as now), not its own path. A dispatcher run from a checkout keeps today's behaviour. Have `status-extra.mjs` compare the same target, and print `lastTickAt` beside `last:` (that line is the last logged change, not the last tick). Keep `loops/dispatch.mjs`'s change to the code-staleness path (slice 22 edits its stall lookup; slice 25 its CLI).
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/dispatch-release.test.mjs`): two fake release folders and a link moved from one to the other; the staleness check reads stale and names the new folder's `dispatch.mjs` as the re-exec target; a checkout-run dispatcher reads as now.
+- Unit test (`loops/status-extra.test.mjs`): status names the same target and shows the last tick's time.
+
+## Slice 25: risa dispatch --restart
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/dispatch-restart.test.mjs
+
+**Build (RISA-1009):** a command a backlog agent can run to restart the dispatcher on the current release, so a new pin or install doesn't need the user at the terminal: `risa dispatch --restart` stops the running one (as `--stop` does: TERM, wait for its lock to free) and starts a new one through `risa` (so on the release it points to now), detached from the caller's shell (or in its own tab the way the dispatcher is started today; find how `risa recover` or `risa start` opens it and reuse that), keeping its `--every` and the keep-alive state a stop would otherwise clear (it isn't the user's stop). No dispatcher running: it starts one. Print one line: old pid, new pid, the code it runs. Add the flag to the usage line and the header comment (`loops/dispatch.mjs`'s CLI; leave its staleness code to slice 24 and its stall lookup to slice 22).
+
+**Acceptance criteria:**
+
+- Unit test (a new `loops/dispatch-restart.test.mjs`): with a fake running dispatcher (a stub process holding the lock), `--restart` ends it and starts one new one detached, keep-alive kept; with none running it starts one.
