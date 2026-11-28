@@ -6,20 +6,20 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
-| 27 | 5 | RISA-1011 | sonnet | agent spawned | — |
-| 28 | 5 | RISA-882 | opus | waiting (blocked by 27) | — |
-| 29 | 5 | RISA-886, 889 | opus | agent spawned | — |
-| 30 | 5 | RISA-986 | opus | agent spawned | — |
-| 31 | 5 | RISA-994 (1/2) | opus | agent spawned | — |
-| 32 | 5 | RISA-994 (2/2) | opus | waiting (blocked by 31) | — |
-| 33 | 5 | RISA-1006 | opus | agent spawned | — |
-| 34 | 5 | RISA-1012 | opus | agent spawned | — |
-| 35 | 5 | RISA-1013 | opus | agent spawned | — |
-| 36 | 5 | RISA-1014 | opus | agent spawned | — |
-| 37 | 5 | RISA-813 | opus | agent spawned | — |
-| 38 | 5 | RISA-883 | opus | agent spawned | — |
+| Slice | Wave | Item           | Model  | State                   | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------------- | ------ | ----------------------- | ------------------------------ |
+| 27    | 5    | RISA-1011      | sonnet | agent spawned           | —                              |
+| 28    | 5    | RISA-882       | opus   | waiting (blocked by 27) | —                              |
+| 29    | 5    | RISA-886, 889  | opus   | agent spawned           | —                              |
+| 30    | 5    | RISA-986       | opus   | agent spawned           | —                              |
+| 31    | 5    | RISA-994 (1/2) | opus   | agent spawned           | —                              |
+| 32    | 5    | RISA-994 (2/2) | opus   | waiting (blocked by 31) | —                              |
+| 33    | 5    | RISA-1006      | opus   | agent spawned           | —                              |
+| 34    | 5    | RISA-1012      | opus   | agent spawned           | —                              |
+| 35    | 5    | RISA-1013      | opus   | agent spawned           | —                              |
+| 36    | 5    | RISA-1014      | opus   | agent spawned           | —                              |
+| 37    | 5    | RISA-813       | opus   | agent spawned           | —                              |
+| 38    | 5    | RISA-883       | opus   | agent spawned           | —                              |
 
 **Wave 4 landed** 2026-11-27 in main as 730639e (PR #11), released as v0.1.8: slices 19–26 (RISA-881, 1005, 1003, 1004, 926, 981, 1009, 1010); 26 on sonnet, the rest opus. CI unit green on 9f74528 (run 46102353384). Codex: 2 P2s filed (RISA-1012, 1013), clean on 9f74528; landed on the user's word with `--no-review --by-user` without its re-review of the docs-only tip. The new risa.json keys (commands.testFile, staticCheck) broke v0.1.7 until v0.1.8 was installed: **a change to Risa's own risa.json needs the release that reads it installed first.** Report filed; slice worktrees removed.
 
