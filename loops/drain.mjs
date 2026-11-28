@@ -9,8 +9,8 @@
 //             (a plan window at 100%: extra usage, if it's on, is being spent), or a session
 //             stopped on a limit whose reset hasn't passed: as draining, and the tick ends
 //             each managed session (marked stalled, error "limited"), except one running a
-//             landing, which finishes first. Hand-opened sessions are never ended: one report
-//             names them. Nothing opens a claude while limited (no helper, keep-alive,
+//             landing, which finishes first. Hand-opened sessions, and backlog and inbox
+//             sessions (the kept kinds: keep-alive.mjs), are never ended: one report names them. Nothing opens a claude while limited (no helper, keep-alive,
 //             session request, rotation or `claude -p` probe: a probe would spend on extra
 //             usage and succeed, so it can't show the limit has reset); resuming goes by the
 //             reading's reset time.
@@ -30,6 +30,7 @@
 //                             limited; else 0 (and 0 on any error: watching never hurts the work)
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
+import { KEPT_KINDS } from "./keep-alive.mjs";
 import { clock, mergeReadings, readUsage, stallHolds, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
 export const DRAIN_PERCENT = 95;
@@ -223,7 +224,8 @@ export function isLanding(/** @type {string} */ args) {
 }
 
 /**
- * @typedef {{ name: string, pid: number, live: boolean, managed: boolean }} LimitSession
+ * @typedef {{ name: string, pid: number, live: boolean, managed: boolean, kind?: string }} LimitSession
+ *   kind: the record's (backlog and inbox sessions are never ended)
  * @typedef {{ type: "end", session: string, pid: number }
  *   | { type: "kill", session: string, pid: number }
  *   | { type: "wait", session: string, why: string }
@@ -235,8 +237,8 @@ export function isLanding(/** @type {string} */ args) {
  * @param {{ sessions: LimitSession[], landing: Set<string>,
  *   stalls: Record<string, { pid?: number | null, at?: string | number | null, error?: string } | null | undefined>,
  *   reported?: string[], drain: Drain, drains?: Record<string, Drain>, now: number, endWaitMs?: number }} facts
- *   stalls: each session's stall mark (its usage reading's); reported: hand-opened sessions
- *   already named in this incident's report; drains: each session's own (sessionDrains),
+ *   stalls: each session's stall mark (its usage reading's); reported: hand-opened, backlog
+ *   and inbox sessions already named in this incident's report; drains: each session's own (sessionDrains),
  *   DRAIN for one it leaves out
  * @returns {LimitAction[]}
  */
@@ -253,14 +255,16 @@ export function limitActions({
   /** @type {LimitAction[]} */
   const out = [];
   const hand = [];
+  const kept = [];
   /** @type {string[]} */
   const whys = [];
   for (const s of sessions) {
     if (!s.live || !s.pid) continue;
     const own = drains[s.name] ?? drain;
     if (own.state !== "limited") continue;
-    if (!s.managed) {
-      hand.push(s.name);
+    const isKept = KEPT_KINDS.includes(s.kind ?? s.name);
+    if (!s.managed || isKept) {
+      (isKept ? kept : hand).push(s.name);
       if (!reported.includes(s.name) && !whys.includes(own.why)) whys.push(own.why);
       continue;
     }
@@ -275,13 +279,20 @@ export function limitActions({
     else if (ours) out.push({ type: "wait", session: s.name, why: "sent TERM; waiting for it to end" });
     else out.push({ type: "end", session: s.name, pid: s.pid });
   }
-  const fresh = hand.filter((n) => !reported.includes(n)).sort();
-  if (fresh.length)
+  const freshHand = hand.filter((n) => !reported.includes(n));
+  const freshKept = kept.filter((n) => !reported.includes(n));
+  const fresh = [...freshHand, ...freshKept].sort();
+  if (fresh.length) {
+    const never = [
+      ...(freshHand.length ? ["one opened by hand"] : []),
+      ...(freshKept.length ? ["a backlog or inbox session"] : []),
+    ].join(", or ");
     out.push({
       type: "report",
       sessions: fresh,
-      text: `Usage is limited (${whys.join("; ")}). The dispatcher ended its managed sessions, but never ends one opened by hand: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
+      text: `Usage is limited (${whys.join("; ")}). The dispatcher ended its managed sessions, but never ends ${never}: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
     });
+  }
   return out;
 }
 

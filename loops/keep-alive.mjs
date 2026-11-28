@@ -15,10 +15,6 @@
 // unreadable process list counts as live: two sessions under one Remote Control
 // name would fight over the main checkout.
 //
-// A dead session `stalled` on a usage limit whose reset is still ahead (drain.mjs
-// stalledSessions: ended on its own account's limit while the dispatcher's is normal)
-// isn't opened before that reset, and its death isn't counted.
-//
 // A session that dies within QUICK_DEATH_MS of being opened is a quick death.
 // The third gets a question ("open again" or "stop keeping it alive") with its
 // own marker (KEEP_SESSION) and state entry, so it is never read as a reopen
@@ -49,8 +45,7 @@ export const START_GRACE_MS = 2 * 60_000;
 /**
  * @typedef {{ deaths?: number, openedAt?: number, asked?: { id: string }, stopped?: boolean }} KeepEntry
  * @typedef {Record<string, KeepEntry>} KeepState
- * @typedef {{ name: string, live: boolean, rotating?: boolean, rotatingAt?: number | string | null,
- *   stalled?: boolean }} KeepSession
+ * @typedef {{ name: string, live: boolean, rotating?: boolean, rotatingAt?: number | string | null }} KeepSession
  * @typedef {{ kind: string, action: "open" | "ask" | "none", why: string, deaths?: number,
  *   reset?: boolean, text?: string, options?: string[] }} KeepDecision
  */
@@ -137,7 +132,6 @@ export function keepAliveDecision({
     if (processes === null) return none("the process list can't be read");
     if (processes.some((args) => remoteNamesOf(kind).some((n) => hasRemoteControl(args, n, claude))))
       return none("live, opened by hand", recovered);
-    if (s?.stalled) return none("stopped on a usage limit: not opened before its reset");
 
     if (e.asked) return none(`waits on ask ${e.asked.id}`);
     if (unready[kind]) return none(unready[kind]);

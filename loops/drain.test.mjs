@@ -33,7 +33,6 @@ import {
   stalledSessions,
 } from "./drain.mjs";
 import { resumeDecision } from "./resume.mjs";
-import { keepAliveDecision } from "./keep-alive.mjs";
 import { markStalled, mergeReadings, readReadings } from "./usage.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
 
@@ -238,26 +237,37 @@ describe("the limited tick's actions", () => {
   const sessions = [
     { name: "prd-a", pid: 11, live: true, managed: true },
     { name: "prd-b", pid: 12, live: true, managed: true },
-    { name: "backlog", pid: 13, live: true, managed: true },
+    { name: "backlog", pid: 13, live: true, managed: true, kind: "backlog" },
     { name: "hotfix-h", pid: 14, live: true, managed: false },
     { name: "prd-dead", pid: 15, live: false, managed: true },
     { name: "mine", pid: 16, live: true, managed: false },
   ];
 
-  it("ends each live managed session but one in a landing, and reports the hand-opened ones once", () => {
+  it("ends each live managed prd session but one in a landing, and reports the hand-opened and backlog ones once", () => {
     const a = limitActions({ sessions, landing: new Set(["prd-b"]), stalls: {}, drain: limited, now: NOW });
     expect(a).toEqual([
       { type: "end", session: "prd-a", pid: 11 },
       { type: "wait", session: "prd-b", why: "it runs a landing: ended once that finishes" },
-      { type: "end", session: "backlog", pid: 13 },
-      expect.objectContaining({ type: "report", sessions: ["hotfix-h", "mine"] }),
+      expect.objectContaining({ type: "report", sessions: ["backlog", "hotfix-h", "mine"] }),
     ]);
-    expect(a[3].text).toContain("never ends one opened by hand: hotfix-h, mine are still live");
+    expect(a[2].text).toContain(
+      "never ends one opened by hand, or a backlog or inbox session: backlog, hotfix-h, mine are still live",
+    );
+    const hands = limitActions({
+      sessions: sessions.filter((s) => s.name !== "backlog"),
+      landing: new Set(),
+      stalls: {},
+      drain: limited,
+      now: NOW,
+    });
+    expect(hands.find((x) => x.type === "report").text).toContain(
+      "never ends one opened by hand: hotfix-h, mine are still live",
+    );
     const again = limitActions({
       sessions,
       landing: new Set(),
       stalls: {},
-      reported: ["hotfix-h", "mine"],
+      reported: ["backlog", "hotfix-h", "mine"],
       drain: limited,
       now: NOW,
     });
@@ -403,49 +413,41 @@ describe("each session on its own account", () => {
     }
   });
 
-  it("a backlog session ended on its own limited account isn't kept alive until its reset", () => {
-    const dir = mkdtempSync(join(tmpdir(), "risa-drain-keep-"));
-    try {
-      // backlog on account B at 99%; the dispatcher on A, under the line.
-      writeFileSync(join(dir, "backlog.json"), JSON.stringify(reading("backlog", B, 99)));
-      const normal = { state: /** @type {const} */ ("normal"), resetsAt: null, why: "", unknown: false };
-      // Tick 1: ended and marked, as drainStep does.
-      const drains = sessionDrains(readReadings(dir), ["backlog"], { ...opts, account: A });
-      expect(
-        limitActions({
-          sessions: [{ name: "backlog", pid: 31, live: true, managed: true }],
-          landing: new Set(),
-          stalls: {},
-          drain: normal,
-          drains,
-          now: NOW,
-        }),
-      ).toEqual([{ type: "end", session: "backlog", pid: 31 }]);
-      markStalled(dir, "backlog", {
-        error: "limited",
-        resetsAt: drains.backlog.resetsAt,
-        pid: 31,
+  it("never ends a backlog or inbox session, on its own limited account or the dispatcher's; a prd session there is ended", () => {
+    const sessions = [
+      { name: "backlog", pid: 41, live: true, managed: true, kind: "backlog" },
+      { name: "inbox", pid: 42, live: true, managed: true, kind: "inbox" },
+      { name: "prd-b", pid: 43, live: true, managed: true, kind: "prd" },
+    ];
+    const readings = [reading("backlog", B, 99), reading("inbox", B, 99), reading("prd-b", B, 99)];
+    const normal = { state: /** @type {const} */ ("normal"), resetsAt: null, why: "", unknown: false };
+    const limited = {
+      state: /** @type {const} */ ("limited"),
+      resetsAt: NOW + 60 * MIN,
+      why: "5h 99%",
+      unknown: false,
+    };
+    for (const account of [A, B]) {
+      // On A, B is the sessions' own account; on B, it is the dispatcher's too.
+      const drains = sessionDrains(
+        readings,
+        sessions.map((s) => s.name),
+        { ...opts, account },
+      );
+      const a = limitActions({
+        sessions,
+        landing: new Set(),
+        stalls: {},
+        drain: account === B ? limited : normal,
+        drains,
         now: NOW,
-        account: B,
       });
-      const keep = (now) =>
-        keepAliveDecision({
-          kinds: ["backlog"],
-          sessions: [
-            { name: "backlog", live: false, stalled: stalledSessions(readReadings(dir), now).has("backlog") },
-          ],
-          processes: [],
-          keep: { backlog: { openedAt: NOW - 120 * MIN } },
-          now,
-        })[0];
-      // Tick 2: dead, its mark's reset ahead: not opened, and no death counted.
-      const held = keep(NOW + MIN);
-      expect(held.action).toBe("none");
-      expect(held.why).toMatch(/not opened before its reset/);
-      // After B's reset: kept alive again.
-      expect(keep(NOW + 61 * MIN).action).toBe("open");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+      expect(a).toEqual([
+        { type: "end", session: "prd-b", pid: 43 },
+        expect.objectContaining({ type: "report", sessions: ["backlog", "inbox"] }),
+      ]);
+      // Only an `end` is marked stalled (drainStep): the backlog and inbox sessions get no mark.
+      expect(a.filter((x) => x.type === "end").map((x) => x.session)).toEqual(["prd-b"]);
     }
   });
 
