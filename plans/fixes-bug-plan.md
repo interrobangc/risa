@@ -38,7 +38,7 @@
 | 26    | 7    | RISA-1089       | opus   | merged  | a0ca4d7                    |
 | 27    | 7    | RISA-1090       | opus   | merged  | 210789d                    |
 | 28    | 7    | RISA-1091       | opus   | started |                            |
-| 29    | 7    | RISA-1094       | opus   | started |                            |
+| 29    | 7    | RISA-1094       | opus   | merged  | d56c7f4                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
