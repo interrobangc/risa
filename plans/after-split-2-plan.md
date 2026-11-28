@@ -4,13 +4,19 @@
 
 ## Status
 
-| Slice | Wave | State   | Merge into `prd/after-split-2` |
-| ----- | ---- | ------- | ------------------------------ |
-| 1     | 1    | planned |                                |
-| 2     | 1    | planned |                                |
-| 3     | 2    | planned |                                |
+| Slice | Wave | State  | Merge into `prd/after-split-2`  |
+| ----- | ---- | ------ | ------------------------------- |
+| 1     | 1    | landed | 11b94c5 (+ fix 6100b8e)         |
+| 2     | 1    | landed | 57736ed                         |
+| 3     | 2    | merged | e32da3c (not landed, not gated) |
 
-**Backlog:** claim RISA-972 when slice 1 starts; `done` it when slice 3 merges.
+**Landing mode:** run everything through (started run-through): start every ready slice, land each green wave, ask only real questions (through the ask skeptic). Models: opus for all three slices.
+
+**Wave 1 landed** 2026-11-27 in main through PR #8 (https://github.com/interrobangc/risa/pull/8, main 4c8b956; tier none, tooling only; on an unsynced tip, main's 3 commits shared no file). Codex: one P2 (stack_hook under pipefail with a config in no checkout), fixed in 6100b8e, thread replied and resolved; then clean. Report filed; to-test `2026-11-27-1916-after-split-2.md`. Worktrees `-1` and `-2` removed. No docs to fold for wave 1 (no doc names where hooks run; the README sentence comes with slice 3).
+
+**Wave 2 (slice 3) gated** 2026-11-27: sync needed no merge (main's changes share no file). Full `risa check` (tier none) on b4eb2ae: 19 failures in 13 files, 17 of them load timeouts (load 20–30); each file rerun alone passed (bye and land-unsynced only at load ~2: 51/51). Next: `risa pr after-split-2`, `risa review after-split-2 --wait`, land; the README sentence already holds the PRD's decisions (nothing more to fold); `risa rm after-split-2` last. RISA-972 is `ready` at e32da3c.
+
+**Lessons:** this machine runs at load 20–35: the tooling suite times out in a handful of files that pass alone (RISA-1000, fixes-tooling, triaged); judge a red check by rerunning its failing files alone. Every commit on prd/ after `risa pr` makes Codex's verdict stale (a status-only commit too, and Codex doesn't pick it up by itself: `review --again`), so commit _Status_ before the push, not between review and land. `risa check` takes no reason for a full check.
 
 ## Architectural decisions
 

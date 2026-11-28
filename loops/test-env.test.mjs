@@ -5,6 +5,7 @@ import { hermeticEnv } from "./test-env.mjs";
 // A session's environment: another repo's config and a session's state.
 const SESSION = {
   RISA_CONFIG: "/work/other-repo/risa.json",
+  RISA_CONFIG_FOUND: "/work/other-repo/risa.json",
   RISA_MACHINE_CONFIG: "/home/sam/.risa/machine.json",
   RISA_SESSION_PID: "4242",
   RISA_SESSION_NAME: "after-split",
@@ -23,6 +24,7 @@ describe("hermeticEnv", () => {
     expect(env.RISA_CONFIG).toBe(FIXTURE_CONFIG);
     expect(env.RISA_MACHINE_CONFIG).toBe("");
     for (const name of [
+      "RISA_CONFIG_FOUND",
       "RISA_SESSION_PID",
       "RISA_SESSION_NAME",
       "RISA_SESSIONS_DIR",

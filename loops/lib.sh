@@ -17,10 +17,15 @@ machine_file=${RISA_MACHINE_CONFIG-$HOME/.risa/machine.json}
 # find_repo [DIR] → sets main, the repo's main checkout (its first worktree,
 # which stays on the trunk), and loops, $main/.loops (every other worktree, and
 # the tool's state), for the repo DIR is in. With no DIR: the repo the current
-# directory is in when the machine config lists it (and RISA_CONFIG, unless set,
-# to that repo's risa.json), else the one this file is in, as with no machine
-# config. The one place a command finds its repo (and RISA_MAIN, to $main, for Node). False, main empty, outside a
-# repo; a machine config that doesn't load stops the command with its loader's line.
+# directory is in when the machine config lists it, else the one this file is in,
+# as with no machine config. Listed, it finds the config too: the current
+# checkout's risa.json, else the main checkout's (machine.mjs configFor), and
+# exports RISA_CONFIG and its mark RISA_CONFIG_FOUND as that path when RISA_CONFIG
+# is unset or equals the mark (a found one, inherited from the shell that started
+# this); any other RISA_CONFIG is a pin and stays. The one place a command finds
+# its repo (and RISA_MAIN, to $main, for Node), and the only one that sets the mark
+# (rm.sh re-points it). False, main empty, outside a repo; a machine config that
+# doesn't load stops the command with its loader's line.
 find_repo() {
   local from=${1:-} listed="" rc=0 listed_config=""
   if [[ -z $from && -n $machine_file && -f $machine_file ]]; then
@@ -36,7 +41,10 @@ find_repo() {
   # RISA_MAIN: the repo for the Node parts this command runs, which can't see the
   # machine config's choice (the tool lives outside the project).
   if [[ -n $main ]]; then export RISA_MAIN=$main; fi
-  if [[ -n $listed_config && -z ${RISA_CONFIG:-} && -f $listed_config ]]; then export RISA_CONFIG=$listed_config; fi
+  if [[ -n $listed_config && -f $listed_config ]] \
+    && [[ -z ${RISA_CONFIG:-} || ${RISA_CONFIG} == "${RISA_CONFIG_FOUND:-}" ]]; then
+    export RISA_CONFIG=$listed_config RISA_CONFIG_FOUND=$listed_config
+  fi
   [[ -n $main ]]
 }
 find_repo || true
@@ -152,15 +160,17 @@ run_hook() {
 # skipped, not failed (RISA-973).
 has_hook() { config_get "hooks.$1" >/dev/null 2>&1; }
 
-# stack_hook NAME [ARG…] → run_hook from the top of the checkout the project's
-# config is in (its main checkout, on the trunk), not the one the shell is in: a
-# worktree made from an older branch may not have the hook's script, and the tool
-# lives outside the project (B-846). ARGs that name a worktree must be absolute.
+# stack_hook NAME [ARG…] → run_hook from the main checkout of the repo the
+# project's config is in (on the trunk), even when the config is a worktree's
+# own, not the checkout the shell is in: a worktree made from an older branch may
+# not have the hook's script, and the tool lives outside the project (B-846,
+# RISA-972); the config's folder when it is in no checkout. ARGs that name a
+# worktree must be absolute.
 stack_hook() {
   local cfg top
   cfg=$(config_get _path) || return 1
-  top=$(git -C "$(dirname "$cfg")" rev-parse --show-toplevel 2>/dev/null) || top=$(dirname "$cfg")
-  hook_top=$top run_hook "$@"
+  top=$(git -C "$(dirname "$cfg")" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p') || top=""
+  hook_top=${top:-$(dirname "$cfg")} run_hook "$@"
 }
 
 # fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else

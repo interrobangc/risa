@@ -6,7 +6,9 @@ leases and test stacks apart, and lands their work through a project's own check
 
 Each repo has a `risa.json` (its trunk, branches, checks, hooks and test projects) and
 its own backlog and plans. The machine config, `~/.risa/machine.json`, lists the repos
-and says which ones may start work.
+and says which ones may start work. In a worktree, risa reads that worktree's
+`risa.json` (else the main checkout's) unless `RISA_CONFIG` pins another; stack hooks
+and the backlog stay the main checkout's.
 
 ## Layout
 

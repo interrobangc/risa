@@ -337,6 +337,27 @@ describe("rm.sh", () => {
     expect(existsSync(join(sessions, "plan-r.json"))).toBe(false);
     expect(existsSync(join(sessions, "prd-other.json"))).toBe(true);
   });
+
+  it("finishes after the removal when the config it reads is the worktree's own (RISA-972)", () => {
+    const runLog = join(root, "rm-own-config.jsonl");
+    for (const [args, name] of [
+      [["plan", "own"], "plan-own"],
+      [["slice", "t", "3"], "t-3"],
+    ]) {
+      ok("new.sh", args);
+      // The worktree's own committed copy of the sample config.
+      const own = join(loops, name, "risa.json");
+      expect(existsSync(own)).toBe(true);
+      const r = sh("rm.sh", [name], {
+        env: { RISA_CONFIG: own, RISA_CONFIG_FOUND: own, RISA_RUN_LOG: runLog },
+      });
+      expect(`${r.stdout}${r.stderr}`).not.toMatch(/no project config/);
+      expect(r.status).toBe(0);
+      expect(existsSync(join(loops, name))).toBe(false);
+    }
+    // The run log's step loads the config (its branch kinds): it ran.
+    expect(read(runLog)).toMatch(/"kind":"slice-end".*"name":"t-3"/);
+  });
 });
 
 describe("a repo with no stack or testDb hooks (RISA-973)", () => {
