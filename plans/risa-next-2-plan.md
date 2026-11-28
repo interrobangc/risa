@@ -8,11 +8,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1 starting (slice 1, opus). Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
+**Now:** wave 1 running: slice 1 worktree `.loops/risa-next-2-1`, agent spawned on opus (2026-11-28). Backlog at start: no new items for this PRD beyond RISA-841, RISA-1007.
 
 | Slice | Wave | State | Merge into `prd/risa-next-2` |
 | ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | —     | —                            |
+| 1     | 1    | working (opus) | —                            |
 | 2     | 2    | —     | —                            |
 | 3     | 3    | —     | —                            |
 | 5     | 3    | —     | —                            |
