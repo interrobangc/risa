@@ -30,7 +30,9 @@ import {
   probeAllowed,
   sessionAccount,
   sessionDrains,
+  stalledSessions,
 } from "./drain.mjs";
+import { resumeDecision } from "./resume.mjs";
 import { markStalled, mergeReadings, readReadings } from "./usage.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
 
@@ -339,6 +341,62 @@ describe("each session on its own account", () => {
       const d = sessionDrains(after, ["prd-d", "prd-a"], { ...opts, account: A });
       expect(d["prd-d"].state).toBe("limited");
       expect(d["prd-a"].state).toBe("normal");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a session ended on its own limited account isn't reopened until its reset; then the resume takes it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "risa-drain-resume-"));
+    try {
+      // prd-b on account B at 99%; the dispatcher on A, which is under the line.
+      writeFileSync(join(dir, "prd-b.json"), JSON.stringify(reading("prd-b", B, 99)));
+      const live = [{ name: "prd-b", pid: 21, live: true, managed: true }];
+      const normal = { state: /** @type {const} */ ("normal"), resetsAt: null, why: "", unknown: false };
+      // Tick 1: its own drain is limited, so it is ended and marked (as drainStep does).
+      const drains = sessionDrains(readReadings(dir), ["prd-b"], { ...opts, account: A });
+      expect(drains["prd-b"].state).toBe("limited");
+      expect(
+        limitActions({ sessions: live, landing: new Set(), stalls: {}, drain: normal, drains, now: NOW }),
+      ).toEqual([{ type: "end", session: "prd-b", pid: 21 }]);
+      markStalled(dir, "prd-b", {
+        error: "limited",
+        resetsAt: drains["prd-b"].resetsAt,
+        pid: 21,
+        now: NOW,
+        account: B,
+      });
+      // Tick 2: it's dead, its mark's reset ahead: the pick doesn't reopen it.
+      const tick = (now) => {
+        const stalled = stalledSessions(readReadings(dir), now);
+        return {
+          rows: [{ topic: "b", state: "running" }],
+          worktrees: [{ name: "b", branch: "prd/b" }],
+          sessions: [{ name: "prd-b", live: false, managed: true, stalled: stalled.has("prd-b") }],
+          now,
+          drain: { state: "normal", why: "under the drain line" },
+        };
+      };
+      const p = pick(tick(NOW + MIN));
+      expect(p.action).toBe("none");
+      expect(p.reasons.find((r) => r.topic === "b").why).toMatch(/not reopened before its reset/);
+      // Without the mark, the same dead session would be reopened at once.
+      expect(
+        pick({ ...tick(NOW + MIN), sessions: [{ name: "prd-b", live: false, managed: true }] }).action,
+      ).toBe("reopen");
+      // After B's reset: the mark no longer holds, and the resume claims it.
+      const after = NOW + 61 * MIN;
+      expect(stalledSessions(readReadings(dir), after).size).toBe(0);
+      const marks = readReadings(dir).map((r) => ({ session: r.session, stalled: r.stalled }));
+      const d = resumeDecision({
+        marks,
+        sessions: [{ name: "prd-b", live: false, managed: true, pid: 21, started: iso(NOW - 60 * MIN) }],
+        worktrees: [{ name: "b", branch: "prd/b" }],
+        rows: [{ topic: "b", state: "running" }],
+        drain: { state: "normal", why: "" },
+        now: after,
+      });
+      expect(d.claim.map((c) => c.session)).toEqual(["prd-b"]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

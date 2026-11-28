@@ -13,7 +13,9 @@
 //      worktree with no managed record was opened by hand: only reported, but
 //      it still takes a slot and its hot files. A session the resume claimed
 //      (resume.mjs: stalled on a usage limit, its reset passed) is the resume's:
-//      never reopened here, so it never counts toward MAX_REOPENS.
+//      never reopened here, so it never counts toward MAX_REOPENS. Nor is one whose stall
+//      mark's reset is still ahead (`stalled`: ended on its own account's limit while the
+//      dispatcher's is normal): the resume takes it after that reset.
 //   3. Busy: no start and no plan (reopens still happen). Draining or limited
 //      (drain.mjs, facts.drain): no start, plan, reopen or reopen ask.
 //   4. A `planned` topic may `start` when a slot is free, every `After` topic
@@ -70,10 +72,11 @@ export const DEFAULT_CAPS = { prds: 4, planners: 1, fixesMin: 3 };
  * @typedef {{ name: string, branch: string }} PickWorktree
  *   a worktree in .loops: only prd/<topic> and plan/<topic> branches count
  * @typedef {{ name: string, live: boolean, managed?: boolean, rotating?: boolean,
- *   rotatingAt?: number | string | null, resuming?: boolean }} PickSession
+ *   rotatingAt?: number | string | null, resuming?: boolean, stalled?: boolean }} PickSession
  *   a session record (prd-<topic>, plan-<topic>) with its liveness; rotatingAt
  *   is when it was marked rotating (ms or ISO; none counts as just now);
- *   resuming: the resume after a limit has claimed it (resume.mjs)
+ *   resuming: the resume after a limit has claimed it (resume.mjs); stalled: its stall mark's
+ *   reset is still ahead (drain.mjs stalledSessions)
  * @typedef {{ id: string, kind: string, topic: string, session?: string | null,
  *   answeredAt?: string | null, doneAt?: string | null, defaulted?: boolean }} PickAsk
  * @typedef {{ rows: PickRow[], worktrees?: PickWorktree[], sessions?: PickSession[],
@@ -183,6 +186,8 @@ export function pick(facts) {
       why = s?.live ? `running, opened by hand` : `opened by hand, ${what} isn't live (left alone)`;
     else if (s.live) why = w.kind === "plan" ? "being planned" : "running";
     else if (s.resuming) why = `${what} stopped on a usage limit: the resume brings it back (not counted)`;
+    else if (s.stalled)
+      why = `${what} stopped on a usage limit: not reopened before its reset (the resume brings it back)`;
     else if (s.rotating && (Number.isNaN(rotatedAt) || now - rotatedAt < ROTATING_GRACE_MS))
       why = `${what} is being rotated`;
     else if (held) why = `${what} died; not reopened while ${heldWhy}`;

@@ -134,6 +134,7 @@ import {
   limitActions,
   sessionAccount,
   sessionDrains,
+  stalledSessions,
 } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { workSwitch } from "./machine.mjs";
@@ -1609,6 +1610,15 @@ export function tick(
     };
   }
   for (const s of facts.sessions) if (resume?.resuming.has(s.name)) s.resuming = true;
+  // A dead session stalled on a limit still ahead (its own account's) waits for the resume.
+  /** @type {Set<string>} */
+  let stalls = new Set();
+  try {
+    stalls = p.usage ? stalledSessions(readReadings(p.usage), facts.now) : stalls;
+  } catch {
+    /* no readings: none stalled */
+  }
+  for (const s of facts.sessions) if (!s.live && stalls.has(s.name)) s.stalled = true;
   /** @type {import("./dispatch-pick.mjs").Pick} */
   let choice = pick(facts);
   // A resume takes the tick's action: the pick's waits a tick.
