@@ -158,10 +158,13 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1063 | bug | live | fixes-bug | prd/fixes-bug | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
 | RISA-1064 | bug | live | fixes-bug | prd/fixes-bug | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
 | RISA-1065 | bug | live | fixes-bug | prd/fixes-bug | The time gate judges the local measure on its start load only (the quiet rule) |
-| RISA-1066 | change | in-progress | fixes-tooling | prd/fixes-tooling | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
+| RISA-1066 | change | ready | fixes-tooling | prd/fixes-tooling | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
 | RISA-1067 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
-| RISA-1068 | change | in-progress | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
+| RISA-1068 | change | ready | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 | RISA-1069 | change | triaged | fixes-tooling |  | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
+| RISA-1070 | bug | triaged | fixes-bug |  | risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help |
+| RISA-1071 | bug | in-progress | risa-next-2 | prd/risa-next-2 | Inbox store: a filed line still in the store (cleanup delayed by an unpushed user commit) accepts inbox edit/move/remove, since findUnfiled refuses only id-tagged lines; an edit changes its key and the next ingest files a duplicate. Refuse lines whose inbox key a backlog item holds |
+| RISA-1072 | bug | in-progress | risa-next-2 | prd/risa-next-2 | prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop |
 
 ## Items
 
@@ -1342,10 +1345,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1066 · change · Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a…
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 9b04e99
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a fixture module / As land.test.mjs/land-fixture.mjs were. Suggested by Caretook (prd-test-time-gates-2) as a sibling of the time-gate quiet-rule item; no longer Caretook's concern.
 - 2026-11-28 (Robert Bo Davis): Triaged fixes-tooling: test layout and speed, sibling of RISA-1065.
@@ -1362,10 +1365,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1068 · change · Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066)
 
-- status: in-progress
+- status: ready
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
-- commit:
+- commit: 9b04e99
 
 - 2026-11-28 (prd/fixes-tooling): Cut from RISA-1066 by the fixes-tooling orchestrator: one slice per test file; RISA-1066 keeps recover.test.mjs.
 
@@ -1377,3 +1380,31 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-tooling): Cut from RISA-1066 by the fixes-tooling orchestrator. Waits: loops/dispatch is risa-next-2's hot file.
+
+### RISA-1070 · bug · risa plan --help takes --help as a topic: it made worktree .loops/plan---help and branch plan/--help
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: From Caretook's backlog at the Caretook user's request. risa plan --help created worktree .loops/plan---help on a new branch plan/--help, ran pnpm install and printed a start command (cleaned up with risa rm plan---help). Work out how to prevent it. Suggestions: --help/-h on every subcommand prints usage and exits 0; topic names must match the slug pattern (lowercase words and dashes, no leading dash) before any worktree or branch is made; unknown flags refuse. Caretook pins v0.2.0: notify backlog (caretook) when it ships in a tagged release.
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-bug: wrong behaviour (a flag made a worktree and branch). Caretook waits on it in a tagged release; notify backlog (caretook).
+
+### RISA-1071 · bug · Inbox store: a filed line still in the store (cleanup delayed by an unpushed user commit) accepts inbox edit/move/remove, since findUnfiled refuses only id-tagged lines; an edit changes its key and the next ingest files a duplicate. Refuse lines whose inbox key a backlog item holds
+
+- status: in-progress
+- prd: risa-next-2
+- owner: prd/risa-next-2
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #34 (backlog/backlog.mjs:500, thread PRRT_kwDOV9ctaM69F9MT); verified: inbox-commands.mjs findUnfiled checks e.id only. Into wave 4 slice 4.
+
+### RISA-1072 · bug · prd.sh inbox's project hop keeps an inherited RISA_SESSIONS_DIR, so an inbox opened from a non-first project's session writes its record under that project, not the canonical first one; rebase RISA_SESSIONS_DIR on the hop
+
+- status: in-progress
+- prd: risa-next-2
+- owner: prd/risa-next-2
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #34 (loops/prd.sh:423, thread PRRT_kwDOV9ctaM69F9MW); verified: session.sh keeps an exported RISA_SESSIONS_DIR. Into wave 4 slice 6.
