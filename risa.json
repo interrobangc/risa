@@ -13,7 +13,7 @@
     "docs": "loops/docs",
     "agentsDoc": "AGENTS.md",
     "preferences": "docs/preferences.md",
-    "tooling": ["bin"],
+    "tooling": ["bin", "release"],
     "tierData": "risa-tiers.json",
     "checkPlanRules": "risa-check-plan.json"
   },
@@ -55,7 +55,9 @@
     "datastoreSeed": "true"
   },
   "hooks": {
-    "check": "sh -c 'pnpm check' --"
+    "check": "sh -c 'pnpm check' --",
+    "shipCheck": "node release/ship.mjs check",
+    "ship": "node release/ship.mjs ship"
   },
   "testProjects": {
     "tooling": ["core:unit", "tooling:unit"],
