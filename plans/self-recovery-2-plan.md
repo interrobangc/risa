@@ -12,12 +12,13 @@
 | 4     | 2    | landed (opus) | 8477e15                          |
 | 5     | 2    | landed (opus) | 3c6214c                          |
 | 6     | 3    | landed (opus) | 115919f                          |
+| 7     | 4    | —             | —                                |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Hand-over (2026-11-28):** every slice has landed: wave 2 as ae50f44 (PR #21, report a39), wave 3 (slice 6) through PR #22 (full check 2488/2488 on 74b6f4d, Codex clean; main 2d56388; report filed; to-test/2026-11-28-0634-self-recovery-2.md). Slice worktrees all removed. `land` didn't mark the row done: RISA-1027, 1028, 1029 (triaged here) aren't landed. A skeptic is reading the question "move them to fixes-bug and rm, or a wave 4 here" (recommend: fixes-bug, then `risa rm self-recovery-2`).
+**Hand-over (2026-11-28):** waves 1-3 (slices 1-6) have all landed: wave 3 through PR #22 (main 2d56388; report filed; to-test/2026-11-28-0634-self-recovery-2.md). The four triaged bugs left here (RISA-1025, 1027, 1028, 1029) became **wave 4 = slice 7** (skeptic decide s23, filed as a42 under "decided for you"; the user may veto). Next session: `risa backlog claim` the four, `risa slice self-recovery-2 7`, one **opus** agent, watch; merge, gate (tier none: `risa check`), rm the slice worktree, sync, `risa pr`, review, land, report, then `risa rm self-recovery-2`. If the user vetoes a42: move the four to fixes-bug/fixes-tooling and `risa rm`.
 
-**Open:** fixes-tooling-3e told the PRD's code is all in main (it held RISA-1025 on our dispatch/finish files). Slice 6 adds no dispatcher-side test (dispatch.test.mjs unchanged by rule). No serve hook (tooling only).
+**Open:** fixes-tooling-3e told the PRD's code is all in main; the backlog session then moved RISA-1025 here (fixes-tooling no longer waits on it). Slice 6 adds no dispatcher-side test (dispatch.test.mjs unchanged by rule). No serve hook (tooling only).
 
 **Backlog:** RISA-811, RISA-560 landed; RISA-789 landed (PR #22).
 
@@ -31,7 +32,7 @@
 
 ## How to run this plan
 
-- **Waves:** wave 1 runs slices 1 and 2 (no shared file). Wave 2 runs 3 and 4 (after 1) and 5 (after 2); none shares a file. Wave 3 is slice 6 (after 3: both change `loops/dispatch.mjs` and `loops/docs/recovery.md`).
+- **Waves:** wave 4 is slice 7 (the tail fixes, after 6). Wave 1 runs slices 1 and 2 (no shared file). Wave 2 runs 3 and 4 (after 1) and 5 (after 2); none shares a file. Wave 3 is slice 6 (after 3: both change `loops/dispatch.mjs` and `loops/docs/recovery.md`).
 - **Gate:** `risa check --quick "slice hand-off"` before each hand-off; `pnpm check` once on the merged tip at landing.
 - **Other topics:** this row runs after `after-split` (it owns `loops/dispatch`, `loops/docs` and `loops/docs-budget.mjs` while it runs). `fixes-tooling` is standing and sets its hot files per wave; today they include `loops/prd.sh` (slices 1 and 5) and `loops/tidy` (slice 4). At each wave boundary read `risa backlog prd list`: a slice whose files a running topic holds waits for a later wave, and no slice starts that would touch two running topics' hot files.
 - **Docs budget:** slices 1, 3 and 6 add to `loops/docs/recovery.md` (5 KB budget, about 2.8 KB used); slice 5 adds to `loops/docs/machinery.md` and raises its budget in `loops/docs-budget.mjs` by what it adds, at most 300 B.
@@ -127,3 +128,26 @@ Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3 · Ch
 - `risa check --quick "slice hand-off"` passes with `loops/dispatch.test.mjs` unchanged.
 
 **Blocked by:** 3. **Blocks:** nothing.
+
+## Slice 7: The finish and cost tail fixes
+
+Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3, 6 · Check: loops/finish-cli.test.mjs
+
+**Backlog:** RISA-1025, RISA-1027, RISA-1028, RISA-1029 (added after wave 3 by the skeptic's decide s23, ask a42; RISA-1025 moved in by the backlog session).
+
+**Build:**
+
+- RISA-1025: `loops/dispatch.mjs` imports `finish.mjs` statically (drop the `createRequire` loader and its null path); add `finish.mjs` to the script lists the dispatch tests copy (`dispatch.test.mjs`, `dispatch-restart.test.mjs`, `dispatch-release.test.mjs`, `dispatch-context.test.mjs` and any sibling that copies `dispatch.mjs`). `after-split` is done, so `dispatch.test.mjs` may now change, for that list only.
+- RISA-1029: `finishStep` passes `env.TRUNK || kinds.trunk` to both `landedTopics` and `landedWithCode`, as `collectTidyFacts` does.
+- RISA-1027: the `finish <topic>` CLI reads its reported keys from the dispatcher's state (`finish.reported`, the same file `finishStep` uses) and appends the key of each report it files, so an unchanged reason is reported once whichever path files it.
+- RISA-1028: `cost.mjs` `topicFolders` and `attribute` don't count a topic named `plan-<x>`'s own worktree (`.loops/plan-<x>`, branch `prd/plan-<x>`) as `<x>`'s planning: a `plan-<x>` folder is `<x>`'s planning only when no registry row or `prd/plan-<x>` branch names `plan-<x>` as a topic.
+
+**Acceptance criteria:**
+
+- `loops/finish-cli.test.mjs`: `finish <t>` twice on an unchanged code tail files one report; a new tip reports again; a report filed by the CLI isn't re-filed by a dispatcher tick on the same tip.
+- `loops/finish-tick.test.mjs`: with `TRUNK` set to a branch other than the configured trunk, a topic landed only into it is a finish candidate.
+- `loops/cost.test.mjs`: with a topic `plan-a` (a row or `prd/plan-a`) beside `a`, `plan-a`'s orchestrator transcripts count to `plan-a`, not to `a`'s planning; a plain planning worktree `plan-a` for topic `a` still counts as `a`'s planning.
+- The dispatch tests pass with `finish.mjs` imported statically; `grep createRequire loops/dispatch.mjs` finds nothing for `finish.mjs`.
+- `risa check --quick "slice hand-off"` passes.
+
+**Blocked by:** 3, 6. **Blocks:** nothing.
