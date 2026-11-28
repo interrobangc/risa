@@ -9,7 +9,7 @@
 | Slice | Wave | Item      | Model | State                                                           | Merge into `prd/fixes-tooling` |
 | ----- | ---- | --------- | ----- | --------------------------------------------------------------- | ------------------------------ |
 | 14    | 3    | RISA-952  | opus  | agent working                                                   |                                |
-| 15    | 3    | RISA-997  | opus  | agent working                                                   |                                |
+| 15    | 3    | RISA-997  | opus  | handed off (e11790b; check red only on load timeouts)           |                                |
 | 16    | 3    | RISA-999  | opus  | agent working                                                   |                                |
 | 17    | 3    | RISA-1000 | opus  | handed off (9a4e8b3; check red only on load timeouts, RISA-994) |                                |
 | 18    | 3    | RISA-927  | opus  | agent working                                                   |                                |
