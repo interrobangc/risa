@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BASE, scaledWait } from "./test-limits.mjs";
 import {
   ADMIRALS,
@@ -32,6 +32,12 @@ import {
 // The limits follow the load as this file starts, not only as the run did (RISA-994).
 vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
 useRotateRepo();
+// A test that failed or timed out leaves its stub sessions running, and they write the shared
+// state folder (ready, rotate.out) under the next test's feet: a cascade of false failures. End
+// whatever of this file's repo still runs once each test is done.
+afterEach(() => {
+  spawnSync("pkill", ["-KILL", "-f", `${root}/`]);
+});
 
 describe("pnpm prd rotate --self", () => {
   const briefs = () => join(loops, ".briefs");
@@ -67,39 +73,44 @@ describe("pnpm prd rotate --self", () => {
 
   beforeEach(() => rmSync(briefs(), { recursive: true, force: true }));
 
-  it("ends the main backlog session and opens one of the same name and model, as a new captain, with no brief", async () => {
-    const old = await selfSession("backlog", { remote: "Archer" });
-    expect(old.code).toBe("0");
-    const captain = /^Rotating backlog: pid \d+ \(the calling session\), as ([A-Za-z]+)\.$/m.exec(
-      old.out,
-    )?.[1];
-    expect(ADMIRALS).toContain(captain);
-    expect(captain).not.toBe("Archer");
-    // The tab is titled with the captain.
-    expect(old.out).toContain(`to open ${captain} (its command):`);
-    const line = printedLine(old.out);
-    expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid} --captain ${captain}`);
-    expect(runInto(line).status).toBe(0);
-    expect((await old.s.done).code).toBe(143);
-    expect(JSON.parse(stateFile("record-at-term"))).toMatchObject({ pid: old.pid, rotating: true });
-    const atStart = JSON.parse(stateFile("record-at-start"));
-    // The record (backlog.json, read at start) stays backlog; only the display name is the captain's.
-    expect(atStart).toMatchObject({ kind: "backlog", model: "sonnet", remote: captain });
-    expect(atStart.pid).not.toBe(old.pid);
-    expect(atStart).not.toHaveProperty("rotating");
-    const args = newArgs();
-    expect(args.slice(0, 6)).toEqual([
-      "--settings",
-      scripts("context-settings.json"),
-      "--model",
-      "sonnet",
-      "--remote-control",
-      shown("backlog", "backlog", captain),
-    ]);
-    const prompt = promptOf(args);
-    expect(prompt.startsWith("You are the new backlog/inbox planning agent.")).toBe(true);
-    expect(prompt).not.toContain("Brief from the session before");
-  });
+  // The file's first rotation runs every script cold: twice the scaled limit under load.
+  it(
+    "ends the main backlog session and opens one of the same name and model, as a new captain, with no brief",
+    async () => {
+      const old = await selfSession("backlog", { remote: "Archer" });
+      expect(old.code).toBe("0");
+      const captain = /^Rotating backlog: pid \d+ \(the calling session\), as ([A-Za-z]+)\.$/m.exec(
+        old.out,
+      )?.[1];
+      expect(ADMIRALS).toContain(captain);
+      expect(captain).not.toBe("Archer");
+      // The tab is titled with the captain.
+      expect(old.out).toContain(`to open ${captain} (its command):`);
+      const line = printedLine(old.out);
+      expect(line).toBe(`cd ${main} && ${scripts("rotate-into.sh")} backlog ${old.pid} --captain ${captain}`);
+      expect(runInto(line).status).toBe(0);
+      expect((await old.s.done).code).toBe(143);
+      expect(JSON.parse(stateFile("record-at-term"))).toMatchObject({ pid: old.pid, rotating: true });
+      const atStart = JSON.parse(stateFile("record-at-start"));
+      // The record (backlog.json, read at start) stays backlog; only the display name is the captain's.
+      expect(atStart).toMatchObject({ kind: "backlog", model: "sonnet", remote: captain });
+      expect(atStart.pid).not.toBe(old.pid);
+      expect(atStart).not.toHaveProperty("rotating");
+      const args = newArgs();
+      expect(args.slice(0, 6)).toEqual([
+        "--settings",
+        scripts("context-settings.json"),
+        "--model",
+        "sonnet",
+        "--remote-control",
+        shown("backlog", "backlog", captain),
+      ]);
+      const prompt = promptOf(args);
+      expect(prompt.startsWith("You are the new backlog/inbox planning agent.")).toBe(true);
+      expect(prompt).not.toContain("Brief from the session before");
+    },
+    scaledWait(BASE.testTimeout * 2),
+  );
 
   it("keeps a Remote Control name that differs from the record's", async () => {
     const s = start(
