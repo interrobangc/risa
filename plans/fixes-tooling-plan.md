@@ -6,29 +6,21 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model  | State                                                                                                 | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)                                   | 4b888b6                        |
-| 20    | 4    | RISA-1005 | opus   | merged (adds commands.testFile and commands.staticCheck, the latter since Risa's typecheck is `true`) | 3626f71                        |
-| 21    | 4    | RISA-1003 | opus   | merged                                                                                                | cf9c3a4                        |
-| 22    | 4    | RISA-1004 | opus   | merged                                                                                                | 0de37c9                        |
-| 23    | 4    | RISA-926  | opus   | merged                                                                                                | b65e587                        |
-| 24    | 4    | RISA-981  | opus   | merged (slice check green on f0dc94b)                                                                 | 2d34ce6                        |
-| 25    | 4    | RISA-1009 | opus   | merged (conflict with 24 resolved on its branch, bfeb925)                                             | 8c34b95                        |
-| 26    | 4    | RISA-1010 | sonnet | merged                                                                                                | 04f2e0f                        |
+| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
 
-**Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running. All of 19–26 merged; wave gate: `risa ci run unit` on a07cdd0 (run 46101459462): failed only doc-sections.test (slice 20's new project-config section sits after slice 26's pinned last heading); sent back to slice 20; its fix (fda8963) merged as 32a0c6e; CI green on 5e836c6 (run 46101944134); synced with main; CI on the synced tip out; synced tip 9f74528 green (run 46102353384); PR #11: Codex's 2 P2s tracked as RISA-1012, RISA-1013, threads replied and resolved, clean on 9f74528. Landing. 22–24 merged ahead of 20 (disjoint files; 981 is urgent). Slice 19 also moved `mergedSlices` into slice-fields.mjs and runs the budget in `risa anchors`; its follow-up (plan.sh and skeptics' 'about 8 files') is RISA-1011. Slices 24–26 joined on the backlog session's word (RISA-981 high priority; v0.1.8 is cut once 981 and 1010 land).
+No slice in flight (idle hand-over after wave 4).
 
-**Wave 3 landed** 2026-11-27 in main as a00a846 (PR #10): slices 14–18 (RISA-952, 997, 999, 1000, 927), all opus. CI unit green on a9b6f2a (run 46095529013, the first run with a real verdict: RISA-997 works). Codex went 4 rounds (3 P1s and 1 P2 fixed); landed on the user's word with `--no-review --by-user` (ask a17), its last two P2s tracked as RISA-1003 and RISA-1004. Report filed; slice worktrees removed; backlog session (risa-ee) told 952 landed (its release plan keys off it).
+**Wave 4 landed** 2026-11-27 in main as 730639e (PR #11), released as v0.1.8: slices 19–26 (RISA-881, 1005, 1003, 1004, 926, 981, 1009, 1010); 26 on sonnet, the rest opus. CI unit green on 9f74528 (run 46102353384). Codex: 2 P2s filed (RISA-1012, 1013), clean on 9f74528; landed on the user's word with `--no-review --by-user` without its re-review of the docs-only tip. The new risa.json keys (commands.testFile, staticCheck) broke v0.1.7 until v0.1.8 was installed: **a change to Risa's own risa.json needs the release that reads it installed first.** Report filed; slice worktrees removed.
 
-**For the next session (wave 4):**
+**For the next session (wave 5):**
 
-- **The user's decision (wave 3):** the drain never ends backlog or inbox sessions on usage, on any account; it reports them at most. Keep it so.
-- **RISA-881 first** (elephant-carpaccio slicing rules): the user wants it before risa-next is unheld; a release follows it (the backlog session handles the tag).
-- **Ready:** RISA-1003 (rotate's simulated pick omits facts.landed), RISA-1004 (watch-off override doesn't release stall-marked sessions), RISA-994 (in-test and script timers don't scale with load: ask, bye, rotate, sessions, land-unsynced; notes list them), 813, 915 (dispatch-pick rule 8 may already cover it: check first), 926 (loops/machine is after-split-2's hot file; check `risa backlog prd list`), 986, 882, 883, 886, 889.
-- **Gate:** slice checks run red on load timeouts at load 15–30 (RISA-994); the wave's CI run is the gate. bye.test's "lists each open thing…" failed under several full checks but passes alone and in CI.
-- `risa pr` pushes local main to origin as it syncs; expected.
-- Docs folded this wave: machinery (context watch, rotate's close), orchestrator rotate line.
+- **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
+- **Dispatcher:** pid 96308 was on old code after the v0.1.8 install (its last tick failed on the config); `risa dispatch --restart` once if `risa status` still shows it stale (the backlog session handles releases).
+- **Ready:** RISA-1012, 1013 (Codex, from 1009 and 981), 1011 (plan.sh and skeptics' 'about 8 files' to the new budget; pairs with 882), 994 (inner test timers under load), 986, 813, 882, 883, 886, 889; check `risa backlog list` for new ones (RISA-1014 appeared at landing).
+- **Plans now take `Check: <test file>`** in each slice's fields line (one test file per slice, none shared in a wave); the slice check runs only it. A slice prompt from an older release called the field unknown: v0.1.8 knows it.
+- **Gate:** slice checks run red on load timeouts at load 20–40 (RISA-994); the wave's CI run is the gate. bye.test 'lists each open thing…' failed alone on prd/fixes-tooling once; green in CI.
+- Docs folded this wave by the slices themselves (planner budget, orchestrator split, project-config slice check); machinery.md is at its budget, so the re-exec/restart note lives in dispatch.mjs's header.
 
 ## How to run this plan
 
