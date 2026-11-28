@@ -170,7 +170,7 @@ if [[ -z $mid_wave && -z $slices ]]; then
     case $tail_kind in empty | plan | docs) landed=1 ;; esac
   fi
 fi
-if [[ -n $landed ]] && rows=$(cd "$main" && node "$bin/../backlog/backlog.mjs" prd list --json 2>/dev/null); then
+if [[ -n $landed ]] && rows=$(cd "$main" && backlog_run prd list --json 2>/dev/null); then
   rc=0
   why=$(node "$bin/rotate.mjs" standing-close "$topic" "$main" <<<"$rows") || rc=$?
   case $rc in

@@ -86,7 +86,7 @@ fi
 echo
 echo "## What it addresses"
 echo
-node "$(dirname "$0")/../backlog/backlog.mjs" list --all --prd "$topic" --json | node -e '
+backlog_run list --all --prd "$topic" --json | node -e '
   const items = JSON.parse(require("fs").readFileSync(0, "utf8"));
   const groups = [["Bugs fixed", "bug"], ["Features", "feature"], ["Changes", "change"], ["Chores", "chore"], ["Plans", "plan"], ["Questions", "question"]];
   const ready = items.filter((i) => i.status === "ready");

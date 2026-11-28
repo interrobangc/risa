@@ -3,9 +3,10 @@
 // refuses a plan/ branch and a branch dev has moved past. The throwaway repo is
 // land-fixture.mjs's (RISA_PR_THROWAWAY: dev is never pushed), with a `gh` that
 // logs what pr.sh asks of it; no GitHub.
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { chmodSync, cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { root, repo, git, commit, branch, useLandRepo } from "./land-fixture.mjs";
@@ -88,5 +89,61 @@ describe("pr.sh", () => {
     expect(r.stderr).toMatch(/has moved since prd\/throwaway-x last synced/);
     expect(onOrigin("prd/throwaway-x")).toBe("");
     expect(read()).toBe("");
+  });
+});
+
+// backlog_run (lib.sh), pr.sh's and ready.sh's backlog call: the config `risa backlog`
+// takes (backlog-config.sh, shared with bin/risa), not the worktree's own risa.json.
+describe("backlog_run", () => {
+  const LIB = fileURLToPath(new URL("./lib.sh", import.meta.url));
+  const FIXTURE = fileURLToPath(new URL("./fixture-project", import.meta.url));
+  const backlog = (title) =>
+    `# Backlog\n\n## PRDs\n\n## Items\n\n### B-1 · bug · ${title}\n\n- status: ready\n- prd: x\n- owner:\n- commit:\n`;
+  /** A project at DIR: the fixture project's files, its backlog's one item TITLE. */
+  const project = (dir, title) => {
+    cpSync(FIXTURE, dir, { recursive: true });
+    writeFileSync(join(dir, "plans", "backlog.md"), backlog(title));
+    writeFileSync(join(dir, "plans", "backlog-archive.md"), "# Backlog archive\n\n## Items\n");
+  };
+  const titles = (cwd, env) => {
+    const r = spawnSync("bash", ["-c", `source "${LIB}" && backlog_run list --all --prd x --json`], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, RISA_CONFIG: "", RISA_CONFIG_FOUND: "", ...env },
+    });
+    expect(r.stderr).toBe("");
+    return JSON.parse(r.stdout).map((i) => i.title);
+  };
+
+  it("reads the main checkout's backlog from a worktree whose config names another, and a pin's", () => {
+    const main = join(root, "main");
+    project(main, "Main's item");
+    const g = (...a) => execFileSync("git", ["-C", main, ...a], { encoding: "utf8", stdio: "pipe" });
+    g("init", "-q", "-b", "dev");
+    g("add", "-A");
+    g("-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q", "-m", "init");
+    const wt = join(main, ".loops", "x");
+    g("worktree", "add", "-q", "-b", "prd/x", wt);
+    // The worktree's config moves the backlog (RISA-1001's repro), to a file that is there.
+    const config = JSON.parse(readFileSync(join(wt, "risa.json"), "utf8"));
+    config.paths.backlog = "plans/new-backlog.md";
+    writeFileSync(join(wt, "risa.json"), JSON.stringify(config));
+    writeFileSync(join(main, "plans", "new-backlog.md"), backlog("The worktree's item"));
+    const machine = join(root, "machine.json");
+    writeFileSync(machine, JSON.stringify({ repos: [{ path: main }] }));
+    expect(titles(wt, { RISA_MACHINE_CONFIG: machine })).toEqual(["Main's item"]);
+    // The found mark is no pin: still the main checkout's.
+    const found = join(wt, "risa.json");
+    expect(
+      titles(wt, { RISA_MACHINE_CONFIG: machine, RISA_CONFIG: found, RISA_CONFIG_FOUND: found }),
+    ).toEqual(["Main's item"]);
+    // A pin stays: its backlog (the backlog's paths are the main checkout's).
+    const pin = join(root, "pin.json");
+    writeFileSync(
+      pin,
+      JSON.stringify({ ...config, paths: { ...config.paths, backlog: "plans/pin-backlog.md" } }),
+    );
+    writeFileSync(join(main, "plans", "pin-backlog.md"), backlog("The pin's item"));
+    expect(titles(wt, { RISA_MACHINE_CONFIG: machine, RISA_CONFIG: pin })).toEqual(["The pin's item"]);
   });
 });

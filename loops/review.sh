@@ -29,6 +29,7 @@
 # Each answer on a head goes to the run log once (run-log.mjs), for prd metrics.
 # Exit status: 0 clean, 1 findings, 2 waiting or stale, 4 out of credits (Codex
 # answered with its usage-limit comment), 75 when --wait times out, 3 for
+# too long to read whole (codex-review.mjs's too-long: never clean) or
 # anything else (no open PR, gh failing, a bad argument).
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -139,4 +140,4 @@ else
   echo "PR #$number $(field url)"
   codex_verdict --text <<< "$raw"
 fi
-case $state in clean) exit 0 ;; findings) exit 1 ;; out-of-credits) exit 4 ;; *) exit 2 ;; esac
+case $state in clean) exit 0 ;; findings) exit 1 ;; out-of-credits) exit 4 ;; too-long) exit 3 ;; *) exit 2 ;; esac

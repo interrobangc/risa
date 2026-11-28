@@ -9,11 +9,13 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 | Id | Type | Status | PRD | Owner | Title |
 | -- | ---- | ------ | --- | ----- | ----- |
 | RISA-720 | chore | dropped | fixes-tooling |  | Confirm dev syncs that share no files with a branch no longer trigger a second CI run |
+| RISA-915 | bug | dropped | fixes-tooling |  | A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time |
 | RISA-932 | bug | live | after-split | prd/after-split | rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*) |
 | RISA-953 | bug | live | after-split | prd/after-split | Tooling test loops/stack.test.mjs 'rm.sh from inside the worktree it removes (B-812)' fails 2 of 3 on dev: the orchestrator session isn't ended (expected SIGTERM, got null) |
 | RISA-967 | chore | dropped |  |  | Reserved: ids up to 967 are Caretook's (B-n), so Risa's own new ids start at 968 |
 | RISA-970 | change | live | after-split | prd/after-split | Export ci/ci-runs.mjs and a verdict fixtures path, so a project's verdict test reaches them without a file URL beside tier-data.mjs (Caretook's verdict.test does today) |
 | RISA-971 | change | live | after-split | prd/after-split | docs-budget.mjs runs on import: export BUDGETS without side effects, so a project can check its role halves add up to the figures |
+| RISA-972 | question | live | after-split-2 | prd/after-split-2 | In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile |
 | RISA-973 | bug | live | after-split |  | A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it |
 | RISA-974 | chore | live | after-split | prd/after-split | The generic loop doc says 'prd doc orchestrator "Rules across PRDs"' as literal text, not the {{prd}} placeholder, so a project's command name doesn't show |
 | RISA-975 | bug | live | after-split | prd/after-split | 217 tests fail on main since the move into Risa's own repo (B-543): many read Risa's own risa.json instead of the fixture (no paths.tierData, no backlog.ciFailureTopic, no item RISA-1) or expect 'pnpm prd' where output now says 'risa'; same set on untouched main at c11e0d6 |
@@ -26,6 +28,7 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 | RISA-988 | bug | live |  |  | risa check can't run in Risa's own repo: risa.json sets no paths.checkPlanRules, so check-plan stops before any check (loops/check-plan.mjs:181) |
 | RISA-990 | bug | live | after-split | prd/after-split | dispatch.test.mjs 'takes the main checkout from RISA_MAIN, else the checkout this file is in' fails in any linked worktree: with RISA_MAIN unset it resolves the main checkout, not the worktree the file is in |
 | RISA-992 | bug | live | after-split | prd/after-split | loops/prompt-golden.test.mjs runs 17-23 s against its 20 s timeout, so it times out under load (after-split slice 1, 2026-11-27) |
+| RISA-996 | chore | dropped | fixes-tooling |  | Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings |
 
 ## Items
 
@@ -41,6 +44,17 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - 2026-11-24 (Robert Bo Davis): 2026-11-24 evidence: not clean. Single-slice and small waves still ran twice: test-health-2 slice 5 full x3 (83cadbcf, ec1c138e, e4effb6a), slice 6 full x2 (841ce494, 24218d92); sync-safety slice 3 components x2 (4a3a9550, b004ec55); symptom-catalog components 2a821ccc, 6a246c1e, f47cc0a2; fixes-bug 9d3f2e2c, 82a3cf1b. Most syncs brought risky files (migrations, scripts/ci, package.json, workflow, apps/), so unsynced_safe rightly refused. The waste has other causes, filed separately: the recheck runs the wave's tier when dev brought only tooling (fixes-bug 82a3cf1b, 9m components); the PRD's own plan file counts as a shared file (plans/fixes-bug-plan.md was the only overlap); the wave runs before the sync, so every synced wave pays twice.
 - 2026-11-27 (the Risa move, B-543): Was B-720 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
 - 2026-11-27 (Robert Bo Davis): 2026-11-27, the user's word: dropped. A check on Caretook's CI; its causes are filed separately, and Risa has no dev branch.
+
+### RISA-915 · bug · A finished PRD whose last session ends before its registry row is marked done gets restarted by the dispatcher every tick: worktree, stack and a new orchestrator each time
+
+- status: dropped
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-26 (Robert Bo Davis): 2026-11-26 (backlog session, the user saw it): todo-subtasks' wave 6 (last) landed as bacd6b65 and its worktree was removed, but the row stayed '—'; dispatch logged 'start todo-subtasks: planned, and nothing stops it' and ran new.sh prd todo-subtasks 5+ times (stack up on slot 1 each time). Its plan-done status commit 3deb078a stayed unlanded on prd/todo-subtasks. Cleared by hand: prd set todo-subtasks flags+=done. Fix idea: dispatch refuses a topic whose plan says done or whose last wave landed; the finish marks the row first.
+- 2026-11-27 (the Risa move, B-543): Was B-915 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling wave 4): already covered: dispatch-pick rule 8 (facts.landed, landed.mjs's landedTopics; B-431, the same nine-starts case) never starts or reopens a landed non-standing topic, tested in dispatch-pick.test.mjs 'rule 8'. Dropped as fixed.
 
 ### RISA-932 · bug · rm.sh session tests in stack.test.mjs fail when run from an orchestrator session (they inherit RISA_SESSION_*)
 
@@ -91,6 +105,16 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 - commit: b5cef69
 
 - 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
+
+### RISA-972 · question · In a worktree of a listed repo, should risa read the worktree's own risa.json (as before the move) rather than its main checkout's? Today risa doc and project-check in a worktree see main's docs and golden; stack hooks would then run from RISA_MAIN (B-846). Caretook's project-data.test pins RISA_CONFIG meanwhile
+
+- status: live
+- prd: after-split-2
+- owner: prd/after-split-2
+- commit: e32da3c
+
+- 2026-11-27 (Robert Bo Davis): Moved to after-split: left by the move into Risa's own repo
+- 2026-11-27 (plan/after-split): Moved to after-split-2 by after-split's planner: sessions inherit the main checkout's RISA_CONFIG (lib.sh find_repo), so the worktree's own config needs a way to tell an inherited config from a pinned one (lib.sh, bin/risa, session env). Answer decided by a skeptic (ask a2): the worktree's own risa.json, hooks still from the main checkout.
 
 ### RISA-973 · bug · A repo with no stack hooks can't make or remove a worktree: new.sh and rm.sh die on stack_hook stackDown's 127 for an unset hook ('stackless env failed', 'couldn't take down … stack'), and config_get prints 'no value for hooks.stackDown'; skip an unset stack hook. Found at the move's step 7 (risa plan in Risa's own repo); the sample project always has stub hooks, so no test meets it
 
@@ -204,3 +228,14 @@ Finished items, moved out of [backlog.md](backlog.md) by `risa backlog archive`.
 
 - 2026-11-27 (prd/after-split): Failed on time only in both full runs of slice 1; passes alone on base at 19.4 s
 - 2026-11-27 (prd/after-split): Failed after-split's landing check at 20.3 s (only failure of 2221); fixed in after-split by giving the test its own timeout
+
+### RISA-996 · chore · Codex review of fixes-tooling wave 1 (PR #5, landed as c4ae22d unreviewed on the user's word): request it on the landed diff and triage its findings
+
+- status: dropped
+- prd: fixes-tooling
+- owner:
+- commit:
+
+- 2026-11-27 (prd/fixes-tooling): The user, 2026-11-27: 'Land it and review codex later'. Codex hadn't reviewed after two 20-min waits.
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27: asked Codex on PR #5 (comment); findings to triage when it answers (fixes-tooling wave 2 orchestrator).
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling wave 3): Codex reviewed c4ae22d1c7 on PR #5: 'Didn't find any major issues.' Nothing to triage.
