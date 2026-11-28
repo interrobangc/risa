@@ -1615,11 +1615,12 @@ export function tick(
     };
   }
   for (const s of facts.sessions) if (resume?.resuming.has(s.name)) s.resuming = true;
-  // A dead session stalled on a limit still ahead (its own account's) waits for the resume.
+  // A dead session stalled on a limit still ahead (its own account's) waits for the resume;
+  // with the usage watch off (RISA_USAGE_WATCH=off) none does: the pick reopens it.
   /** @type {Set<string>} */
   let stalls = new Set();
   try {
-    stalls = p.usage ? stalledSessions(readReadings(p.usage), facts.now) : stalls;
+    if (p.usage && !drainSettings(env).off) stalls = stalledSessions(readReadings(p.usage), facts.now);
   } catch {
     /* no readings: none stalled */
   }
