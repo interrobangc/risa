@@ -9,9 +9,8 @@
 // topic has "throwaway" in its name), which stops before the merge.
 //
 // The onboarding a user does after init is the test's too: the folder's two CI
-// lists (init writes the tier data, the check plan's rules and the check hook),
-// the preferences doc, the planner's additions and the fixes rules, and the repo's
-// own prefixes. A second case builds the same repo on risa.json, its rule files
+// lists (init writes the tier data, the check plan's rules, the check hook and the
+// skeptic brief's docs) and the repo's own prefixes. A second case builds the same repo on risa.json, its rule files
 // under tools/, migrates it (`risa config migrate`) and runs the same check.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
@@ -43,7 +42,8 @@ const INIT = ["--name", "ledger", "--trunk", TRUNK, "--check", "make check"];
 // Each case runs dozens of git commands, a check and a landing: generous under load.
 const LONG = 240_000;
 
-// init's own files: the config, its tier data and check plan rules, the backlog's three.
+// init's own files: the config, its tier data and check plan rules, the backlog's three,
+// the skeptic brief's docs.
 const INIT_FILES = initFiles({ name: "ledger", trunk: TRUNK, check: "make check" });
 const TIERS = JSON.parse(INIT_FILES[`${CONFIG_DIR}/tiers.json`] ?? "{}");
 // The two CI lists init leaves to the user, by RULE_FILES' default names.
@@ -88,14 +88,12 @@ const editJson = (path, change) => {
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`);
 };
 
-/** The user's own edits after init: the repo's prefixes, the skeptic's docs. */
+/** The user's own edit after init: the repo's prefixes. */
 const onboard = (/** @type {Record<string, any>} */ c) => {
-  c.paths.preferences = "docs/preferences.md";
-  c.roles = { planner: { additions: "docs/planner.md" } };
   c.branches.prefixes = PREFIXES;
 };
 
-/** The ledger before Risa: a Makefile project, its docs, one commit on trunk, pushed. */
+/** The ledger before Risa: a Makefile project, its agents doc, one commit on trunk, pushed. */
 function makeLedger() {
   execFileSync("git", ["init", "-q", "--bare", "-b", TRUNK, origin]);
   execFileSync("git", ["init", "-q", "-b", TRUNK, repo]);
@@ -105,12 +103,6 @@ function makeLedger() {
     Makefile: 'check:\n\t@test -f README.md && echo "make check: ok"\n',
     "README.md": "# Ledger\n\nA fictional ledger, kept with make.\n",
     "AGENTS.md": "# Ledger: agents\n\nRun `make check` before handing off.\n",
-    "docs/preferences.md":
-      "# Preferences\n\n- **Default on silence:** a recommendation stands. Never (`--waits`): money, data (2026-01-01)\n",
-    "docs/planner.md":
-      "## What to ask\n\nAsk what changes the plan.\n\n**Unattended** runs take the defaults.\n\n" +
-      "## The skeptic pass\n\nA skeptic reads the plan first.\n",
-    "plans/fixes-rules.md": "# Fixes rules\n\nA fix wave takes small fixes.\n",
   });
   git(repo, "add", "-A");
   git(repo, "commit", "-qm", "chore: start the ledger");
@@ -185,7 +177,7 @@ describe("a second repo, from risa init to a landing", () => {
       // The user's part: the two CI lists, their edits, the commit init names.
       write(join(repo, CONFIG_DIR), LISTS);
       editJson(join(repo, CONFIG_DIR, CONFIG_FILE), onboard);
-      git(repo, "add", CONFIG_DIR, "plans");
+      git(repo, "add", CONFIG_DIR, "plans", "docs");
       git(repo, "commit", "-qm", "chore: start risa");
       git(repo, "push", "-q", "origin", TRUNK);
       checkConfig();

@@ -15,14 +15,18 @@
 //       Writes .risa/config.json (Risa's defaults for the rest: paths under plans/, the
 //       id prefix from the name, no-op commands, a check hook running --check), the
 //       folder's tier data and check plan rules (one tier, `check`, that every file asks
-//       for), the backlog (its PRDs table, empty), the inbox and the archive. Prints the
-//       machine config line and the commit. Exit 2
-//       with one line, writing nothing: outside a repo, a config in either form there,
-//       a file it would write already there, a value the loader refuses.
+//       for), the backlog (its PRDs table, empty), the inbox and the archive; and, each
+//       only when missing (never over a file there), the skeptic brief's docs: the
+//       preferences doc and the planner's additions under docs/, plans/fixes-rules.md.
+//       Prints a step for what it can't guess (a missing agents doc, a kept doc the
+//       brief can't read, another .md beside the preferences doc), the machine config
+//       line and the commit. Exit 2 with one line, writing nothing: outside a repo, a
+//       config in either form there, another file it would write already there, a
+//       value the loader refuses.
 //
 // migratePlan and initFiles are the pure halves (no file system, no git), for tests.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -37,6 +41,15 @@ import {
 
 /** The folder form's config, from the repo's root. */
 const FOLDER_CONFIG = `${CONFIG_DIR}/${CONFIG_FILE}`;
+
+/** The docs init writes only when missing, keeping one already there: the skeptic brief's. */
+const PREFERENCES = "docs/preferences.md";
+const PLANNER = "docs/planner.md";
+const FIXES_RULES = "plans/fixes-rules.md";
+const KEPT = new Set([PREFERENCES, PLANNER, FIXES_RULES]);
+// The never list's line as the skeptic brief reads it (skeptics.mjs's readRules).
+const NEVER_LINE =
+  /\*\*Default on silence:\*\*.*Never \(`--waits`\):\s*.+?\s*\([^()]*\d{4}-\d{2}-\d{2}\)\s*$/m;
 
 /** A refusal: one line, exit 2, nothing changed. */
 class Refusal extends Error {}
@@ -79,12 +92,19 @@ export function migratePlan({ root, raw, exists = (rel) => existsSync(join(root,
 /**
  * The files init writes (path from the root → text): the folder's config, its tier data
  * and check plan rules (by RULE_FILES' names, so the loader finds them), and the backlog,
- * inbox and archive under plans/. The check hook runs CHECK through sh, which drops the
- * mode, base and test files check-hook.sh appends.
- * @param {{ name: string, trunk?: string, check?: string }} opts
+ * inbox and archive under plans/; and the skeptic brief's docs (init keeps any already
+ * there): the preferences doc with its never list (dated DATE), the planner's additions
+ * (_What to ask_) and the fixes rules. The check hook runs CHECK through sh, which drops
+ * the mode, base and test files check-hook.sh appends.
+ * @param {{ name: string, trunk?: string, check?: string, date?: string }} opts
  * @returns {Record<string, string>}
  */
-export function initFiles({ name, trunk = "main", check = "true" }) {
+export function initFiles({
+  name,
+  trunk = "main",
+  check = "true",
+  date = new Date().toISOString().slice(0, 10),
+}) {
   const idPrefix = String(name)
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
@@ -98,8 +118,10 @@ export function initFiles({ name, trunk = "main", check = "true" }) {
       plans: "plans",
       docs: "docs",
       agentsDoc: "AGENTS.md",
+      preferences: PREFERENCES,
       tooling: [CONFIG_DIR],
     },
+    roles: { planner: { additions: PLANNER } },
     branches: { trunk, prefixes: { prd: "prd/", slice: "slice/", plan: "plan/", hotfix: "hotfix/" } },
     backlog: { prdsHeading: "## PRDs", idPrefix },
     commands: {
@@ -172,6 +194,29 @@ export function initFiles({ name, trunk = "main", check = "true" }) {
     "## Items",
     "",
   ];
+  const preferences = [
+    "# Preferences",
+    "",
+    "What the user has decided about how work runs here. A skeptic briefs from the never list below: keep its line's shape (the list, then a dated note in parentheses).",
+    "",
+    `- **Default on silence:** a recommended question takes its recommendation after 30 minutes unless answered (\`--defaults\`). Never (\`--waits\`): money, data loss or a change to existing data, a live deploy, a destructive step, a new dependency; and when unsure. (risa init, ${date})`,
+    "",
+  ];
+  const planner = [
+    "## What to ask",
+    "",
+    "Ask only when a wrong guess is costly to undo or the choice is the user's alone, and neither the items nor the [preferences](preferences.md) answer it: scope, existing data, a new dependency or paid service. Never ask about naming, layout or test choices: take the smallest version that fits, and record it as assumed.",
+    "",
+    "**Unattended** runs take each recommendation; a question on the never list waits for the user.",
+    "",
+  ];
+  const fixesRules = [
+    "# Fixes rules",
+    "",
+    "- **One slice and one backlog item per fix.** A big fix is split into slices that each land on their own.",
+    "- **A fix gets a test** beside the code it changes, naming it in the slice's acceptance criteria.",
+    "",
+  ];
   return {
     [FOLDER_CONFIG]: json(config),
     [ruleFile("tierData")]: json(tiers),
@@ -179,6 +224,9 @@ export function initFiles({ name, trunk = "main", check = "true" }) {
     [config.paths.backlog]: backlog.join("\n"),
     [config.paths.inbox]: inbox.join("\n"),
     [config.paths.archive]: archive.join("\n"),
+    [PREFERENCES]: preferences.join("\n"),
+    [PLANNER]: planner.join("\n"),
+    [FIXES_RULES]: fixesRules.join("\n"),
   };
 }
 
@@ -282,6 +330,35 @@ export function migrate({ cwd = process.cwd(), dryRun = false } = {}) {
 }
 
 /**
+ * The steps a kept doc (THERE: the kept docs) needs before the project-data check passes,
+ * and one for each other .md beside the preferences doc, which no role names.
+ * @param {string} root @param {string[]} there
+ * @returns {string[]}
+ */
+function keptDocSteps(root, there) {
+  const read = (/** @type {string} */ rel) => readFileSync(join(root, rel), "utf8");
+  const steps = [];
+  if (there.includes(PREFERENCES) && !NEVER_LINE.test(read(PREFERENCES)))
+    steps.push(
+      `${PREFERENCES} (paths.preferences) has no never list for the skeptic brief: add a line "- **Default on silence:** … Never (\`--waits\`): <the list> (<note>, YYYY-MM-DD)"`,
+    );
+  if (there.includes(PLANNER) && !/^## What to ask\s*$/m.test(read(PLANNER)))
+    steps.push(
+      `${PLANNER} (roles.planner.additions) has no "## What to ask" section for the skeptic brief: add one`,
+    );
+  const folder = dirname(PREFERENCES);
+  const others = readdirSync(join(root, folder))
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => `${folder}/${f}`)
+    .filter((rel) => rel !== PREFERENCES && rel !== PLANNER);
+  if (others.length)
+    steps.push(
+      `${others.join(", ")}: no role names it, and every .md beside ${PREFERENCES} must be one's: name it in the config (roles.<role>.additions or replacement), or move it out of ${folder}/`,
+    );
+  return steps;
+}
+
+/**
  * `init`, in CWD's repo. Returns the lines to print.
  * @param {{ cwd?: string, name?: string, trunk?: string, check?: string }} opts
  * @returns {string[]}
@@ -300,15 +377,20 @@ export function init({ cwd = process.cwd(), name, trunk, check }) {
   const files = initFiles({ name, trunk, check });
   mustLoad(FOLDER_CONFIG, JSON.parse(files[FOLDER_CONFIG] ?? "{}"));
   const there = Object.keys(files).filter((rel) => existsSync(join(root, rel)));
-  if (there.length) throw new Refusal(`${there.join(", ")}: already there; init writes only new files`);
+  const refused = there.filter((rel) => !KEPT.has(rel));
+  if (refused.length) throw new Refusal(`${refused.join(", ")}: already there; init writes only new files`);
   for (const [rel, text] of Object.entries(files)) {
+    if (there.includes(rel)) continue;
     mkdirSync(dirname(join(root, rel)), { recursive: true });
     writeFileSync(join(root, rel), text);
   }
   const config = JSON.parse(files[FOLDER_CONFIG] ?? "{}");
   const missing = [config.paths.agentsDoc, config.paths.docs].filter((rel) => !existsSync(join(root, rel)));
   return [
-    ...Object.keys(files).map((rel) => `wrote ${rel}`),
+    ...Object.keys(files).map((rel) =>
+      there.includes(rel) ? `kept ${rel} (already there)` : `wrote ${rel}`,
+    ),
+    ...keptDocSteps(root, there),
     ...(missing.length
       ? [
           `the config names ${missing.join(" and ")} (paths.agentsDoc, paths.docs): add them, or change those paths`,
