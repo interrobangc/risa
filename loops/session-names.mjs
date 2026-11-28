@@ -23,8 +23,8 @@ const isMainBacklog = (/** @type {string} */ name, /** @type {string} */ kind) =
 
 /**
  * The persona of the session NAME of KIND, whose Remote Control name is REMOTE:
- * the main backlog's given admiral (the backlog pool's rank, whatever name it was
- * given), none for any other backlog session, else the role's hashed one.
+ * the main backlog's given admiral (one word of letters, worn with the backlog
+ * pool's rank), none for any other backlog session, else the role's hashed one.
  * @param {{ name: string, kind: string, remote?: string | null }} session
  * @returns {import("./flavor.mjs").Persona | null}
  */
