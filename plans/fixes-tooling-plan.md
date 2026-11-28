@@ -6,26 +6,26 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item           | Model  | State                | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------------- | ------ | -------------------- | ------------------------------ |
-| 27    | 5    | RISA-1011      | sonnet | merged               | 5bff9fa                        |
-| 28    | 5    | RISA-882       | opus   | merged               | a99f7d2                        |
-| 29    | 5    | RISA-886, 889  | opus   | merged               | 6645281                        |
-| 30    | 5    | RISA-986       | opus   | merged               | c4654f1                        |
-| 31    | 5    | RISA-994 (1/2) | opus   | merged               | b432f93                        |
-| 32    | 5    | RISA-994 (2/2) | opus   | agent spawned (opus) | —                              |
-| 33    | 5    | RISA-1006      | opus   | merged               | 5cf783f                        |
-| 34    | 5    | RISA-1012      | opus   | merged               | 56f901b                        |
-| 35    | 5    | RISA-1013      | opus   | merged               | b5c04a7                        |
-| 36    | 5    | RISA-1014      | opus   | merged               | d40d249                        |
-| 37    | 5    | RISA-813       | opus   | merged               | f200b15                        |
-| 38    | 5    | RISA-883       | opus   | merged               | 1573463                        |
+| Slice | Wave | Item           | Model  | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | -------------- | ------ | ------ | ------------------------------ |
+| 27    | 5    | RISA-1011      | sonnet | merged | 5bff9fa                        |
+| 28    | 5    | RISA-882       | opus   | merged | a99f7d2                        |
+| 29    | 5    | RISA-886, 889  | opus   | merged | 6645281                        |
+| 30    | 5    | RISA-986       | opus   | merged | c4654f1                        |
+| 31    | 5    | RISA-994 (1/2) | opus   | merged | b432f93                        |
+| 32    | 5    | RISA-994 (2/2) | opus   | merged | 6973aab                        |
+| 33    | 5    | RISA-1006      | opus   | merged | 5cf783f                        |
+| 34    | 5    | RISA-1012      | opus   | merged | 56f901b                        |
+| 35    | 5    | RISA-1013      | opus   | merged | b5c04a7                        |
+| 36    | 5    | RISA-1014      | opus   | merged | d40d249                        |
+| 37    | 5    | RISA-813       | opus   | merged | f200b15                        |
+| 38    | 5    | RISA-883       | opus   | merged | 1573463                        |
 
 **Wave 4 landed** 2026-11-27 in main as 730639e (PR #11), released as v0.1.8: slices 19–26 (RISA-881, 1005, 1003, 1004, 926, 981, 1009, 1010); 26 on sonnet, the rest opus. CI unit green on 9f74528 (run 46102353384). Codex: 2 P2s filed (RISA-1012, 1013), clean on 9f74528; landed on the user's word with `--no-review --by-user` without its re-review of the docs-only tip. The new risa.json keys (commands.testFile, staticCheck) broke v0.1.7 until v0.1.8 was installed: **a change to Risa's own risa.json needs the release that reads it installed first.** Report filed; slice worktrees removed.
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
-**Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. Watch running. Slices 30–38 merged ahead of 29 (no shared files) so 32 could start. **Slip:** worktrees were cut before the plan commit (964bfdf), so slice checks ran the full suite (load 107); each agent told to merge prd/fixes-tooling first (filed as a bug).
+**Wave 5** started 2026-11-27 (session after the wave-4 hand-over): main synced (up to date), slices 27–38 written, hot files set, items claimed; 10 agents spawned, 28 and 32 wait on 27 and 31. All 12 merged; wave gate next. Slices 30–38 merged ahead of 29 (no shared files) so 32 could start. **Slip:** worktrees were cut before the plan commit (964bfdf), so slice checks ran the full suite (load 107); each agent told to merge prd/fixes-tooling first (filed as a bug).
 
 **Carried over:** a change to Risa's own risa.json needs the release that reads it installed first. Slice checks run red on load timeouts (RISA-994, slices 31–32); the wave's CI run is the gate. machinery.md is at its budget. check-plan's "shares its Check file with slice 25" on 34 is a false wave (25 landed).
 
