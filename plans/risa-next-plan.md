@@ -6,15 +6,19 @@
 
 | Slice | Wave | State | Merge into `prd/risa-next` |
 | ----- | ---- | ----- | -------------------------- |
-| 1     | 1    | working (opus, worktree risa-next-1) | —                          |
-| 2     | 2    | —     | —                          |
-| 3     | 2    | —     | —                          |
+| 1     | 1    | merged (opus, 5fd8fdf) | 37fd0e6                    |
+| 2     | 2    | working (opus, worktree risa-next-2) | —                          |
+| 3     | 2    | working (opus, worktree risa-next-3) | —                          |
 | 4     | 3    | —     | —                          |
 | 5     | 4    | —     | —                          |
 
 **Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Models:** slice 1 opus.
+**Models:** slices 1, 2, 3 opus.
+
+**Landing held for wave 2 (orchestrator's call, 2026-11-28):** wave 1 alone would regress main: `captain.mjs` now draws admirals (`--remote-control Ross`), which the keep-alive and session-request matchers don't know until slice 2 makes the argument begin with `backlog`; and the backlog prompt would read "Captain Ross" until slice 3. Waves 1 and 2 land together. Wave 1 gate: `pnpm test` (tier none) on 37fd0e6.
+
+**Slice 1 notes for later slices:** `flavor.mjs` loads `machine.mjs` only by dynamic import in its CLI (a top-level await hangs node); tests copying `captain.mjs` also need `flavor.mjs`, `machine.mjs`, `config.mjs`.
 
 **Backlog:** claim each slice's items as it starts. Slices 1 and 3: RISA-914 (`done` after 3). Slice 2: RISA-799 (and RISA-914's push label). Slice 4: RISA-815. Slice 5: RISA-984. With the first landing, mark RISA-816 and RISA-1008 `done` (answered in the PRD's _Decisions_) and move RISA-1007 to `risa-next-2` (`risa backlog set RISA-1007 prd=risa-next-2`), whose build it is.
 
