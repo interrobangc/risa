@@ -122,6 +122,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1032 | change | triaged | fixes-bug |  | Two fixes topics may run at once when their hot files don't overlap: dispatch-pick.mjs's startBlock refuses any standing topic while another runs ('another fixes topic … is running'), so in a repo where one fixes topic (Risa's fixes-tooling) keeps refilling, fixes-bug, fixes-perf and fixes-nit rarely or never get a lane. The hot-file check already guards overlap; keep the lane cap |
 | RISA-1033 | bug | triaged | fixes-bug-urgent |  | A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification |
 | RISA-1034 | bug | triaged | fixes-bug-urgent |  | An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on |
+| RISA-1035 | change | dropped | fixes-bug |  | Backlog and orchestrator prompts: keep queues moving the best way you know; contact the user about flow actions only when the action risks major work, data, or another critical problem |
+| RISA-1036 | plan | triaged | asks-relay |  | A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work |
 
 ## Items
 
@@ -987,3 +989,24 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From Caretook's backlog session 2026-11-28, beside RISA-1030. Overlaps RISA-913's machinery-owned jobs (self-recovery-3) for the long-term shape; this is the small guard now.
 - 2026-11-28 (Robert Bo Davis): Caretook 2026-11-28: prd-sync-safety-3 was alive and took a turn at 11:59:35Z right after a nudge; its background wait on the browser check had ended with nothing to wake it. Separate from RISA-1030.
+
+### RISA-1035 · change · Backlog and orchestrator prompts: keep queues moving the best way you know; contact the user about flow actions only when the action risks major work, data, or another critical problem
+
+- status: dropped
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-tooling): From the user, 2026-11-28 (in the fixes-tooling session): 'a general rule: keep queues moving the best way you know how. Only contact me about actions that keep work moving if you see any real risk of major work, any data, or any other critical problems arising from your recommended action. This should probably be part of backlog prompts'
+- 2026-11-28 (prd/fixes-tooling): The user added: '(or a new "queue-tender" agent)': the rule could live in the backlog prompts, or in a new queue-tender role whose job is keeping the lanes moving.
+- 2026-11-28 (Robert Bo Davis): Triaged 2026-11-28 into fixes-bug (normal urgency): a wording rule in loops/prompts/backlog.sh, orchestrator.sh and their docs, one slice. The 'queue-tender' role the user floated is a bigger design; asks-relay (the backlog session as go-between for every agent) is the natural place for its planner to weigh it.
+- 2026-11-28 (Robert Bo Davis): Dropped 2026-11-28: the user sent this rule to the fixes-tooling session by mistake and asked for it undone; the rule was meant for the backlog session, which now follows it.
+
+### RISA-1036 · plan · A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work
+
+- status: triaged
+- prd: asks-relay
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): The user, 2026-11-28, beside the keep-queues-moving rule now held by the backlog session. asks-relay already plans the backlog session as go-between for every agent's questions; its planner weighs a separate queue-tender against folding this into the backlog role, alongside RISA-1033 and RISA-1034's stall detection.
