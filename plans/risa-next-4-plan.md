@@ -4,20 +4,20 @@
 
 ## Status
 
-| Slice | Wave | State                                                   | Merge into `prd/risa-next-4` |
-| ----- | ---- | ------------------------------------------------------- | ---------------------------- |
-| 1     | 1    | started 2026-11-28 (worktree made, agent spawned, opus) | —                            |
-| 2     | 2    | —                                                       | —                            |
-| 4     | 2    | —                                                       | —                            |
-| 3     | 3    | —                                                       | —                            |
-| 5     | 4    | —                                                       | —                            |
-| 6     | 5    | —                                                       | —                            |
+| Slice | Wave | State                                           | Merge into `prd/risa-next-4` |
+| ----- | ---- | ----------------------------------------------- | ---------------------------- |
+| 1     | 1    | merged 2026-11-28 (handed off at 447be29, opus) | 952927e                      |
+| 2     | 2    | —                                               | —                            |
+| 4     | 2    | —                                               | —                            |
+| 3     | 3    | —                                               | —                            |
+| 5     | 4    | —                                               | —                            |
+| 6     | 5    | —                                               | —                            |
 
 **From the user:** nothing yet beyond the start itself.
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Now (2026-11-28):** wave 1 running: slice 1 in `.loops/risa-next-4-1` on `slice/risa-next-4/1`, agent on opus. Next: merge slice 1, gate with `risa ci run <tier from risa tier> --wait`, PR and Codex review, land, docs, rotate. Other topics: `fixes-bug` is running but its hot files are now `loops/new`, `loops/rotate`, `loops/open-session` (none of this topic's); recheck with `risa backlog prd list` before starting slices 3 and 5. Inbox empty at start; no new item proposed for this topic.
+**Now (2026-11-28):** wave 1: slice 1 merged at 952927e (worktree `.loops/risa-next-4-1` kept until the gate is green). `risa tier` says none (tooling only), so the gate is the full `risa check` on the synced tip, not a CI tier. Next: `risa sync`, the check, `risa pr risa-next-4`, `risa review risa-next-4 --wait`, land, `risa rm risa-next-4-1`, docs, `risa status-trim`, rotate. Slice 1's notes for 2 and 4: both forms present throws from `configPath` (callers outside `loadConfig` see a bare `ConfigError`); bash uses `node loops/config.mjs where <dir>` (exit 1 none, 2 both). Other topics: `fixes-bug` is running but its hot files are now `loops/new`, `loops/rotate`, `loops/open-session` (none of this topic's); recheck with `risa backlog prd list` before starting slices 3 and 5. Inbox empty at start; no new item proposed for this topic.
 
 **Slice models:** all six are coding with real logic: opus.
 
