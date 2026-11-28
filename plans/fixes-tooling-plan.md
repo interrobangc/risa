@@ -6,11 +6,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State              | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------------------ | ------------------------------ |
-| 45    | 8    | RISA-1020 | opus  | merged 6634dd6     | 6634dd6                        |
-| 46    | 8    | RISA-1021 | opus  | spawned            | —                              |
-| 47    | 8    | RISA-1022 | opus  | handed off 136583c | —                              |
+| Slice | Wave | Item      | Model | State          | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | -------------- | ------------------------------ |
+| 45    | 8    | RISA-1020 | opus  | merged 6634dd6 | 6634dd6                        |
+| 46    | 8    | RISA-1021 | opus  | merged ff8fca0 | ff8fca0                        |
+| 47    | 8    | RISA-1022 | opus  | merged b7fd72e | b7fd72e                        |
 
 **Wave 8** (2026-11-28): slices 45–47 written, items claimed, hot files set; main has new commits (fixes-bug 3598122, risa-next 725042b, 75ba240): `risa sync` at this wave's green. Docs at landing: `risa anchors` now exits 1 on a fields error (planner.md, orchestrator.md say it only warns).
 
