@@ -11,6 +11,9 @@
 //   prd dispatch --resume              undo --pause
 //   prd dispatch --stop                end the running dispatcher (TERM; waits
 //                                           RISA_DISPATCH_STOP_SECS, 10, for it to go)
+//   prd dispatch --restart [--every <s>] stop it as --stop does, then start one through the tool's
+//                                           command (its current release) in a background tab, keeping
+//                                           its --every and keep-alive state; none running: starts one
 //   prd dispatch --cap <n>|default     the PRD cap (lanes), read every tick: running PRDs finish
 //
 // The actions:
@@ -384,7 +387,7 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
- *   code?: { hash: string | null, pid: number, at: string } }} DispatchState */
+ *   code?: { hash: string | null, pid: number, at: string, every?: number } }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -495,6 +498,27 @@ export function takeLock(
       }
     }
   }
+}
+
+/**
+ * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free LOCK:
+ * true once it has. It releases the lock on its way out (a zombie still answers kill 0).
+ */
+async function stopHolder(/** @type {string} */ lock, /** @type {number} */ holder) {
+  process.kill(holder, "SIGTERM");
+  const held = () => lockHolder(lock) === holder;
+  const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
+  for (let i = 0; i < waits && held(); i++) await new Promise((r) => setTimeout(r, 100));
+  return !held();
+}
+
+/** The running dispatcher's --every: the one its start wrote, else its command line's, else null. */
+export function everyOf(/** @type {number} */ pid, /** @type {DispatchState} */ state) {
+  const kept = state.code?.pid === pid ? Number(state.code?.every) : 0;
+  if (kept > 0) return kept;
+  const r = spawnSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" });
+  const m = /(?:^|\s)--every\s+([0-9.]+)(?:\s|$)/.exec(r.stdout ?? "");
+  return m && Number(m[1]) > 0 ? Number(m[1]) : null;
 }
 
 const releaseLock = (/** @type {string} */ lock) => {
@@ -1965,6 +1989,9 @@ function parse(/** @type {string[]} */ argv) {
     pause: /** @type {string | null} */ (null),
     resume: false,
     stop: false,
+    restart: false,
+    everySet: false,
+    restarted: /** @type {string | null} */ (null),
     cap: /** @type {string | null} */ (null),
     reexec: /** @type {string | null} */ (null),
   };
@@ -1973,11 +2000,15 @@ function parse(/** @type {string[]} */ argv) {
     if (a === "--every") {
       o.every = Number(argv[++i]);
       if (!(o.every > 0)) throw new Error("--every takes a number of seconds");
+      o.everySet = true;
     } else if (a === "--once") o.once = true;
     else if (a === "--dry-run") o.dryRun = true;
     else if (a === "--pause") o.pause = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : "";
     else if (a === "--resume") o.resume = true;
     else if (a === "--stop") o.stop = true;
+    else if (a === "--restart") o.restart = true;
+    else if (a === "--restarted") o.restarted = argv[++i] ?? "";
+    // (internal: the stopped one's pid, passed by --restart: its keep-alive stops are kept)
     else if (a === "--cap") {
       const v = argv[++i] ?? "";
       if (v !== "default" && !(/^[0-9]+$/.test(v) && Number(v) >= 1 && Number(v) <= MAX_CAP))
@@ -1988,7 +2019,7 @@ function parse(/** @type {string[]} */ argv) {
     else if (a === "-h" || a === "--help") o.help = true;
     else
       throw new Error(
-        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --cap <n>|default)`,
+        `dispatch: unknown argument ${a} (--every <s>, --once, --dry-run, --pause [<why>], --resume, --stop, --restart, --cap <n>|default)`,
       );
   }
   return o;
@@ -2006,7 +2037,7 @@ async function main() {
     const text = readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n");
     console.log(
       text
-        .slice(1, 13)
+        .slice(1, 17)
         .map((l) => l.replace(/^\/\/ ?/, ""))
         .join("\n"),
     );
@@ -2071,15 +2102,56 @@ async function main() {
       console.log("No dispatcher is running.");
       return;
     }
-    process.kill(holder, "SIGTERM");
-    // It releases the lock on its way out (a zombie still answers kill 0).
-    const held = () => lockHolder(p.lock) === holder;
-    const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
-    for (let i = 0; i < waits && held(); i++) await new Promise((r) => setTimeout(r, 100));
     console.log(
-      held()
-        ? `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`
-        : `Stopped the dispatcher (pid ${holder}).`,
+      (await stopHolder(p.lock, holder))
+        ? `Stopped the dispatcher (pid ${holder}).`
+        : `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`,
+    );
+    return;
+  }
+  if (o.restart) {
+    const was = lockHolder(p.lock);
+    const every = o.everySet ? o.every : (was && everyOf(was, readState(p.state))) || 60;
+    if (was && !(await stopHolder(p.lock, was))) {
+      console.error(
+        `${toolCmd.prd}: sent TERM to the dispatcher (pid ${was}); it hasn't exited, so none was started`,
+      );
+      process.exit(1);
+    }
+    // Through the tool's command, so the new one runs the release it points to now.
+    const line = `cd ${sh(p.main)} && ${toolCmd.prd} dispatch --every ${every}${was ? ` --restarted ${was}` : ""}`;
+    const r = run(
+      "bash",
+      [join(HERE, "open-session.sh"), "--command", line, "--title", "dispatch", "--background"],
+      {
+        cwd: p.main,
+      },
+    );
+    if (!r.ok) {
+      console.error(
+        `${toolCmd.prd}: couldn't open the dispatcher's tab: ${(r.err || r.out).split("\n").pop()}`,
+      );
+      process.exit(1);
+    }
+    const limit = Number(process.env.RISA_DISPATCH_START_SECS || 60) * 1000;
+    const deadline = Date.now() + limit;
+    /** @type {{ pid: number, hash: string | null } | null} */
+    let now = null;
+    while (!now && Date.now() < deadline) {
+      const pid = lockHolder(p.lock);
+      const code = readState(p.state).code;
+      if (pid && pid !== was && code?.pid === pid) now = { pid, hash: code.hash };
+      else await new Promise((res) => setTimeout(res, 100));
+    }
+    if (!now) {
+      console.error(
+        `${toolCmd.prd}: the new dispatcher didn't take its lock within ${limit / 1000}s (its tab opened)`,
+      );
+      process.exit(1);
+    }
+    log([`restart: pid ${was ?? "none"} -> ${now.pid}, code ${now.hash ?? "unknown"}`], nowOf());
+    console.log(
+      `Restarted the dispatcher: pid ${was ?? "none"} -> ${now.pid}, code ${now.hash ?? "unknown"} (every ${every}s${was ? ", keep-alive kept" : ""}).`,
     );
     return;
   }
@@ -2113,12 +2185,16 @@ async function main() {
 
   const reexeced = o.reexec;
   if (!o.once) {
-    // A start begins again after "stop keeping it alive" (a re-exec is no start).
+    // A start begins again after "stop keeping it alive" (a re-exec or a --restart is no start).
     updateState(p.state, (s) => {
-      if (s.keepAlive && !reexeced) s.keepAlive = clearKeepStops(s.keepAlive);
-      s.code = { hash: CODE_AT_START, pid: process.pid, at: stamp(nowOf()) };
+      if (s.keepAlive && !reexeced && o.restarted === null) s.keepAlive = clearKeepStops(s.keepAlive);
+      s.code = { hash: CODE_AT_START, pid: process.pid, at: stamp(nowOf()), every: o.every };
     });
-    const what = reexeced ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; ` : "started (";
+    const what = reexeced
+      ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; `
+      : o.restarted !== null
+        ? `restarted (was pid ${o.restarted}; `
+        : "started (";
     log([`${what}pid ${process.pid}, every ${o.every}s)`], nowOf());
     console.log(
       `Dispatcher ${reexeced ? `re-exec'd on new code ${CODE_AT_START}` : "running"} (pid ${process.pid}, every ${o.every}s). --pause, --resume, --stop from any shell.`,
