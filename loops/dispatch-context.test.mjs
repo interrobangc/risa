@@ -26,6 +26,7 @@ import {
   contextAnswer,
   contextDecision,
   contextDefault,
+  rotationGate,
   runsPrdCommand,
 } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, MAX_REOPENS, pick } from "./dispatch-pick.mjs";
@@ -272,6 +273,53 @@ describe("a managed inbox session", () => {
     expect(contextDefault("inbox")).toBe(CONTEXT_OPTIONS[0]);
     // An orchestrator at the same size is under its hard limit: no follow-up.
     expect(decide({ sizes: { "prd-x": at170 }, inboxLimit: 160_000 })).toEqual([]);
+  });
+});
+
+describe("a machine that lost the home (RISA-1084)", () => {
+  const AWAY = "the home is the fictional machine Galileo";
+  const INBOX_AWAY = "the inbox home is Galileo";
+  const yes = (topic) => ({ a1: question({ topic, answeredAt: ago(1), answer: CONTEXT_OPTIONS[0] }) });
+  const answered = (name, kind, topic) => ({
+    sessions: [session({ name, kind, topic })],
+    sizes: { [name]: delivered },
+    entries: { [name]: { pid: 100, askId: "a1" } },
+    asks: yes(topic || name),
+  });
+  const prd = answered("prd-x", "prd", "x");
+  const backlog = answered("backlog", "backlog", "");
+  const inbox = answered("inbox", "inbox", "");
+
+  it("doesn't rotate a session past the hard limit while the project's home is away, and says why", () => {
+    const gates = { project: AWAY, inbox: null };
+    expect(decide({ ...prd, gates })).toEqual([
+      { type: "answered", session: "prd-x", pid: 100, answer: "rotate", askId: "a1" },
+      { type: "gated", session: "prd-x", why: AWAY },
+    ]);
+    expect(types(decide({ ...backlog, gates }))).toEqual(["answered", "gated"]);
+    // The inbox session reads its own gate: open, it still rotates.
+    expect(types(decide({ ...inbox, gates }))).toEqual(["answered", "rotate-inbox"]);
+  });
+
+  it("rotates as before with the home here", () => {
+    const gates = { project: null, inbox: null };
+    expect(types(decide({ ...prd, gates }))).toEqual(["answered", "rotate"]);
+    expect(types(decide({ ...backlog, gates }))).toEqual(["answered", "rotate-backlog"]);
+    expect(types(decide({ ...inbox, gates }))).toEqual(["answered", "rotate-inbox"]);
+  });
+
+  it("with only the inbox gate closed, holds the inbox session and rotates a PRD's", () => {
+    const gates = { project: null, inbox: INBOX_AWAY };
+    expect(decide({ ...inbox, gates })[1]).toEqual({ type: "gated", session: "inbox", why: INBOX_AWAY });
+    expect(types(decide({ ...prd, gates }))).toEqual(["answered", "rotate"]);
+    expect(rotationGate("inbox", gates)).toBe(INBOX_AWAY);
+    expect(rotationGate("prd", gates)).toBeNull();
+  });
+
+  it("still nudges and asks: they open no session", () => {
+    const gates = { project: AWAY, inbox: AWAY };
+    expect(types(decide({ gates }))).toEqual(["nudge"]);
+    expect(types(decide({ sizes: { "prd-x": delivered }, gates }))).toEqual(["ask"]);
   });
 });
 
@@ -720,6 +768,41 @@ describe("the tick", () => {
       `rotate-into.sh inbox ${child.pid} --reason context --title inbox --background`,
     );
     expect(callsOf("rotate")).toEqual([]);
+  });
+
+  it("doesn't rotate on a machine that lost the home, says why once, and rotates once it's back (RISA-1084)", async () => {
+    readyToAsk(liveSession());
+    tick();
+    answer(listAsks(asksDir)[0].id, CONTEXT_OPTIONS[0]);
+    const AWAY = "the home is the fictional machine Galileo";
+    /** A stand-in home: BLOCKED is the project's gate. */
+    const homeOf = (/** @type {string | null} */ blocked) => ({
+      homeTick: () => ({ lines: [], blocked, inboxWhy: null, state: {} }),
+    });
+    const { pathsOf, tick: tickIn } = await import(scripts("dispatch.mjs"));
+    const saved = { ...process.env };
+    Object.assign(process.env, env);
+    /** One tick in this process, with HOME standing in for home.mjs; its lines. */
+    const inProcess = (/** @type {any} */ home) =>
+      tickIn(pathsOf(main, env), { env, say: () => {}, home }).lines.join("\n");
+    const cwd = process.cwd();
+    try {
+      process.chdir(main);
+      const first = inProcess(homeOf(AWAY));
+      expect(first).toContain(`context: prd-x isn't rotated here: ${AWAY}`);
+      expect(callsOf("rotate")).toEqual([]);
+      // Not every tick: the line comes back only with another reason.
+      expect(inProcess(homeOf(AWAY))).not.toContain("isn't rotated here");
+      expect(callsOf("rotate")).toEqual([]);
+      expect(contextState()["prd-x"]).toMatchObject({ answer: "rotate", gated: AWAY });
+      inProcess(homeOf(null));
+      expect(callsOf("rotate")).toEqual(["x --mid-wave --reason context"]);
+      expect(contextState()["prd-x"].gated).toBeUndefined();
+    } finally {
+      process.chdir(cwd);
+      for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+      Object.assign(process.env, saved);
+    }
   });
 
   it("writes nothing on a dry run", () => {

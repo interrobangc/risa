@@ -40,7 +40,7 @@ export const contextDefault = (/** @type {string | undefined} */ kind) =>
 
 /**
  * @typedef {{ pid: number, askId?: string, answer?: "rotate" | "leave", triedAt?: number,
- *   reported?: boolean }} ContextEntry
+ *   reported?: boolean, gated?: string }} ContextEntry
  * @typedef {{ name: string, pid: number, kind?: string, topic?: string, managed?: boolean,
  *   live: boolean, rotating?: boolean }} ContextSession
  * @typedef {{ type: "clear", session: string, askId: string | null }
@@ -48,10 +48,24 @@ export const contextDefault = (/** @type {string | undefined} */ kind) =>
  *   | { type: "ask", session: string, pid: number, topic: string, text: string, recommend: string }
  *   | { type: "answered", session: string, pid: number, answer: "rotate" | "leave", askId: string }
  *   | { type: "hold", session: string }
+ *   | { type: "gated", session: string, why: string }
  *   | { type: "rotate", session: string, pid: number, topic: string }
  *   | { type: "rotate-backlog", session: string, pid: number, topic: string, brief: boolean }
  *   | { type: "rotate-inbox", session: string, pid: number, topic: string }} ContextAction
  */
+
+/**
+ * What stops the automatic rotations here (RISA-1084): `project`, the project's home is
+ * another machine's (or unreadable); `inbox`, the inbox session's own gate (home.mjs's
+ * `inboxWhy`). Null or absent: none.
+ * @typedef {{ project?: string | null, inbox?: string | null }} RotationGates
+ */
+
+/** Why a session of KIND isn't rotated into a fresh one here, or null. The inbox session reads its own gate. */
+export const rotationGate = (
+  /** @type {string | undefined} */ kind,
+  /** @type {RotationGates} */ gates = {},
+) => (kind === "inbox" ? gates.inbox : gates.project) || null;
 
 /** What a context question's answer means; anything unclear leaves the session alone. */
 export function contextAnswer(/** @type {string | null | undefined} */ answer) {
@@ -103,8 +117,9 @@ export function commandUnder(pid, table) {
  * @param {{ sessions: ContextSession[], sizes?: Record<string, any>,
  *   entries?: Record<string, ContextEntry>, asks?: Record<string, any>, running?: Set<string>,
  *   briefs?: Record<string, number>, paused?: boolean, limit: number, inboxLimit?: number,
- *   waitMs: number, now: number }} facts `briefs`: a session's usable brief file, by when it was
- *   written (ms); `inboxLimit`: the inbox session's hard limit (its soft one), else `limit`
+ *   waitMs: number, now: number, gates?: RotationGates }} facts `briefs`: a session's usable brief
+ *   file, by when it was written (ms); `inboxLimit`: the inbox session's hard limit (its soft one),
+ *   else `limit`; `gates`: what stops a rotation on this machine (rotationGate)
  * @returns {ContextAction[]}
  */
 export function contextDecision({
@@ -119,6 +134,7 @@ export function contextDecision({
   inboxLimit = limit,
   waitMs,
   now,
+  gates = {},
 }) {
   // `limit` is the hard limit.
   if (paused) return [];
@@ -169,7 +185,9 @@ export function contextDecision({
 
     if (answer === "rotate") {
       if (e?.triedAt && now - e.triedAt < waitMs) continue;
-      if (running.has(session)) actions.push({ type: "hold", session });
+      const gated = rotationGate(s.kind, gates);
+      if (gated) actions.push({ type: "gated", session, why: gated });
+      else if (running.has(session)) actions.push({ type: "hold", session });
       else if (s.kind === "backlog") {
         const delivered = Date.parse(rec.nudgeDeliveredAt ?? "");
         const brief = briefs[session] !== undefined && briefs[session] > delivered;
