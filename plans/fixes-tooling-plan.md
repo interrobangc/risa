@@ -19,7 +19,7 @@ No slice in flight (idle hand-over after wave 8; its slices' merges: 45 6634dd6,
 
 **For the next session:**
 
-- **Waiting (2026-11-28):** RISA-1025 (finish.mjs into dispatch*.test.mjs's script lists, static import in dispatch.mjs) is the only triaged item; it touches self-recovery-2's hot files (loops/dispatch, loops/finish), so it is held until that topic lands (asked its orchestrator to ping; a background check watches `risa backlog prd list`). Then `risa sync` and write it as slice 48 in wave 9.
+- **Waiting (2026-11-28):** RISA-1025 (finish.mjs into dispatch*.test.mjs's script lists, static import in dispatch.mjs) is the only triaged item; it touches self-recovery-2's hot files (loops/dispatch, loops/finish), so it is held until that topic lands (asked its orchestrator to ping; a background check watches `risa backlog prd list`). Its slice 3 (finishStep) is in main as ae50f44, but its slice 6 (merged on its branch, not landed) also touches dispatch.mjs resumePrep, so the hold stays until the topic is done. Then `risa sync` and write it as slice 48 in wave 9.
 - **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
