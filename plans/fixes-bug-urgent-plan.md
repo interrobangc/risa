@@ -8,20 +8,21 @@
 
 | Slice | Wave | Item      | Model | State                                      | Merge into `prd/fixes-bug-urgent` |
 | ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
-| 1     | 1    | RISA-1030 | opus  | merged                                     | ff256da                           |
-| 2     | 1    | RISA-1034 | opus  | merged                                     | 61be90b                           |
-| 3     | 1    | RISA-1033 | opus  | merged                                     | 1f81567                           |
 | 4     | 2    | RISA-1037 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
 
-Wave 1 gate: synced with main (58fcc52); tier none (tooling only), so the gate is a full `risa check` on the synced tip: 25 tests in 16 files timed out at load ~27, the 16 files rerun green at load ~8 (533 tests). **Green**; PR and Codex review next. Wave 1 merged 2026-11-28 (slice 1's check ran out of budget under load ~16 in the tooling step, its own tests green: the CI run is the gate). Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging). Slice 3 started too, once self-recovery-2 freed `dispatch-stuck.mjs`. fixes-bug landed in main (3598122): `risa sync` at the wave boundary. Slice 2 handed off (check passed; merges after slice 1, in plan order); at landing fold into `prd.sh`'s `wait` help and the docs that `wait` now prints the result and exits 1 with none recorded. Slice 3 handed off (check passed): it built the question-at-once branch (Risa has no way to wake an idle session) and added a `transcript` field to the heartbeat (`loops/heartbeat.mjs`, now in hot files).
+**Wave 1 landed** 2026-11-28 in main as 232b823 through PR #25: slices 1 (RISA-1030, merge ff256da), 2 (RISA-1034, 61be90b), 3 (RISA-1033, 1f81567), all opus. Tooling only, tier none. Gate: full `risa check` on the synced tip; 25 tests in 16 files timed out at load ~27, and those 16 files reran green at load ~8 (533 tests). Codex: one P2 (browser wait misses a suite's earlier results), tracked as RISA-1042, thread resolved; clean on ca79cb4. Report filed; to-test/2026-11-28-0815-fixes-bug-urgent.md; slice worktrees removed.
 
-**For the next session:**
+**For the next session (wave 2):**
 
-- **RISA-1038** (the inbox session finds the wrong project; filed by risa-ca for the next wave): it touches `loops/prd.sh` (self-recovery-2's hot file), `loops/session.sh` and `loops/lib.sh`, so it goes in wave 2 beside slice 4.
-- **Docs fold deferred:** the `wait` help in `loops/prd.sh` and `loops/docs/` are self-recovery-2's hot files, so the note on `wait`'s new output and exit 1 (slice 2) and the `notified` stall (slice 3) waits for wave 2, after self-recovery-2 lands.
-- **Context:** this session passed the soft limit (120k) during wave 1; rotate after wave 1 lands.
-- **self-recovery-2** (2026-11-28) said it won't edit `loops/dispatch.mjs` again (barring a Codex fix) and never touches `loops/dispatch-stuck.mjs`, so slice 3 (RISA-1033) started at once. Its last slice changes `dispatch.mjs` and is in review as PR #23. Slice 4 (RISA-1037) starts once PR #23 is in main and `risa sync` has brought it in; self-recovery-2 will message when it lands, and a background check watches its registry row.
-- RISA-1030's keep-alive (launchd or a watchdog) stays with self-recovery-3, per its note.
+- **Waiting on self-recovery-2's PR #23** (it changes `loops/dispatch.mjs`; `loops/prd.sh` and `loops/docs/` are its hot files too). self-recovery-2 will message when it lands; then `risa sync`, and start wave 2. Wave 2 is:
+  - Slice 4 (RISA-1037), already written: the dispatcher logs why it exits.
+  - A slice for RISA-1038 (the inbox session finds the wrong project; `loops/session.sh`, `loops/lib.sh`, `loops/prd.sh`; the backlog session's note has the likely fix).
+  - A slice for RISA-1042 (`loops/lease.sh`; not hot: it could start at once).
+- **Docs fold owed from wave 1** (deferred: hot files): `prd.sh`'s `wait` help and the orchestrator/loop docs should say `wait check|browser` prints the result and exits 1 with none recorded. The machinery doc should name the stuck watch's `notified` kind (`RISA_STUCK_NOTIFIED_MIN`, 10; it asks at once, since Risa can't wake an idle session).
+- **`risa check` takes no label for a full run** (`--quick "<why>"` only).
+- **Under load (~16–27)** slice and full checks time out in the tooling tests. Rerun just the failed files through the check lease once the load drops.
+- RISA-1030's keep-alive (launchd or a watchdog) stays with self-recovery-3.
+- **Commit no Status after asking Codex** before landing: it costs a re-review round.
 
 ## How to run this plan
 
