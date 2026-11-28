@@ -8,18 +8,18 @@
 | ----- | ---- | ------------- | -------------------------------- |
 | 1     | 1    | landed (opus) | bf18c79                          |
 | 2     | 1    | landed (opus) | c2f1e25                          |
-| 3     | 2    | merged (opus) | aa0916e                          |
-| 4     | 2    | merged (opus) | 8477e15                          |
-| 5     | 2    | merged (opus) | 3c6214c                          |
-| 6     | 3    | started (opus) | —                               |
+| 3     | 2    | landed (opus) | aa0916e                          |
+| 4     | 2    | landed (opus) | 8477e15                          |
+| 5     | 2    | landed (opus) | 3c6214c                          |
+| 6     | 3    | merged (opus) | 115919f                          |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Hand-over (2026-11-28):** wave 1 (slices 1, 2) landed in main as 3c11cf9 through PR #20 (tier none, Codex clean; report filed). Wave 2 (slices 3, 4, 5) is merged at 3c6214c and **green**: full `risa check` passed 2487/2487 on 3c6214c (load ~6); slice worktrees 3, 4, 5 removed. Sync skipped (up to date, no recheck); PR #21 open, `risa review --wait` out; then triage, land (tier none), report. Slice 6 (RISA-789, claimed) started early as wave 3 while the review runs: worktree self-recovery-2-6, opus agent spawned, watch running. Check runs at load above ~15 fail on timeouts; rerun when quieter.
+**Hand-over (2026-11-28):** wave 2 landed in main as ae50f44 through PR #21 (tier none, Codex clean on a9112f8; report a39 filed; to-test/2026-11-28-0621-self-recovery-2.md). Wave 3 (slice 6, RISA-789, opus) handed off at 931349b (slice check 2488/2488) and is merged at 115919f; its worktree self-recovery-2-6 stays until the wave is green. Next session: wave gate (tier none: `pnpm test` / `risa check` on the tip), then `risa rm self-recovery-2-6`, `risa sync`, `risa pr`, `risa review --wait`, triage, land, report. That is the plan's last slice: after it lands, `risa rm self-recovery-2`, unless the user brings RISA-1027/1028/1029 into a wave.
 
-**Open:** **message `fixes-tooling-3e` when the landing carrying slice 3 reaches main** (it holds RISA-1025 on our dispatch/finish files). Codex findings from PR #20, triaged into this PRD: RISA-1027 (the finish CLI re-files reports; no persisted keys) and RISA-1028 (cost counts a `plan-<x>` topic's transcripts as `<x>`'s planning); the user decides whether they join a wave. RISA-1025 and RISA-1026 (lease.test flake) filed under fixes-tooling. The handbook names no _Docs at landing_ section; each slice wrote its own doc bullet.
+**Open:** Messaged `fixes-tooling-3e` that slice 3 is in main (ae50f44; RISA-1025 waited on it); it holds RISA-1025 until prd/self-recovery-2 fully lands: **ping `fixes-tooling-3e` after the wave 3 landing**. Triaged into this PRD, the user decides whether they join a wave: RISA-1027 (finish CLI re-files reports), RISA-1028 (cost counts `plan-<x>` as `<x>`'s planning), RISA-1029 (Codex on PR #21: finishStep ignores an overridden TRUNK). Slice 6 adds no dispatcher-side test (dispatch.test.mjs stays unchanged by rule). No serve hook (tooling only).
 
-**Backlog:** RISA-811 and RISA-560 marked done at 3c6214c (they land with wave 2). Slice 6: RISA-789.
+**Backlog:** RISA-811, RISA-560 landed; RISA-789 marked done at 115919f.
 
 ## Architectural decisions
 
