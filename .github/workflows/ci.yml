@@ -2,8 +2,9 @@
 # own runners. Its name is the one `risa ci` filters runs by (ci/ci-io.mjs's
 # WORKFLOW_NAME). `risa ci run <tier>` starts it by pushing the commit to
 # ci/<tier>/<branch> (risa-tiers.json's refPrefix), with no dispatch inputs; the Actions
-# tab's "Run workflow" button starts it by hand. It writes no verdict artifact yet,
-# so `risa ci run --wait` reads such a run as unknown.
+# tab's "Run workflow" button starts it by hand. Pass or fail, it uploads the verdict
+# `risa ci run --wait` reads (ci/write-verdict.mjs; the artifact's name is ci/ci-io.mjs's
+# VERDICT_ARTIFACT, its file VERDICT_FILE).
 # Every action is pinned to a full commit SHA, its version in the comment.
 name: CI
 
@@ -39,3 +40,23 @@ jobs:
           git config --global user.name "Risa CI"
           git config --global user.email "ci@example.invalid"
       - run: pnpm check
+        id: check
+        env:
+          RISA_CI_REPORT: ${{ runner.temp }}/vitest.json
+      - run: node ci/write-verdict.mjs
+        if: always()
+        env:
+          VERDICT_OUT: ${{ runner.temp }}/verdict/verdict.json
+          VERDICT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          VERDICT_RUN_ID: ${{ github.run_id }}
+          VERDICT_REF: ${{ github.ref_name }}
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          VERDICT_REPORT: ${{ runner.temp }}/vitest.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: verdict
+          path: ${{ runner.temp }}/verdict/verdict.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true

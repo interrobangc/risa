@@ -63,8 +63,9 @@
 // (usage.mjs, .loops/.usage/): draining (RISA_USAGE_DRAIN, 85%) holds starts,
 // plans, reopens and the keep-alive (--resume doesn't override it); limited
 // (RISA_USAGE_STOP, 98%, overage, or a session stopped on a limit) also ends
-// each managed session not running a landing (marked stalled; KILL a tick later if
-// it ignored TERM), files one report naming the live hand-opened ones, and opens no
+// each managed prd or plan session not running a landing (marked stalled; KILL a tick
+// later if it ignored TERM), files one report naming the live hand-opened, backlog and
+// inbox ones (never ended), and opens no
 // claude at all: no helper, session request, context or stuck follow-up. An
 // unknown reading never drains; with a session live past RISA_USAGE_STALE_MIN,
 // it files one report per incident. RISA_USAGE_WATCH=off turns it off.
@@ -126,7 +127,16 @@ import {
   stuckDecision,
   stuckSettings,
 } from "./dispatch-stuck.mjs";
-import { LIMITED_ERROR, drainDecision, drainSettings, landingUnder, limitActions } from "./drain.mjs";
+import {
+  LIMITED_ERROR,
+  drainDecision,
+  drainSettings,
+  landingUnder,
+  limitActions,
+  sessionAccount,
+  sessionDrains,
+  stalledSessions,
+} from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
@@ -135,7 +145,15 @@ import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
 import { createNotice } from "./notices.mjs";
-import { canOpenTabs, claudeBin, claudeChoiceFor, claudeEnvPrefix, claudeName, itermApp } from "./host.mjs";
+import {
+  canOpenTabs,
+  claudeAccount,
+  claudeBin,
+  claudeChoiceFor,
+  claudeEnvPrefix,
+  claudeName,
+  itermApp,
+} from "./host.mjs";
 import { inboxDirOf, inboxUntrusted } from "./open-session.mjs";
 import { plannerModel } from "./planner-model.mjs";
 import {
@@ -1188,9 +1206,11 @@ function drainOf(
 }
 
 /**
- * The drain's actions: one report for an unknown reading, and while limited, each managed
- * session ended (marked stalled first) unless it runs a landing, and one report naming the
- * hand-opened ones. Returns whether it did anything.
+ * The drain's actions: one report for an unknown reading, and each managed prd or plan session whose
+ * own account is limited (sessionDrains: its reading's account) ended (marked stalled first)
+ * unless it runs a landing, and one report naming the hand-opened, backlog and inbox ones
+ * (never ended). Returns whether it
+ * did anything.
  */
 function drainStep(
   /** @type {ReturnType<typeof pathsOf>} */ p,
@@ -1223,9 +1243,17 @@ function drainStep(
       out("usage: reported an unknown reading");
     }
   }
+  const readings = readReadings(p.usage);
+  const drains = sessionDrains(
+    readings,
+    g.records.map((r) => r.name),
+    { ...drainSettings(env), now, staleMs: staleMsOf(env), account: claudeAccount(env) },
+  );
+  const limited =
+    drain.state === "limited" || g.records.some((r) => r.live && drains[r.name]?.state === "limited");
   /** @type {string[]} */
-  let reported = drain.state === "limited" ? (prev.reported ?? []) : [];
-  if (drain.state === "limited") {
+  let reported = limited ? (prev.reported ?? []) : [];
+  if (limited) {
     /** @type {Map<number, { ppid: number, args: string }> | null} */
     let table = null;
     try {
@@ -1238,6 +1266,7 @@ function drainStep(
       pid: r.record.pid ?? 0,
       live: r.live,
       managed: r.record.managed === true,
+      kind: r.record.kind,
     }));
     if (!table && sessions.some((s) => s.live && s.managed))
       // A landing can't be told apart: none is ever stopped, so nothing is ended.
@@ -1253,8 +1282,8 @@ function drainStep(
       );
       /** @type {Record<string, any>} */
       const stalls = {};
-      for (const r of readReadings(p.usage)) if (r?.stalled) stalls[String(r.session)] = r.stalled;
-      for (const a of limitActions({ sessions, landing, stalls, reported, drain, now })) {
+      for (const r of readings) if (r?.stalled) stalls[String(r.session)] = r.stalled;
+      for (const a of limitActions({ sessions, landing, stalls, reported, drain, drains, now })) {
         if (a.type === "wait") {
           out(`usage limited: ${a.session} left running (${a.why})`);
           continue;
@@ -1267,7 +1296,9 @@ function drainStep(
         if (a.type === "report") {
           if (report(a.text)) {
             reported = [...reported, ...a.sessions];
-            out(`usage limited: reported ${a.sessions.join(", ")} (opened by hand, never ended)`);
+            out(
+              `usage limited: reported ${a.sessions.join(", ")} (opened by hand, or backlog or inbox: never ended)`,
+            );
           }
           continue;
         }
@@ -1277,9 +1308,11 @@ function drainStep(
           try {
             markStalled(p.usage, a.session, {
               error: LIMITED_ERROR,
-              resetsAt: drain.resetsAt,
+              resetsAt: (drains[a.session] ?? drain).resetsAt,
               pid: a.pid,
               now,
+              // A default-account session's null is kept: never the dispatcher's account.
+              account: sessionAccount(readings, a.session, claudeAccount(env)),
             });
           } catch (e) {
             marked = `its stall mark failed: ${e instanceof Error ? e.message : String(e)}`;
@@ -1582,6 +1615,15 @@ export function tick(
     };
   }
   for (const s of facts.sessions) if (resume?.resuming.has(s.name)) s.resuming = true;
+  // A dead session stalled on a limit still ahead (its own account's) waits for the resume.
+  /** @type {Set<string>} */
+  let stalls = new Set();
+  try {
+    stalls = p.usage ? stalledSessions(readReadings(p.usage), facts.now) : stalls;
+  } catch {
+    /* no readings: none stalled */
+  }
+  for (const s of facts.sessions) if (!s.live && stalls.has(s.name)) s.stalled = true;
   /** @type {import("./dispatch-pick.mjs").Pick} */
   let choice = pick(facts);
   // A resume takes the tick's action: the pick's waits a tick.

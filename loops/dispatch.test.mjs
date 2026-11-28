@@ -2042,7 +2042,7 @@ describe("the drain", () => {
     expect(existsSync(join(usageDir(), "prd-x.json"))).toBe(false);
   });
 
-  it("limited: ends each managed session (marked stalled), one in a landing only after it finishes; reports the hand-opened once", async () => {
+  it("limited: ends each managed prd session (marked stalled), one in a landing only after it finishes; reports the hand-opened and backlog ones once", async () => {
     reading(99);
     const x = liveSession("prd-x", { kind: "prd", topic: "x" });
     const kept = liveSession("backlog", { kind: "backlog" });
@@ -2065,12 +2065,18 @@ describe("the drain", () => {
     const first = ok(["--once"], on);
     expect(first).toMatch(/^\S+Z nothing: usage is limited: 5h 99%, at or over the stop line 98%/);
     expect(first).toMatch(new RegExp(`usage limited: ended prd-x \\(pid ${x.pid}, TERM; marked stalled\\)`));
-    expect(first).toContain("usage limited: ended backlog");
+    expect(first).not.toContain("usage limited: ended backlog");
     expect(first).toContain(
       "usage limited: prd-y left running (it runs a landing: ended once that finishes)",
     );
-    expect(first).toContain("usage limited: reported hotfix-h (opened by hand, never ended)");
-    await until(() => gone(x) && gone(kept));
+    expect(first).toContain(
+      "usage limited: reported backlog, hotfix-h (opened by hand, or backlog or inbox: never ended)",
+    );
+    await until(() => gone(x));
+    expect(gone(kept)).toBe(false);
+    expect(
+      existsSync(join(usageDir(), "backlog.json")) ? readingOf("backlog").stalled : undefined,
+    ).toBeUndefined();
     expect(readingOf("prd-x").stalled).toMatchObject({
       error: "limited",
       pid: x.pid,
@@ -2079,7 +2085,9 @@ describe("the drain", () => {
     expect(gone(y) || gone(hand)).toBe(false);
     const [report] = drainAsks();
     expect(report).toMatchObject({ kind: "report" });
-    expect(report.text).toContain("never ends one opened by hand: hotfix-h is still live");
+    expect(report.text).toContain(
+      "never ends one opened by hand, or a backlog or inbox session: backlog, hotfix-h are still live",
+    );
 
     // The next tick: the landing still runs, and the report isn't filed again.
     setClock(T0 + 60);
@@ -2093,7 +2101,7 @@ describe("the drain", () => {
     setClock(T0 + 120);
     expect(ok(["--once"], on)).toMatch(new RegExp(`usage limited: ended prd-y \\(pid ${y.pid}`));
     await until(() => gone(y));
-    expect(gone(hand)).toBe(false);
+    expect(gone(hand) || gone(kept)).toBe(false);
     expect(drainAsks()).toHaveLength(1);
   });
 

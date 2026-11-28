@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EXIT, RUN_FIELDS, WORKFLOW_NAME, exitFor } from "./ci-io.mjs";
+import { EXIT, RUN_FIELDS, VERDICT_ARTIFACT, VERDICT_FILE, WORKFLOW_NAME, exitFor } from "./ci-io.mjs";
 import { ciTiers } from "./tier-data.mjs";
 import { sharedNames, toolCmd } from "../loops/config.mjs";
 
@@ -63,7 +63,7 @@ export function isVerdict(v) {
   );
 }
 
-/** The verdict artifact of a run (its `verdict.json`), or null. */
+/** The verdict artifact of a run (its VERDICT_FILE), or null. */
 export function readVerdict(
   /** @type {Io} */ io,
   /** @type {number} */ runId,
@@ -71,9 +71,9 @@ export function readVerdict(
 ) {
   const dir = mkdtempSync(join(tmpdir(), "risa-ci-"));
   try {
-    const r = io.gh(["run", "download", String(runId), "--name", "verdict", "--dir", dir], timeoutMs);
+    const r = io.gh(["run", "download", String(runId), "--name", VERDICT_ARTIFACT, "--dir", dir], timeoutMs);
     if (!r.ok) return null;
-    const verdict = JSON.parse(readFileSync(join(dir, "verdict.json"), "utf8"));
+    const verdict = JSON.parse(readFileSync(join(dir, VERDICT_FILE), "utf8"));
     return isVerdict(verdict) ? verdict : null;
   } catch {
     return null;
