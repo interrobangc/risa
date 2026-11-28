@@ -16,6 +16,7 @@ import {
   namesOf,
   personaFor,
   poolOf,
+  sessionPersona,
 } from "./flavor.mjs";
 import { machineProblems } from "./machine.mjs";
 
@@ -87,6 +88,17 @@ describe("personaFor", () => {
     for (const role of ROLES) expect(personaFor(role, "prd-x", "none")).toBeNull();
     expect(personaFor("dispatcher", "x")).toBeNull();
     expect(personaFor("constructor", "x")).toBeNull();
+  });
+});
+
+describe("sessionPersona", () => {
+  it("wears the backlog's drawn admiral with the pool's rank; personaFor for every other role", () => {
+    expect(sessionPersona("backlog", "Janeway")).toEqual({ rank: "Admiral", name: "Janeway" });
+    for (const name of ["", "backlog", "Pi card", "$(x)", "backlog - triage"])
+      expect(sessionPersona("backlog", name), name).toBeNull();
+    expect(sessionPersona("backlog", "Janeway", "none")).toBeNull();
+    expect(sessionPersona("prd", "prd-t")).toEqual(personaFor("prd", "prd-t"));
+    expect(sessionPersona("inbox", "inbox", "none")).toBeNull();
   });
 });
 

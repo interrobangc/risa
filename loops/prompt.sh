@@ -38,12 +38,34 @@
 #   skeptic.mjs              skeptic (its brief)
 # The parts are sourced, not run: they share this shell's arguments and
 # variables, and a part that exits ends the script.
+# The flavor line (flavor.mjs's `line`, RISA-914) ends each prompt the user talks
+# to: backlog (its admiral, RISA_CAPTAIN), orchestrator, plan, hotfix, inbox and
+# recover, each for its session's name. It goes through this script's exit path,
+# so no part prints it: only on exit 0, and nothing under the `none` flavor or
+# when it doesn't render. Slice, tidy, skeptic and the backlog's --guide get none.
 # prompt-golden.test.mjs holds every kind's output byte for byte.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 kind=${1:?kind: orchestrator, plan, slice, hotfix, backlog, inbox, recover, tidy or skeptic}
+flavor_role="" flavor_name=""
+case $kind in
+  backlog) [[ ${2:-} == --guide ]] || flavor_role=backlog flavor_name=${RISA_CAPTAIN:-} ;;
+  orchestrator) flavor_role=prd flavor_name=prd-${2:-} ;;
+  plan | hotfix) flavor_role=$kind flavor_name=$kind-${2:-} ;;
+  inbox) flavor_role=inbox flavor_name=inbox ;;
+  recover) flavor_role=recovery flavor_name=recover ;;
+esac
+flavor_end() {
+  local rc=$? line=""
+  if ((rc == 0)) && [[ -n $flavor_role && -n $flavor_name ]]; then
+    line=$(node "$(dirname "$0")/flavor.mjs" line "$flavor_role" "$flavor_name" 2>/dev/null) || line=""
+    [[ -z $line ]] || printf '%s\n' "$line"
+  fi
+  exit "$rc"
+}
+trap flavor_end EXIT
 prompts=$(dirname "$0")/prompts
 # shellcheck source=prompts/shared.sh
 source "$prompts/shared.sh"

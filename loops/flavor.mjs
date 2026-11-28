@@ -13,6 +13,8 @@
 //   node flavor.mjs persona <role> <name>   `<rank>\t<name>`; nothing under none
 //   node flavor.mjs label <role> <name>     `<Rank> <Name>`; nothing under none
 //   node flavor.mjs line <role> <name>      the prompt's flavor line; nothing under none
+// Each takes the session's persona (sessionPersona): for the backlog role, <name> is
+// its drawn admiral (RISA_CAPTAIN), not a session name to hash.
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -137,6 +139,19 @@ export function personaFor(role, sessionName, flavor = DEFAULT_FLAVOR) {
 }
 
 /**
+ * The persona of a ROLE session named NAME: the backlog's NAME is its drawn admiral
+ * (drawAdmiral; one word, not the bare `backlog`), worn with the pool's rank;
+ * every other role's comes from personaFor. Null under none or for no persona.
+ * @param {string} role @param {string} name
+ * @returns {Persona | null}
+ */
+export function sessionPersona(role, name, flavor = DEFAULT_FLAVOR) {
+  if (role !== "backlog") return personaFor(role, name, flavor);
+  const rank = poolOf(role, flavor)[0]?.rank;
+  return rank && /^[A-Za-z]+$/.test(name) && name !== "backlog" ? { rank, name } : null;
+}
+
+/**
  * The main backlog session's name for a new session: an admiral from the pack's
  * backlog pool, never LAST; under none (an empty pool), the bare `backlog`.
  * RANDOM is a source of numbers in [0, 1) (Math.random; tests pass a fixed one).
@@ -193,7 +208,7 @@ if (isMain()) {
     } catch {
       // A machine config that doesn't load: `machine.mjs check` reports it; the default here.
     }
-    const persona = personaFor(/** @type {string} */ (role), name, flavor);
+    const persona = sessionPersona(/** @type {string} */ (role), name, flavor);
     const out =
       verb === "persona"
         ? persona && `${persona.rank}\t${persona.name}`

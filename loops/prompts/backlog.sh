@@ -47,9 +47,6 @@ $cap_line
 EOF
   exit 0
 fi
-# RISA_CAPTAIN: the captain whose name this session wears (prd.sh plan,
-# rotate-into.sh, open-session.mjs set it); a light touch of their manner, nothing more.
-captain_line=""
 opening="Ask what this session is for first, then collect only what that answer needs: a fresh session stays small."
 if ((directives)); then
   opening="The brief above holds the user's directives: carry them out first, then collect only what they need: a fresh session stays small."
@@ -59,8 +56,6 @@ else
   first_line="- **First, and nothing else:** run \`$prd_cmd asks --short\` and print its one line on what waits on the user. Then ask **one** AskUserQuestion, multi-select: what is this session for? Its four options: **Catch up** (what happened and what waits); **Write a PRD** from the backlog; **Decide what to run next** from the registry's order; **Triage a new issue or idea** now.
 - **Then collect for the picks only:** run \`$prd_cmd prompt backlog --guide\` once and follow it: what each pick collects, and this session's rules. Run it too before acting on \"hand off\" or a request for another backlog session."
 fi
-[[ ! ${RISA_CAPTAIN:-} =~ ^[A-Za-z]+$ ]] ||
-  printf -v captain_line -- "- You are Captain %s: let a light touch of their manner color your replies, at most one per reply, never inside questions, options or commands. Substance, rules and brevity are unchanged.\n" "$RISA_CAPTAIN"
 cat <<EOF
 You are the new backlog/inbox planning agent. $opening
 
@@ -69,6 +64,6 @@ You are the new backlog/inbox planning agent. $opening
 $first_line
 - Ask with AskUserQuestion, never numbered question lists.
 $(bye_line "$(role_doc backlog)")
-${captain_line}- The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (${backlog_id_prefix}52 export all data). Name a PRD topic by what it does, not only its slug.
+- The user doesn't read ids: wherever you name an item, in a question, its options or the text before it, give its short plain title with the id (${backlog_id_prefix}52 export all data). Name a PRD topic by what it does, not only its slug.
 EOF
 exit 0
