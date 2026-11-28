@@ -149,7 +149,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1079 | bug | triaged | fixes-bug |  | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
 | RISA-1080 | bug | triaged | fixes-bug |  | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
 | RISA-1081 | bug | triaged | fixes-bug |  | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
-| RISA-1082 | bug | in-progress | fixes-bug | prd/fixes-bug | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
+| RISA-1082 | bug | ready | fixes-bug | prd/fixes-bug | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
 | RISA-1083 | bug | triaged | fixes-bug |  | Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears |
 | RISA-1084 | bug | triaged | fixes-bug |  | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
 | RISA-1085 | bug | triaged | fixes-tooling |  | loops/check-run.test.mjs fails on GitHub's pull_request runs: it expects the logged branch not to be empty, and a PR run checks out a detached merge commit (run 46172609471 on PR #36: expected '' not to be '') |
@@ -1239,10 +1239,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1082 · bug · risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect
 
-- status: in-progress
+- status: ready
 - prd: fixes-bug
 - owner: prd/fixes-bug
-- commit:
+- commit: c8dac71
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: Reported by caretook's backlog session (caretook B-1045, 2026-11-28): risa rotate --self in caretook's inbox session printed 'Opened inbox in a new background iTerm2 tab', but per the user the hand-off did not take effect. Rotate should confirm the fresh session is live and the old one ended before reporting success, or say it failed. Related: RISA-1077 (the risa inbox session refused a rollover hand-off).
 - 2026-11-28 (Robert Bo Davis): From caretook's backlog (B-1045). Rotate claims success without checking the fresh session took over. Sibling of RISA-1077; normal urgency.
