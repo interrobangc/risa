@@ -10,10 +10,10 @@
 | ----- | ---- | --------- | ----- | ------------------------------------------ | --------------------------------- |
 | 1     | 1    | RISA-1030 | opus  | running                                    | —                                 |
 | 2     | 1    | RISA-1034 | opus  | running                                    | —                                 |
-| 3     | 1    | RISA-1033 | opus  | written                                    | —                                 |
+| 3     | 1    | RISA-1033 | opus  | running                                    | —                                 |
 | 4     | 2    | RISA-1037 | opus  | waits for self-recovery-2's PR #23 in main | —                                 |
 
-Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging).
+Wave 1 started 2026-11-28: slices 1 and 2 (worktrees made, opus agents spawned). Hot files set to the paths they touch. RISA-1037 split from RISA-1030 (the dispatcher-side exit logging). Slice 3 started too, once self-recovery-2 freed `dispatch-stuck.mjs`. fixes-bug landed in main (3598122): `risa sync` at the wave boundary.
 
 **For the next session:**
 
