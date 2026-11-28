@@ -8,16 +8,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 running (2026-11-28): slices 3 and 5 started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
+**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); wave gate CI requested. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
 
-| Slice | Wave | State                     | Merge into `prd/risa-next-2` |
-| ----- | ---- | ------------------------- | ---------------------------- |
-| 1     | 1    | landed (opus)             | 72d3a64                      |
-| 2     | 2    | landed (opus)             | 5ff0aae (main)               |
-| 3     | 3    | running (opus)            | —                            |
-| 5     | 3    | handed off (opus) c47b460 | — (merges after 3)           |
-| 4     | 4    | —                         | —                            |
-| 6     | 4    | —                         | —                            |
+| Slice | Wave | State          | Merge into `prd/risa-next-2` |
+| ----- | ---- | -------------- | ---------------------------- |
+| 1     | 1    | landed (opus)  | 72d3a64                      |
+| 2     | 2    | landed (opus)  | 5ff0aae (main)               |
+| 3     | 3    | running (opus) | —                            |
+| 5     | 3    | merged (opus)  | 1aa160b                      |
+| 4     | 4    | —              | —                            |
+| 6     | 4    | —              | —                            |
 
 **Slice 6 note (from 5's hand-off):** `prd.sh inbox` opens from the machine config's first repo with `inbox` without checking `work: true`; slice 6's keep-alive says first `work: true` repo with `inbox`: make them agree.
 
