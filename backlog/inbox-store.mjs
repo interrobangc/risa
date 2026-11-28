@@ -340,7 +340,8 @@ async function cli(argv) {
   // format.mjs reads a project config as it loads: the project's own when it is here.
   if (project) process.env.RISA_CONFIG = project.configPath;
   const fmt = await import("./format.mjs");
-  const { LookAlikeStop, lookAlikeLine, storeInbox } = await import("./inbox-commands.mjs");
+  const { storeInbox } = await import("./inbox-commands.mjs");
+  const { LookAlikeStop, lookAlikeLine } = await import("./inbox-edit.mjs");
   /** The project's backlog and archive items, from its main checkout's copies. */
   const pool = () => {
     if (!project) return [];

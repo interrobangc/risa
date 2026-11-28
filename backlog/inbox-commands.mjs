@@ -6,20 +6,8 @@
 // This runs no git: it asks the store it is given.
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { LookAlikeStop } from "./inbox-edit.mjs";
 import { toolCmd } from "../loops/config.mjs";
-
-/** A write stopped on look-alikes: nothing was written (exit 3). */
-export class LookAlikeStop extends Error {
-  /** @param {ReturnType<typeof fmt.similarItems>} matches */
-  constructor(matches) {
-    super("look-alikes");
-    this.matches = matches;
-  }
-}
-
-/** A look-alike as a line: an item, or an unfiled inbox line. */
-export const lookAlikeLine = (/** @type {ReturnType<typeof fmt.similarItems>[number]} */ m) =>
-  m.id === "inbox" ? `unfiled inbox line  ${m.title}` : fmt.similarLine(m);
 
 /**
  * @typedef {{ id: string, status: string, prd: string, title: string, archived?: boolean }} PoolItem
