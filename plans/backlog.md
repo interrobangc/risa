@@ -20,7 +20,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `risa-next-3` | — | `risa-next-2` | — | — |
 | `risa-next-4` | — | — | `loops/config`, `loops/machine.mjs`, `loops/skeptics.mjs`, `loops/project-check`, `loops/sample-project/repo.mjs`, `bin/risa`, `loops/rm.sh`, `loops/lib.sh`, `loops/setup`, `loops/second-repo`, `loops/docs/project-config.md`, `README.md` | — |
 | `fixes-test` | standing | — | — | Test fixes: flakes, the test harness, timeouts under load, ranked apart from other fixes. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
-| `fixes-bug` | standing | — | `loops/status-trim`, `loops/prompts/backlog.sh`, `loops/prompt.test.mjs`, `loops/session-names`, `loops/flavor`, `loops/ask.mjs`, `loops/keep-alive`, `loops/session-requests`, `loops/session.sh`, `loops/session.test.mjs`, `loops/doc`, `loops/docs`, `CHANGELOG.md`, `package.json` | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
+| `fixes-bug` | standing | — | — | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | Held to be rethought (the user, 2026-11-28): written for Caretook's dev and staging branches, which Risa doesn't have (main is the only trunk). Items RISA-404, RISA-430, RISA-436, RISA-584; RISA-241 moved to fixes-bug. Cut from orchestration-3. |
 | `self-recovery-2` | done | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560); RISA-1025, 1027-1029 follow-ups. Planned held after two skeptic send-backs (a7); since released. |
 | `self-recovery-3` | — | `self-recovery-2` | `backlog/registry`, `loops/prompts/plan.sh`, `loops/sample-project/prompt-golden.txt`, `loops/rotate`, `loops/rm.sh`, `loops/new.sh`, `loops/run-log`, `loops/dispatch`, `loops/land-idle`, `loops/finish` | Replan state (RISA-998), the land-idle backstop (RISA-1040) and a background-session spike for self-recovery-4 |
@@ -115,8 +115,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1020 | bug | live | fixes-tooling | prd/fixes-tooling | loops/anchors.mjs ignores planBudget's errors, so prd anchors doesn't show a bad Model field |
 | RISA-1021 | chore | live | fixes-tooling | prd/fixes-tooling | In Risa's own repo the slice check runs the Check file twice (unit step via commands.testFile, then the narrowed tooling step) |
 | RISA-1022 | bug | live | fixes-tooling | prd/fixes-tooling | The load gate reads an unreadable load mid-wait as dropped: load_gate_wait (loops/lib.sh) ends its busy loop on 'unread' and starts the check with 'The load dropped to -' |
-| RISA-1023 | bug | ready | fixes-bug | prd/fixes-bug | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
-| RISA-1024 | bug | ready | fixes-bug | prd/fixes-bug | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
+| RISA-1023 | bug | live | fixes-bug | prd/fixes-bug | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
+| RISA-1024 | bug | live | fixes-bug | prd/fixes-bug | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 | RISA-1025 | change | live | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically |
 | RISA-1026 | bug | live | fixes-tooling | prd/fixes-tooling | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
 | RISA-1027 | bug | live | self-recovery-2 | prd/self-recovery-2 | risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key |
@@ -131,7 +131,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1036 | plan | triaged | queue-tender |  | A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work |
 | RISA-1037 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The dispatcher logs why it exits: every exit path (signal, uncaught error, lost lock, clean stop) writes one line to .loops/.dispatch.log and marks .dispatch.json stopped, so a dead pid with no stop mark reads as a crash |
 | RISA-1038 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The inbox session finds the wrong project: run from its own directory (~/.risa/inbox, outside any repo), session.sh's find_repo falls back to the release worktree's repo (Risa's checkout), not the project prd.sh inbox ran for, so it misses that project's claudeConfigDir (starts on Claude Code's default account) and writes its session record under Risa's .loops/.sessions (the project's risa status shows it ended while it's live) |
-| RISA-1039 | change | ready | fixes-bug | prd/fixes-bug | Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
+| RISA-1039 | change | live | fixes-bug | prd/fixes-bug | Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
 | RISA-1040 | feature | triaged | self-recovery-3 |  | An orchestrator that lands and stops without rotating is caught: rotate runs go into .run-log.jsonl, and the dispatcher nudges (then closes) a standing topic whose session sits idle after a land-end with nothing runnable, instead of leaving its lane held |
 | RISA-1041 | change | triaged | fixes-nit |  | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
 | RISA-1042 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began |
@@ -141,7 +141,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1046 | feature | triaged | flavor-packs |  | Flavor pack: Dune. A Great House: the user as the Padishah Emperor or a Duke, backlog = Dukes or House heads, prd = Swordmasters or Warmasters, slice = ornithopter pilots, inbox = Fremen messengers, hotfix = water engineers or Fremen craftsmen, plan = Mentats, recovery = Suk doctors |
 | RISA-1047 | feature | triaged | flavor-packs |  | Flavor pack: Lord of the Rings. The user as a Wizard of the White Council, backlog = Wizards and Elf-lords, prd = kings and stewards, slice = Rangers and Riders, inbox = hobbits and messengers, hotfix = dwarf smiths, plan = Ents and loremasters, recovery = Elvish healers |
 | RISA-1048 | bug | triaged | fixes-test |  | pnpm test:tooling runs no tests and exits 0 (a false green) from a project's node_modules: loops/tooling-tests.mjs's main guard compares import.meta.url with file://argv[1], and under pnpm argv[1] is the symlink while import.meta.url is the real .pnpm path; compare realpaths (as session-names.mjs's isMain does) here and in the other entry points with the same guard |
-| RISA-1049 | change | ready | fixes-bug | prd/fixes-bug | A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names |
+| RISA-1049 | change | live | fixes-bug | prd/fixes-bug | A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names |
 | RISA-1050 | change | triaged | fixes-bug |  | Warn when a project's pinned risa differs from the running release: risa status, and the dispatcher on start or re-exec, name both versions (a refusal is RISA-1017's versioning) |
 | RISA-1051 | bug | triaged | fixes-nit |  | The machinery doc has no 'The dispatcher' section (nor 'Recorded sessions', 'The load gate'), though orchestrator.md and inbox.md send readers to risa doc machinery "The dispatcher", which prints 'no section'; the dispatcher's stop mark and the stuck watch's notified kind have no doc home, and machinery.md's 727 B budget leaves no room to add one |
 | RISA-1052 | bug | triaged | fixes-bug-urgent |  | session.sh resolves its own directory (bin=$(cd "$(dirname "$0")" && pwd)) before sourcing lib.sh, whose unset CDPATH now comes too late: with CDPATH set and a relative $0, cd prints the matched path and bin gets it twice, so source "$bin/lib.sh" fails. Unset CDPATH first |
@@ -911,7 +911,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1023 · bug · Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: cf93d26
@@ -920,7 +920,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1024 · bug · A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: cf93d26
@@ -1066,7 +1066,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1039 · change · Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow'
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 9f14e04
@@ -1162,7 +1162,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1049 · change · A project's role additions can target a named section of the generic doc (a '## <Heading>' in the additions merges into that section; the rest appends at the end), and a check fails a change to a generic doc's section headings or last section that no changelog line names
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: c0751bb
