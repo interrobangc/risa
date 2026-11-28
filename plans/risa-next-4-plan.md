@@ -7,8 +7,8 @@
 | Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
 | ----- | ---- | --------------------------------------------- | ---------------------------- |
 | 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
-| 2     | 2    | —                                             | —                            |
-| 4     | 2    | —                                             | —                            |
+| 2     | 2    | started 2026-11-28 (worktree, agent; opus)    | —                            |
+| 4     | 2    | started 2026-11-28 (worktree, agent; opus)    | —                            |
 | 3     | 3    | —                                             | —                            |
 | 5     | 4    | —                                             | —                            |
 | 6     | 5    | —                                             | —                            |
@@ -17,7 +17,7 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Now (2026-11-28):** wave 1 landed in main through PR #38 (main at 9f54654, tier none, Codex clean, report a67, slice 1's worktree removed). Nothing in flight. Next session: `risa backlog ingest` and `list`, `risa sync`, then wave 2: slices 2 and 4 at once (both opus), `risa watch risa-next-4 --wait` in the background. Before slices 3 and 5, check `risa backlog prd list` that no running topic holds `bin/risa`, `loops/rm.sh` or `loops/lib.sh` (`fixes-bug` held `loops/new`, `loops/rotate`, `loops/open-session` on 2026-11-28).
+**Now (2026-11-28):** wave 1 landed in main through PR #38 (main at 9f54654, report a67). Wave 2 in flight: backlog ingested (nothing new), `risa sync` a skip, slices 2 and 4 started together (worktrees `risa-next-4-2` and `risa-next-4-4`, one opus agent each), `risa watch risa-next-4 --wait` running. After a crash: respawn each unmerged slice with `risa prompt slice risa-next-4 <n> --continue`. Next: merge 2 then 4 as they hand off, `risa tier` and `risa ci run <tier> --wait`, PR, Codex review, land, rotate. Before slices 3 and 5, check `risa backlog prd list` that no running topic holds `bin/risa`, `loops/rm.sh` or `loops/lib.sh` (`risa-next` is done; `fixes-bug` held `loops/new`, `loops/rotate`, `loops/open-session` on 2026-11-28).
 
 **Lessons for the gate:** a full check takes no label: `env -u CLAUDE_CONFIG_DIR risa check > <log outside the worktree> 2>&1` in the background (about 8 minutes at load 20+), then `risa wait check`; with `CLAUDE_CONFIG_DIR` set, RISA-1076 fails about 20 tests. `loops/land-unsynced.test.mjs` can time out under load and passes alone. Commit _Status_ before `risa pr`: land refuses a local tip the PR's head trails.
 
