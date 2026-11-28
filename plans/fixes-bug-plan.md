@@ -25,16 +25,16 @@
 | 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
 | 14    | 5    | RISA-1070       | opus   | merged  | 9b490d4                    |
 | 15    | 5    | RISA-1082       | opus   | merged  | c8dac71                    |
-| 16    | 6    | RISA-1078       | opus   | planned |                            |
+| 16    | 6    | RISA-1078       | opus   | started |                            |
 | 17    | 6    | RISA-1080       | opus   | planned |                            |
-| 18    | 6    | RISA-1083       | opus   | planned |                            |
+| 18    | 6    | RISA-1083       | opus   | started |                            |
 | 19    | 6    | RISA-1079       | opus   | planned |                            |
 | 20    | 6    | RISA-1084       | opus   | planned |                            |
 | 21    | 6    | RISA-1050       | opus   | planned |                            |
-| 22    | 6    | RISA-1077       | opus   | planned |                            |
-| 23    | 6    | RISA-1081       | opus   | planned |                            |
-| 24    | 6    | RISA-1086       | opus   | planned |                            |
-| 25    | 6    | RISA-1087       | opus   | planned |                            |
+| 22    | 6    | RISA-1077       | opus   | started |                            |
+| 23    | 6    | RISA-1081       | opus   | started |                            |
+| 24    | 6    | RISA-1086       | opus   | started |                            |
+| 25    | 6    | RISA-1087       | opus   | started |                            |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
