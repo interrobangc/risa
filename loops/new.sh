@@ -34,7 +34,12 @@ while [[ ${1:-} == --* ]]; do
   esac
 done
 kind=${1:?kind: prd, slice, plan or hotfix}; topic=${2:?topic}
-[[ $topic =~ ^[a-z0-9-]+$ ]] || { echo "topic: lowercase, digits, dashes" >&2; exit 1; }
+# A topic (or hotfix name) starts with a lowercase letter or digit: `plan --help`
+# is refused here, before any worktree, branch or install (RISA-1070).
+[[ $topic =~ ^[a-z0-9][a-z0-9-]*$ ]] || {
+  echo "refused: topic \"$topic\": lowercase letters, digits and dashes, starting with a letter or digit" >&2
+  exit 1
+}
 case $kind in
   prd) name=$topic branch=$prd_prefix$topic base=${base:-$trunk} stack=${stack:-1}
     if [[ ! -e $loops/$name ]] && (($(prd_count) >= max_prds)); then

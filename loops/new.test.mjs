@@ -37,14 +37,17 @@ describe("new.sh slice and the committed plan", () => {
   let root, main, loops, env;
   const git = (cwd, ...a) =>
     execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
-  const newSlice = (topic, n) => {
-    const r = spawnSync("bash", [join(main, "loops/new.sh"), "slice", topic, String(n)], {
+  const newSh = (...args) => {
+    const r = spawnSync("bash", [join(main, "loops/new.sh"), ...args], {
       cwd: main,
       env,
       encoding: "utf8",
     });
     return { status: r.status, out: `${r.stdout}${r.stderr}` };
   };
+  const newSlice = (topic, n) => newSh("slice", topic, String(n));
+  const heads = () => git(main, "for-each-ref", "--format=%(refname:short)", "refs/heads/");
+  const loopsDirs = () => (existsSync(loops) ? readdirSync(loops).sort() : []);
   const branch = (b) => git(main, "branch", "--list", b);
 
   beforeAll(() => {
@@ -121,6 +124,30 @@ describe("new.sh slice and the committed plan", () => {
     expect(r.out).not.toContain("refused");
     expect(branch("slice/t/2")).not.toBe("");
     expect(existsSync(join(loops, "t-2"))).toBe(true);
+  });
+
+  it("refuses a topic that starts with a dash, making no worktree and no branch (RISA-1070)", () => {
+    const before = { heads: heads(), dirs: loopsDirs() };
+    for (const [kind, topic] of [
+      ["plan", "--help"],
+      ["plan", "-x"],
+      ["prd", "-a"],
+    ]) {
+      const r = newSh(kind, topic);
+      expect(r.status, r.out).not.toBe(0);
+      expect(r.out).toContain(
+        `refused: topic "${topic}": lowercase letters, digits and dashes, starting with a letter or digit`,
+      );
+    }
+    expect(heads()).toBe(before.heads);
+    expect(loopsDirs()).toEqual(before.dirs);
+  });
+
+  it("starts a plan worktree for a valid topic, as before", () => {
+    const r = newSh("plan", "v-1");
+    expect(r.status, r.out).toBe(0);
+    expect(branch("plan/v-1")).not.toBe("");
+    expect(existsSync(join(loops, "plan-v-1"))).toBe(true);
   });
 
   it("starts a slice of a topic with no plan file, as before", () => {

@@ -8,31 +8,35 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | started |                            |
-| 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
+| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
+| 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | merged | 9b490d4                    |
+| 15    | 5    | RISA-1082       | opus   | merged | c8dac71                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
 **Wave 2** (slices 6–9, RISA-1023/1024/1039/1049): landed 2026-11-28 in main as 5767dfb (PR #27, tier unit, run 46154596385); Codex's P2 (CI fetches no tags) is RISA-1054 (fixes-tooling). Caretook's backlog session told 5767dfb has RISA-1049.
 
-**Wave 3** (slices 10–11, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1057–1060 moved to risa-next-2 (no longer ours). RISA-1061 (loops/context.mjs) and RISA-1063 (loops/captain.mjs, flavor.mjs, cross-repo session records) are clear of running hot files; RISA-1050 still waits (`loops/dispatch`, hot for risa-next-2). Hot set: loops/context, loops/captain, loops/flavor, loops/sessions, loops/machine.mjs. Items claimed; slices 10–11 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); merged (47c911a). Slice 12 handed off (b7c1d48: session.sh calls the new `session-names.mjs start`, which returns display and persona from one draw, and passes `persona=` to the first record's `sessions.mjs set`; `keptPersona` in captain.mjs) and merged (a04752b). `risa tier`: none, gate `risa check` green on 116704e (2567 tests). Sync: no merge needed. Slice worktrees removed. PR #33 opened; Codex review out. Slice 10 handed off (fb28d13: hint is `cd <main> && <toolCmd.prd> rotate --self`; loops/prompts/shared.sh:45 builds its own form, left as is) and merged (fcb1dd3). Slice 11 handed off (7135a2a: `machineHeld` in captain.mjs reads every machine repo's live records; `personaFor`/`drawAdmiral` take `held`; a stepped persona is kept in the session record's `persona`; also edited loops/session-names.mjs `personaOf`, added to hot) and merged (6e331aa). `risa tier`: none (tooling only), so the gate is `risa check`: green on 0d6ee37 (2543 tests). Synced main (4142eb2; session-names.mjs import conflict with fixes-nit's RISA-1019 refactor, kept both); `pnpm test` green on the synced tip. Slice worktrees removed. PR #30: one Codex P2 (a fresh session's stepped persona isn't kept in its first record), tracked as RISA-1064 (fixes-bug, triaged), thread resolved; Codex clean on 9959f75. **Landed** 2026-11-28 in main as 6f1daaa (tier none, unsynced tip: main's 1 commit shared no file); to-test file `to-test/2026-11-28-1045-fixes-bug.md`; report filed.
+**Wave 3** (slices 10–11, RISA-1061/1063): landed 2026-11-28 in main as 6f1daaa (PR #30, tier none); Codex's P2 became RISA-1064.
 
-**Wave 4** (slices 12–13, both opus), 2026-11-28, fresh session: ingest had nothing new. RISA-1064 (loops/captain, loops/session.sh) and RISA-1065 (loops/time-gate) clear of risa-next-2's hot files; RISA-1050 still waits (`loops/dispatch`). Hot set: loops/captain, loops/session, loops/time-gate, loops/docs. Items claimed; slices 12–13 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 13 handed off (30e3f26: quiet is the start load alone; judged and unjudged local lines name both loads; also loops/check-run.sh comment and check-run.test.mjs expectations, added to hot); merged (47c911a). Slice 12 handed off (b7c1d48: session.sh calls the new `session-names.mjs start`, which returns display and persona from one draw, and passes `persona=` to the first record's `sessions.mjs set`; `keptPersona` in captain.mjs) and merged (a04752b). `risa tier`: none, gate `risa check` green on 116704e (2567 tests). Sync: no merge needed. Slice worktrees removed. PR #33 opened; Codex review out.
+**Wave 4** (slices 12–13, RISA-1064/1065): landed 2026-11-28 in main as acb0975 (PR #33, tier none, Codex clean); to-test file `to-test/2026-11-28-1123-fixes-bug.md`.
 
-**For the next session:** first run `risa backlog prd list`. RISA-1064 (loops/captain.mjs, loops/session.sh) is the next wave's item if neither is hot. risa-next-2 (2026-11-28): wave 1 landed in main (36eee3e, PR #28); `backlog/` stays hot through its wave 4, `loops/dispatch` hot only in wave 4; its next session will say when each frees (RISA-1050 waits on dispatch). When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
+**Wave 5** (slices 14–15, both opus), 2026-11-28, fresh session: ingest had nothing new. Ten items wait; only risa-next-2 runs (hot: backlog/, loops/config, loops/docs/project-config.md, loops/docs/inbox.md, loops/prompts/inbox.sh, loops/prd.sh, loops/dispatch, loops/home). Clear of those: RISA-1070 (loops/new.sh; the `plan` case in loops/prd.sh stays untouched) and RISA-1082 (loops/rotate*, loops/open-session*). Waiting on risa-next-2's hot files: RISA-1050, 1083, 1084 (loops/dispatch), RISA-1077 (loops/prompts/inbox.sh), RISA-1078, 1079, 1080 (loops/home), RISA-1081 (backlog/). Hot set: loops/new, loops/rotate, loops/open-session. Items claimed; slices 14–15 started (worktrees `.loops/fixes-bug-<n>`, one opus agent each). Slice 14 handed off (222dfdf: new.sh refuses a topic not starting with a letter or digit, before the kind case; bin/risa has no per-command `--help` hook, so that and unknown-flag refusal are a new follow-up item needing loops/prd.sh) and merged (9b490d4). Slice 15 handed off (f4dcee3: `rotate --self` waits `RISA_ROTATE_START_WAIT`, default 30 s, for the record marked rotating or replaced, else exits 1 with rotate-into's reason from `<sessions dir>/<name>.refused`; plain `rotate <topic>` unchanged) and merged (c8dac71). `risa tier`: none, so the gate is `risa check` on c8dac71's tip. `risa check` on 24ac588: 2566 passed, 10 failed in usage, drain and dispatch tests, all RISA-1076 (this session's `CLAUDE_CONFIG_DIR`; the three files pass with it unset), so the gate counts as green. Synced main (e2e4f6d): main had split loops/rotate.test.mjs (rotate-fixture, rotate-self, rotate-into, rotate-standing); took main's file plus slice 15's pure `handoffOutcome` tests. Slice 15's fixes merged: e1d2d64 (4fd8852: its `--self` tests ported into loops/rotate-self.test.mjs and rotate-fixture.mjs) and 91b91ad (fa82dc8: the file's first test gets twice the scaled limits and an `afterEach` kills leftover stub sessions; the fault was a cold start past a fixed 10 s wait, not the hand-off wait). Local `risa check` on 91b91ad failed 25 tests in 14 files, all timeouts with the machine at load 20+ (risa-next-4's check failed the same way), so the gate is a CI run: `risa ci run unit` on 91b91ad: **green** (run 46179562703). Slice worktrees removed. Next: PR, Codex review, land. risa-next-2 landed its last wave in main as 2940be2 and is done: every waiting item is free for wave 6 (confirm with `risa backlog prd list`), with the new RISA-1086 (per-command `--help`, loops/prd.sh).
+
+**For the next session:** first run `risa backlog prd list`. Run checks and tests with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands. When RISA-1050 ships, tell Caretook's backlog session the commit (its note asks). When a tagged release carries RISA-1065 (acb0975) or RISA-1070, tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
 ## How to run this plan
 
@@ -170,3 +174,23 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/time-gate.test.mjs`): quiet start with a busy end is judged (ok, warn and fail cases); a busy start is unjudged; the lines name both loads; a CI measure is judged as before.
+
+## Slice 14: A topic name can't start with a dash, so `plan --help` makes no worktree
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/new.test.mjs
+
+**Build (RISA-1070):** `risa plan --help` took `--help` as a topic and made worktree `.loops/plan---help` on branch `plan/--help`: `loops/new.sh` accepts any `^[a-z0-9-]+$` as a topic. Refuse there, before any worktree, branch or install, a topic (or hotfix name) that doesn't start with a lowercase letter or digit, with a line naming the bad value and the rule; this covers `start`, `slice`, `plan` and `hotfix`, which all wrap new.sh. Don't edit `loops/prd.sh` (hot for risa-next-2): its `plan` case stays as is, so `plan --help` ends in new.sh's refusal (non-zero, nothing made). If `bin/risa` already has one place that could answer `<command> --help` or `-h` with the usage text before the command runs, without touching prd.sh, use it and say so in the hand-off; otherwise say in the hand-off that per-command `--help` and refusing unknown flags are left for a later fix in prd.sh.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/new.test.mjs`): `new.sh plan --help`, `new.sh plan -x` and `new.sh prd -a` exit non-zero naming the topic rule, and leave no worktree and no branch; a valid topic works as before.
+
+## Slice 15: rotate --self says whether the hand-off took
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/rotate.test.mjs
+
+**Build (RISA-1082):** in Caretook's inbox session `risa rotate --self` printed "Opened inbox in a new background iTerm2 tab", but the hand-off never took effect: `loops/rotate.sh`'s `--self` branches `exec` `open-session.sh … --background`, whose success line only means a tab was opened. The tab runs `loops/rotate-into.sh`, which can still refuse ("nothing was ended": no record of that kind, the pid isn't the name's live session; a likely cause here is the record sitting under another project's sessions dir, RISA-1072, which risa-next-2 fixes) and nobody sees that line. Make `rotate --self` (backlog, inbox, and the orchestrator path if it has the same gap) report the truth: after the tab is opened, wait a bounded time (an env override for tests, as `RISA_ROTATE_WAIT` is) for evidence that rotate-into started on this session, which is its first step marking the record rotating (or the record already replaced); when none shows, print a failure line saying the hand-off did not start and this session carries on, with rotate-into's reason when it left one (have rotate-into write its refusal where rotate.sh can read it, e.g. a file under the sessions dir, removed once read), and exit non-zero. When it does show, the session is about to be ended, so print what is happening and return. Keep the pure logic in `loops/rotate.mjs` where it can be tested. Don't edit `loops/prd.sh`, `loops/dispatch*` or `loops/prompts/inbox.sh` (hot for risa-next-2). Say in the hand-off what counts as "started" and how long the wait is.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/rotate.test.mjs`): with the opener stubbed so rotate-into never runs, or refuses, `rotate --self` exits non-zero and says the hand-off did not start (with the refusal's reason when there is one), never the bare success; with the record marked rotating within the wait it reports the hand-off under way and exits 0.
