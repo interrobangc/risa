@@ -10,7 +10,7 @@
 | 2     | 2    | merged (opus, 1c991ce) | 6da49d7                    |
 | 3     | 2    | merged (opus, 7754261) | dadae10                    |
 | 4     | 3    | merged (opus, 8207e40) | e01708f                    |
-| 5     | 4    | —                      | —                          |
+| 5     | 4    | started (opus)         | —                          |
 
 **Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
@@ -18,7 +18,7 @@
 
 **Landed (2026-11-28):** waves 1+2 through PR #14 (main 725042b). Wave 3 (slice 4) through PR #16 at tier none: full suite green on rerun (108 files, 2449 tests; first run's 12 failures were timeouts at load ~18), Codex clean on f891446 after one P2 filed as RISA-1024 (fixes-bug); main at 75ba240, to-test `to-test/2026-11-28-0402-risa-next.md`. Slice 4's fix also mended main's `doc.test.mjs` (our 082af3a had dropped the sentence it anchored on). RISA-815 done; worktree risa-next-4 removed.
 
-**Next:** wave 4 = slice 5 (claim RISA-984; opus; its blockers 2 and 4 are merged). Run `risa sync` first. Slice 4's briefs use `## From the user` (backlog.sh's internal flag is still named `directives`).
+**Wave 4 (started 2026-11-28):** synced (up to date with main 82c9cb7), RISA-984 claimed, worktree risa-next-5, opus agent spawned; watch running. Slice 4's briefs use `## From the user` (backlog.sh's internal flag is still named `directives`).
 
 **Review tip:** don't commit to the PR branch after the review round you'll land on: `land` refuses a local tip ahead of the PR's head, and a docs-only commit that isn't a main merge makes Codex's verdict stale.
 
