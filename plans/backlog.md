@@ -57,7 +57,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-811 | change | triaged | self-recovery-2 |  | Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits |
 | RISA-813 | feature | live | fixes-tooling | prd/fixes-tooling | Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop |
 | RISA-814 | feature | triaged | usage-aware-drain |  | Orchestrator picks the usage drain line from the current Claude plan (e.g. ultra vs smaller plans) instead of one fixed percent |
-| RISA-815 | change | in-progress | risa-next | prd/risa-next | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
+| RISA-815 | change | ready | risa-next | prd/risa-next | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
 | RISA-816 | question | live | risa-next |  | Should the orchestrator PRDQ be slice-based instead of PRD-based? |
 | RISA-820 | feature | triaged | risa-next-3 |  | Risa: cross-repo topics: a Risa topic can change a configured subproject's code (Caretook), each side passing its own repo's checks |
 | RISA-841 | change | triaged | risa-next-2 |  | Risa: one inbox session for every configured project, lines kept in a private inbox repo |
@@ -396,10 +396,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-815 · change · Orchestrator summary for backlog handoff should include the ability to pass on directives from the…
 
-- status: in-progress
+- status: ready
 - prd: risa-next
 - owner: prd/risa-next
-- commit:
+- commit: e01708f
 
 - 2026-11-25 (Robert Bo Davis): From the inbox: Orchestrator summary for backlog handoff should include the ability to pass on directives from the user more clearly and directly.
 - 2026-11-25 (Robert Bo Davis): Triage: risa-next, orchestration tooling (hand-off briefs, the PRD queue) that the split moves into Risa.
