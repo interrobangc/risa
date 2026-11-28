@@ -10,14 +10,14 @@
 
 **Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Wave 4 starting** (session 2026-11-28 ~16:50Z): slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Plan anchor fixed (`loops/home.test.mjs` marked new). Sync skipped (main's changes share no file). Worktrees `risa-next-2-4`, `risa-next-2-6` made, agents spawned on opus; watch running. Slice 4 handed off (2abdaa6; its quick check stopped at prettier on the plan from its base, tests run by hand: 208 pass), merged f388a0b; RISA-1071 done. Slice 6 handed off (6073bf2, quick check green), merged 860aad4 (`loops/docs/inbox.md` conflict resolved by hand, trimmed to budget); RISA-1072, RISA-1007, RISA-841 done. Keep worktrees 4 and 6 until the wave is green. Next: wave 4 CI run.
 
-| Slice | Wave | State          | Merge into `prd/risa-next-2` |
-| ----- | ---- | -------------- | ---------------------------- |
-| 1     | 1    | landed (opus)  | 72d3a64                      |
-| 2     | 2    | landed (opus)  | 5ff0aae (main)               |
-| 3     | 3    | landed (opus)  | 0be4983 (main)               |
-| 5     | 3    | landed (opus)  | 0be4983 (main)               |
-| 4     | 4    | merged (opus)  | f388a0b                      |
-| 6     | 4    | merged (opus)  | 860aad4                      |
+| Slice | Wave | State         | Merge into `prd/risa-next-2` |
+| ----- | ---- | ------------- | ---------------------------- |
+| 1     | 1    | landed (opus) | 72d3a64                      |
+| 2     | 2    | landed (opus) | 5ff0aae (main)               |
+| 3     | 3    | landed (opus) | 0be4983 (main)               |
+| 5     | 3    | landed (opus) | 0be4983 (main)               |
+| 4     | 4    | merged (opus) | f388a0b                      |
+| 6     | 4    | merged (opus) | 860aad4                      |
 
 **Slice 6 note (from 5's hand-off):** `prd.sh inbox` opens from the machine config's first repo with `inbox` without checking `work: true`; slice 6's keep-alive says first `work: true` repo with `inbox`: make them agree.
 
