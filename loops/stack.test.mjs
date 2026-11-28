@@ -155,6 +155,7 @@ describe("new.sh slice", () => {
   it("makes a Stack: no slice stackless, with its own test database", () => {
     const out = ok("new.sh", ["slice", "t", "1"]);
     expect(out).toMatch(/Stack: no/);
+    expect(out).toMatch(/^ {2}model {8}spawn its agent on opus /m);
     const dir = join(loops, "t-1");
     expect(stack(dir)).toBeNull();
     // The stackless env through the stack down hook, and its own test database.
