@@ -11,9 +11,10 @@
 //               local measure: its `modes` are the check modes it covers)
 // The verdict: `ok` at or under the aim, `warn` past it, `fail` past the cutoff.
 // An unarmed measure's `fail` comes back as `warn`, saying "not armed". The local
-// measure is judged only on a quiet machine: a 5-minute load, at the start and at
-// the end, at most quietLoadPerCore × the core count; any other run (a busy or
-// unread load) is `unjudged`. A breach's lines name the measure, its seconds
+// measure is judged only on a quiet machine: a 5-minute load at the start at most
+// quietLoadPerCore × the core count; any other run (a busy or unread start load) is
+// `unjudged`. The end load counts the check's own work, so it decides nothing; both
+// loads are named in the first line, judged or not. A breach's lines name the measure, its seconds
 // against the aim and the cutoff, the steps it was given and its slowest files
 // (ten at most).
 //
@@ -63,22 +64,26 @@ const load = (/** @type {number | null | undefined} */ l) =>
  *     perCore?: number },
  *   slowest?: Timed[], steps?: Timed[] }} run
  *   loads: the 5-minute load at the start and the end, and the core count (the
- *   local measure only; perCore is the gates' quietLoadPerCore)
+ *   local measure only; the start load decides quiet, both are named; perCore is
+ *   the gates' quietLoadPerCore)
  * @returns {{ verdict: Verdict, armed: boolean, quiet: boolean | null, lines: string[] }}
  */
 export function timeGate({ measure, seconds, limits, loads, slowest = [], steps = [] }) {
   const { aim, cutoff, armed } = limits;
-  const head = `Time gate ${measure}: ${clock(seconds)} (${secs(seconds)}); aim ${clock(aim)}, cutoff ${clock(cutoff)}`;
+  const top = `Time gate ${measure}: ${clock(seconds)} (${secs(seconds)}); aim ${clock(aim)}, cutoff ${clock(cutoff)}`;
   let quiet = null;
+  let head = top;
   if (measure === LOCAL_MEASURE) {
     const cores = loads?.cores ?? 0;
     const threshold = (loads?.perCore ?? DEFAULT_QUIET_LOAD_PER_CORE) * cores;
-    const calm = (/** @type {unknown} */ l) => typeof l === "number" && Number.isFinite(l) && l <= threshold;
-    quiet = calm(loads?.start) && calm(loads?.end);
+    const start = loads?.start;
+    quiet = typeof start === "number" && Number.isFinite(start) && start <= threshold;
+    const both = `load ${load(start)} at the start, ${load(loads?.end)} at the end`;
     if (!quiet) {
-      const why = `load ${load(loads?.start)} at the start, ${load(loads?.end)} at the end; quiet is at most ${load(threshold)} on ${cores} cores`;
-      return { verdict: "unjudged", armed, quiet, lines: [`${head}: not judged (${why}).`] };
+      const why = `${both}; quiet is a start load of at most ${load(threshold)} on ${cores} cores`;
+      return { verdict: "unjudged", armed, quiet, lines: [`${top}: not judged (${why}).`] };
     }
+    head = `${top} (${both})`;
   }
   if (seconds <= aim) return { verdict: "ok", armed, quiet, lines: [`${head}: ok.`] };
   const pastCutoff = seconds > cutoff;
