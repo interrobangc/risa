@@ -11,14 +11,19 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { brakeNotice } from "../ci/blame.mjs";
 import { createNotice, withdrawNotice } from "./notices.mjs";
 import { sharedNames } from "./config.mjs";
+import { BASE, scaledWait } from "./test-limits.mjs";
 import { root, repo, config, git, commit, landWith, branch, GH_CI, useLandRepo } from "./land-fixture.mjs";
 
 useLandRepo();
+// Each test runs land.sh once or more (dozens of node and git starts, ~5 s at a
+// load of 25, no wait among them), synchronously: no inner wait to scale, so the
+// limits follow the load as this file starts, not only as the run did (RISA-994).
+vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
 
 describe("land.sh on an unsynced tip", () => {
   const OWN = "loops/own.sh";
@@ -427,12 +432,12 @@ exit 0
       },
     );
     const gone = new Promise((done) => child.on("exit", done));
-    await expect.poll(() => existsSync(hung), { timeout: 15_000 }).toBe(true);
+    await expect.poll(() => existsSync(hung), { timeout: scaledWait(15_000) }).toBe(true);
     child.kill("SIGTERM");
     await gone;
     await expect
       .poll(() => existsSync(join(inWt("rev-parse", "--absolute-git-dir"), sharedNames().unsyncedMerge)), {
-        timeout: 5_000,
+        timeout: scaledWait(5_000),
       })
       .toBe(false);
     atTip();
