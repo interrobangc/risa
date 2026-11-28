@@ -101,6 +101,64 @@ describe("checkBudget", () => {
   });
 });
 
+describe("checkBudget with the steps the check will run (RISA-1073)", () => {
+  /** Times for steps, `{ step: seconds }`, as the log's stepTimes. */
+  const times = (o) => Object.entries(o).map(([step, seconds]) => ({ step, seconds }));
+  // Fast slice runs of the project's check alone, then slower ones that ran the tooling step too.
+  const fast = runs([12, 14, 15, 15, 16, 18], { stepTimes: times({ check: 14 }) });
+  const slow = runs([300, 320, 340, 360, 400], { stepTimes: times({ check: 15, tooling: 300 }) });
+  const log = [...fast, ...slow];
+
+  it("gives a check that will run the tooling step a budget from the runs that ran it", () => {
+    const b = checkBudget(log, { ...query, steps: ["check", "tooling"] });
+    // median 340 → 680; slowest 400 × 1.2 = 480
+    expect(b).toMatchObject({ samples: 5, medianSeconds: 340, budget: 680, from: "history" });
+    expect(b.steps).toEqual(["check", "tooling"]);
+  });
+
+  it("keeps the fast budget for a check without it", () => {
+    const b = checkBudget(log, { ...query, steps: ["check"] });
+    expect(b).toMatchObject({ samples: 6, medianSeconds: 15, budget: 600, from: "history" });
+  });
+
+  it("matches steps in any order, leaving a project hook's own step names out", () => {
+    const own = runs([200, 200, 210, 220, 230], { stepTimes: times({ lint: 9, check: 20, tooling: 150 }) });
+    const b = checkBudget(own, { ...query, steps: ["tooling", "check"] });
+    expect(b).toMatchObject({ samples: 5, medianSeconds: 210 });
+  });
+
+  it("falls back to the hard limit with too few runs of those steps, as before", () => {
+    const few = [...fast, ...slow.slice(0, 4)];
+    expect(checkBudget(few, { ...query, steps: ["check", "tooling"] })).toMatchObject({
+      budget: 1200,
+      samples: 4,
+      from: "hard limit",
+    });
+    // runs logged before check-hook.sh timed its own steps (only `tooling`, or none) match no check's
+    const old = [
+      ...runs(Array(5).fill(15)),
+      ...runs(Array(5).fill(14), { stepTimes: times({ tooling: 0 }) }),
+    ];
+    expect(checkBudget(old, { ...query, steps: ["check", "tooling"] }).samples).toBe(0);
+    expect(checkBudget(old, { ...query, steps: ["static", "unit", "tooling"] }).samples).toBe(0);
+  });
+
+  it("counts runs of any steps when none are given", () => {
+    expect(checkBudget(log, query)).toMatchObject({ samples: 11, steps: null });
+    expect(checkBudget(log, { ...query, steps: [] }).samples).toBe(11);
+  });
+
+  it("names the steps in its line", () => {
+    const at = { mode: "slice", branch: "slice/x/1" };
+    expect(describeBudget(checkBudget(log, { ...query, steps: ["check", "tooling"] }), at)).toMatch(
+      /^Check budget 11m20s \(from 5 passing slice runs on slice branches that ran check, tooling, median 5m40s/,
+    );
+    expect(describeBudget(checkBudget([], { ...query, steps: ["check", "tooling"] }), at)).toMatch(
+      /the hard limit: 0 passing slice run\(s\) on slice branches that ran check, tooling, under the 5 it needs/,
+    );
+  });
+});
+
 describe("hardLimit", () => {
   it("is 20 minutes for slice and quick checks, 40 for full, or RISA_CHECK_LIMIT", () => {
     expect(hardLimit("slice", {})).toBe(1200);
@@ -142,6 +200,45 @@ describe("check-budget.mjs CLI", () => {
     const [limits, said] = r.stdout.trim().split("\n");
     expect(limits).toBe("1600 480");
     expect(said).toMatch(/^Check budget 26m40s \(from 5 passing full runs on prd branches/);
+  });
+
+  it("learns only from runs of the steps --steps names", () => {
+    const log = join(root, "steps-log");
+    const line = (secs, steps) =>
+      [
+        "2026-11-01T10:00:00Z",
+        "wt",
+        "slice/x/1",
+        "slice",
+        "",
+        secs,
+        "10",
+        "10",
+        "0",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "ok",
+        steps,
+      ].join("\t");
+    const fast = [12, 14, 15, 15, 16].map((s) => line(s, "check:12"));
+    const slow = [300, 320, 340, 360, 400].map((s) => line(s, "check:14,tooling:290"));
+    writeFileSync(log, [...fast, ...slow].join("\n") + "\n");
+    const at = (steps) =>
+      cli(["--mode", "slice", "--branch", "slice/y/2", "--log", log, "--load", "10", "--steps", steps])
+        .stdout.trim()
+        .split("\n");
+    expect(at("check,tooling")[0]).toBe("680 480");
+    expect(at("check")[0]).toBe("600 480");
+    // no steps: all ten count, and the fast ones hold it at the floor
+    expect(at("")).toEqual([
+      "600 480",
+      expect.stringMatching(/\(from 10 passing slice runs on slice branches, median/),
+    ]);
   });
 
   it("falls back to the hard limit with no log, and takes the settings from env", () => {

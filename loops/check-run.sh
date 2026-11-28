@@ -18,6 +18,9 @@
 # machine asleep: it counts against neither limit, nor in the seconds logged.
 # RISA_CLOCK_FILE (tests): epoch seconds to read instead of the clock;
 # RISA_CHECK_BUDGET_LOAD (tests): the load the limits scale for.
+# RISA_CHECK_STEPS: the steps COMMAND will run, comma-separated (prd.sh sets it
+# from check-hook.sh --steps); the budget learns only from runs of those steps.
+# Unset or empty: from runs of any steps.
 # If check-budget.mjs fails, the hard limit and the default silence apply.
 #
 # Fields: start (UTC), worktree, branch, mode, reason, seconds, 5-minute load
@@ -91,7 +94,7 @@ if [[ $mode == full ]]; then load_gate_wait "the check"; else RISA_LOAD_LANE=lig
 start=$(date -u +%Y-%m-%dT%H:%M:%SZ); l0=$(load5)
 branch=$(git branch --show-current 2>/dev/null)
 budget=$hard silence=${RISA_CHECK_SILENCE:-480}
-{ read -r b s; read -r said; } < <(node "$here/check-budget.mjs" --mode "$mode" --branch "$branch" --log "$log" --load "${RISA_CHECK_BUDGET_LOAD:-$l0}" 2>/dev/null) || true
+{ read -r b s; read -r said; } < <(node "$here/check-budget.mjs" --mode "$mode" --branch "$branch" --log "$log" --load "${RISA_CHECK_BUDGET_LOAD:-$l0}" --steps "${RISA_CHECK_STEPS:-}" 2>/dev/null) || true
 if [[ ${b:-} =~ ^[0-9]+$ && ${s:-} =~ ^[0-9]+$ ]] && ((b > 0 && s > 0)); then
   budget=$b silence=$s
   echo "$said"

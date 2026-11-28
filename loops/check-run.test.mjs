@@ -129,6 +129,21 @@ describe("check-run.sh budget and silence limit", () => {
     `echo unit > ${inState("step")}; echo "last words"; sh -c 'trap "" TERM; echo $$ > "${pidFile}"; while :; do sleep 1; done' & wait`;
   const lastRun = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
 
+  it("hands the budget the steps it will run, RISA_CHECK_STEPS (RISA-1073)", () => {
+    const log = join(root, "steps-log");
+    const line = (secs, steps) =>
+      ["2026-11-01T10:00:00Z", "wt", "slice/x/1", "quick", "", secs, "1", "1", "0"]
+        .concat(Array(8).fill(""), steps)
+        .join("\t");
+    writeFileSync(log, [5, 6, 7, 8, 9].map((s) => line(s, "check:5")).join("\n") + "\n");
+    const said = (steps) =>
+      run("quick", "steps", "exit 0", { RISA_CHECK_LOG: log, RISA_CHECK_STEPS: steps }).stdout;
+    expect(said("check")).toMatch(
+      /^Check budget 10m00s \(from 5 passing quick runs on \w+ branches that ran check,/m,
+    );
+    expect(said("check,tooling")).toMatch(/^Check budget 20m00s \(the hard limit: 0 passing quick run/m);
+  });
+
   it("stops past its budget, exits non-zero, leaves no child, prints the last lines and logs why", () => {
     const pidFile = join(root, "grandchild");
     const r = run("quick", "hangs", hang(pidFile), {
