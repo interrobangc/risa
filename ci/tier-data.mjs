@@ -357,7 +357,7 @@ export function tierDataOrExit(who) {
 let ciLoaded;
 
 /**
- * The CI commands' tiers (`prd ci` and the modules it runs): tierDataOrExit("ci"),
+ * The CI commands' tiers (`ci` and the modules it runs): tierDataOrExit("ci"),
  * read when a module first uses them and kept, never at import, so a module that
  * only imports another reads no tier data.
  * @returns {Tiers}

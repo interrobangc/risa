@@ -1,5 +1,6 @@
 // `ci zone-file` against a finished item: a landed or dropped item whose fix the
 // tested commit lacks takes the run as a note; one whose fix is in it is a new failure.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { fileZoneVerdict } from "./ci-file.mjs";
@@ -82,5 +83,12 @@ describe("zone filing on a finished item", () => {
         applyFindings(b, null, f, { add: wrote, note: wrote, hasFix: () => false }),
     });
     expect(fileZoneVerdict(verdict, { url: "https://ci.example/run/7" }, io)).toBe(EXIT.green);
+  });
+});
+
+describe("command names", () => {
+  it("names no literal `prd <command>` in ci-file.mjs: a message uses the configured command", () => {
+    const src = readFileSync(new URL("./ci-file.mjs", import.meta.url), "utf8");
+    expect(src).not.toMatch(/\b(prd|risa) [a-z]/);
   });
 });
