@@ -149,13 +149,14 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1054 | bug | triaged | fixes-tooling |  | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
 | RISA-1055 | feature | triaged | cross-machine-messages |  | Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account |
 | RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
-| RISA-1057 | bug | triaged | risa-next-2 |  | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
-| RISA-1058 | bug | triaged | risa-next-2 |  | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
-| RISA-1059 | bug | triaged | risa-next-2 |  | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
-| RISA-1060 | bug | triaged | risa-next-2 |  | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
+| RISA-1057 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo |
+| RISA-1058 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere |
+| RISA-1059 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has |
+| RISA-1060 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using |
 | RISA-1061 | bug | ready | fixes-bug | prd/fixes-bug | context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo |
 | RISA-1062 | chore | triaged | fixes-tooling |  | Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown) |
 | RISA-1063 | bug | ready | fixes-bug | prd/fixes-bug | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
+| RISA-1064 | bug | triaged | fixes-bug |  | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
 
 ## Items
 
@@ -1245,9 +1246,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1057 · bug · inbox-store cloneName can give two distinct repo URLs the same clone folder (a/b-c and a-b/c, or ':' vs '/'), so one store would read and push another's repo
 
-- status: triaged
+- status: in-progress
 - prd: risa-next-2
-- owner:
+- owner: prd/risa-next-2
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex P1 on PR #28 (risa-next-2 wave 1), backlog/inbox-store.mjs:53. Add a short hash of the URL to the name.
@@ -1256,9 +1257,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1058 · bug · inbox-store's temp index (GIT_INDEX_FILE) is built from the clone dir, so a relative RISA_INBOX_STORE puts it at a path git resolves from -C dir: the write fails or writes elsewhere
 
-- status: triaged
+- status: in-progress
 - prd: risa-next-2
-- owner:
+- owner: prd/risa-next-2
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:149. resolve() the store root or the index path.
@@ -1267,9 +1268,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1059 · bug · inbox-store keeps the old tracking tip when the remote is confirmed empty (branch deleted or repo recreated): reads return the stale copy and a write builds on a commit the remote no longer has
 
-- status: triaged
+- status: in-progress
 - prd: risa-next-2
-- owner:
+- owner: prd/risa-next-2
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:101. Delete TRACKING when ls-remote answers empty.
@@ -1278,9 +1279,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1060 · bug · inbox-store's first-use clone isn't safe across processes: two at once both init, the second's 'remote add' fails and its cleanup rm -rf's the clone the first is using
 
-- status: triaged
+- status: in-progress
 - prd: risa-next-2
-- owner:
+- owner: prd/risa-next-2
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex P2 on PR #28, backlog/inbox-store.mjs:91. Init in a temp folder and rename into place, or tolerate an existing remote with the same URL.
@@ -1314,3 +1315,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): From Caretook's backlog, quoting the user: 'name overlap is not good'. Seen 2026-11-28: backlog (risa) and backlog (caretook) both Admiral Cartwright; two Captain Saru too (prd-fixes-bug risa, prd-account-security caretook).
 - 2026-11-28 (Robert Bo Davis): Triaged fixes-bug (wrong behaviour). Touches loops/captain.mjs and the live-session list (loops/session-names.mjs or the sessions record); check risa-next-2's hot files before a wave picks it.
+
+### RISA-1064 · bug · A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-bug): Codex P2 on PR #30 (loops/captain.mjs:176, thread PRRT_kwDOV9ctaM69FeM-), follow-up of RISA-1063 slice 11
