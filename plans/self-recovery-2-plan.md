@@ -1,6 +1,6 @@
 # Plan: self-recovery-2
 
-> Source PRD: [`plans/self-recovery-2-prd.md`](self-recovery-2-prd.md). User-story numbers (US) refer to it. Items RISA-811, RISA-789, RISA-560. RISA-438, RISA-912 and RISA-913 went to the follow-on topic `self-recovery-3`, after this one. Topic `self-recovery-2`. **Held** (`hold`) after two skeptic send-backs, until the user lifts it (`risa backlog prd set self-recovery-2 flags-=hold`).
+> Source PRD: [`plans/self-recovery-2-prd.md`](self-recovery-2-prd.md). User-story numbers (US) refer to it. Items RISA-811, RISA-789, RISA-560. RISA-438, RISA-912 and RISA-913 went to the follow-on topic `self-recovery-3`, after this one. Topic `self-recovery-2`.
 
 ## Status
 
@@ -12,6 +12,10 @@
 | 4     | 2    | —     | —                                |
 | 5     | 2    | —     | —                                |
 | 6     | 3    | —     | —                                |
+
+**Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
+
+**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 starting: slices 1 and 2, both on opus. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
 
 **Backlog:** claim each slice's items as it starts; `done` them when the last slice naming them merges. Slices 1, 3 and 4: RISA-811 (`done` after 3 and 4). Slices 2 and 5: RISA-560 (`done` after 5). Slice 6: RISA-789.
 
@@ -33,7 +37,7 @@
 
 ## Slice 1: `risa finish` cleans up one landed topic by hand
 
-Stack: no · Reads: loops/docs/recovery.md, loops/docs/machinery.md · Tests: unit · Blocked by: none
+Stack: no · Reads: loops/docs/recovery.md, loops/docs/machinery.md · Tests: unit · Blocked by: none · Check: loops/finish.test.mjs
 
 **User stories:** US 1, 2, 3, 4.
 
@@ -41,49 +45,49 @@ Stack: no · Reads: loops/docs/recovery.md, loops/docs/machinery.md · Tests: un
 
 **Acceptance criteria:**
 
-- Unit test (`loops/finish.test.mjs`, new) of `finishDecision`: not landed → running; landed with no worktree, slot or open row → clean; a recorded session with a running call, or an event 5 minutes ago → wait; a landing journal → wait; idle recorded sessions and a docs tail → act, ending both; a code tail → report, then nothing on the same tip once reported, and a report on a new tip; a dirty worktree, a slice worktree left, an unrecorded claude in the worktree, and a recorded live session with no heartbeat record → each a report with no session ended; landed with no worktree but the row not done → a report naming the `prd set` line, never `act`; a `standing` row → running.
-- Unit test (same file) of `liveIn` on a stub process table and `cwdOf`: a claude in the worktree, one in a subfolder, one elsewhere, and a non-claude process in the worktree → only the first two. Of `landedWithCode` on a temp repo: a topic landed with a `.mjs` commit past it is in it; one with only Markdown past it, and one never landed, are not.
-- Script test (`loops/finish-cli.test.mjs`, new, after `tidy-cli.test.mjs`): a temp repo whose `prd/<t>` landed in the trunk with a Markdown commit past it, a worktree and an idle stub session record → `finish <t>` ends the stub (its `end` recorded), removes the worktree, marks the row done and files one report; with a `.mjs` commit past the landing, or an uncommitted file, it ends nothing, keeps the worktree and branch and files one report naming why; `--dry-run` prints the decision and changes nothing.
+- Unit test (new `loops/finish.test.mjs`) of `finishDecision`: not landed → running; landed with no worktree, slot or open row → clean; a recorded session with a running call, or an event 5 minutes ago → wait; a landing journal → wait; idle recorded sessions and a docs tail → act, ending both; a code tail → report, then nothing on the same tip once reported, and a report on a new tip; a dirty worktree, a slice worktree left, an unrecorded claude in the worktree, and a recorded live session with no heartbeat record → each a report with no session ended; landed with no worktree but the row not done → a report naming the `prd set` line, never `act`; a `standing` row → running.
+- Unit test (same file) of `liveIn` on a stub process table and `cwdOf`: a claude in the worktree, one in a subfolder, one elsewhere, and a non-claude process in the worktree → only the first two. Of `landedWithCode` on a temp repo: a topic landed with a code (.mjs) commit past it is in it; one with only Markdown past it, and one never landed, are not.
+- Script test (new `loops/finish-cli.test.mjs`, after `tidy-cli.test.mjs`): a temp repo whose `prd/<t>` landed in the trunk with a Markdown commit past it, a worktree and an idle stub session record → `finish <t>` ends the stub (its `end` recorded), removes the worktree, marks the row done and files one report; with a code (.mjs) commit past the landing, or an uncommitted file, it ends nothing, keeps the worktree and branch and files one report naming why; `--dry-run` prints the decision and changes nothing.
 
 **Blocked by:** nothing. **Blocks:** 3, 4.
 
 ## Slice 2: The cost parser and its CLI
 
-Stack: no · Reads: none · Tests: unit · Blocked by: none
+Stack: no · Reads: none · Tests: unit · Blocked by: none · Check: loops/cost.test.mjs
 
 **User stories:** US 7, 8.
 
-**Build:** a new `loops/cost.mjs` (PRD _Implementation decisions_, _The cost record_): pure `parseTranscript(text, { file, worktree, meta })` (assistant messages by `message.id`: model and `usage` input, output, cache read, cache write; malformed lines counted), `attribute(rows, topic)` (a `plan-<topic>` worktree → planning; a subagent whose `.meta.json` description matches `slice\s*(\d+)` → that slice; else whose first user prompt names `.loops/<topic>-<n>` → that slice; else orchestration), `mergeRows(...lists)` (one row per message id, the last wins) and `summarise(rows)` (per line and total, tokens by model). The CLI: `node loops/cost.mjs report [<topic>] [--json]` reads the projects folders of the topic's worktrees (Claude Code's encoding of `<main>/.loops/<name>`: every `/` and `.` as `-`) under `RISA_CLAUDE_PROJECTS`, else `$CLAUDE_CONFIG_DIR/projects`, else `~/.claude/projects`, each session's `subagents/agent-*.jsonl` with its `.meta.json`, and the ledger `.loops/.cost/<topic>.json`, and prints the table (no topic: one total line per topic it finds); `node loops/cost.mjs ledger <topic>` merges what's on disk into the ledger (a temp file, then rename).
+**Build:** a new `loops/cost.mjs` (PRD _Implementation decisions_, _The cost record_): pure `parseTranscript(text, { file, worktree, meta })` (assistant messages by `message.id`: model and `usage` input, output, cache read, cache write; malformed lines counted), `attribute(rows, topic)` (a `plan-<topic>` worktree → planning; a subagent whose meta.json description matches `slice\s*(\d+)` → that slice; else whose first user prompt names `.loops/<topic>-<n>` → that slice; else orchestration), `mergeRows(...lists)` (one row per message id, the last wins) and `summarise(rows)` (per line and total, tokens by model). The CLI: `node loops/cost.mjs report [<topic>] [--json]` reads the projects folders of the topic's worktrees (Claude Code's encoding of `<main>/.loops/<name>`: every `/` and `.` as `-`) under `RISA_CLAUDE_PROJECTS`, else `$CLAUDE_CONFIG_DIR/projects`, else `~/.claude/projects`, each session's `subagents/agent-*.jsonl` with its meta.json, and the ledger `.loops/.cost/<topic>.json`, and prints the table (no topic: one total line per topic it finds); `node loops/cost.mjs ledger <topic>` merges what's on disk into the ledger (a temp file, then rename).
 
 **Acceptance criteria:**
 
-- Unit test (`loops/cost.test.mjs`, new): one message streamed over three lines counts once; the same message id in a session and its `--continue` copy counts once; a subagent attributed by description, by prompt, and by neither (orchestration); a `plan-` transcript is planning; malformed lines are counted and skipped; `mergeRows` of a ledger and newer transcripts keeps one row per id; `summarise` totals by model.
+- Unit test (new `loops/cost.test.mjs`): one message streamed over three lines counts once; the same message id in a session and its `--continue` copy counts once; a subagent attributed by description, by prompt, and by neither (orchestration); a `plan-` transcript is planning; malformed lines are counted and skipped; `mergeRows` of a ledger and newer transcripts keeps one row per id; `summarise` totals by model.
 - Script test (same file, temp projects folder through `RISA_CLAUDE_PROJECTS`): `report <t> --json` gives the fixture's per-slice and total counts; after `ledger <t>` and deleting the transcripts, `report <t>` gives the same numbers.
 
 **Blocked by:** nothing. **Blocks:** 5.
 
 ## Slice 3: The dispatcher finishes landed topics
 
-Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 1
+Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 1 · Check: loops/finish-tick.test.mjs
 
 **User stories:** US 1, 2.
 
-**Build:** `loops/finish.mjs` gains the pure `finishPick(candidates)`: each candidate a non-standing topic in `landedTopics` or `landedWithCode` with a worktree, a slot or a row not done, with its `finishDecision`; the first in row order whose decision is `act` or a `report` not yet filed, passing over the ones that `wait` or whose report is filed; none while paused or draining. `loops/dispatch.mjs` gets a `finishStep` after the pick: it computes both sets for the candidates it already gathers, leaves standing rows out, gathers each candidate's facts with `gatherFinish` (the dispatcher's `finish.reported` state as `reported`), decides each, picks, acts as the CLI does (or, with `--dry-run`, prints `finish: would …`), and writes each report key it filed to `finish.reported`. The `loops/docs/recovery.md` bullet from slice 1 says the dispatcher runs it.
+**Build:** slice 1's new `loops/finish.mjs` gains the pure `finishPick(candidates)`: each candidate a non-standing topic in `landedTopics` or `landedWithCode` with a worktree, a slot or a row not done, with its `finishDecision`; the first in row order whose decision is `act` or a `report` not yet filed, passing over the ones that `wait` or whose report is filed; none while paused or draining. `loops/dispatch.mjs` gets a new step, finishStep, after the pick: it computes both sets for the candidates it already gathers, leaves standing rows out, gathers each candidate's facts with `gatherFinish` (the dispatcher's `finish.reported` state as `reported`), decides each, picks, acts as the CLI does (or, with `--dry-run`, prints `finish: would …`), and writes each report key it filed to `finish.reported`. The `loops/docs/recovery.md` bullet from slice 1 says the dispatcher runs it.
 
 **Acceptance criteria:**
 
-- Unit test (`loops/finish-tick.test.mjs`, new) of `finishPick`: two landed topics with leftovers → the first in row order; a clean one is skipped; a code-tail topic is picked once, then passed over once its report is filed; a first topic that waits and a second that acts → the second; a standing topic is never a candidate; paused or draining → none.
-- Unit test (same file) of `finishStep` through `dispatch.mjs` on a temp main checkout (the env the dispatcher reads, set by the test): `--dry-run` with a landed topic and an idle stub session prints one `finish: would end …, rm …` line; a topic landed with a `.mjs` commit past it files one report on the first tick and none on the second (`finish.reported` holds its key), and its worktree stays.
+- Unit test (new `loops/finish-tick.test.mjs`) of `finishPick`: two landed topics with leftovers → the first in row order; a clean one is skipped; a code-tail topic is picked once, then passed over once its report is filed; a first topic that waits and a second that acts → the second; a standing topic is never a candidate; paused or draining → none.
+- Unit test (same file) of `finishStep` through `dispatch.mjs` on a temp main checkout (the env the dispatcher reads, set by the test): `--dry-run` with a landed topic and an idle stub session prints one `finish: would end …, rm …` line; a topic landed with a code (.mjs) commit past it files one report on the first tick and none on the second (`finish.reported` holds its key), and its worktree stays.
 
 **Blocked by:** 1. **Blocks:** 6.
 
 ## Slice 4: Tidy names landed leftovers and duplicate sessions
 
-Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1
+Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1 · Check: loops/tidy.test.mjs
 
 **User stories:** US 5.
 
-**Build:** `loops/tidy.mjs` `tidy` gains two ask findings: a non-standing topic in `landedTopics` or `landedWithCode` with a worktree or a row not done while no dispatcher runs (`finish <topic>` named as the fix), and a topic with more than one live claude across its worktrees (the pids and their worktrees). `loops/tidy-cli.mjs` gathers both (`landedTopics`, `landedWithCode`, `liveIn`, the dispatcher's lock).
+**Build:** `loops/tidy.mjs` `tidy` gains two ask findings: a non-standing topic in `landedTopics` or `landedWithCode` with a worktree or a row not done while no dispatcher runs (`finish <topic>` named as the fix), and a topic with more than one live claude across its worktrees (the pids and their worktrees). `loops/tidy-cli.mjs` gathers both (from landed.mjs, finish.mjs and sessions.mjs: landedTopics, landedWithCode, liveIn; and the dispatcher's lock).
 
 **Acceptance criteria:**
 
@@ -93,15 +97,15 @@ Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 1
 
 ## Slice 5: `risa cost`, and `rm` keeps the ledger
 
-Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 2
+Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 2 · Check: loops/rm-ledger.test.mjs
 
 **User stories:** US 7, 8.
 
-**Build:** `loops/prd.sh` routes `cost` to `node cost.mjs report`, with a usage line. `loops/rm.sh` runs `node cost.mjs ledger <topic>` for a `prd/` or `plan/` worktree before it removes anything; a failure prints `cost ledger: <why> (rm goes on)` and `rm` carries on. One bullet in `loops/docs/machinery.md` for `cost`, its budget in `loops/docs-budget.mjs` raised by what it adds.
+**Build:** `loops/prd.sh` routes a new command, cost, to `node cost.mjs report`, with a usage line. `loops/rm.sh` runs `node cost.mjs ledger <topic>` for a `prd/` or `plan/` worktree before it removes anything; a failure prints `cost ledger: <why> (rm goes on)` and `rm` carries on. One bullet in `loops/docs/machinery.md` for the cost command, its budget in `loops/docs-budget.mjs` raised by what it adds.
 
 **Acceptance criteria:**
 
-- Script test (`loops/rm-ledger.test.mjs`, new, after `stack.test.mjs`'s rm fixtures): `rm` of a temp `prd/<t>` worktree with a fixture transcript under `RISA_CLAUDE_PROJECTS` leaves `.loops/.cost/<t>.json` with its rows; with the ledger folder unwritable it prints the one line and still removes the worktree (exit 0).
+- Script test (new `loops/rm-ledger.test.mjs`, after `stack.test.mjs`'s rm fixtures): `rm` of a temp `prd/<t>` worktree with a fixture transcript under `RISA_CLAUDE_PROJECTS` leaves `.loops/.cost/<t>.json` with its rows; with the ledger folder unwritable it prints the one line and still removes the worktree (exit 0).
 - Script test (same file): `risa cost <t> --json` in that fixture prints the ledger's totals after the transcripts are gone.
 - `pnpm docs:budget` passes.
 
@@ -109,11 +113,11 @@ Stack: no · Reads: loops/docs/machinery.md · Tests: unit · Blocked by: 2
 
 ## Slice 6: A dead landing journal's held resume files one report
 
-Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3
+Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3 · Check: loops/resume.test.mjs
 
 **User stories:** US 6.
 
-**Build:** `loops/resume.mjs` `resumeDecision` takes `journals` (`{ session, branch, started, live }`) beside `landing`: a claim held by a journal whose pid is dead gets one report (`reports`: `{ session, text }`, naming the session, the branch and `risa land --resume <branch>`) and the claim records `journalReported` (branch and start), so the same journal is never reported again; a live journal stays a waits line; a new journal for the branch reports again. `loops/dispatch.mjs` `resumeStep` builds `journals` from `listLandings` and the pid check it already does, files each report through the asks queue (or prints `resume: would report …` on `--dry-run`) and writes the claim's field. The resume bullet in `loops/docs/recovery.md` says so.
+**Build:** `loops/resume.mjs` `resumeDecision` takes `journals` (`{ session, branch, started, live }`) beside `landing`: a claim held by a journal whose pid is dead gets one report (`reports`: `{ session, text }`, naming the session, the branch and `risa land --resume <branch>`) and the claim records `journalReported` (branch and start), so the same journal is never reported again; a live journal stays a waits line; a new journal for the branch reports again. `loops/dispatch.mjs` `resumePrep` builds `journals` from `listLandings` and the pid check it already does, files each report through the asks queue (or prints `resume: would report …` on `--dry-run`) and writes the claim's field. The resume bullet in `loops/docs/recovery.md` says so.
 
 **Acceptance criteria:**
 
