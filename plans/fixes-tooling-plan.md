@@ -10,9 +10,9 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                                                                                                                                                                                                                    | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 53    | 12   | RISA-1073 | opus  | merged; main synced after it (b60d88c). Gate `pnpm test` on 33b8c3c: 11 failed. One is the slice's (`check-run.test.mjs` "hands the budget the steps", passes only on a slice branch): fix sent back to its agent, second merge to come. The other 10 (dispatch/drain/usage) come from the session's CLAUDE_CONFIG_DIR leaking into tests, pass with it unset: filed RISA-1076; rerun the gate with `env -u CLAUDE_CONFIG_DIR pnpm test` | a9eb9ec                        |
+| Slice | Wave | Item      | Model | State                                                                                                                                                                                                                                                                                               | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 53    | 12   | RISA-1073 | opus  | merged twice (the fix: its steps test passed only on a slice branch); main synced (b60d88c); gate `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed (2618 passed); worktree removed; PR and Codex review next, then land. No doc to fold (the budget rule lives in `check-budget.mjs`'s header) | a9eb9ec, 68950ed               |
 
 Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
@@ -33,6 +33,7 @@ Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's 
 - **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029.
 - **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
+- **Run local test gates with `env -u CLAUDE_CONFIG_DIR`** until RISA-1076 lands: a session on ~/.claude-personal fails 10 drain/usage tests otherwise.
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
 
