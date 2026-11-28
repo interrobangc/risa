@@ -4,7 +4,7 @@ For a PRD orchestrator: a top-level session (spawned agents can't spawn), one pe
 
 ## Commands
 
-`{{prd}} help` lists them. **At start,** fix what `{{prd}} anchors` flags.
+`{{prd}} help` lists them. **At start,** fix what `{{prd}} anchors` flags (exit 1: a bad `Model:`).
 
 ## Models
 
