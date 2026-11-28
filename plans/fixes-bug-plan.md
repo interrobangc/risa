@@ -8,33 +8,33 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item            | Model  | State   | Merge into `prd/fixes-bug` |
-| ----- | ---- | --------------- | ------ | ------- | -------------------------- |
-| 1     | 1    | RISA-241        | opus   | merged  | 5155c24                    |
-| 2     | 1    | RISA-980        | opus   | merged  | 1e9259e                    |
-| 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
-| 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
-| 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
-| 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
-| 8     | 2    | RISA-1039       | opus   | merged  | 9f14e04                    |
-| 9     | 2    | RISA-1049       | opus   | merged  | c0751bb                    |
-| 10    | 3    | RISA-1061       | opus   | merged  | fcb1dd3                    |
-| 11    | 3    | RISA-1063       | opus   | merged  | 6e331aa                    |
-| 12    | 4    | RISA-1064       | opus   | merged  | a04752b                    |
-| 13    | 4    | RISA-1065       | opus   | merged  | 47c911a                    |
-| 14    | 5    | RISA-1070       | opus   | merged  | 9b490d4                    |
-| 15    | 5    | RISA-1082       | opus   | merged  | c8dac71                    |
-| 16    | 6    | RISA-1078       | opus   | merged  | af6ee57                    |
-| 17    | 6    | RISA-1080       | opus   | merged  | 57bd232                    |
-| 18    | 6    | RISA-1083       | opus   | merged  | 29020ba                    |
-| 19    | 6    | RISA-1079       | opus   | merged  | 50780f8                    |
-| 20    | 6    | RISA-1084       | opus   | started |                            |
-| 21    | 6    | RISA-1050       | opus   | merged  | 2942e27                    |
-| 22    | 6    | RISA-1077       | opus   | merged  | 5a22554                    |
-| 23    | 6    | RISA-1081       | opus   | merged  | 69cd110                    |
-| 24    | 6    | RISA-1086       | opus   | merged  | c3324f5                    |
-| 25    | 6    | RISA-1087       | opus   | merged  | 4fbc7cf                    |
+| Slice | Wave | Item            | Model  | State  | Merge into `prd/fixes-bug` |
+| ----- | ---- | --------------- | ------ | ------ | -------------------------- |
+| 1     | 1    | RISA-241        | opus   | merged | 5155c24                    |
+| 2     | 1    | RISA-980        | opus   | merged | 1e9259e                    |
+| 3     | 1    | RISA-991        | opus   | merged | 8316198                    |
+| 4     | 1    | RISA-1001 (1/2) | opus   | merged | c5163aa                    |
+| 5     | 1    | RISA-1001 (2/2) | opus   | merged | 3697271                    |
+| 6     | 2    | RISA-1023       | opus   | merged | e29fab7                    |
+| 7     | 2    | RISA-1024       | sonnet | merged | cf93d26                    |
+| 8     | 2    | RISA-1039       | opus   | merged | 9f14e04                    |
+| 9     | 2    | RISA-1049       | opus   | merged | c0751bb                    |
+| 10    | 3    | RISA-1061       | opus   | merged | fcb1dd3                    |
+| 11    | 3    | RISA-1063       | opus   | merged | 6e331aa                    |
+| 12    | 4    | RISA-1064       | opus   | merged | a04752b                    |
+| 13    | 4    | RISA-1065       | opus   | merged | 47c911a                    |
+| 14    | 5    | RISA-1070       | opus   | merged | 9b490d4                    |
+| 15    | 5    | RISA-1082       | opus   | merged | c8dac71                    |
+| 16    | 6    | RISA-1078       | opus   | merged | af6ee57                    |
+| 17    | 6    | RISA-1080       | opus   | merged | 57bd232                    |
+| 18    | 6    | RISA-1083       | opus   | merged | 29020ba                    |
+| 19    | 6    | RISA-1079       | opus   | merged | 50780f8                    |
+| 20    | 6    | RISA-1084       | opus   | merged | 1fdb50b                    |
+| 21    | 6    | RISA-1050       | opus   | merged | 2942e27                    |
+| 22    | 6    | RISA-1077       | opus   | merged | 5a22554                    |
+| 23    | 6    | RISA-1081       | opus   | merged | 69cd110                    |
+| 24    | 6    | RISA-1086       | opus   | merged | c3324f5                    |
+| 25    | 6    | RISA-1087       | opus   | merged | 4fbc7cf                    |
 
 **Wave 1** (slices 1–5, RISA-241/980/991/1001): landed 2026-11-28 in main as 3598122 (PR #13, tier none). RISA-985 closed at triage (a489eef already fixed it).
 
