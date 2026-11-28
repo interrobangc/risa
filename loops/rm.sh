@@ -162,13 +162,17 @@ slice_merged=false
 if [[ $branch == "$slice_prefix"* ]] && git -C "$main" merge-base --is-ancestor "$branch" "$(parent_of "$branch")" 2>/dev/null; then
   slice_merged=true
 fi
-# A config read from inside this worktree (its own risa.json, found or pinned)
+# A config read from inside this worktree (its own, either form, found or pinned)
 # goes with it: the steps after the removal (run log, backlog tool) load the
-# main checkout's instead (risa.json: config.mjs's CONFIG_NAME).
+# main checkout's instead (config.mjs where: its .risa/config.json or risa.json).
 if [[ -n ${RISA_CONFIG:-} ]]; then
   config_dir=$(cd "$(dirname "$RISA_CONFIG")" 2>/dev/null && pwd -P) || config_dir=""
   if [[ -n $config_dir && ($config_dir == "$real_dir" || $config_dir == "$real_dir"/*) ]]; then
-    export RISA_CONFIG=$main/risa.json RISA_CONFIG_FOUND=$main/risa.json
+    if main_config=$(node "$(dirname "$0")/config.mjs" where "$main"); then
+      export RISA_CONFIG=$main_config RISA_CONFIG_FOUND=$main_config
+    else
+      unset RISA_CONFIG RISA_CONFIG_FOUND
+    fi
   fi
 fi
 git -C "$main" worktree remove ${force:+--force} "$dir"

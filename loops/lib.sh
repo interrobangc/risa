@@ -164,13 +164,13 @@ has_hook() { config_get "hooks.$1" >/dev/null 2>&1; }
 # project's config is in (on the trunk), even when the config is a worktree's
 # own, not the checkout the shell is in: a worktree made from an older branch may
 # not have the hook's script, and the tool lives outside the project (B-846,
-# RISA-972); the config's folder when it is in no checkout. ARGs that name a
-# worktree must be absolute.
+# RISA-972); the config's repo root (config.mjs dump's _root: a .risa folder's
+# parent) when it is in no checkout. ARGs that name a worktree must be absolute.
 stack_hook() {
-  local cfg top
-  cfg=$(config_get _path) || return 1
-  top=$(git -C "$(dirname "$cfg")" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p') || top=""
-  hook_top=${top:-$(dirname "$cfg")} run_hook "$@"
+  local cfg_root top
+  cfg_root=$(config_get _root) || return 1
+  top=$(git -C "$cfg_root" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p') || top=""
+  hook_top=${top:-$cfg_root} run_hook "$@"
 }
 
 # fact KEY [FACTS] → the value of KEY in a hook's key=value lines (FACTS, else
