@@ -197,4 +197,48 @@ describe("resumeDecision", () => {
       /^hotfix-h, prd-b stopped on a usage limit that has now reset\. .*never one opened by hand/,
     );
   });
+
+  it("a dead landing journal holding a claim is reported once, naming land --resume; a live one only waits", () => {
+    const base = { marks: [mark("prd-a")], sessions: [dead("prd-a")] };
+    const journal = (extra = {}) => ({
+      session: "prd-a",
+      branch: "prd/a",
+      started: iso(NOW - 150 * MIN),
+      live: false,
+      ...extra,
+    });
+    const first = decide({ ...base, journals: [journal()] });
+    expect(first.acts).toEqual([]);
+    expect(first.waits).toEqual([{ session: "prd-a", why: "it has a landing marker: a landing first" }]);
+    expect(first.reports).toEqual([
+      {
+        session: "prd-a",
+        journal: { branch: "prd/a", started: iso(NOW - 150 * MIN) },
+        text: expect.stringMatching(/^prd-a .*landing journal for prd\/a .*land --resume prd\/a /),
+      },
+    ]);
+    // The claim records it (the dispatcher writes journalReported): the next tick only waits.
+    const claimed = {
+      "prd-a": {
+        ...first.claim[0].claim,
+        journalReported: first.reports[0].journal,
+      },
+    };
+    const next = decide({ sessions: [dead("prd-a")], claimed, journals: [journal()] });
+    expect(next.reports).toEqual([]);
+    expect(next.waits).toEqual([{ session: "prd-a", why: "it has a landing marker: a landing first" }]);
+    // A live journal: a waits line only.
+    const live = decide({ ...base, journals: [journal({ live: true })] });
+    expect(live.reports).toEqual([]);
+    expect(live.waits.map((w) => w.why)).toEqual(["it has a landing marker: a landing first"]);
+    // A new journal for the branch (another start) reports again.
+    const again = decide({
+      sessions: [dead("prd-a")],
+      claimed,
+      journals: [journal({ started: iso(NOW - 30 * MIN) })],
+    });
+    expect(again.reports).toMatchObject([
+      { session: "prd-a", journal: { branch: "prd/a", started: iso(NOW - 30 * MIN) } },
+    ]);
+  });
 });

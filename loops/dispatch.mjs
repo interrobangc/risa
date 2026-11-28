@@ -1523,9 +1523,16 @@ function resumePrep(
   const journalPids = new Set(journals.map((r) => Number(r.pid)).filter((n) => Number.isInteger(n) && n > 0));
   /** @type {Set<string>} */
   const landing = new Set();
+  /** @type {import("./resume.mjs").ResumeJournal[]} */
+  const held = [];
   for (const j of journals) {
-    const s = sessionOfBranch(String(j.branch ?? ""));
-    if (s) landing.add(s);
+    const branch = String(j.branch ?? "");
+    const s = sessionOfBranch(branch);
+    if (!s) continue;
+    landing.add(s);
+    const pid = Number(j.pid);
+    const runs = Number.isInteger(pid) && pid > 0 && (table ? table.has(pid) : alive(pid));
+    held.push({ session: s, branch, started: j.started == null ? null : String(j.started), live: runs });
   }
   /** @type {Set<string> | null} */
   const commands = table ? new Set() : null;
@@ -1549,6 +1556,7 @@ function resumePrep(
     rows: g.facts.rows,
     claimed,
     landing,
+    journals: held,
     commands,
     drain,
     paused: g.facts.paused,
@@ -1566,6 +1574,10 @@ function resumePrep(
       out(`resume: would claim ${c.session} (stalled on a limit; its reset has passed)`);
     for (const x of d.drop) out(`resume: would drop ${x.session} (${x.why})`);
     if (d.report) out(`resume: would report ${d.report.sessions.join(", ")} (opened by hand, never resumed)`);
+    for (const r of d.reports)
+      out(
+        `resume: would report ${r.session} (a dead landing journal for ${r.journal.branch}: land --resume)`,
+      );
   } else {
     // The claim is written before the mark goes, so neither a crash nor a failed write loses it.
     if (d.claim.length || d.drop.length)
@@ -1584,6 +1596,15 @@ function resumePrep(
     if (d.report && fileReport(p, env, d.report.text, out)) {
       for (const session of d.report.sessions) clear(session);
       out(`resume: reported ${d.report.sessions.join(", ")} (opened by hand, never resumed)`);
+    }
+    for (const r of d.reports) {
+      if (!fileReport(p, env, r.text, out)) continue;
+      // Recorded once filed, so this journal is never reported again (a failed filing retries).
+      updateState(p.state, (s) => {
+        const c = s.resume?.claimed?.[r.session];
+        if (c) c.journalReported = r.journal;
+      });
+      out(`resume: reported ${r.session} (a dead landing journal for ${r.journal.branch}: land --resume)`);
     }
   }
   for (const w of d.waits) out(`resume: ${w.session} waits (${w.why})`);
@@ -1865,7 +1886,7 @@ export function tick(
     resumeOut(`resume: ${e instanceof Error ? e.message : String(e)}`);
     // Whatever was claimed before stays the resume's.
     resume = {
-      decision: { claim: [], clear: [], report: null, drop: [], acts: [], waits: [] },
+      decision: { claim: [], clear: [], report: null, drop: [], acts: [], waits: [], reports: [] },
       resuming: new Set(Object.keys(readState(p.state).resume?.claimed ?? {})),
     };
   }
