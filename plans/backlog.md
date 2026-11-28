@@ -94,7 +94,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-998 | feature | triaged | self-recovery-3 |  | A "replan" state on a PRD registry row: the dispatcher sends that topic back to its planner (before… |
 | RISA-999 | bug | live | fixes-tooling | prd/fixes-tooling | An After on an already archived PRD topic passes doctor but the dispatcher never counts it done (dispatch reads only prd list), so the dependent topic waits forever |
 | RISA-1000 | bug | live | fixes-tooling | prd/fixes-tooling | Under load (5-min avg 20-35) the tooling unit suite times out in 5-19 files (20s test, 10s hook limits); the same files pass alone |
-| RISA-1001 | bug | in-progress | fixes-bug | prd/fixes-bug | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
+| RISA-1001 | bug | ready | fixes-bug | prd/fixes-bug | Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin |
 | RISA-1002 | feature | triaged | usage-aware-drain |  | Backup Claude account: when the current account reaches 99% usage on this machine, or on the user's word, Risa pauses work, swaps every session to the other account (work or personal) and resumes there |
 | RISA-1003 | bug | live | fixes-tooling | prd/fixes-tooling | rotate's standing-close simulated pick omits facts.landed, so a landed-but-planned row can make a standing topic close and then be restarted by the dispatcher (worktree, stack, test db torn down and rebuilt) |
 | RISA-1004 | bug | live | fixes-tooling | prd/fixes-tooling | With RISA_USAGE_WATCH=off, a dead session with an outstanding stall mark is still held out of pick()'s reopen, and resume waits for its recorded reset, so disabling the watch doesn't release it |
@@ -772,10 +772,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1001 · bug · Internal backlog/backlog.mjs calls (pr.sh, ready.sh, land.sh, rm.sh, lib.sh) take the worktree's risa.json since RISA-972, bypassing bin/risa's main-checkout choice: a worktree whose config changes paths.backlog reads another file or fails (risa ready: missing backlog). Route them through the same selection, keeping a pin
 
-- status: in-progress
+- status: ready
 - prd: fixes-bug
 - owner: prd/fixes-bug
-- commit:
+- commit: 3697271
 
 - 2026-11-27 (prd/after-split-2): Codex P2 on PR #9 (after-split-2), https://github.com/interrobangc/risa/pull/9#discussion_r4724774993; Codex reproduced it with paths.backlog=plans/new-backlog.md in a worktree
 - 2026-11-28 (prd/fixes-bug): fixes-bug slice 4 merged at c5163aa (part 1: backlog_run helper; pr, ready, lib.sh). Part 2 (land, rm, ls, rotate) is slice 5.
