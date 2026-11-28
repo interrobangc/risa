@@ -45,6 +45,10 @@
 //                                            detail lines, "" drops them); a filed one is refused
 //   backlog inbox remove <words…>       an unfiled bullet and its details out, on origin/dev;
 //                                            a filed one is refused
+//   backlog inbox to-repo <git url>     move the trunk inbox to a private inbox store (gh must say
+//                                            private): its unfiled lines into <name>.md there, then
+//                                            one commit on origin/dev sets `inbox` and removes the
+//                                            trunk inbox (backlog/inbox-move.mjs); refused once set
 //
 // The inbox commands write through the origin writer (backlog/origin.mjs):
 // a commit built on origin/dev's tip, changing only the inbox, pushed without
@@ -98,7 +102,7 @@
 // BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
@@ -127,6 +131,9 @@ const QUARANTINE_REL = config.paths.quarantine ?? null;
 const PREFIX = config.branches.prefixes;
 /** The lock and temporary files in the git dir carry the project's name. */
 const NAME = config.name;
+// Loaded only for the move: no other command needs it.
+const mover =
+  process.argv[2] === "inbox" && process.argv[3] === "to-repo" ? await import("./inbox-move.mjs") : null;
 // Loaded only for ci-file: every other command works without ci/.
 const filing = process.argv[2] === "ci-file" ? await import("../ci/filing.mjs") : null;
 
@@ -756,6 +763,29 @@ function findUnfiled(t, localText, words, filed) {
   return e;
 }
 
+/** `inbox to-repo <git url>`: the trunk inbox into a private store (backlog/inbox-move.mjs). */
+function inboxToRepo(args) {
+  if (args.length !== 1) throw new fmt.BacklogError("usage: inbox to-repo <git url>");
+  const configRel = relative(mainCheckout, CONFIG_FILE);
+  if (configRel.startsWith("..") || isAbsolute(configRel))
+    throw new fmt.BacklogError(`the config ${CONFIG_FILE} isn't in ${mainCheckout}: move it from there`);
+  const lines = /** @type {NonNullable<typeof mover>} */ (mover).moveToRepo(args[0], {
+    main: mainCheckout,
+    gitDir,
+    name: NAME,
+    remote: REMOTE,
+    trunk: TRUNK,
+    configRel,
+    inboxRel: INBOX_REL,
+    hasInbox: STORE !== null,
+    by: who(),
+    backlogFiles: BACKLOG_FILES,
+    withLock,
+  });
+  for (const line of lines) console.log(line);
+  pickup("the inbox move");
+}
+
 /** A filed line's refusal: `then` says what to do instead. */
 const filedAs = (/** @type {{ text: string }} */ e, /** @type {string} */ id, /** @type {string} */ then) =>
   new fmt.BacklogError(`"${fmt.titleFromBullet(e.text)}" is filed as ${id}: ${then}`);
@@ -1341,6 +1371,7 @@ function main() {
       return console.log(`${file}\n${inboxFile}`);
     case "inbox": {
       const [sub, ...args] = pos;
+      if (sub === "to-repo" && mover) return inboxToRepo(args);
       if (STORE && store) {
         const at = {
           store: store.storeFor(STORE.repo),

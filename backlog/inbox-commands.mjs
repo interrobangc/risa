@@ -10,7 +10,7 @@ import { LookAlikeStop } from "./inbox-edit.mjs";
 import { toolCmd } from "../loops/config.mjs";
 
 /**
- * @typedef {{ id: string, status: string, prd: string, title: string, archived?: boolean }} PoolItem
+ * @typedef {{ id: string, status: string, prd: string, title: string, notes?: string, archived?: boolean }} PoolItem
  * @typedef {{
  *   store: ReturnType<typeof import("./inbox-store.mjs").storeFor>,
  *   file: string,
@@ -37,10 +37,15 @@ const unfiledPool = (text) =>
  */
 export function storeInbox(at, sub, args, opts) {
   const { store, file } = at;
+  /** @type {Map<string, string> | null} */
+  let keys = null;
+  /** The item whose note holds the line's key (filed, not yet removed from the store), or undefined. */
+  const filedBy = (/** @type {import("./format.mjs").InboxEntry} */ e) =>
+    (keys ??= fmt.inboxKeys(at.pool().map((i) => ({ id: i.id, notes: i.notes ?? "" })))).get(fmt.lineKey(e));
   const where = (/** @type {string} */ sha) => `on ${store.repo} ${file} as ${sha.slice(0, 7)}`;
   const write = (/** @type {string} */ subject, /** @type {(t: string | null) => string | null} */ edit) =>
     store.write(file, edit, `${subject}\n\nBy: ${at.by}\n`);
-  /** The one unfiled bullet `words` find in `t`; a filed one throws `filed(entry, id)`. */
+  /** The one unfiled bullet `words` find in `t`; a filed one (tagged, or its key in an item's note) throws `filed(entry, id)`. */
   const findUnfiled = (
     /** @type {string | null} */ t,
     /** @type {string} */ words,
@@ -54,6 +59,9 @@ export function storeInbox(at, sub, args, opts) {
       );
     const e = hits[0];
     if (e.id) throw filed(e, e.id);
+    // Filed by a store ingest but still here (its removal waits on origin): its key is taken.
+    const id = filedBy(e);
+    if (id) throw filed(e, id);
     return e;
   };
   const filedAs = (/** @type {{ text: string }} */ e, /** @type {string} */ id, /** @type {string} */ then) =>

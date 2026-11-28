@@ -338,7 +338,7 @@ export function findStoreRepo({ env = process.env } = {}) {
 // `projects` prints storeProjectList's, one a line: the name `--project` takes, its
 // config's name and its main checkout, tab-separated (the last two empty for a store
 // file with no repo on this machine): the inbox session's prompt lists them, and
-// `prd inbox` opens the session from the first one's checkout. `--no-fetch` reads the
+// `prd inbox` opens the session from home.mjs's inbox keeper's checkout. `--no-fetch` reads the
 // clone's last copy.
 // The inbox commands (backlog/inbox-commands.mjs) on the store file `<name>.md`, from
 // any folder, inside a repo or not: it needs no project config. The store is

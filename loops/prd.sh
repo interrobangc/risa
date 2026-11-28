@@ -58,6 +58,9 @@ ${prd_cmd} <command>
                               (--model <m>: another model, this session only; a reopen or rotation is Opus),
                               Remote Control "inbox", opened in its own directory outside the repository (\$RISA_INBOX_DIR, default ~/.risa/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
+    home [take <project|inbox>]   which machine is each project's home (and the inbox session's), from the
+                              inbox store's homes.json; take moves one here: another machine's dispatcher
+                              then leaves it alone within about five minutes (a project with inbox only)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on ${hotfix_prefix}<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
@@ -411,15 +414,18 @@ case $cmd in
     # rotate-into.sh): the recorded directory, and the dispatcher's record. They
     # pass no --model, so a reopen or rotation is always on inbox_model.
     # With an inbox store (the config's inbox group) it is one session for every
-    # project on this machine: opened from the main checkout of the store's first
-    # project here (inbox-store.mjs projects: the machine config's first repo with
-    # inbox), so its record, name and prompt are the same whichever project runs
-    # this. RISA_INBOX_FROM marks the hop, so it is made once.
+    # project on this machine: opened from the main checkout of the inbox keeper
+    # (home.mjs inbox-repo: the machine config's first repo with inbox whose work
+    # switch is on, the one whose dispatcher keeps it alive; none on: the first
+    # with inbox), so its record, name and prompt are the same whichever project
+    # runs this. RISA_INBOX_FROM marks the hop, so it is made once; an inherited
+    # RISA_SESSIONS_DIR (a session's, under the project it hops from) moves to the
+    # keeper's, so the record lands there (RISA-1072).
     if [[ -z ${RISA_INBOX_FROM:-} ]] && config_get inbox.repo > /dev/null 2>&1; then
-      listed=$(node "$loops_lib_dir/../backlog/inbox-store.mjs" projects --no-fetch) ||
-        die "inbox: couldn't find the inbox store's projects"
-      home=$(awk -F'\t' '$3 != "" { print $3; exit }' <<< "$listed")
+      home=$(node "$loops_lib_dir/home.mjs" inbox-repo) ||
+        die "inbox: no repo in the machine config has an inbox group"
       if [[ -n $home && $(cd "$home" 2> /dev/null && pwd -P) != "$(cd "$main" && pwd -P)" ]]; then
+        [[ -z ${RISA_SESSIONS_DIR:-} ]] || export RISA_SESSIONS_DIR=$home/.loops/.sessions
         cd "$home" && RISA_INBOX_FROM=$main exec "$loops_lib_dir/prd.sh" inbox "$@"
       fi
     fi
@@ -455,6 +461,7 @@ case $cmd in
     cd "$dir" && RISA_MAIN=$main exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
+  home) exec node "$bin/home.mjs" "$@" ;;
   hotfix)
     name=${1:?"usage: ${prd_cmd} hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
     while (($#)); do
