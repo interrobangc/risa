@@ -65,11 +65,12 @@ dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }
 
-# The drain (drain.mjs): no new slice worktree near or past a usage limit. A reading
+# The drain (drain.mjs): no new slice worktree near or past a usage limit, but while
+# draining the allowance's topic (prd dispatch --allow) still makes them. A reading
 # that can't be had never refuses (watching never hurts the work).
 if [[ $kind == slice ]]; then
   drain_rc=0
-  drain_why=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check 2>/dev/null) || drain_rc=$?
+  drain_why=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check "$topic" "$loops/.drain-allow" 2>/dev/null) || drain_rc=$?
   if ((drain_rc == 3)); then echo "refused: slice $topic-$n: $drain_why" >&2; exit 1; fi
 fi
 
