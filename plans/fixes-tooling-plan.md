@@ -16,7 +16,7 @@
 | 55    | 13   | RISA-1085 | opus  | merged | 99e0432                        |
 | 56    | 13   | RISA-1069 | opus  | merged | dcc597a                        |
 
-Wave 13 (2026-11-28): slices 54, 55, 56 written and started, each agent on opus; all three merged. 54 and 55's slice checks passed; 56's failed only in untouched files under load 29-39 (its 9 dispatch files pass alone, 112 tests). Next: the wave gate, then PR, Codex, land. RISA-1069 runs now: no running topic holds `loops/dispatch`. Waiting: RISA-1095 (until ship and cross-machine-messages land).
+Wave 13 (2026-11-28): slices 54, 55, 56, each agent on opus, all merged. Synced with main (b23f2a9): the sync conflicted in `loops/dispatch.test.mjs`, so main's home-gate tests (RISA-1083) now live in `loops/dispatch-home.test.mjs` and `pin.mjs` is in the dispatch fixture. Tooling only, tier none; `pnpm test` green on b23f2a9 with `CLAUDE_CONFIG_DIR` set (146 files, 2730 tests). Next: PR, Codex, land, then rotate (past the soft context limit). Waiting: RISA-1095 (until ship and cross-machine-messages land).
 
 **Wave 12 landed** 2026-11-28 in main as c49040a through PR #37: slice 53, opus (RISA-1073; merged twice, a9eb9ec and 68950ed: its steps test passed only on a slice branch). Synced with main (b60d88c) first; tooling only, tier none; `env -u CLAUDE_CONFIG_DIR pnpm test` green on 68950ed; Codex clean on 466ed83. Report filed (a65); to-test/2026-11-28-1254-fixes-tooling.md; slice worktree removed. Takes effect with the next release tag.
 
@@ -37,7 +37,7 @@ Wave 13 (2026-11-28): slices 54, 55, 56 written and started, each agent on opus;
 - **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029.
 - **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
-- **Run local test gates with `env -u CLAUDE_CONFIG_DIR`** until RISA-1076 lands: a session on ~/.claude-personal fails 10 drain/usage tests otherwise.
+- **Dispatcher tests live in `loops/dispatch-*.test.mjs` by group** (slice 56): a sync that conflicts in `loops/dispatch.test.mjs` means main added tests there; move them to the group's file.
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
 
