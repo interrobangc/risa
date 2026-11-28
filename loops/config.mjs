@@ -92,6 +92,9 @@ const TYPES = {
   },
 };
 
+/** Whether V has the config's version shape (1.2.3): ship.mjs's version check. */
+export const isVersion = (/** @type {unknown} */ v) => TYPES.version.ok(v);
+
 /**
  * The whole shape: a key, then its type. `?` after the type: optional. `[]`: a list
  * of that type, not empty, no repeats. `*` in a key: any lowercase name (a role).
@@ -201,6 +204,11 @@ export const SHAPE = [
   ["hooks.docBudget", "command?"],
   // How to try a landing and what the main checkout needs after one (ready.sh, land.sh).
   ["hooks.landing", "command?"],
+  // A ship's phases, each called with the version (ship.mjs): its checks, its steps, its smoke test, who it tells.
+  ["hooks.shipCheck", "command?"],
+  ["hooks.ship", "command?"],
+  ["hooks.shipSmoke", "command?"],
+  ["hooks.shipNotify", "command?"],
   // The Claude Code config folder this project's sessions use (absolute, or ~/…; none: Claude
   // Code's default). RISA_CLAUDE_CONFIG_DIR and the machine config come first (host.mjs).
   ["claude.configDir", "text?"],

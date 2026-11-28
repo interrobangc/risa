@@ -79,6 +79,10 @@ ${prd_cmd} <command>
                               (finished-looking live sessions, branches without a worktree, registry rows
                               that look done); --yes removes the safe
                               ones and files the ask list as one report (prompt tidy: the haiku brief)
+    ship <version> [--dry-run] [--from <phase>]   ship a version through the project's hooks, one phase each:
+                              check (hooks.shipCheck), ship (hooks.ship), smoke (shipSmoke), notify (shipNotify);
+                              a failed ship resumes where it stopped (.loops/.ships/<version>.json), --from reruns
+                              from a phase; --dry-run runs only the checks; one report when it ends. Only on your word
     finish <topic> [--dry-run] [--json]   a landed topic whose orchestrator stopped short: ends its idle
                               recorded sessions, then rm <topic> (never --force), and files one report;
                               a code tail, dirty or busy worktree is kept and reported instead
@@ -258,7 +262,7 @@ cmd=${1:-help}; (($#)) && shift
 known_cmds=" status ls status-watch ready watch metrics land serve browser rm stack gc reclaim tidy finish cost ci
   wait test-db testdb prompt doc project-check queue status-trim anchors dispatch recover down autostart watchdog
   open end bye rotate context session review pr tier dev-sync plan inbox slice home hotfix start check sync ask asks
-  answer skeptic notice notices usage help "
+  answer skeptic notice notices usage ship help "
 self_help=" browser down end open reclaim recover rotate bye dispatch finish queue tidy watchdog doc "
 # cmd_usage <command> → its lines from usage(): each entry that starts with the
 # command's name, and the indented lines that carry it on. None: the whole text.
@@ -343,6 +347,9 @@ case $cmd in
   reclaim) exec "$bin/reclaim.sh" "$@" ;;
   tidy) exec node "$bin/tidy-cli.mjs" "$@" ;;
   finish) exec node "$bin/finish.mjs" "$@" ;;
+  ship)
+    RISA_ASKS_DIR=${RISA_ASKS_DIR:-$loops/.asks} RISA_SHIPS_DIR=${RISA_SHIPS_DIR:-$loops/.ships} \
+      exec node "$bin/ship.mjs" "$@" ;;
   cost) exec node "$bin/cost.mjs" report "$@" ;;
   ci) exec node "$bin/../ci/ci.mjs" "$@" ;;
   wait)
