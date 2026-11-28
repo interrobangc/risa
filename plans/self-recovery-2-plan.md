@@ -15,7 +15,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 (slices 1, 2) merged (bf18c79, c2f1e25); gate: `risa tier` says none (tooling only), so a full `risa check` on the tip stands in for CI. Slices 3, 4, 5 working on opus (started early, their blockers merged); they land as wave 2. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
+**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 (slices 1, 2) merged (bf18c79, c2f1e25), synced with main (992bc5b), full check green (2469/2469; two earlier runs failed on timeouts at load ~23). Landing it: PR + Codex review. Slices 3, 5 handed off, merge after the landing; slice 4 working (opus). Then drain and rotate; slice 6 starts next session. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
 
 **Open:** slices 3 (1f9606b) and 5 (9588490) handed off, merge after the wave check (5's slice check timed out under load; its own test passed). RISA-1025 (fixes-tooling) filed for slice 3's lazy finish.mjs load: **message `fixes-tooling-3e` when the landing carrying slice 3 reaches main.**
 
