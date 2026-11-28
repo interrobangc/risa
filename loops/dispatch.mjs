@@ -54,7 +54,8 @@
 //
 // Each tick also catches a stuck managed, run-through orchestrator (dispatch-stuck.mjs):
 // one question per stall that never defaults ("rotate it now", the mid-wave
-// rotation, or "leave it"). RISA_STUCK_MIN (30); RISA_STUCK_WATCH=off stops it.
+// rotation, or "leave it"). RISA_STUCK_MIN (30), RISA_STUCK_NOTIFIED_MIN (10: a
+// notification with no turn after it); RISA_STUCK_WATCH=off stops it.
 //
 // Every RISA_PICKUP_EVERY seconds (300; `off` never), on a tick that isn't
 // paused, it runs the pickup (`prd dev-sync`), so lines pushed to
@@ -85,6 +86,13 @@
 // toward the reopen limit. Never while paused, draining or limited, during a prd
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
+// After the pick, the finish of a landed topic (finish.mjs, finishStep): a non-standing
+// topic landed in the trunk (landedTopics or landedWithCode) with a worktree, a slot or a
+// row not done left; the first in row order whose decision acts (ends its idle recorded
+// sessions, runs rm, files one report) or reports (once per topic, reasons and tip:
+// .dispatch.json `finish.reported`). Never while paused or draining; --dry-run prints
+// `finish: would …`.
+//
 // Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
 // non-test .mjs files of loops/ and backlog/, hashed at its start) with its target's
 // (staleness): a dispatcher run from a checkout targets that checkout, which a landing
@@ -101,8 +109,10 @@
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
 // state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop; inboxReported:
-// the untrusted inbox's report filed),
-// .dispatch.log (each acting tick, and each idle one whose lines changed).
+// the untrusted inbox's report filed; stopped: the last end's pid, time and why),
+// .dispatch.log (each acting tick, and each idle one whose lines changed, and one
+// line for every way it ends: a signal, an uncaught error, a lost lock, a re-exec;
+// a gone pid with no stop mark crashed or was SIGKILLed, RISA-1037).
 //
 // Env: RISA_MAX_PRDS (4; a stored --cap, .loops/.prd-cap, wins over it), RISA_MAX_PLANNERS (1), RISA_FIXES_MIN (3):
 // the pick's caps; RISA_LOAD_* (load-gate.mjs); RISA_SESSIONS_DIR,
@@ -139,6 +149,7 @@ import {
   stuckClock,
   stuckDecision,
   stuckSettings,
+  transcriptNotifiedAt,
 } from "./dispatch-stuck.mjs";
 import {
   LIMITED_ERROR,
@@ -155,7 +166,15 @@ import {
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
 import { MACHINE_DIR, workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
-import { landedTopics } from "./landed.mjs";
+import {
+  applyFinish,
+  failedKey,
+  finishDecision,
+  finishPick,
+  gatherFinish,
+  landedWithCode,
+} from "./finish.mjs";
+import { doneFlags, landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
 import { START_GRACE_MS, clearKeepStops, keepAliveDecision, keepAnswerAction } from "./keep-alive.mjs";
 import { readLoadGate } from "./load-gate.mjs";
@@ -463,8 +482,11 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[], allow?: string | null },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
+ *   finish?: { reported?: string[] },
  *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
- *     every?: number } }} DispatchState */
+ *     every?: number },
+ *   stopped?: { pid: number, stoppedAt: string, why: string } | null,
+ *   stopRequest?: { pid: number, by: string } | null }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -578,10 +600,22 @@ export function takeLock(
 }
 
 /**
- * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free LOCK:
+ * Sends HOLDER TERM and waits RISA_DISPATCH_STOP_SECS (10) for it to free the lock:
  * true once it has. It releases the lock on its way out (a zombie still answers kill 0).
+ * BY (--stop, --restart) goes in the state first, for the stop mark's why (RISA-1037).
  */
-async function stopHolder(/** @type {string} */ lock, /** @type {number} */ holder) {
+async function stopHolder(
+  /** @type {{ lock: string, state: string }} */ { lock, state },
+  /** @type {number} */ holder,
+  /** @type {string} */ by,
+) {
+  try {
+    updateState(state, (s) => {
+      s.stopRequest = { pid: holder, by };
+    });
+  } catch {
+    /* the TERM still stops it; its mark just won't say who sent it */
+  }
   process.kill(holder, "SIGTERM");
   const held = () => lockHolder(lock) === holder;
   const waits = Math.max(1, Math.round(Number(process.env.RISA_DISPATCH_STOP_SECS || 10) * 10));
@@ -597,6 +631,13 @@ export function everyOf(/** @type {number} */ pid, /** @type {DispatchState} */ 
   const m = /(?:^|\s)--every\s+([0-9.]+)(?:\s|$)/.exec(r.stdout ?? "");
   return m && Number(m[1]) > 0 ? Number(m[1]) : null;
 }
+
+/** An error's first line, for a log line or a stop mark: "Error: boom". */
+export const firstLine = (/** @type {unknown} */ e) =>
+  (e instanceof Error ? `${e.name}: ${e.message}` : String(e)).split("\n")[0];
+
+/** The end hook a running dispatcher sets (RISA-1037): main's own rejection reaches it too. */
+let onEnd = /** @type {((why: string) => void) | null} */ (null);
 
 const releaseLock = (/** @type {string} */ lock) => {
   try {
@@ -945,7 +986,7 @@ function stuckStep(
 ) {
   if (env.RISA_STUCK_WATCH === "off") return false;
   const now = g.facts.now;
-  const { limitMs, gapMs } = stuckSettings(env, every);
+  const { limitMs, gapMs, notifiedMs } = stuckSettings(env, every);
   const prev = readState(p.state).stuck ?? {};
   const clockFrom = stuckClock(prev, now, gapMs);
   const sessions = g.records.map((r) => ({
@@ -957,8 +998,15 @@ function stuckStep(
     auto: r.record.auto === true,
     live: r.live,
     rotating: r.record.rotating === true,
+    notifiedAt: /** @type {number | null} */ (null),
   }));
   const watched = sessions.filter((s) => s.live && s.managed && s.auto && s.kind === "prd" && s.topic);
+  const heartbeats = watched.length ? readHeartbeats(heartbeatDirOf(p.sessions)) : [];
+  // A watched session's newest notification with no reply after it (RISA-1033).
+  for (const s of watched) {
+    const own = heartbeats.find((h) => h.session === s.name && h.pid === s.pid && !h.agent);
+    s.notifiedAt = transcriptNotifiedAt(own?.transcript);
+  }
   // The process table only when a session is watched; unreadable holds every one (busy).
   const running = new Set();
   if (watched.length) {
@@ -989,7 +1037,7 @@ function stuckStep(
     }
   const actions = stuckDecision({
     sessions,
-    heartbeats: watched.length ? readHeartbeats(heartbeatDirOf(p.sessions)) : [],
+    heartbeats,
     running,
     asks,
     watch,
@@ -998,6 +1046,7 @@ function stuckStep(
     paused: g.facts.paused,
     clockFrom,
     limitMs,
+    notifiedMs,
     now,
   });
   if (dryRun) {
@@ -1514,9 +1563,16 @@ function resumePrep(
   const journalPids = new Set(journals.map((r) => Number(r.pid)).filter((n) => Number.isInteger(n) && n > 0));
   /** @type {Set<string>} */
   const landing = new Set();
+  /** @type {import("./resume.mjs").ResumeJournal[]} */
+  const held = [];
   for (const j of journals) {
-    const s = sessionOfBranch(String(j.branch ?? ""));
-    if (s) landing.add(s);
+    const branch = String(j.branch ?? "");
+    const s = sessionOfBranch(branch);
+    if (!s) continue;
+    landing.add(s);
+    const pid = Number(j.pid);
+    const runs = Number.isInteger(pid) && pid > 0 && (table ? table.has(pid) : alive(pid));
+    held.push({ session: s, branch, started: j.started == null ? null : String(j.started), live: runs });
   }
   /** @type {Set<string> | null} */
   const commands = table ? new Set() : null;
@@ -1540,6 +1596,7 @@ function resumePrep(
     rows: g.facts.rows,
     claimed,
     landing,
+    journals: held,
     commands,
     drain,
     paused: g.facts.paused,
@@ -1557,6 +1614,10 @@ function resumePrep(
       out(`resume: would claim ${c.session} (stalled on a limit; its reset has passed)`);
     for (const x of d.drop) out(`resume: would drop ${x.session} (${x.why})`);
     if (d.report) out(`resume: would report ${d.report.sessions.join(", ")} (opened by hand, never resumed)`);
+    for (const r of d.reports)
+      out(
+        `resume: would report ${r.session} (a dead landing journal for ${r.journal.branch}: land --resume)`,
+      );
   } else {
     // The claim is written before the mark goes, so neither a crash nor a failed write loses it.
     if (d.claim.length || d.drop.length)
@@ -1575,6 +1636,15 @@ function resumePrep(
     if (d.report && fileReport(p, env, d.report.text, out)) {
       for (const session of d.report.sessions) clear(session);
       out(`resume: reported ${d.report.sessions.join(", ")} (opened by hand, never resumed)`);
+    }
+    for (const r of d.reports) {
+      if (!fileReport(p, env, r.text, out)) continue;
+      // Recorded once filed, so this journal is never reported again (a failed filing retries).
+      updateState(p.state, (s) => {
+        const c = s.resume?.claimed?.[r.session];
+        if (c) c.journalReported = r.journal;
+      });
+      out(`resume: reported ${r.session} (a dead landing journal for ${r.journal.branch}: land --resume)`);
     }
   }
   for (const w of d.waits) out(`resume: ${w.session} waits (${w.why})`);
@@ -1626,6 +1696,106 @@ function resumeActs(
     }
   }
   return acted;
+}
+
+// ---- the finish of a landed topic --------------------------------------------------
+
+/**
+ * The finish step: gathers each landed topic's facts, decides, picks one, and acts
+ * on it (or, dry, prints what it would do). Returns whether it acted.
+ */
+function finishStep(
+  /** @type {ReturnType<typeof pathsOf>} */ p,
+  /** @type {ReturnType<typeof gather>} */ g,
+  /** @type {import("./drain.mjs").Drain} */ drain,
+  /** @type {{ dryRun: boolean, env: NodeJS.ProcessEnv, out: (l: string) => void }} */ { dryRun, env, out },
+) {
+  const paused = g.facts.paused;
+  const draining = drain.state !== "normal";
+  if (paused || draining) return false;
+  const kinds = branchKinds();
+  /** @type {{ topic: string, flags: string[] }[]} */
+  const rows = g.facts.rows;
+  const standing = new Set(rows.filter((r) => r.flags?.includes("standing")).map((r) => r.topic));
+  const worktreeOf = new Map(
+    g.facts.worktrees.flatMap((w) => {
+      const t = kinds.nameOf(w.branch, "prd");
+      return t && !t.includes("/") ? [[t, w.name]] : [];
+    }),
+  );
+  /** @type {Set<string>} */
+  const slots = new Set();
+  const slotDir = join(p.loops, ".slots");
+  for (const n of existsSync(slotDir) ? readdirSync(slotDir) : [])
+    try {
+      slots.add(readFileSync(join(slotDir, n, "name"), "utf8").trim());
+    } catch {
+      /* not a slot */
+    }
+  const open = (/** @type {string} */ t) => "flags" in doneFlags(rows, t);
+  // Row order first, then the worktrees and slots no row names.
+  const topics = [
+    ...new Set([
+      ...rows.map((r) => r.topic),
+      ...[...worktreeOf.keys()].sort(),
+      ...[...slots].filter((n) => n && !n.startsWith("plan-") && !n.includes("/")).sort(),
+    ]),
+  ].filter((t) => !standing.has(t) && (worktreeOf.has(t) || slots.has(t) || open(t)));
+  const reported = readState(p.state).finish?.reported ?? [];
+  const trunk = env.TRUNK || kinds.trunk;
+  const plain = landedTopics(p.main, topics, trunk);
+  const code = landedWithCode(
+    p.main,
+    topics.filter((t) => !plain[t]),
+    trunk,
+  );
+  /** @type {Map<number, { ppid: number, args: string }> | undefined} */
+  let table;
+  try {
+    table = processTable();
+  } catch {
+    /* gatherFinish reads it itself */
+  }
+  const candidates = topics
+    .filter((t) => plain[t] || code[t])
+    .map((topic) => {
+      const facts = gatherFinish(topic, { main: p.main, env, now: g.facts.now, reported, rows, table });
+      return {
+        topic,
+        tip: facts.tip,
+        name: facts.worktree?.name ?? topic,
+        decision: finishDecision(facts),
+      };
+    });
+  // A key whose topic is no longer a candidate is spent: the topic finished or moved on.
+  const live = new Set(candidates.map((c) => c.topic));
+  const kept = reported.filter((k) => live.has(k.split("\t")[0]));
+  const c = finishPick(candidates, { paused, draining, reported });
+  if (dryRun) {
+    for (const x of candidates)
+      if (x.decision?.kind === "wait") out(`finish: ${x.topic} waits (${x.decision.why})`);
+    const d = c?.decision;
+    if (d?.kind === "act")
+      out(`finish: would end ${d.end.length ? d.end.join(", ") : "no session"}, rm ${c?.name} (${d.why})`);
+    else if (d?.kind === "report") out(`finish: would report ${d.topic}: ${d.why}`);
+    return false;
+  }
+  /** @type {string[]} */
+  const filed = [];
+  if (c?.decision) {
+    const d = c.decision;
+    const did = applyFinish(d, { main: p.main, env: { ...env, RISA_ASKS_DIR: p.asks }, name: c.name });
+    if (d.kind === "report" && did.filed) filed.push(d.key);
+    if (d.kind === "act" && !did.ok) filed.push(failedKey(d.topic, c.tip));
+    const [first, ...rest] = (did.report ?? "").split("\n");
+    out(`finish: ${first}${did.filed ? "" : " (its report wasn't filed)"}`);
+    for (const l of rest) out(`  ${l}`);
+  }
+  if (filed.length || kept.length !== reported.length)
+    updateState(p.state, (s) => {
+      s.finish = { ...s.finish, reported: [...new Set([...kept, ...filed])] };
+    });
+  return !!c;
 }
 
 // ---- one tick --------------------------------------------------------------------
@@ -1737,7 +1907,7 @@ export function tick(
     resumeOut(`resume: ${e instanceof Error ? e.message : String(e)}`);
     // Whatever was claimed before stays the resume's.
     resume = {
-      decision: { claim: [], clear: [], report: null, drop: [], acts: [], waits: [] },
+      decision: { claim: [], clear: [], report: null, drop: [], acts: [], waits: [], reports: [] },
       resuming: new Set(Object.keys(readState(p.state).resume?.claimed ?? {})),
     };
   }
@@ -1835,6 +2005,13 @@ export function tick(
     if (!limited && stuckStep(p, g, { dryRun, env, out, every })) watched = true;
   } catch (e) {
     out(`stuck: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // The finish of a landed topic: after the pick, one topic a tick.
+  try {
+    if (finishStep(p, g, drain, { dryRun, env, out })) watched = true;
+  } catch (e) {
+    out(`finish: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // The keep-alive, beside the pick: it takes no slot, so the pick's action still happens.
@@ -2254,7 +2431,7 @@ async function main() {
       return;
     }
     console.log(
-      (await stopHolder(p.lock, holder))
+      (await stopHolder(p, holder, "--stop"))
         ? `Stopped the dispatcher (pid ${holder}).`
         : `Sent TERM to the dispatcher (pid ${holder}); it hasn't exited yet.`,
     );
@@ -2271,7 +2448,7 @@ async function main() {
       process.exit(1);
     }
     const every = o.everySet ? o.every : (was && everyOf(was, readState(p.state))) || 60;
-    if (was && !(await stopHolder(p.lock, was))) {
+    if (was && !(await stopHolder(p, was, "--restart"))) {
       console.error(
         `${toolCmd.prd}: sent TERM to the dispatcher (pid ${was}); it hasn't exited, so none was started`,
       );
@@ -2330,17 +2507,56 @@ async function main() {
     console.error(`${toolCmd.prd}: a dispatcher is already running (pid ${lock.pid}); --stop ends it`);
     process.exit(1);
   }
-  let stopping = false;
+  // Every way out logs why and marks the state stopped (RISA-1037), once: a gone pid
+  // with no mark is then a crash or a SIGKILL.
+  let ended = false;
+  const markEnd = (
+    /** @type {string} */ why,
+    /** @type {{ line?: string | null, release?: boolean }} */ {
+      line = `stopped (${why})`,
+      release = true,
+    } = {},
+  ) => {
+    if (ended) return;
+    ended = true;
+    const now = nowOf();
+    try {
+      if (line) log([line], now);
+    } catch {
+      /* no log: the mark still says why */
+    }
+    try {
+      updateState(p.state, (s) => {
+        s.stopped = { pid: process.pid, stoppedAt: stamp(now), why };
+        s.stopRequest = null;
+      });
+    } catch {
+      /* an unwritable state: the log line says why */
+    }
+    if (release) releaseLock(p.lock);
+  };
+  onEnd = markEnd;
   const stop = (/** @type {string} */ sig) => {
-    if (stopping) return;
-    stopping = true;
-    log([`stopped (${sig})`], nowOf());
-    releaseLock(p.lock);
+    if (ended) return;
+    const req = readState(p.state).stopRequest;
+    const by = req?.pid === process.pid ? req.by : "";
+    markEnd(by ? `${sig} by ${by}` : sig, { line: `stopped (${sig})${by ? ` by ${by}` : ""}` });
     process.exit(0);
+  };
+  const crash = (/** @type {string} */ what, /** @type {unknown} */ e) => {
+    console.error(e instanceof Error ? (e.stack ?? firstLine(e)) : e);
+    markEnd(`${what}: ${firstLine(e)}`);
+    process.exit(1);
   };
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));
-  process.on("exit", () => releaseLock(p.lock));
+  process.on("SIGHUP", () => stop("SIGHUP"));
+  process.on("uncaughtException", (e) => crash("uncaught exception", e));
+  process.on("unhandledRejection", (e) => crash("unhandled rejection", e));
+  process.on("exit", (code) => {
+    if (!o.once) markEnd(`exit ${code}`);
+    releaseLock(p.lock);
+  });
 
   const reexeced = o.reexec;
   // Whether it follows the `risa` link (a release install) or its own checkout.
@@ -2349,6 +2565,8 @@ async function main() {
     // A start begins again after "stop keeping it alive" (a re-exec or a --restart is no start).
     updateState(p.state, (s) => {
       if (s.keepAlive && !reexeced && o.restarted === null) s.keepAlive = clearKeepStops(s.keepAlive);
+      s.stopped = null;
+      s.stopRequest = null;
       s.code = {
         hash: CODE_AT_START,
         pid: process.pid,
@@ -2377,6 +2595,19 @@ async function main() {
     started: CODE_AT_START,
     current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
     step: () => {
+      // Another took the lock (or it was removed): this one ends rather than tick beside it.
+      let held = null;
+      try {
+        held = readFileSync(p.lock, "utf8").trim();
+      } catch {
+        /* removed */
+      }
+      if (held !== String(process.pid)) {
+        markEnd(`lost its lock (${held ? `it names pid ${held}` : "the lock file is gone"})`, {
+          release: false,
+        });
+        process.exit(1);
+      }
       const now = nowOf();
       const quiet = [];
       const t = tick(p, { say: (l) => quiet.push(l), every: o.every });
@@ -2402,6 +2633,8 @@ async function main() {
     const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
     const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
     const env = process.env;
+    // The re-exec's line is above; the new code's start clears the mark.
+    markEnd(`re-exec onto new code ${end.to}`, { line: null, release: false });
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.
     if (typeof process.execve === "function")
       process.execve(process.execPath, [process.execPath, ...args], env);
@@ -2415,6 +2648,7 @@ async function main() {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main().catch((e) => {
     console.error(`${toolCmd.prd}: ${e instanceof Error ? e.message : String(e)}`);
+    onEnd?.(`error: ${firstLine(e)}`);
     process.exit(1);
   });
 }

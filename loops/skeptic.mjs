@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd skeptic | prompt skeptic: the skeptic's command line (the store, the
+// skeptic | prompt skeptic: the skeptic's command line (the store, the
 // checker and the brief are skeptics.mjs).
 //
 //   record --kind ask|land|plan|stall --verdict <v> --why "<one line>"
@@ -9,7 +9,7 @@
 //          [--slice <n> --defaults|--waits]                 stall (--waits: a never-list step, only ask)
 //          [--topic <t>] [--session <s>]                    prints the id
 //   [list] [--topic <t>] [--json]                           the verdicts, oldest first
-//   brief ask|land|plan|stall --evidence <file>                   (prd prompt skeptic …)
+//   brief ask|land|plan|stall --evidence <file>                   (prompt skeptic …)
 //
 // The directory is RISA_SKEPTIC_DIR (prd.sh sets the main checkout's
 // .loops/.skeptic). The topic and session default to what prd.sh passes as

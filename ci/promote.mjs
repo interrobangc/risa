@@ -1,4 +1,4 @@
-// `prd ci promote`: the staging gate. Merges the open candidate's PR only when
+// `ci promote`: the staging gate. Merges the open candidate's PR only when
 // the newest candidate verdict on its exact tip passes, pinned to that commit with a
 // merge commit, then deletes its rc/ branch and its ci/candidate/ ref.
 //

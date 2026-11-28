@@ -19,7 +19,7 @@
 // and no answer means keep going. The inbox session has one limit, the soft one
 // (its hard limit equals it): past it, it hands off unasked, at the crossing and
 // every RISA_CONTEXT_REMIND_MIN. The dispatcher's follow-up starts at the hard
-// limit (`hardOverAt`). A planner (kind `plan`: `prd plan <topic> --open`, the
+// limit (`hardOverAt`). A planner (kind `plan`: `plan <topic> --open`, the
 // dispatcher's) has the soft and hard limits of any kind but an orchestrator, at the
 // same times as an orchestrator's, in a planner's words: past soft, head for landing
 // the plan; past hard, land it if that is the next step, else hand over (commit what
@@ -43,9 +43,9 @@
 //   .agents/<name>/<id>.json   the same for one subagent of that session, with
 //                          remindedSize (where its next soft reminder counts from)
 //
-//   prd context                the calling session's size and its limits
-//   prd context --keep "<why>" leave it alone for RISA_CONTEXT_KEEP_MIN (30)
-//   prd context --all [--json] every live session
+//   context                    the calling session's size and its limits
+//   context --keep "<why>"     leave it alone for RISA_CONTEXT_KEEP_MIN (30)
+//   context --all [--json]     every live session
 //
 // RISA_CONTEXT_LIMIT (the soft limit for every kind; else 120000 tokens for an
 // orchestrator, 160000 for the others), RISA_CONTEXT_HARD_LIMIT
@@ -216,8 +216,13 @@ export function plannerReminder(
   return `Context watch: this planning session is at ${kilo(size)} tokens of context, past the hard limit of ${kilo(hard)}. Land the plan only if landing is the next step (the skeptic's go is in and only \`${toolCmd.prd} land\` is left); otherwise hand over now, without asking, starting no new exploring. ${plannerHandOver(topic, auto)}`;
 }
 
-/** The inbox session's hand-off: it runs outside the repository, so by the main checkout's path. */
-export const inboxRotate = (/** @type {string} */ main) => `pnpm -s -C ${main} prd rotate --self`;
+/**
+ * The inbox session's hand-off: the configured command's `rotate --self`. The session
+ * runs outside the repository and the command may need the main checkout as its cwd (a
+ * package script does), so the hint changes there first.
+ */
+export const inboxRotate = (/** @type {string} */ main, prd = toolCmd.prd) =>
+  `cd ${main} && ${prd} rotate --self`;
 
 export function inboxReminder(
   /** @type {number} */ size,

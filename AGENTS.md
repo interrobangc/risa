@@ -2,7 +2,7 @@
 
 Risa runs Claude sessions in the repos a machine config names (README.md). This repo is
 Risa's own code, and a configured repo of its own (`risa.json`): its sessions read the
-generic role docs in `loops/docs/` (`risa doc <role>`), with one addition: the planner's _What to ask_ (`docs/planner.md`), which the skeptic brief reads.
+generic role docs in `loops/docs/` (`risa doc <role>`), with two additions: the planner's _What to ask_ (`docs/planner.md`), which the skeptic brief reads, and the backlog's _Fix topics_ (`docs/backlog.md`).
 
 ## Working rules
 
@@ -16,7 +16,7 @@ generic role docs in `loops/docs/` (`risa doc <role>`), with one addition: the p
   branch; `risa backlog`; an orchestrator's `risa land` on the user's word.
 - **`main` is the trunk and the only long-lived branch.** `prd/`, `slice/`, `plan/` and
   `hotfix/` branches land into `main` by PR. There is no `dev` and no `staging`.
-- **Checks:** `pnpm check` (prettier, eslint, the docs budget, the tests) before handing
+- **Checks:** `pnpm check` (prettier, eslint, the docs budget and headings, the tests) before handing
   off. GitHub Actions (`.github/workflows/ci.yml`) runs the same `pnpm check` on pushes
   and PRs to `main` and on `risa ci run`'s `ci/` refs.
 - **Commit subjects are Conventional Commits:** `<type>(<scope>)!: <description>`, backlog

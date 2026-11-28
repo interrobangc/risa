@@ -1,4 +1,4 @@
-// ci-io.mjs: part of `prd ci` (ci.mjs has the map). The exit codes, the
+// ci-io.mjs: part of `ci` (ci.mjs has the map). The exit codes, the
 // shared types (Io, Run, Board, Cache) and the real Io: git and gh, the notice
 // board, the status cache, the backlog's locked write and the terminal. Tests
 // pass their own Io, so nothing else here touches the machine.

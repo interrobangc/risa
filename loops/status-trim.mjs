@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd status-trim: keep a plan's _Status_ short by moving finished-wave
+// status-trim: keep a plan's _Status_ short by moving finished-wave
 // history into plans/<topic>-history.md (B-598). An orchestrator runs it after
 // each landing, once the docs are folded, and commits both files.
 //
@@ -19,7 +19,9 @@
 //       The landing mode, other paragraphs, lists and open rows stay. The
 //       history file gets a "## Trimmed <date>" section at its top (newest
 //       first: paragraphs, then the rows in a table of the plan's columns),
-//       and _Status_ a one-line pointer to it. Both files go through Prettier.
+//       and _Status_ a one-line pointer to it. Both files go through Prettier,
+//       the project's (--repo's node_modules) or else Risa's own; a release
+//       install has neither, so they're written unformatted and it says so.
 //       A rerun with nothing to move changes nothing.
 //       A wave has landed when its rows with a merge SHA all are in --base
 //       (default: dev or origin/dev) and it has one, or a later wave has.
@@ -35,6 +37,7 @@
 import { toolCmd } from "./config.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -316,8 +319,33 @@ function landedIn(/** @type {string} */ repo, /** @type {string[]} */ refs) {
   };
 }
 
-async function format(/** @type {string} */ text, /** @type {string} */ file) {
-  const prettier = await import("prettier");
+/**
+ * Prettier, from the project's checkout or else Risa's own install; null when
+ * neither has it (a release folder has no node_modules, RISA-1023).
+ * @param {string} repo
+ * @param {() => Promise<any>} own
+ */
+export async function loadPrettier(repo, own = () => import("prettier")) {
+  /** @type {(() => Promise<any>)[]} */
+  const tries = [
+    () => import(pathToFileURL(createRequire(join(repo, "package.json")).resolve("prettier")).href),
+    own,
+  ];
+  for (const load of tries) {
+    try {
+      const mod = await load();
+      const prettier = typeof mod?.format === "function" ? mod : mod?.default;
+      if (typeof prettier?.format === "function") return prettier;
+    } catch {
+      /* not there: try the next */
+    }
+  }
+  return null;
+}
+
+/** The text through Prettier, or as it is when there's none. */
+async function format(/** @type {any} */ prettier, /** @type {string} */ text, /** @type {string} */ file) {
+  if (!prettier) return text;
   const config = (await prettier.resolveConfig(file)) ?? {};
   return prettier.format(text, { ...config, filepath: file });
 }
@@ -325,7 +353,10 @@ async function format(/** @type {string} */ text, /** @type {string} */ file) {
 const kb = (/** @type {number} */ n) => `${(n / 1024).toFixed(1)} KB`;
 
 /** Runs the CLI; resolves to the exit code. */
-export async function main(/** @type {string[]} */ argv, { out = console.log, err = console.error } = {}) {
+export async function main(
+  /** @type {string[]} */ argv,
+  { out = console.log, err = console.error, prettier: findPrettier = loadPrettier } = {},
+) {
   const args = [...argv];
   const opt = (/** @type {string} */ name) => {
     const i = args.indexOf(name);
@@ -376,8 +407,10 @@ export async function main(/** @type {string[]} */ argv, { out = console.log, er
     if (before > STATUS_WARN_BYTES) out(`  still over ${kb(STATUS_WARN_BYTES)}: shorten what stays by hand`);
     return 0;
   }
-  const plan = await format(r.plan, planFile);
-  const history = await format(r.history, historyFile);
+  const prettier = await findPrettier(repo);
+  if (!prettier) out("status-trim: no Prettier in the project or Risa's install: formatting skipped");
+  const plan = await format(prettier, r.plan, planFile);
+  const history = await format(prettier, r.history, historyFile);
   const after = statusBytes(plan);
   const what = `${r.paragraphs} paragraph(s) and ${r.rows} row(s)`;
   const waves = r.landedWaves.length ? `; landed waves ${r.landedWaves.join(", ")}` : "";

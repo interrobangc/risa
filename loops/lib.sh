@@ -196,7 +196,7 @@ landing_hook() {
 not_files() {
   if (($#)); then grep -vxF -f <(printf '%s\n' "$@") || true; else cat; fi
 }
-# The PRD cap (lanes): `prd dispatch --cap <n>` stores it in .loops/.prd-cap, which
+# The PRD cap (lanes): `dispatch --cap <n>` stores it in .loops/.prd-cap, which
 # wins over RISA_MAX_PRDS; the default is 4. max_prds_from says which one set it.
 prd_cap_file=$loops/.prd-cap
 max_prds=${RISA_MAX_PRDS:-4} max_prds_from=${RISA_MAX_PRDS:+RISA_MAX_PRDS}
@@ -206,7 +206,7 @@ if [[ -r $prd_cap_file ]] && _cap=$(<"$prd_cap_file") && [[ $_cap =~ ^[1-9][0-9]
 fi
 unset _cap
 
-# dispatch_pid → the running dispatcher's pid (prd dispatch: its lock,
+# dispatch_pid → the running dispatcher's pid (dispatch: its lock,
 # .loops/.dispatch.lock), or nothing and false when none runs.
 dispatch_pid() {
   local p
@@ -268,7 +268,7 @@ prd_count() {
 die() { echo "$*" >&2; exit 1; }
 
 # end_pid PID LABEL [SECS] → end a session's process: TERM, then KILL after SECS
-# seconds (default 10). For prd end and rm.sh, which ends its caller's own
+# seconds (default 10). For the end command and rm.sh, which ends its caller's own
 # session; say what it ends first, since ending the caller's session may take
 # the output with it.
 end_pid() {
@@ -320,7 +320,7 @@ web_port() { fact web_port "$(stack_hook stackStatus "$1" 2>/dev/null || true)";
 # server_pids PORT → pids listening on PORT.
 server_pids() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
 
-# checked_file DIR → where `prd check` records the commit it passed on
+# checked_file DIR → where `check` records the commit it passed on
 # (in the worktree's git dir, so it never shows up as a change).
 checked_file() { echo "$(git -C "$1" rev-parse --absolute-git-dir)/$project_name-checked"; }
 
@@ -347,7 +347,7 @@ check_base() {
 }
 
 # The record is one line: `<sha> full`, or `<sha> quick <base> <why>` for a
-# `prd check --quick` (typecheck, lint, format and the tests related to
+# `check --quick` (typecheck, lint, format and the tests related to
 # the diff since <base>). A bare `<sha>` (older records) reads as full.
 
 # exempt_re → the paths that need no check: docs, the tool's own folders while
@@ -456,7 +456,7 @@ node_is() {
 
 # trunk_drift BRANCH [REF] → the files dev (or REF) changed since BRANCH last
 # merged it, other than the backlog files and CI's two lists (backlog and
-# prd ci commit those onto dev, and they never affect a branch's code).
+# the ci command's commit those onto dev, and they never affect a branch's code).
 # Empty means BRANCH is up to date with dev.
 trunk_drift() {
   git -C "$main" diff --name-only "$1...${2:-$trunk}" | not_files "${backlog_files[@]}" ${ci_lists[@]+"${ci_lists[@]}"}
@@ -476,7 +476,7 @@ trunk_lists() {
   done
 }
 
-# Machine-wide leases (browser checks, prd check) live in lease.sh.
+# Machine-wide leases (browser checks, check) live in lease.sh.
 
 # fmt_secs N → 1m05s.
 fmt_secs() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
@@ -634,7 +634,7 @@ land_dir() {
   esac
 }
 
-# backlog_run ARGS… → backlog/backlog.mjs ARGS on the config `risa backlog` would
+# backlog_run ARGS… → backlog/backlog.mjs ARGS on the config the backlog command would
 # take (backlog-config.sh, shared with bin/risa: the main checkout's risa.json unless
 # RISA_CONFIG is a pin), not the checkout's own that find_repo found, so a worktree
 # whose config names another paths.backlog still reads the main checkout's backlog.

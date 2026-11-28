@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# End a recorded session. (prd end)
+# End a recorded session. (the end command)
 #
 #   end-session.sh [<name>]
 #
 # With a name (prd-<topic>, plan-<topic>, hotfix-<name>, backlog, recover): the live session its record names.
 # With none, the calling shell's own session: the record of the worktree it is
 # in when that is live, else the shell's ancestor claude process (a session
-# started before session.sh, or one whose worktree `prd rm` has removed).
+# started before session.sh, or one whose worktree `rm` has removed).
 # Refuses when it finds neither. A finished session runs it as its last step;
 # its tab closes when the session ends (a tab the opener made execs it).
 #

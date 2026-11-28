@@ -13,7 +13,7 @@
 // and an optional `Model: opus|sonnet` the model its agent runs on (opus when
 // left out; any other model is an error, and the command exits 1); leaving any
 // of them out is fine here (check-plan.mjs's planBudget warns on a missing
-// Check). (`prd doc planner`.)
+// Check). (`doc planner`.)
 //
 //   node slice-fields.mjs <n> [plan-file]   (the plan on stdin when no file)
 //     prints "Stack: …", "Reads: …", "Tests: …" and "Model: …", warnings on stderr
@@ -21,7 +21,7 @@
 //     prints one field's value only (stack: yes or no; model: opus or sonnet)
 // A slice's body is also read for line-number anchors (`file.mjs ~158`,
 // `:231`), which go stale on hot files: `lineAnchors` finds them, and
-// `prd anchors` (anchors.mjs) warns on each.
+// `anchors` (anchors.mjs) warns on each.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 

@@ -1,5 +1,5 @@
 // The model a topic's planner runs on: Fable for a registry row flagged
-// `design`, else opus. `prd plan`, the opener and the dispatcher all ask here.
+// `design`, else opus. `plan`, the opener and the dispatcher all ask here.
 //
 // CLI: node planner-model.mjs <topic> <main checkout>   prints the model
 import { readFileSync } from "node:fs";

@@ -54,6 +54,7 @@ import {
   stuckSettings,
 } from "./dispatch-stuck.mjs";
 import { createRequest } from "./session-requests.mjs";
+import { loadConfig } from "./config.mjs";
 import "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -352,6 +353,8 @@ beforeAll(() => {
     "doc.mjs",
     "sessions.mjs",
     "captain.mjs",
+    "flavor.mjs",
+    "session-names.mjs",
     "load-gate.mjs",
     "rotate.mjs",
     "open-session.mjs",
@@ -362,6 +365,7 @@ beforeAll(() => {
     "drain.mjs",
     "usage.mjs",
     "land-journal.mjs",
+    "finish.mjs",
     "landed.mjs",
     "resume.mjs",
   ])
@@ -1133,7 +1137,7 @@ describe("the session-request tick", () => {
     });
     expect(r.status).toBe(0);
     const args = readFileSync(seen, "utf8");
-    expect(args).toContain("--remote-control\nbacklog - labels\n");
+    expect(args).toContain(`--remote-control\nbacklog - labels (${loadConfig().config.name})\n`);
     expect(args).toMatch(/## Brief from the session before[\s\S]*Fictional task: tidy the labels/);
     expect(args.indexOf("Fictional task")).toBeLessThan(args.indexOf("You are the new backlog"));
     expect(JSON.parse(readFileSync(join(sessions, "backlog-labels.json"), "utf8"))).toMatchObject({

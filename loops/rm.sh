@@ -20,6 +20,7 @@
 # instead (backlog prd set <topic> hot=—), merged or not; its flags stay.
 # --no-registry does neither: the dispatcher's undo of a start it couldn't
 # finish (a fresh prd/ branch from dev counts as merged) leaves the row alone.
+# A prd/ or plan/ worktree's cost ledger (cost.mjs) is saved before anything goes.
 #
 #   loops/rm.sh <name> [--force] [--keep-branch] [--no-registry]
 set -euo pipefail
@@ -131,6 +132,20 @@ fi
 if [[ -n $registry && $branch == "$prd_prefix"* && -n $hot_rows ]] &&
   node "$(dirname "$0")/rotate.mjs" clears-hot "${branch#"$prd_prefix"}" <<<"$hot_rows"; then
   clear_hot=${branch#"$prd_prefix"}
+fi
+
+# A prd/ or plan/ worktree's cost record (cost.mjs, RISA-560): its transcripts'
+# rows merged into .loops/.cost/<topic>.json before anything goes, so the totals
+# outlive the worktree and transcript cleanup. A failure says why; rm goes on.
+case $branch in
+  "$prd_prefix"*) cost_topic=${branch#"$prd_prefix"} ;;
+  "$plan_prefix"*) cost_topic=${branch#"$plan_prefix"} ;;
+  *) cost_topic="" ;;
+esac
+if [[ -n $cost_topic ]] && ! cost_out=$(node "$(dirname "$0")/cost.mjs" ledger "$cost_topic" 2>&1); then
+  why=$(grep -m1 -E '^[A-Za-z]*Error' <<<"$cost_out" || true)
+  [[ -n $why ]] || why=$(grep -v '^[[:space:]]*$' <<<"$cost_out" | tail -n1 || true)
+  echo "cost ledger: ${why:-it failed} (rm goes on)" >&2
 fi
 
 # Its stack, its data and its env files (the stack hook; nothing without a stack).

@@ -9,7 +9,7 @@
 #
 # Two paths:
 #   the PR path    prd/ branches, and hotfix/ ones with --pr: the branch's open
-#                  PR into dev (prd pr) is merged on GitHub (a merge commit
+#                  PR into dev (the pr command) is merged on GitHub (a merge commit
 #                  with the -m subject, pinned to the checked tip with
 #                  --match-head-commit, the remote branch deleted), after dev is
 #                  pushed to origin (fast-forward only; a pickup of anything but
@@ -21,7 +21,7 @@
 # A hotfix must say which (ask the user "PR or local?"); a prd/ branch takes
 # --local only as the fallback when the PR path fails, on the user's word.
 #
-# It refuses unless the branch already contains dev's work (`prd sync`;
+# It refuses unless the branch already contains dev's work (`sync`;
 # backlog-only commits on dev don't count) and, for a prd/ or hotfix/ branch,
 # a CI verdict for its tier (ci/ci.mjs gate, gate.mjs).
 # The unsynced landing: when dev's commits since the last sync share no file with
@@ -54,7 +54,7 @@
 # it also refuses (the config's docBudget hook) when the branch grows a doc that
 # is already over its budget, for every kind of branch (a plan branch lands docs).
 # The PR path also refuses unless the PR is open, its head is the branch's
-# local tip, and Codex's verdict on it is clean (prd review): a clean
+# local tip, and Codex's verdict on it is clean (the review command): a clean
 # verdict on an older head carries over plain dev merges that leave the PR's
 # diff alone (codex-review.mjs), or over commits that change only Markdown
 # (docs_re: a Status commit after the approval), and the report names the

@@ -1,10 +1,19 @@
 // status-trim.mjs: moving finished-wave history out of a plan's _Status_ (B-598).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { main, nextSlice, splitBlocks, statusBytes, trimStatus } from "./status-trim.mjs";
+import { loadPrettier, main, nextSlice, splitBlocks, statusBytes, trimStatus } from "./status-trim.mjs";
 
 const plan = (rows) => `# Plan: Fixes (x)
 
@@ -259,7 +268,12 @@ describe("the CLI", () => {
   const g = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" }).trim();
   const cli = async (...argv) => {
     const out = [];
-    const code = await main([...argv, "--repo", repo], { out: (s) => out.push(s), err: (s) => out.push(s) });
+    const opts = typeof argv.at(-1) === "object" ? argv.pop() : {};
+    const code = await main([...argv, "--repo", repo], {
+      out: (s) => out.push(s),
+      err: (s) => out.push(s),
+      ...opts,
+    });
     return { code, out: out.join("\n") };
   };
   const planFile = () => join(repo, "plans", "fixes-x-plan.md");
@@ -346,6 +360,19 @@ describe("the CLI", () => {
     expect((await cli("fixes-z")).out).toContain("nothing to move");
   });
 
+  it("trims unformatted and says so with no Prettier to be found (RISA-1023)", async () => {
+    const file = join(repo, "plans", "fixes-w-plan.md");
+    const text = plan(ROWS).replace("fixes-x", "fixes-w");
+    writeFileSync(file, text);
+    const r = await cli("fixes-w", "--date", "2026-11-24", "--base", "dev", { prettier: async () => null });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("formatting skipped");
+    expect(r.out).toContain("3 paragraph(s) and 0 row(s)"); // two hand-offs and a list; no SHA here is in dev
+    const want = trimStatus(text, { topic: "fixes-w", date: "2026-11-24" });
+    expect(readFileSync(file, "utf8")).toBe(want.plan);
+    expect(readFileSync(join(repo, "plans", "fixes-w-history.md"), "utf8")).toBe(want.history);
+  });
+
   it("--next counts the plan and its history", async () => {
     const r = await cli("fixes-x", "--next");
     expect(r).toEqual({ code: 0, out: "7" });
@@ -354,5 +381,46 @@ describe("the CLI", () => {
   it("refuses a missing plan or a bad topic", async () => {
     expect((await cli("nope")).code).toBe(1);
     expect((await cli("Bad Topic")).code).toBe(2);
+  });
+});
+
+describe("loadPrettier (RISA-1023)", () => {
+  const none = async () => {
+    throw Object.assign(new Error("Cannot find package 'prettier'"), { code: "ERR_MODULE_NOT_FOUND" });
+  };
+  const real = dirname(createRequire(import.meta.url).resolve("prettier/package.json"));
+  let bare;
+  let project;
+  beforeAll(() => {
+    bare = mkdtempSync(join(tmpdir(), "status-trim-bare-"));
+    project = mkdtempSync(join(tmpdir(), "status-trim-project-"));
+    mkdirSync(join(project, "node_modules"));
+    symlinkSync(real, join(project, "node_modules", "prettier"), "dir");
+  });
+  afterAll(() => {
+    for (const d of [bare, project]) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("is null with Prettier neither in the project nor in Risa's install", async () => {
+    expect(await loadPrettier(bare, none)).toBeNull();
+  });
+
+  it("finds the project's Prettier, which formats as before", async () => {
+    const prettier = await loadPrettier(project, none);
+    expect(typeof prettier?.format).toBe("function");
+    mkdirSync(join(project, "plans"));
+    const file = join(project, "plans", "fixes-x-plan.md");
+    writeFileSync(file, plan(ROWS));
+    const code = await main(["fixes-x", "--repo", project, "--date", "2026-11-24"], {
+      out: () => {},
+      err: () => {},
+      prettier: (dir) => loadPrettier(dir, none),
+    });
+    expect(code).toBe(0);
+    expect(readFileSync(file, "utf8")).toMatch(/^\| 5 {5}\| B-5 {2}\| started \(opus\) +\| — +\|$/m);
+  });
+
+  it("falls back to Risa's own Prettier", async () => {
+    expect(typeof (await loadPrettier(bare))?.format).toBe("function");
   });
 });

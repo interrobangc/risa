@@ -1,4 +1,4 @@
-# Risa's CI: `pnpm check` (prettier, eslint, the docs budget, the tests) on GitHub's
+# Risa's CI: `pnpm check` (prettier, eslint, the docs budget and headings, the tests) on GitHub's
 # own runners. Its name is the one `risa ci` filters runs by (ci/ci-io.mjs's
 # WORKFLOW_NAME). `risa ci run <tier>` starts it by pushing the commit to
 # ci/<tier>/<branch> (risa-tiers.json's refPrefix), with no dispatch inputs; the Actions

@@ -1,6 +1,6 @@
 {
   "name": "risa",
-  "version": "0.1.8",
+  "version": "0.2.0",
   "private": true,
   "description": "Runs Claude sessions (orchestrators, slices, planners, a backlog) in the repos a machine config names.",
   "type": "module",
@@ -26,7 +26,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs:budget": "node loops/docs-budget.mjs",
-    "check": "pnpm format:check && pnpm lint && pnpm docs:budget && pnpm test"
+    "docs:headings": "node loops/docs-headings.mjs",
+    "check": "pnpm format:check && pnpm lint && pnpm docs:budget && pnpm docs:headings && pnpm test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

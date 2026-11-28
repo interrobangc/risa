@@ -4,6 +4,7 @@
 // lib.sh's find_repo and work_switch call it, and only when the file is there.
 //
 //   {
+//     "flavor": "starfleet",
 //     "repos": [
 //       { "path": "/Users/me/git/app", "work": true },
 //       { "path": "/Users/me/git/risa", "work": false,
@@ -15,6 +16,8 @@
 // whether the dispatcher and start, queue, plan and slice may start work there)
 // and `claudeConfigDir` (the Claude Code config folder its sessions use: one
 // absolute path, or one per role). Unknown keys are errors, so a typo can't hide.
+// `flavor` (optional, top level): the flavor pack the machine's sessions wear,
+// one of flavor.mjs's FLAVORS (`starfleet`, the default, or `none`).
 //
 // The work switch. No machine config: on everywhere (today's behaviour). With one:
 // the repo's `work`, else off for the tool's own repo (its risa.json says
@@ -47,6 +50,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_NAME, loadConfig } from "./config.mjs";
+import { FLAVORS } from "./flavor.mjs";
 
 /** The file's name, and its folder under the home: here and in lib.sh's machine_file. */
 export const MACHINE_NAME = "machine.json";
@@ -119,7 +123,9 @@ export function machineProblems(raw) {
   const top = /** @type {Record<string, unknown>} */ (raw);
   /** @type {string[]} */
   const problems = [];
-  for (const k of Object.keys(top)) if (k !== "repos") problems.push(`${k}: unknown key`);
+  for (const k of Object.keys(top)) if (!["repos", "flavor"].includes(k)) problems.push(`${k}: unknown key`);
+  if ("flavor" in top && !FLAVORS.includes(/** @type {string} */ (top.flavor)))
+    problems.push(`flavor: must be one of ${FLAVORS.join(", ")}`);
   if (!Array.isArray(top.repos)) {
     problems.push("repos: must be a list of repos ({ path, work?, claudeConfigDir? })");
     return problems;
@@ -166,7 +172,7 @@ export function machineConfigPath(env = process.env) {
 
 /**
  * @typedef {{ path: string, work?: boolean, claudeConfigDir?: string | Record<string, string> }} MachineRepo
- * @typedef {{ repos: MachineRepo[], path: string }} Machine
+ * @typedef {{ repos: MachineRepo[], path: string, flavor?: string }} Machine
  */
 
 /**
@@ -195,7 +201,7 @@ export function loadMachineConfig({ path, env = process.env } = {}) {
   }
   const problems = machineProblems(raw);
   if (problems.length) throw new MachineConfigError(problems.map((p) => `${file}: ${p}`));
-  return { repos: raw.repos, path: file };
+  return { repos: raw.repos, path: file, ...(raw.flavor ? { flavor: raw.flavor } : {}) };
 }
 
 /** A path with its symlinks resolved, when it exists. @param {string} p */

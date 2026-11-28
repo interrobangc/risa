@@ -22,11 +22,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPTAINS } from "./captain.mjs";
+import { loadConfig } from "./config.mjs";
+import { namesOf } from "./flavor.mjs";
 import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 import { pick } from "./dispatch-pick.mjs";
+import { displayName } from "./session-names.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
+
+/** The main backlog session's pool: the starfleet admirals (flavor.mjs). */
+const ADMIRALS = namesOf("backlog");
+/** The name session.sh shows claude for a session (session-names.mjs). */
+const shown = (name, kind, remote) => displayName({ name, kind, remote, project: loadConfig().config.name });
 
 const HERE = new URL(".", import.meta.url).pathname;
 // The limits follow the load as this file starts, not only as the run did (RISA-994).
@@ -606,7 +613,7 @@ describe("rotate-into.sh", () => {
     const [settingsFlag, settingsFile, ...args] = stateFile("args").split("\n");
     expect(settingsFlag).toBe("--settings");
     expect(settingsFile).toMatch(/context-settings\.json$/);
-    expect(args.slice(0, 2)).toEqual(["--remote-control", "prd-w"]);
+    expect(args.slice(0, 2)).toEqual(["--remote-control", shown("prd-w", "prd", "prd-w")]);
     const prompt = args.slice(2).join("\n");
     expect(prompt).toContain('You are the PRD orchestrator for "w".');
     expect(prompt).toContain("**You're taking over after an interruption**");
@@ -662,7 +669,12 @@ describe("rotate-into.sh", () => {
     await first.s.done;
     expect(JSON.parse(stateFile("record-at-start"))).toMatchObject({ model: "fable" });
     const args = stateFile("args").split("\n");
-    expect(args.slice(2, 6)).toEqual(["--model", "fable", "--remote-control", "prd-w"]);
+    expect(args.slice(2, 6)).toEqual([
+      "--model",
+      "fable",
+      "--remote-control",
+      shown("prd-w", "prd", "prd-w"),
+    ]);
     expect(record("prd-w")).toMatchObject({ model: "fable" });
 
     rmSync(state, { recursive: true, force: true });
@@ -721,7 +733,8 @@ describe("pnpm prd rotate --self", () => {
     });
   /** The new session's args: flags first, the prompt as the rest. */
   const newArgs = () => stateFile("args").split("\n");
-  const promptOf = (args) => args.slice(args.indexOf("--remote-control") + 2).join("\n");
+  // The prompt follows the names session.sh passes: --remote-control, then --name.
+  const promptOf = (args) => args.slice(args.indexOf("--name") + 2).join("\n");
 
   beforeEach(() => rmSync(briefs(), { recursive: true, force: true }));
 
@@ -731,7 +744,7 @@ describe("pnpm prd rotate --self", () => {
     const captain = /^Rotating backlog: pid \d+ \(the calling session\), as ([A-Za-z]+)\.$/m.exec(
       old.out,
     )?.[1];
-    expect(CAPTAINS).toContain(captain);
+    expect(ADMIRALS).toContain(captain);
     expect(captain).not.toBe("Archer");
     // The tab is titled with the captain.
     expect(old.out).toContain(`to open ${captain} (its command):`);
@@ -752,7 +765,7 @@ describe("pnpm prd rotate --self", () => {
       "--model",
       "sonnet",
       "--remote-control",
-      captain,
+      shown("backlog", "backlog", captain),
     ]);
     const prompt = promptOf(args);
     expect(prompt.startsWith("You are the new backlog/inbox planning agent.")).toBe(true);
@@ -771,7 +784,7 @@ describe("pnpm prd rotate --self", () => {
     await s.done;
     expect(stubPid()).not.toBe(pid);
     const args = newArgs();
-    expect(args.slice(2, 4)).toEqual(["--remote-control", "backlog - tax"]);
+    expect(args.slice(2, 4)).toEqual(["--remote-control", shown("backlog-tax", "backlog", "backlog - tax")]);
   });
 
   it("leads the new prompt with the brief and deletes the file", async () => {
@@ -790,7 +803,9 @@ describe("pnpm prd rotate --self", () => {
     await s.done;
     // A rotation given no --captain (an old opener's line) draws one itself.
     const args = newArgs();
-    expect(CAPTAINS).toContain(args[args.indexOf("--remote-control") + 1]);
+    expect(ADMIRALS.map((a) => shown("backlog", "backlog", a))).toContain(
+      args[args.indexOf("--remote-control") + 1],
+    );
     const prompt = promptOf(args);
     expect(prompt.startsWith("## Brief from the session before")).toBe(true);
     expect(prompt).toContain(text);
@@ -938,7 +953,7 @@ describe("pnpm prd rotate --self", () => {
         "--model",
         "opus",
         "--remote-control",
-        "inbox",
+        shown("inbox", "inbox", "inbox"),
       ]);
       expect(promptOf(args).startsWith("You are the inbox agent.")).toBe(true);
     };

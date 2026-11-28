@@ -1,5 +1,5 @@
 // The recovery inventory: the one place that decides what each .loops worktree
-// is and what `prd recover` does about it. Pure: a facts object in
+// is and what `recover` does about it. Pure: a facts object in
 // (inventory-facts.mjs collects one), a classification and an ordered action
 // list out. `down`, `recover`, `reclaim` and the recovery agent read this; they
 // don't re-derive it.
@@ -34,7 +34,7 @@
 //   resume-landing <branch>  a landing cut off midway (its journal in
 //                         .loops/.landing/, land-journal.mjs): recover only lists
 //                         it; the recovery agent and a resumed orchestrator run
-//                         `prd land --resume <branch>` before anything else
+//                         `land --resume <branch>` before anything else
 //   offer-gc <name>       merged slices (a dirty one is offered, and gc keeps it)
 //   open-session <name>   every prd and plan worktree (the recovery agent skips
 //                         the ones with a live session, and managed ones while
@@ -44,7 +44,7 @@
 // Every step is skipped when it's already true (a stack up, a server running),
 // so a second `recover` only has sessions and gc offers left.
 //
-// The down record (.loops/.down.json, written by `prd down`):
+// The down record (.loops/.down.json, written by the down command):
 //   { "at": "<ISO time>", "stacks": ["<name>", …], "servers": ["<name>", …], "testDb": true,
 //     "dispatcher": true }
 // Names that no longer have a worktree are skipped, with a warning.
