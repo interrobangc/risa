@@ -49,7 +49,7 @@
     "toolingTests": "pnpm test",
     "log": "git log --oneline",
     "docBudget": "pnpm docs:budget",
-    "format": "pnpm exec prettier --write",
+    "format": "pnpm exec prettier --write --ignore-unknown",
     "datastoreStart": "true",
     "datastoreReset": "true",
     "datastoreSeed": "true"
