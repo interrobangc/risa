@@ -6,11 +6,15 @@
 
 | Slice | Wave | State | Merge into `prd/risa-next` |
 | ----- | ---- | ----- | -------------------------- |
-| 1     | 1    | —     | —                          |
+| 1     | 1    | working (opus, worktree risa-next-1) | —                          |
 | 2     | 2    | —     | —                          |
 | 3     | 2    | —     | —                          |
 | 4     | 3    | —     | —                          |
 | 5     | 4    | —     | —                          |
+
+**Landing mode:** run everything through (dispatcher run-through start, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
+
+**Models:** slice 1 opus.
 
 **Backlog:** claim each slice's items as it starts. Slices 1 and 3: RISA-914 (`done` after 3). Slice 2: RISA-799 (and RISA-914's push label). Slice 4: RISA-815. Slice 5: RISA-984. With the first landing, mark RISA-816 and RISA-1008 `done` (answered in the PRD's _Decisions_) and move RISA-1007 to `risa-next-2` (`risa backlog set RISA-1007 prd=risa-next-2`), whose build it is.
 
