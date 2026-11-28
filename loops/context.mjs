@@ -216,8 +216,13 @@ export function plannerReminder(
   return `Context watch: this planning session is at ${kilo(size)} tokens of context, past the hard limit of ${kilo(hard)}. Land the plan only if landing is the next step (the skeptic's go is in and only \`${toolCmd.prd} land\` is left); otherwise hand over now, without asking, starting no new exploring. ${plannerHandOver(topic, auto)}`;
 }
 
-/** The inbox session's hand-off: it runs outside the repository, so by the main checkout's path. */
-export const inboxRotate = (/** @type {string} */ main) => `pnpm -s -C ${main} prd rotate --self`;
+/**
+ * The inbox session's hand-off: the configured command's `rotate --self`. The session
+ * runs outside the repository and the command may need the main checkout as its cwd (a
+ * package script does), so the hint changes there first.
+ */
+export const inboxRotate = (/** @type {string} */ main, prd = toolCmd.prd) =>
+  `cd ${main} && ${prd} rotate --self`;
 
 export function inboxReminder(
   /** @type {number} */ size,

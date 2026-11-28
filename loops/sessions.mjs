@@ -1,7 +1,7 @@
 // Session records: .loops/.sessions/<name>.json, one per session started
 // through session.sh: an orchestrator, planner, backlog, hotfix, recovery or inbox
-// session (pid, kind, topic, started, command, model, remote, dir, auto, managed (the dispatcher started it), rotating, and ended and
-// exit once it has exited). A record
+// session (pid, kind, topic, started, command, model, remote, dir, auto, managed (the dispatcher started it), rotating,
+// persona (one stepped off its hash, captain.mjs's machinePersona), and ended and exit once it has exited). A record
 // stays after its session exits and goes with its worktree (rm.sh), so "no
 // live session" is a pid check.
 //
@@ -84,7 +84,8 @@ export function parseEtime(/** @type {string} */ s) {
 
 /**
  * @typedef {{ pid?: number, kind?: string, topic?: string, started?: string, command?: string, model?: string,
- *   remote?: string, dir?: string, auto?: boolean, managed?: boolean, rotating?: boolean, ended?: string, exit?: number }} SessionRecord
+ *   remote?: string, dir?: string, auto?: boolean, managed?: boolean, rotating?: boolean, ended?: string, exit?: number,
+ *   persona?: string }} SessionRecord
  */
 
 /**

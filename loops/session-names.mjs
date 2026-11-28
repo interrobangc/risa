@@ -17,16 +17,8 @@
 //   node session-names.mjs display <name> <kind> <remote> <project>
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { CAPTAIN_SESSION, machineFlavor } from "./captain.mjs";
-import {
-  DEFAULT_FLAVOR,
-  ROLES,
-  label,
-  personaFor,
-  personaOfLabel,
-  sessionPersona,
-  shortLabel,
-} from "./flavor.mjs";
+import { CAPTAIN_SESSION, machineFlavor, machinePersona } from "./captain.mjs";
+import { DEFAULT_FLAVOR, ROLES, label, personaOfLabel, sessionPersona, shortLabel } from "./flavor.mjs";
 
 /** Whether NAME, KIND is the main backlog session (its record name and kind). */
 const isMainBacklog = (/** @type {string} */ name, /** @type {string} */ kind) =>
@@ -52,7 +44,7 @@ export function readDisplayName(display, flavor = DEFAULT_FLAVOR) {
  * The persona of the session NAME of KIND, whose Remote Control name is REMOTE:
  * the main backlog's given admiral (one word of letters, worn with the backlog
  * pool's rank, or the persona a qualified REMOTE carries), none for any other
- * backlog session, else the role's hashed one.
+ * backlog session, else the role's hashed one (captain.mjs's machinePersona).
  * @param {{ name: string, kind: string, remote?: string | null }} session
  * @returns {import("./flavor.mjs").Persona | null}
  */
@@ -63,7 +55,8 @@ export function personaOf({ name, kind, remote }, flavor = DEFAULT_FLAVOR) {
     if (read) return read.persona;
     return sessionPersona("backlog", remote, flavor);
   }
-  return ROLES.includes(kind) ? personaFor(kind, name, flavor) : null;
+  // The role's hashed one, stepped past names other live sessions on the machine wear (RISA-1063).
+  return ROLES.includes(kind) ? machinePersona(kind, name, flavor) : null;
 }
 
 /** The session's label (`Captain Sisko`), or "". @param {Parameters<typeof personaOf>[0]} session */
