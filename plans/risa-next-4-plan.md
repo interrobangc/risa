@@ -4,20 +4,20 @@
 
 ## Status
 
-| Slice | Wave | State                                         | Merge into `prd/risa-next-4` |
-| ----- | ---- | --------------------------------------------- | ---------------------------- |
-| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus) | 952927e                      |
-| 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | dd41acb                      |
-| 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus) | ca49316                      |
-| 3     | 3    | landed 2026-11-28 (PR 41, main ca063ec; opus) | 32bb4ed                      |
-| 5     | 4    | landed 2026-11-28 (PR 42, main 657f1da; opus) | ff49347                      |
-| 6     | 5    | merged 2026-11-28 (opus), gate green, PR next | 3410f93                      |
+| Slice | Wave | State                                          | Merge into `prd/risa-next-4` |
+| ----- | ---- | ---------------------------------------------- | ---------------------------- |
+| 1     | 1    | landed 2026-11-28 (PR 38, main 9f54654; opus)  | 952927e                      |
+| 2     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus)  | dd41acb                      |
+| 4     | 2    | landed 2026-11-28 (PR 39, main 34eb47b; opus)  | ca49316                      |
+| 3     | 3    | landed 2026-11-28 (PR 41, main ca063ec; opus)  | 32bb4ed                      |
+| 5     | 4    | landed 2026-11-28 (PR 42, main 657f1da; opus)  | ff49347                      |
+| 6     | 5    | merged 2026-11-28 (opus), green, PR 44 landing | 3410f93                      |
 
 **From the user:** nothing yet beyond the start itself.
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
 
-**Wave 5 (2026-11-28, a fresh session after an interruption):** no cut-off landing; git matched _Status_; ingest found nothing new; `risa sync` needed no merge. Slice 6 started: worktree `.loops/risa-next-4-6` on `slice/risa-next-4/6`, one opus agent, the watch running. Slice 6 handed off (2f6b2d7, two new files, slice check green) and is merged at 3410f93; RISA-797 marked done. `risa tier`: none, and the gate, a full `risa check`, is green on 6a618fa (134 files, 2674 tests); the sync after it merged main in (main had moved), so a second full `risa check` runs on the synced tip (log in the session scratchpad; `risa wait check`); slice worktree removed. PR #44 is open. Its six init gaps (hooks.check unset, project-data check needs preferences and role docs, no prefix flag, rule-file shapes, refPrefix, `config check` outside a repo) are filed: a note on RISA-1090, RISA-1091 (`fixes-bug`), RISA-1092 (`risa-next-5`, proposed). Next: `risa pr`, `risa review --wait`, land (tier none), `risa rm risa-next-4-6`, then `risa rm risa-next-4`.
+**Wave 5 (2026-11-28, a fresh session after an interruption):** no cut-off landing; git matched _Status_; ingest found nothing new; `risa sync` needed no merge. Slice 6 started: worktree `.loops/risa-next-4-6` on `slice/risa-next-4/6`, one opus agent, the watch running. Slice 6 handed off (2f6b2d7, two new files, slice check green) and is merged at 3410f93; RISA-797 marked done. `risa tier`: none, and the gate, a full `risa check`, is green on 6a618fa (134 files, 2674 tests); the sync after it merged main in (main had moved), and a second full `risa check` is green on the synced tip 5df7c0d (135 files, 2716 tests); slice worktree removed. PR #44 is open and Codex is clean on it. Landing now: `risa land risa-next-4` (tier none); a cut-off one resumes with `risa land --resume prd/risa-next-4`. Its six init gaps (hooks.check unset, project-data check needs preferences and role docs, no prefix flag, rule-file shapes, refPrefix, `config check` outside a repo) are filed: a note on RISA-1090, RISA-1091 (`fixes-bug`), RISA-1092 (`risa-next-5`, proposed). Next: `risa pr`, `risa review --wait`, land (tier none), `risa rm risa-next-4-6`, then `risa rm risa-next-4`.
 
 **Before wave 5:** waves 1 to 4 are landed. Wave 4 (slice 5) landed in main through PR #42 (main at 657f1da, tier none, full `risa check` green on the merged tip: 133 files, 2672 tests; report a72; slice worktree removed). Land took the unsynced tip (main had 4 commits sharing no file). Codex's two P2s were verified, filed and resolved: RISA-1089 (migrate half-done on a git-ignored rule file) and RISA-1090 (a fresh init's check can't run without `.risa/check-plan.json` and `.risa/tiers.json`), both `fixes-bug`, triaged. RISA-796 is done; RISA-797 stays claimed. Nothing in flight. Next session: `risa backlog ingest` and `list`, `risa sync`, then wave 5, the last: slice 6 alone (opus; RISA-797 `done` after it), `risa watch risa-next-4 --wait` in the background; after its landing `risa rm risa-next-4`. Slice 6 edits only new files (`loops/second-repo*`). Nothing to fold into the docs this wave (slice 5 wrote README's _Start a project_).
 
