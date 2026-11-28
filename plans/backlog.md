@@ -149,6 +149,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1079 | bug | triaged | fixes-bug |  | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
 | RISA-1080 | bug | triaged | fixes-bug |  | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
 | RISA-1081 | bug | triaged | fixes-bug |  | backlog inbox to-repo: a trunk ingest landing between the move's store write and its refused trunk push leaves the already-copied, now-filed line in the store untagged, and the next store ingest files it twice (the trunk-filed item has no inbox-key note); reconcile lines copied by earlier tries against the latest trunk before finishing |
+| RISA-1082 | bug | triaged | fixes-bug |  | risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect |
+| RISA-1083 | bug | triaged | fixes-bug |  | Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears |
 
 ## Items
 
@@ -1231,3 +1233,22 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69GZnL, backlog/inbox-move.mjs:172); verified in the code: the retry's store edit only appends.
+
+### RISA-1082 · bug · risa rotate --self reports the new inbox tab opened, but the hand-off doesn't take effect
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: Reported by caretook's backlog session (caretook B-1045, 2026-11-28): risa rotate --self in caretook's inbox session printed 'Opened inbox in a new background iTerm2 tab', but per the user the hand-off did not take effect. Rotate should confirm the fresh session is live and the old one ended before reporting success, or say it failed. Related: RISA-1077 (the risa inbox session refused a rollover hand-off).
+- 2026-11-28 (Robert Bo Davis): From caretook's backlog (B-1045). Rotate claims success without checking the fresh session took over. Sibling of RISA-1077; normal urgency.
+
+### RISA-1083 · bug · Home machines: a running dispatcher loads the home module only at start (loops/dispatch.mjs loadHome), so a project moved with backlog inbox to-repo while it runs is never home-gated until the dispatcher restarts; recheck between ticks or restart the dispatcher when the inbox group appears
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/risa-next-2): Codex on PR #36 (thread PRRT_kwDOV9ctaM69Gjta, loops/dispatch.mjs:2586); verified: loadHome runs once before the loop, and the code hash covers only .mjs files.
