@@ -46,6 +46,7 @@ import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
 import { loadConfig } from "./config.mjs";
 import { TierDataError, tierData } from "../ci/tier-data.mjs";
 import { FILE_EXT, mergedSlices, sliceFields, sliceRows, sliceSections } from "./slice-fields.mjs";
+import { isMain } from "./is-main.mjs";
 
 /** The core's own folders, tooling while they sit in the repo (lib.sh's exempt_re too). */
 const CORE_TOOLING = ["loops", "backlog"];
@@ -600,7 +601,7 @@ async function cli({ propose, opts }) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   if (!args.ok) {
     console.error(`${args.error}\n${USAGE}`);

@@ -9,6 +9,7 @@
 // (check-plan.mjs: the project's rules).
 import { execFileSync } from "node:child_process";
 import { checkPlan } from "./check-plan.mjs";
+import { isMain } from "./is-main.mjs";
 
 /** backlog commits these onto dev; two branches sharing them means nothing. */
 const BACKLOG = new Set(["plans/backlog.md", "plans/inbox.md", "plans/backlog-archive.md"]);
@@ -90,7 +91,7 @@ export function devBrought(repo, devRef, tipRef, { plan = checkPlan() } = {}) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const flag = (/** @type {string} */ name) =>
     process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : undefined;
   const [repo, dev, tip] = [flag("--repo"), flag("--dev"), flag("--tip")];

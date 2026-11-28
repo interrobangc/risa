@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
+import { isMain } from "./is-main.mjs";
 
 /**
  * The failed test files of a Vitest JSON report, relative to cwd, sorted; none
@@ -294,7 +295,7 @@ export async function toolingStep({
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
   const root = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).stdout.trim();
   const opt = (/** @type {string} */ name) => {
