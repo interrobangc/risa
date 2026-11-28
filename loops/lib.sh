@@ -511,17 +511,22 @@ load_gate() {
 }
 
 # load_gate_wait WHAT: while the machine is busy, poll (RISA_LOAD_POLL, 15 s)
-# for at most RISA_LOAD_WAIT (600 s), then go ahead and say so. Sets
-# load_waited to the seconds waited. RISA_LOAD_GATE=off or
-# RISA_LEASES=off waits for nothing. Always returns 0.
+# for at most RISA_LOAD_WAIT (600 s), then go ahead and say so. Once it has
+# said busy, an unread load (the file replaced or briefly missing) keeps it
+# waiting (RISA-1022); unread from the start goes ahead. Sets load_waited to
+# the seconds waited. RISA_LOAD_GATE=off or RISA_LEASES=off waits for
+# nothing. Always returns 0.
 load_waited=0
 load_gate_wait() {
   local what=$1 max=${RISA_LOAD_WAIT:-600} poll=${RISA_LOAD_POLL:-15} t0 state l thr _c said=""
+  local bl="" bthr=""
   load_waited=0
   [[ ${RISA_LOAD_GATE:-} == off || ${RISA_LEASES:-} == off ]] && return 0
   [[ $max =~ ^[0-9]+$ ]] || max=600
   t0=$(date +%s)
-  while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy ]]; do
+  while read -r state l thr _c <<< "$(load_gate)"; [[ $state == busy || ($state == unread && -n $said) ]]; do
+    # An unread poll keeps the last busy reading for the messages.
+    if [[ $state == busy ]]; then bl=$l bthr=$thr; else l=$bl thr=$bthr; fi
     load_waited=$(($(date +%s) - t0))
     if [[ -z $said ]]; then
       echo "The machine is busy (5-minute load $l, over $thr): waiting up to ${max}s before $what (RISA_LOAD_WAIT)…"
