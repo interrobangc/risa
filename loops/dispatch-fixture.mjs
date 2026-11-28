@@ -218,6 +218,9 @@ export function useDispatchRepo() {
     writeFileSync(join(main, ".gitignore"), ".loops/\n");
     git(main, "add", ".");
     git(main, "commit", "-q", "-m", "chore: init");
+    // .loops/ there from the start, as the earlier tests in one file once left it:
+    // a file's first test may write its lock or state directly.
+    mkdirSync(loops, { recursive: true });
     writeFileSync(join(root, "load"), "1 1 1");
     inboxDir = join(root, "home/.risa/inbox");
     claudeConfig = join(root, "claude.json");
