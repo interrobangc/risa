@@ -1,6 +1,7 @@
 // review.sh's run log: Codex's answer on a head is recorded once per PR and
 // head, however often it's polled, and out of credits apart; --json's stdout is
-// only the verdict; --again --wait times out when Codex never takes it up. A throwaway repo
+// only the verdict; --again --wait times out when Codex never takes it up; a
+// clean verdict carries over docs-only commits after it. A throwaway repo
 // with these scripts copied in and a stubbed `gh` serving a fixture PR state
 // (codex-review.fixtures/); the run log is a temp file.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -118,5 +119,86 @@ describe("review.sh's output and waits", () => {
     expect(r.stderr).toContain("didn't take up the re-review of PR #7");
     expect(r.stdout).not.toContain("clean");
     expect(events()).toEqual([]);
+  });
+});
+
+describe("review.sh over commits after Codex's approval", () => {
+  const git = (...a) => execFileSync("git", ["-C", repo, ...a], { encoding: "utf8", stdio: "pipe" }).trim();
+  const commit = (files, msg) => {
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(repo, name), text);
+    git("add", "-A");
+    git("commit", "-qm", msg);
+    return git("rev-parse", "HEAD");
+  };
+  const state = (sha) =>
+    `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: sha, status: "completed" } })} -->`;
+  // The PR at head, with Codex's last finished review (clean) on reviewed.
+  const prAt = (head, reviewed) => {
+    const file = join(root, `pr-${head}.json`);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        number: 7,
+        url: "https://example.test/pr/7",
+        headRefOid: head,
+        reviews: { nodes: [] },
+        reviewThreads: { nodes: [] },
+        comments: {
+          nodes: [
+            {
+              author: { login: "chatgpt-codex-connector" },
+              body: state(reviewed),
+              createdAt: "2026-01-01T00:00:00Z",
+              updatedAt: "2026-01-01T00:09:00Z",
+            },
+          ],
+        },
+        reactions: { nodes: [] },
+      }),
+    );
+    return file;
+  };
+  const reviewAt = (file, ...args) =>
+    spawnSync("bash", ["loops/review.sh", "throwaway-x", ...args], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PR_FIXTURE: file,
+        RISA_RUN_LOG: log(),
+      },
+    });
+  let reviewed;
+
+  beforeEach(() => {
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    git("config", "core.hooksPath", "/dev/null");
+    writeFileSync(join(repo, ".gitignore"), "loops/\n");
+    commit({ "mine.txt": "base\n" }, "base");
+    git("checkout", "-qb", "prd/throwaway-x");
+    reviewed = commit({ "mine.txt": "work\n" }, "work");
+  });
+
+  it("reads clean when only a .md commit came after the approved one", () => {
+    const head = commit({ "notes.md": "## Status\n\nwave 1 landed\n" }, "status");
+    const r = reviewAt(prAt(head, reviewed), "--json");
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      state: "clean",
+      headSha: head,
+      carriedFrom: reviewed,
+      carriedOver: "docs",
+    });
+  });
+
+  it("still reads stale when a code commit came after it", () => {
+    commit({ "notes.md": "n\n" }, "status");
+    const head = commit({ "mine.txt": "more work\n" }, "more work");
+    const r = reviewAt(prAt(head, reviewed), "--json");
+    expect(r.status).toBe(2);
+    expect(JSON.parse(r.stdout)).toMatchObject({ state: "stale", headSha: head });
+    expect(JSON.parse(r.stdout).notCarried).toContain("mine.txt changed since, not only docs");
   });
 });

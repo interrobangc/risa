@@ -68,12 +68,12 @@ beforeAll(() => {
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const { RISA_CONFIG: _, ...env } = process.env;
-const hook = (args, extra = {}, cwd = repo) => {
+const hook = (args, extra = {}, cwd = repo, at = repo) => {
   writeFileSync(calls, "");
   rmSync(`${calls}.seen`, { force: true });
   rmSync(state, { recursive: true, force: true });
   mkdirSync(state);
-  const r = spawnSync("bash", [join(repo, "loops/check-hook.sh"), ...args], {
+  const r = spawnSync("bash", [join(at, "loops/check-hook.sh"), ...args], {
     cwd,
     encoding: "utf8",
     env: {
@@ -164,6 +164,58 @@ describe("check-hook.sh", () => {
     });
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/sets no check hook \(hooks\.check\)/);
+  });
+});
+
+describe("the tooling step after the slice's own check (RISA-1015)", () => {
+  // A sample repo whose config sets commands.testFile and staticCheck (stubs), on
+  // slice branches part/t/3 (Check: loops/a.test.mjs) and part/t/4 (no Check).
+  const PLAN =
+    "# T plan\n\n## Slice 3: one file\n\nStack: no · Reads: a · Tests: unit · Check: loops/a.test.mjs\n\n" +
+    "## Slice 4: no field\n\nStack: no · Reads: a · Tests: unit\n";
+  let own;
+  beforeAll(() => {
+    own = join(root, "own");
+    makeRepo(own, { files: { ...sampleData(), "work/plans/t-plan.md": PLAN } });
+    const cfg = JSON.parse(readFileSync(join(own, "risa.json"), "utf8"));
+    Object.assign(cfg.commands, { staticCheck: "true", testFile: "echo test file:" });
+    writeFileSync(join(own, "risa.json"), JSON.stringify(cfg));
+    mkdirSync(join(own, "node_modules/.bin"), { recursive: true });
+    writeFileSync(join(own, "node_modules/.bin/vitest"), STUB);
+    chmodSync(join(own, "node_modules/.bin/vitest"), 0o755);
+  });
+  const onSlice = (n, tooling = "1") => {
+    spawnSync("git", ["-C", own, "checkout", "-q", "-B", `part/t/${n}`]);
+    return hook(["slice", "abc123", tooling], {}, own, own);
+  };
+
+  it("runs only the slice's Check file of the tooling projects, never the whole suite", () => {
+    const r = onSlice(3);
+    expect(r.status, r.err).toBe(0);
+    expect(r.out).toContain("test file: loops/a.test.mjs\n");
+    expect(r.ran).toEqual([`${TOOLS} --passWithNoTests loops/a.test.mjs`]);
+    expect(r.step).toBe("tooling");
+    expect(onSlice(3, "2").ran).toEqual([
+      `${TOOLS} --project tools:browser --passWithNoTests loops/a.test.mjs`,
+    ]);
+  });
+
+  it("reruns that file alone when it fails, as the whole suite's step does", () => {
+    spawnSync("git", ["-C", own, "checkout", "-q", "-B", "part/t/3"]);
+    const r = hook(["slice", "abc123", "1"], { STUB_TESTS: "loops/a.test.mjs:1" }, own, own);
+    expect(r.status).toBe(0);
+    expect(r.flaky).toEqual(["loops/a.test.mjs"]);
+  });
+
+  it("runs the whole tooling suite as now for a slice with no Check field", () => {
+    const r = onSlice(4);
+    expect(r.status, r.err).toBe(0);
+    expect(r.out).toMatch(/^sample check: slice abc123\n/);
+    expect(r.ran).toEqual([TOOLS]);
+  });
+
+  it("runs no tooling test when the plan says the diff touches none", () => {
+    expect(onSlice(3, "0").ran).toEqual([]);
   });
 });
 

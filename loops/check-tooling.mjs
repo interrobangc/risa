@@ -6,7 +6,10 @@
 // The tests `pnpm test:tooling` runs (tooling-tests.mjs), without its lint (the
 // check's static steps linted everything) and without the check plan (decided).
 //
-//   node check-tooling.mjs [--harness] [--state DIR] [--rerun-max N]
+//   node check-tooling.mjs [--harness] [--state DIR] [--rerun-max N] [--file F]…
+//
+// With --file (check-hook.sh, after a slice's own check: its Check files), only
+// those files of the projects; a file in none of them runs nothing, and passes.
 //
 // No tooling tests in the config (testProjects.tooling unset): the project has
 // none, so the step runs nothing and passes (tooling-tests.mjs too). First, the
@@ -139,11 +142,12 @@ export function checkProjects(config, harness) {
  * file owns it) or past `rerunMax` failed files. With a state directory, writes
  * `step` (tooling) and adds to `failed` and `flaky`, as the project's check does,
  * and to `times` (`<seconds> tooling`, the rerun included) and `slowest` (the
- * first run's ten slowest files, `<seconds> <file>` lines).
- * @param {{ root: string, projects: string[], state?: string, rerunMax?: number, vitest?: string }} opts
+ * first run's ten slowest files, `<seconds> <file>` lines). With `files`, only
+ * those files of the projects (none of them there: nothing runs, and it passes).
+ * @param {{ root: string, projects: string[], files?: string[], state?: string, rerunMax?: number, vitest?: string }} opts
  * @returns {Promise<number>} the step's exit code
  */
-export async function toolingStep({ root, projects, state = "", rerunMax = 20, vitest }) {
+export async function toolingStep({ root, projects, files = [], state = "", rerunMax = 20, vitest }) {
   const bin = vitest ?? join(root, "node_modules/.bin/vitest");
   const work = mkdtempSync(join(tmpdir(), "tooling-step-"));
   const record = (/** @type {string} */ kind, /** @type {string[]} */ files) => {
@@ -163,7 +167,14 @@ export async function toolingStep({ root, projects, state = "", rerunMax = 20, v
     const first = join(work, "first.json");
     const run = await streamed(
       bin,
-      ["run", ...flags, "--reporter=default", "--reporter=json", `--outputFile.json=${first}`],
+      [
+        "run",
+        ...flags,
+        ...(files.length ? ["--passWithNoTests", ...files] : []),
+        "--reporter=default",
+        "--reporter=json",
+        `--outputFile.json=${first}`,
+      ],
       root,
     );
     if (state) {
@@ -242,6 +253,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const max = Number(opt("--rerun-max") ?? 20);
   const projects = checkProjects(loadConfig().config, args.includes("--harness"));
   const state = opt("--state") ?? "";
+  const files = args.flatMap((a, i) => (a === "--file" && args[i + 1] ? [args[i + 1]] : []));
   const here = dirname(fileURLToPath(import.meta.url));
   const checked = spawnSync(process.execPath, [join(here, "project-check.mjs")], {
     cwd: root || process.cwd(),
@@ -259,6 +271,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = await toolingStep({
       root: root || process.cwd(),
       projects,
+      files,
       state,
       rerunMax: Number.isInteger(max) && max >= 0 ? max : 20,
     });

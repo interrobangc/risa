@@ -47,6 +47,18 @@ Stack: yes · Reads: none · Tests: unit
 Stack: no · Reads: none · Tests: unit
 
 ## Slice 4: No fields
+
+## Slice 5: Stack by --stack
+
+Stack: no · Reads: none · Tests: unit
+
+## Slice 6: Run log and states
+
+Stack: no · Reads: none · Tests: unit
+
+## Slice 7: Hand-off, then a fix
+
+Stack: no · Reads: none · Tests: unit
 `;
 
 let root, main, loops, log, env, state;
