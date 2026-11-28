@@ -4,14 +4,24 @@
 
 ## Status
 
-| Slice | Wave | State | Merge into `prd/risa-next-4` |
-| ----- | ---- | ----- | ---------------------------- |
-| 1     | 1    | —     | —                            |
-| 2     | 2    | —     | —                            |
-| 4     | 2    | —     | —                            |
-| 3     | 3    | —     | —                            |
-| 5     | 4    | —     | —                            |
-| 6     | 5    | —     | —                            |
+| Slice | Wave | State                                           | Merge into `prd/risa-next-4` |
+| ----- | ---- | ----------------------------------------------- | ---------------------------- |
+| 1     | 1    | merged 2026-11-28 (handed off at 447be29, opus) | 952927e                      |
+| 2     | 2    | —                                               | —                            |
+| 4     | 2    | —                                               | —                            |
+| 3     | 3    | —                                               | —                            |
+| 5     | 4    | —                                               | —                            |
+| 6     | 5    | —                                               | —                            |
+
+**From the user:** nothing yet beyond the start itself.
+
+**Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions through `risa ask`.
+
+**Now (2026-11-28):** wave 1: slice 1 merged at 952927e (worktree `.loops/risa-next-4-1` kept until the gate is green). `risa tier` says none (tooling only), so the gate was the full `risa check` on the tip (main needed no sync): green in effect, 2640 of 2641 with `CLAUDE_CONFIG_DIR` unset (set, RISA-1076 fails 20 more), the one failure a load timeout in `loops/land-unsynced.test.mjs` that passes alone. A full check takes no label (`risa check`, about 8 minutes at load 20+); run it as `env -u CLAUDE_CONFIG_DIR risa check > <log>` to keep the failures. PR https://github.com/interrobangc/risa/pull/38 open; `risa review risa-next-4 --wait` out. Next: triage Codex, `risa land risa-next-4 -m …`, the landing report (`risa ask --report`), `risa rm risa-next-4-1`, docs, `risa status-trim`, rotate into wave 2 (slices 2 and 4). Slice 1's notes for 2 and 4: both forms present throws from `configPath` (callers outside `loadConfig` see a bare `ConfigError`); bash uses `node loops/config.mjs where <dir>` (exit 1 none, 2 both). Other topics: `fixes-bug` is running but its hot files are now `loops/new`, `loops/rotate`, `loops/open-session` (none of this topic's); recheck with `risa backlog prd list` before starting slices 3 and 5. Inbox empty at start; no new item proposed for this topic.
+
+**Slice models:** all six are coding with real logic: opus.
+
+**Open issues:** none.
 
 **Backlog:** claim each slice's item as it starts. Slices 1 to 4: RISA-796. Slice 5: RISA-796 (`done` after it) and RISA-797. Slice 6: RISA-797 (`done` after it).
 
