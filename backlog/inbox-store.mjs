@@ -268,18 +268,21 @@ export function findStoreRepo({ env = process.env } = {}) {
   const clones = existsSync(root)
     ? readdirSync(root).filter((n) => !n.includes(".tmp-") && existsSync(join(root, n, "HEAD")))
     : [];
-  const urls = clones
-    .map((n) => {
-      try {
-        return execFileSync("git", ["-C", join(root, n), "config", "--get", `remote.${REMOTE}.url`], {
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim();
-      } catch {
-        return "";
-      }
-    })
-    .filter(Boolean);
+  // Two clones of one URL (an older clone's name, a copy) are one store.
+  const urls = [
+    ...new Set(
+      clones.map((n) => {
+        try {
+          return execFileSync("git", ["-C", join(root, n), "config", "--get", `remote.${REMOTE}.url`], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }).trim();
+        } catch {
+          return "";
+        }
+      }),
+    ),
+  ].filter(Boolean);
   if (urls.length === 1) return urls[0];
   if (urls.length > 1)
     throw new StoreError(
