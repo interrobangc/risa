@@ -8,7 +8,7 @@
 
 | Slice | Wave | Item      | Model | State                                                                                | Merge into `prd/fixes-tooling` |
 | ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------ | ------------------------------ |
-| 51    | 11   | RISA-1066 | opus  | agent working (worktree fixes-tooling-51)                                            |                                |
+| 51    | 11   | RISA-1066 | opus  | merged (81db42a; check stopped at budget in tooling step, no failure)                | 423f066                        |
 | 52    | 11   | RISA-1068 | opus  | merged (ca5850b; check stopped at 600s budget in tooling step, load ~21; no failure) | 9b04e99                        |
 
 **Wave 11** (2026-11-28): RISA-1066 split by test file: recover (51, RISA-1066), rotate (52, RISA-1068); dispatch (RISA-1069) waits, `loops/dispatch` being risa-next-2's hot file.
