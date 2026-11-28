@@ -9,8 +9,8 @@
 //             (a plan window at 100%: extra usage, if it's on, is being spent), or a session
 //             stopped on a limit whose reset hasn't passed: as draining, and the tick ends
 //             each managed session (marked stalled, error "limited"), except one running a
-//             landing, which finishes first. Hand-opened sessions are never ended: one report
-//             names them. Nothing opens a claude while limited (no helper, keep-alive,
+//             landing, which finishes first. Hand-opened sessions, and backlog and inbox
+//             sessions (the kept kinds: keep-alive.mjs), are never ended: one report names them. Nothing opens a claude while limited (no helper, keep-alive,
 //             session request, rotation or `claude -p` probe: a probe would spend on extra
 //             usage and succeed, so it can't show the limit has reset); resuming goes by the
 //             reading's reset time.
@@ -18,6 +18,9 @@
 // never drains: with a session live longer than that, it files one report per incident.
 // RISA_USAGE_WATCH=off: always normal.
 //
+// sessionDrains (pure): each session's drain on its own account's readings (a reading's
+// `account`, usage.mjs), so a session on another Claude config folder is drained, and ended
+// when limited, on that account's numbers, not the dispatcher's.
 // limitActions (pure): what a limited tick does to each live session.
 // landingUnder (pure): whether a session runs a landing (land.sh, or a landing journal's pid,
 // among its descendants).
@@ -27,7 +30,8 @@
 //                             limited; else 0 (and 0 on any error: watching never hurts the work)
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
-import { clock, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
+import { KEPT_KINDS } from "./keep-alive.mjs";
+import { clock, mergeReadings, readUsage, stallHolds, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
 export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
@@ -136,6 +140,54 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
   return normal("under the drain line");
 }
 
+/**
+ * SESSION's account: its reading's (`account`; a reading without one is Claude Code's
+ * default, null, never FALLBACK), else FALLBACK (the dispatcher's own) when it has no reading. Pure.
+ * @param {any[]} readings @param {string} session @param {string | null} fallback
+ */
+export function sessionAccount(readings, session, fallback) {
+  const r = readings.find((x) => x && typeof x === "object" && String(x.session) === session);
+  return r ? (r.account ?? null) : fallback;
+}
+
+/**
+ * Each session's drain, from its own account's readings only. A session's account is its
+ * reading's (`account`, absent for Claude Code's default); one with no reading takes ACCOUNT
+ * (the dispatcher's own: host.mjs claudeAccount). Pure.
+ * @param {any[]} readings every session's (usage.mjs readReadings)
+ * @param {string[]} names the sessions
+ * @param {{ drain: number, stop: number, off?: boolean, now: number, staleMs: number,
+ *   timeZone?: string, account?: string | null }} opts
+ * @returns {Record<string, Drain>}
+ */
+export function sessionDrains(readings, names, { account = null, ...opts }) {
+  /** @type {Map<string | null, Drain>} */
+  const byAccount = new Map();
+  /** @type {Record<string, Drain>} */
+  const out = {};
+  for (const name of names) {
+    const a = sessionAccount(readings, name, account);
+    let d = byAccount.get(a);
+    if (!d) {
+      const mine = readings.filter((r) => (r?.account ?? null) === a);
+      d = drainDecision(mergeReadings(mine, { now: opts.now, staleMs: opts.staleMs }), opts);
+      byAccount.set(a, d);
+    }
+    out[name] = d;
+  }
+  return out;
+}
+
+/**
+ * The sessions whose stall mark still holds at NOW (its reset ahead): a dead one is never
+ * reopened by the pick (dispatch-pick.mjs `stalled`), only resumed after its reset
+ * (resume.mjs), so a session ended on its own limited account isn't reopened at once. Pure.
+ * @param {any[]} readings @param {number} now
+ */
+export function stalledSessions(readings, now) {
+  return new Set(readings.filter((r) => stallHolds(r?.stalled, now)).map((r) => String(r.session)));
+}
+
 /** Whether anything may run a claude to probe the limit (`claude -p`): never while limited. Pure. */
 export const probeAllowed = (/** @type {Drain} */ d) => d.state !== "limited";
 
@@ -172,7 +224,8 @@ export function isLanding(/** @type {string} */ args) {
 }
 
 /**
- * @typedef {{ name: string, pid: number, live: boolean, managed: boolean }} LimitSession
+ * @typedef {{ name: string, pid: number, live: boolean, managed: boolean, kind?: string }} LimitSession
+ *   kind: the record's (backlog and inbox sessions are never ended)
  * @typedef {{ type: "end", session: string, pid: number }
  *   | { type: "kill", session: string, pid: number }
  *   | { type: "wait", session: string, why: string }
@@ -183,9 +236,10 @@ export function isLanding(/** @type {string} */ args) {
  * What a limited tick does to each live session. Pure.
  * @param {{ sessions: LimitSession[], landing: Set<string>,
  *   stalls: Record<string, { pid?: number | null, at?: string | number | null, error?: string } | null | undefined>,
- *   reported?: string[], drain: Drain, now: number, endWaitMs?: number }} facts
- *   stalls: each session's stall mark (its usage reading's); reported: hand-opened sessions
- *   already named in this incident's report
+ *   reported?: string[], drain: Drain, drains?: Record<string, Drain>, now: number, endWaitMs?: number }} facts
+ *   stalls: each session's stall mark (its usage reading's); reported: hand-opened, backlog
+ *   and inbox sessions already named in this incident's report; drains: each session's own (sessionDrains),
+ *   DRAIN for one it leaves out
  * @returns {LimitAction[]}
  */
 export function limitActions({
@@ -194,17 +248,24 @@ export function limitActions({
   stalls,
   reported = [],
   drain,
+  drains = {},
   now,
   endWaitMs = END_WAIT_MS,
 }) {
-  if (drain.state !== "limited") return [];
   /** @type {LimitAction[]} */
   const out = [];
   const hand = [];
+  const kept = [];
+  /** @type {string[]} */
+  const whys = [];
   for (const s of sessions) {
     if (!s.live || !s.pid) continue;
-    if (!s.managed) {
-      hand.push(s.name);
+    const own = drains[s.name] ?? drain;
+    if (own.state !== "limited") continue;
+    const isKept = KEPT_KINDS.includes(s.kind ?? s.name);
+    if (!s.managed || isKept) {
+      (isKept ? kept : hand).push(s.name);
+      if (!reported.includes(s.name) && !whys.includes(own.why)) whys.push(own.why);
       continue;
     }
     if (landing.has(s.name)) {
@@ -218,13 +279,20 @@ export function limitActions({
     else if (ours) out.push({ type: "wait", session: s.name, why: "sent TERM; waiting for it to end" });
     else out.push({ type: "end", session: s.name, pid: s.pid });
   }
-  const fresh = hand.filter((n) => !reported.includes(n)).sort();
-  if (fresh.length)
+  const freshHand = hand.filter((n) => !reported.includes(n));
+  const freshKept = kept.filter((n) => !reported.includes(n));
+  const fresh = [...freshHand, ...freshKept].sort();
+  if (fresh.length) {
+    const never = [
+      ...(freshHand.length ? ["one opened by hand"] : []),
+      ...(freshKept.length ? ["a backlog or inbox session"] : []),
+    ].join(", or ");
     out.push({
       type: "report",
       sessions: fresh,
-      text: `Usage is limited (${drain.why}). The dispatcher ended its managed sessions, but never ends one opened by hand: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
+      text: `Usage is limited (${whys.join("; ")}). The dispatcher ended its managed sessions, but never ends ${never}: ${fresh.join(", ")} ${fresh.length === 1 ? "is" : "are"} still live and can spend extra usage. End ${fresh.length === 1 ? "it" : "them"}, or turn extra usage off in the account.`,
     });
+  }
   return out;
 }
 

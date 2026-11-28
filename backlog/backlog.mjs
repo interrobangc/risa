@@ -1043,7 +1043,8 @@ function prd(pos, opts) {
     case "list":
     case undefined: {
       const b = read();
-      const rows = reg.rowsOf(b.preamble);
+      // An After naming an archived (done) topic is met: the dispatcher reads this list.
+      const rows = reg.withoutAfter(reg.rowsOf(b.preamble), new Set(archivedRows().map((r) => r.topic)));
       const facts = registryFacts(b.items);
       const out = rows.map((r) => ({
         ...r,

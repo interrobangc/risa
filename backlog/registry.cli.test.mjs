@@ -281,5 +281,13 @@ describe("backlog prd", () => {
       "B-5  is triaged, but its topic alpha is done",
       "3 findings",
     ]);
+
+    // An After set on an archived topic (RISA-999): stored, met in the list the dispatcher reads, and doctor agrees.
+    cli(prd, "prd", "set", "epsilon", "after=alpha,beta");
+    expect(file()).toContain("| `epsilon` | hold | `alpha`, `beta` |");
+    expect(JSON.parse(cli(prd, "prd", "list", "--json")).find((r) => r.topic === "epsilon").after).toEqual([
+      "beta",
+    ]);
+    expect(cliFails(main, "doctor").out).not.toContain("epsilon");
   });
 });

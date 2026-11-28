@@ -6,26 +6,26 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-**Wave 2** (started 2026-11-27): slices 8–13, all opus. Wave 1 landed in main as c4ae22d (PR #5); its table is in the history once trimmed.
+| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
+| 14    | 3    | RISA-952  | opus  | merged | 2439fe9                        |
+| 15    | 3    | RISA-997  | opus  | merged | ac81b56                        |
+| 16    | 3    | RISA-999  | opus  | merged | 79d6fef                        |
+| 17    | 3    | RISA-1000 | opus  | merged | 6f9f1b0                        |
+| 18    | 3    | RISA-927  | opus  | merged | 10ef985                        |
 
-| Slice | Wave | Item     | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | -------- | ----- | ------ | ------------------------------ |
-| 8     | 2    | RISA-969 | opus  | merged | 6202184                        |
-| 9     | 2    | RISA-681 | opus  | merged | 7796fbc                        |
-| 10    | 2    | RISA-934 | opus  | merged | 4c91c61                        |
-| 11    | 2    | RISA-987 | opus  | merged | 00269bb                        |
-| 12    | 2    | RISA-989 | opus  | merged | ee78763                        |
-| 13    | 2    | RISA-993 | opus  | merged | 7451bdd                        |
+**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). Merged all five (17's vitest.config conflict with 15 resolved: both kept). Slice checks were red only on load timeouts (RISA-994 notes). CI unit green on b7bb152 (run 46090524277, the first with a real verdict); sync not needed; docs folded; PR #10 open. Codex (on 2b02eab): P1 dispatch.mjs:1308 (a default-account session's null replaced by the dispatcher's account) sent to slice 18's agent; P2 rotate.sh:160 (close path fires before the wave lands) sent to slice 14's agent. Both fixed and re-merged (18: 1134fe0, 14: bbae04a); pushed da64927, threads answered and resolved. Codex round 2: P1 dispatch.mjs:1250 (a session limited on its own account is reopened by pick() before its reset) fixed by slice 18 (5d8aac8) and re-merged. Unit CI green on da64927 (run 46093565648); Unit CI green on 54e571d. Codex round 3: P1 dispatch.mjs:1251 (keep-alive reopens a session stalled on its own account) sent to slice 18, then redirected on the user's word: the drain never ends backlog or inbox sessions (any account), at most reports them (415d749, merged); P2 rotate.mjs:139 (simulated pick omits facts.landed) tracked as RISA-1003, thread answered. Codex round 4 (a9b6f2a): one P2 (watch-off override, dispatch.mjs:1622) tracked as RISA-1004, thread answered. Asking the user (via ask skeptic): land now (recommended) or fix 1003/1004 first. Next: triage, land, then rotate (session past the soft limit). RISA-881 goes in wave 4 (the user wants it before risa-next). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
 
-**Notes:**
+**Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
 
-- **Gate:** `risa check` inside a session fails ~259 tests on the `RISA_CONFIG` leak until after-split's slice 1 lands; gate with every `RISA_*`, `CLAUDE_CODE_*`, `CLAUDECODE` unset, rerun failing files once (load timeouts). No CI until slice 8's workflow is on main: landing wave 2 needs `--force` (ask the user, `--waits`) unless the workflow runs on the PR.
-- **Wave 3 first (the user, via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982, as wave 3's first slice right after wave 2 lands; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold). Main's b5c4391: land skeptics run on Opus (`model: "opus"`), not Fable: pick it up at the next sync.
-- **Waiting:** RISA-994 (may share after-split slice 1's cause: check after it lands); RISA-996 (Codex review of wave 1's landed diff: do it at wave 2's PR); after after-split lands: RISA-813, 915, 926, 927, 952, 882, 886, 881, 883, 889, 986, plus wave 1's docs (loop doc: `wait check` 160 s, RISA-911; machinery: plan sessions get the context hook, RISA-880; backlog doc: `prd set … why=`, RISA-477).
-- Usage: all six slices hit the 5h limit mid-check (17:40 reset); each had one commit on its branch, clean tree. Resumed by message after the reset to finish the slice check and hand off.
-- RISA-997 filed (slice 8): the workflow writes no verdict artifact, so `risa ci run --wait` reads its runs as unknown.
-- Context past the soft limit (120k): rotate at this wave's boundary.
-- **Synced with main** (after-split's a6c95e4) as 74f9487 (one conflict, `ci/promote.test.mjs`, resolved). Wave gate: full `risa check` on the synced tip (tier `unit`; the CI workflow isn't on main yet and writes no verdict, RISA-997). Gate run 1 (load 75): 18 failures, mostly timeouts. Rerun of 4 files on main vs the branch: `loops/land-unsynced.test.mjs` times out on both (pre-existing, noted on RISA-994); `loops/tidy-cli.test.mjs` fails only on the branch (its fixture doesn't copy slice 12's new `backlog/lock.mjs`): **sent back to slice 12**. Slice 12's fix merged as 4323007. Gate run 3 (load to 29): 34 timeouts; rerun of those 19 files at load ~8: only `land-unsynced` (fails on main too) and one `recover` timeout, both RISA-994's: **green**. Docs folded (a46d9fb: loop doc 160 s wait; backlog doc `why=` and `prd archive`); the RISA-880 machinery line is still to fold. **PR #7** open; Codex: one P2 (RISA-999, replied, resolved), then clean on 5bd92ed. First land refused: the unit run (https://github.com/interrobangc/risa/actions/runs/46084230316) concluded **success** on 5bd92ed but left no verdict (RISA-997), and main had moved. Synced again as 0634bd0 (plans/backlog.md conflict: took main's). Next: CI run + Codex on 0634bd0, then a land skeptic (Opus, b5c4391) on `--force` (evidence in the session scratchpad's land-evidence.md), `risa land fixes-tooling --tier unit --force --skeptic <id>`; a `no` means ask the user (`--waits`). RISA-996: asked Codex on merged PR #5 by comment; triage what it finds. Then status-trim, the RISA-880 machinery doc line, rotate. after-split landed: RISA-994 and the after-split-blocked items can go in wave 3.
+**For the next session (wave 3):**
+
+- **First, on the user's word (via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold).
+- **Ready (after-split has landed):** RISA-997 (the workflow writes a verdict artifact, so `risa land`'s unit gate reads its runs: do it early, it removes the `--force`), RISA-999 (an After on an archived PRD topic), RISA-994 (land-unsynced times out on main too; recover), RISA-813, 915, 926, 927, 882, 886, 881, 883, 889, 986. Check hot files first (`risa backlog prd list`).
+- **RISA-996:** Codex asked on merged PR #5 by comment (wave 1's unreviewed diff); triage its findings to the backlog.
+- **Docs still to fold:** machinery doc: plan sessions get the context hook (RISA-880, wave 1).
+- **Gate:** the test env is hermetic now (after-split's RISA-975), so `risa check` works in a session; under load (>25) many tests time out: rerun failing files once at low load. Land skeptics run on Opus (b5c4391).
+- Slice 12's note for later: `backlog/lock.mjs` is new; tests that copy backlog/ files by name must list it.
 
 ## How to run this plan
 
@@ -162,3 +162,53 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - Unit test: `loops/config.test.mjs` passes ten runs in a row (`--repeat` or a loop), with and without `RISA_*` variables set.
+
+## Slice 14: An idle standing topic closes itself after a landing
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-952, folding in RISA-982):** after a landing, a standing (fixes) topic whose waiting items are all blocked (its items held, or waiting on another topic; none the next wave could start) keeps its session and lane, so at cap 1 the dispatcher starts nothing else. Make the hand-over close it instead: `risa rotate` (`loops/rotate.sh`, `loops/rotate.mjs`) on a standing topic with no slice in flight and nothing runnable waiting runs the topic's `rm` (which already leaves a standing row not done) rather than opening a fresh session, and says why in one line. Decide "runnable" from the backlog and registry the way the dispatcher counts a fixes topic's waiting items (`loops/dispatch-pick.mjs`; reuse, don't copy). Don't edit `loops/rm.sh`, `loops/lib.sh` or `loops/docs/` (another topic's hot files); call rm as it is. The orchestrator folds the handbook line in at landing.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/rotate.test.mjs` or beside `rotate.mjs`): a standing topic with only blocked waiting items closes (rm called, no new session); one with a runnable item rotates as now; a non-standing topic rotates as now.
+
+## Slice 15: The CI workflow writes a verdict
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-997):** `.github/workflows/ci.yml` runs `pnpm check` but uploads no verdict, so `risa ci run --wait` reads "unknown: the run left no verdict" and `risa land`'s CI gate needs `--force`. Have the workflow write and upload the verdict artifact `ci run --wait` reads (its name, file and shape from `ci/ci-io.mjs` and `ci/verdict.fixtures`), green or failing with the failing tests, also when `pnpm check` fails (`if: always()`). Pin any new action to a full SHA with its version in a comment. No paid service; a new dependency stops the slice.
+
+**Acceptance criteria:**
+
+- Unit test (`ci/workflow.test.mjs`): the workflow uploads an artifact under the name `ci-io.mjs` reads, on success and failure, and a verdict it would write parses with the reader `ci run --wait` uses.
+
+## Slice 16: An After on an archived topic counts as done
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-999):** `prd add/set after=<topic>` on a topic already archived (RISA-934) passes doctor, but the dispatcher reads only `prd list`, so the dependent topic waits forever. Make an archived After count as done: either the write drops it (saying so) or the registry's reader that dispatch uses treats an archived topic as done (`backlog/registry.mjs`; `loops/dispatch*` only if the reader can't carry it). Pick one, say why in the hand-off.
+
+**Acceptance criteria:**
+
+- Unit test (`backlog/registry.test.mjs` or `registry.cli.test.mjs`): a topic with `after=<archived>` reads as not waiting on it; doctor and the dispatcher's view agree.
+
+## Slice 17: Test timeouts scale with load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1000):** under a 5-minute load of 20–35 the tooling unit suite times out in 5–19 files (20 s test, 10 s hook limits) that pass alone. Scale vitest's `testTimeout` and `hookTimeout` with load the way `check-budget` scales its budget (find it; reuse its load read, don't copy it), or lower parallelism under load, in `vitest.config.mjs`. Don't edit `loops/test-env*` or `loops/test-setup.mjs`. Don't just raise the fixed limits.
+
+**Acceptance criteria:**
+
+- Unit test: the limits the config computes rise with a given load (through a knob, not the machine's real load) and stay at today's values at low load.
+
+## Slice 18: The drain reads each session's own account
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-927):** the drain (`loops/drain.mjs`) reads usage only from its own environment's Claude account, so a session on another `CLAUDE_CONFIG_DIR` is drained on the wrong account's numbers. Read usage per session's config folder, as usage and context already follow each session's folder (`loops/usage.mjs`, `loops/host.mjs`), and drain each session on its own account's numbers. Don't touch `loops/machine*` or `loops/lib.sh` (another topic's hot files).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/drain.test.mjs`): two sessions on two config folders, one over the drain line and one under; only the one over drains.
