@@ -17,7 +17,7 @@
 | 33    | 5    | RISA-1006      | opus   | handed off (tip c30f407): own test 6/6; check timed out under load, CI gates                   | —                              |
 | 34    | 5    | RISA-1012      | opus   | handed off (022a664, 0cdb858): refuses before stopping; slice check red on load timeouts only  | —                              |
 | 35    | 5    | RISA-1013      | opus   | handed off green (1823c19, tip 41abf2d)                                                        | —                              |
-| 36    | 5    | RISA-1014      | opus   | agent spawned                                                                                  | —                              |
+| 36    | 5    | RISA-1014      | opus   | handed off (tip e99f515): own test 32/32; docs_re not exempt_re (loops/ is code here)          | —                              |
 | 37    | 5    | RISA-813       | opus   | handed off (tip eb54406): own test 31/31, reruns green; check out of time under load, CI gates | —                              |
 | 38    | 5    | RISA-883       | opus   | handed off (tip 33c5842): own test 4/4; check out of time under load, CI gates                 | —                              |
 
