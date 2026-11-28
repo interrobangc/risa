@@ -71,15 +71,22 @@ describe("scaledWait", () => {
   });
 
   // RISA-994: their waits failed under load on fixed clocks.
-  it.each(["land-unsynced.test.mjs", "rotate.test.mjs", "ask.test.mjs", "sessions.test.mjs", "bye.test.mjs"])(
-    "scales %s's waits",
-    (file) => {
-      const src = readFileSync(new URL(file, import.meta.url), "utf8");
-      expect(src).toContain('import { BASE, scaledWait } from "./test-limits.mjs";');
-      expect(src).toContain("vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout)");
-      expect(src).not.toMatch(/timeout: \d[\d_]*\b|\}, \d[\d_]*\);/);
-    },
-  );
+  it.each([
+    "land-unsynced.test.mjs",
+    "rotate.test.mjs",
+    "rotate-standing.test.mjs",
+    "rotate-into.test.mjs",
+    "rotate-self.test.mjs",
+    "rm-done.test.mjs",
+    "ask.test.mjs",
+    "sessions.test.mjs",
+    "bye.test.mjs",
+  ])("scales %s's waits", (file) => {
+    const src = readFileSync(new URL(file, import.meta.url), "utf8");
+    expect(src).toContain('import { BASE, scaledWait } from "./test-limits.mjs";');
+    expect(src).toContain("vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout)");
+    expect(src).not.toMatch(/timeout: \d[\d_]*\b|\}, \d[\d_]*\);/);
+  });
 });
 
 describe("vitest.config.mjs", () => {
