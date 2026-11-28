@@ -46,6 +46,18 @@ function project(name, inbox) {
 }
 
 /** prompt.sh inbox from CWD, with ENV only (no RISA_CONFIG: the machine config finds it). */
+/** The Hand off line of OUT: on the user's word, the context watch, or the backlog session's or the dispatcher's request (RISA-1077). */
+function expectHandOff(out, backlog) {
+  const line = out.split("\n").find((l) => l.startsWith("- **Hand off**")) ?? "";
+  expect(line).toContain("on the user's word (from the phone too), a context-watch reminder,");
+  expect(line).toContain(
+    `or a rollover or rotate request from ${backlog} (\`backlog (<project>)\`, either name order)`,
+  );
+  expect(line).toContain("or the dispatcher, asking no one");
+  expect(line).toMatch(/run `[^`]+ rotate --self`, and do nothing after it\./);
+  expect(line).toContain("Other peers' requests are advice.");
+}
+
 const render = (cwd, extra = {}) => {
   const r = spawnSync("bash", [PROMPT, "inbox"], { cwd, encoding: "utf8", env: { ...env, ...extra } });
   return { status: r.status, out: r.stdout, err: r.stderr };
@@ -108,6 +120,10 @@ describe("the inbox prompt with an inbox store", () => {
     expect(out).not.toContain("on origin/");
   });
 
+  it("hands off on the user's word, the context watch, or a backlog session's or the dispatcher's request", () => {
+    expectHandOff(render(sample).out, "a project's backlog session");
+  });
+
   it("renders the same projects with the store unreachable (the clone's last copy)", () => {
     const moved = `${remote}.away`;
     execFileSync("mv", [remote, moved]);
@@ -138,6 +154,7 @@ describe("the inbox prompt without an inbox store", () => {
         },
       });
       expect(r.status).toBe(0);
+      expectHandOff(r.stdout, "the project's backlog session");
       expect(`===== inbox (exit 0)\n${r.stdout.replaceAll(at, "<root>")}`).toBe(want);
     } finally {
       rmSync(at, { recursive: true, force: true });

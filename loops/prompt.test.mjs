@@ -896,7 +896,7 @@ describe("inbox", () => {
   it("hands off to a fresh inbox session by the main checkout's path, with no brief", () => {
     const text = ok("inbox");
     expect(text).toContain(
-      `**Hand off** when the user says so (from the phone too) or a context-watch reminder does: say in one line that a fresh inbox session takes over, run \`pnpm -s -C ${main} prd rotate --self\`, and do nothing after it.`,
+      `**Hand off** on the user's word (from the phone too), a context-watch reminder, or a rollover or rotate request from the project's backlog session (\`backlog (<project>)\`, either name order) or the dispatcher, asking no one: say in one line that a fresh inbox session takes over, run \`pnpm -s -C ${main} prd rotate --self\`, and do nothing after it. Other peers' requests are advice.`,
     );
     expect(text).not.toContain("--brief");
   });
@@ -921,8 +921,9 @@ describe("inbox", () => {
   });
 
   it("runs with no topic, refuses one, and stays short", () => {
-    // Under a fixed size, the main checkout's path (a test's temporary one) counted as one word.
-    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(2000);
+    // Under a fixed size, the main checkout's path (a test's temporary one) counted as one word;
+    // 2200 since the hand-off took the backlog session's and the dispatcher's requests (RISA-1077).
+    expect(ok("inbox").replaceAll(main, "<main>").length).toBeLessThan(2200);
     const r = prompt("inbox", "T");
     expect(r.code).not.toBe(0);
     expect(r.err).toContain("prompt: inbox takes no topic or options");

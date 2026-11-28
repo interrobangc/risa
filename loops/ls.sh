@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# List every worktree in .loops: name, slot, branch, commits ahead of the branch
+# A warning when the project's pinned risa differs from the release running
+# (pin.mjs), then every worktree in .loops: name, slot, branch, commits ahead of the branch
 # it merges into, dirty state, its containers and its dev server link, and the
 # held PRDs (a hold's date and reason beside it). Then the
 # machine's load averages, any stale slot lease, the shared test Postgres,
@@ -12,6 +13,11 @@
 set -euo pipefail
 # shellcheck source=stack-lib.sh
 source "$(dirname "$0")/stack-lib.sh"
+
+# The project's pinned risa against the release running (pin.mjs): one warning line
+# when they differ, nothing otherwise (no pin, or a run from a checkout).
+pin=$(node "$(dirname "$0")/pin.mjs" --root "$loops_lib_dir/.." 2>/dev/null || true)
+[[ -z $pin ]] || printf '%s\n\n' "$pin"
 
 fmt='%-22s %-4s %-28s %-22s %-6s %-10s %s\n'
 # shellcheck disable=SC2059

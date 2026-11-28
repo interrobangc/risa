@@ -17,9 +17,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  markStalled,
   mergeReadings,
   nextReading,
   parseInput,
+  readReadings,
   resetFromInput,
   resetFromReadings,
   stalledReading,
@@ -212,6 +214,64 @@ describe("the reading and the stall", () => {
     expect(
       nextReading(current, parseInput({}), { session: "prd-a", pid: 99_999_998, now: NOW }).stalled,
     ).toBeUndefined();
+  });
+
+  it("drops a reading from another account instead of merging it (RISA-1087)", () => {
+    const A = "/nowhere/.claude-a";
+    const B = "/nowhere/.claude-b";
+    const stall = { at: isoAt(NOW - MIN), error: "rate_limit", resetsAt: null, pid: 99_999_999 };
+    const onA = {
+      ...reading("prd-a", NOW - 5 * MIN, { fiveHour: [94, NOW + 60 * MIN] }, { account: A }),
+      stalled: stall,
+    };
+    const week = parseInput(input({ week: [20, NOW + 2 * 24 * 60 * MIN] }));
+    const at = { session: "prd-a", pid: 99_999_999, now: NOW };
+    const onB = nextReading(onA, week, { ...at, account: B });
+    expect(onB.account).toBe(B);
+    expect(onB.windows).toEqual({
+      sevenDay: { percent: 20, resetsAt: isoAt(NOW + 2 * 24 * 60 * MIN), at: isoAt(NOW) },
+    });
+    expect(onB.stalled).toBeUndefined();
+    // A reading with no account (the default) is another account's once the new one has one, and back.
+    const onDefault = { ...onA, account: undefined };
+    expect(nextReading(onDefault, week, { ...at, account: B }).windows.fiveHour).toBeUndefined();
+    expect(nextReading(onA, week, at).windows.fiveHour).toBeUndefined();
+    // The same account merges windows as before.
+    const same = nextReading(onA, week, { ...at, account: A });
+    expect(same).toMatchObject({ account: A, stalled: stall });
+    expect(same.windows.fiveHour).toEqual(onA.windows.fiveHour);
+    expect(same.windows.sevenDay).toMatchObject({ percent: 20 });
+    expect(nextReading(onDefault, week, at).windows.fiveHour).toEqual(onA.windows.fiveHour);
+  });
+
+  it("a stall noted after an account switch keeps none of the old account's windows (RISA-1087)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "usage-switch-"));
+    try {
+      const A = "/nowhere/.claude-a";
+      const B = "/nowhere/.claude-b";
+      const aReset = NOW + 60 * MIN;
+      writeFileSync(
+        join(dir, "prd-a.json"),
+        JSON.stringify(reading("prd-a", NOW - 5 * MIN, { fiveHour: [94, aReset] }, { account: A })),
+      );
+      // Another session on A: its window isn't B's stall reset either.
+      writeFileSync(
+        join(dir, "prd-z.json"),
+        JSON.stringify(reading("prd-z", NOW - MIN, { fiveHour: [99, aReset] }, { account: A })),
+      );
+      markStalled(dir, "prd-a", { error: "rate_limit", pid: 7, now: NOW, account: B });
+      const a = readReadings(dir).find((r) => r.session === "prd-a");
+      expect(a.account).toBe(B);
+      expect(a.windows).toEqual({});
+      expect(a.stalled).toMatchObject({ error: "rate_limit", resetsAt: null, pid: 7 });
+      // On the same account the stall keeps the windows and takes their reset.
+      markStalled(dir, "prd-z", { error: "rate_limit", pid: 8, now: NOW, account: A });
+      const z = readReadings(dir).find((r) => r.session === "prd-z");
+      expect(z).toMatchObject({ account: A, windows: { fiveHour: { percent: 99 } } });
+      expect(z.stalled.resetsAt).toBe(isoAt(aReset));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("a stall with no reset takes the last reading's: the most used window still ahead, stale or not", () => {

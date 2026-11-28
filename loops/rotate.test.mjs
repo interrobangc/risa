@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
+import { clearsHot, contextHold, doneFlags, handoffOutcome, slicesLeft, standingClose } from "./rotate.mjs";
 import { pick } from "./dispatch-pick.mjs";
 import { BASE, scaledWait } from "./test-limits.mjs";
 import {
@@ -288,5 +288,30 @@ describe("pnpm prd rotate", () => {
       git(main, "worktree", "remove", "--force", join(loops, "w-3"));
       git(main, "branch", "-D", "slice/w/3");
     }
+  });
+});
+
+describe("whether rotate --self's hand-off started (RISA-1082)", () => {
+  const rec = { pid: 42, kind: "backlog" };
+  it("started once the record is marked rotating, or replaced by another pid", () => {
+    expect(handoffOutcome({ record: { ...rec, rotating: true }, pid: 42 }).state).toBe("started");
+    expect(handoffOutcome({ record: { ...rec, pid: 43 }, pid: 42 })).toEqual({
+      state: "started",
+      why: "replaced by pid 43",
+    });
+  });
+  it("refused when rotate-into left its reason for this pid; a stale one for another pid doesn't count", () => {
+    const refusal = "42\trotate-into: pid 42 isn't backlog's live session; nothing was ended\n";
+    expect(handoffOutcome({ record: rec, pid: 42, refusal })).toEqual({
+      state: "refused",
+      why: "rotate-into: pid 42 isn't backlog's live session; nothing was ended",
+    });
+    expect(handoffOutcome({ record: rec, pid: 42, refusal: refusal.replace(/^42/, "41") }).state).toBe(
+      "waiting",
+    );
+  });
+  it("still waiting with the record as it was, or none", () => {
+    expect(handoffOutcome({ record: rec, pid: 42 })).toEqual({ state: "waiting" });
+    expect(handoffOutcome({ record: null, pid: 42 })).toEqual({ state: "waiting" });
   });
 });

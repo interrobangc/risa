@@ -41,11 +41,36 @@
 # effort (prd.sh inbox), with no brief: what it handles is on origin/dev. An
 # orchestrator behaves as plain rotate (its hand-over is _Status_, so no brief);
 # any other kind, an unrecorded caller and a slice agent's shell are refused.
+# Once its tab is open, --self waits for the hand-off to start (handoff, below)
+# and exits 1 when it didn't: the session carries on.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 bin=$(cd "$(dirname "$0")" && pwd)
 export RISA_SESSIONS_DIR=${RISA_SESSIONS_DIR:-$loops/.sessions}
+
+# handoff LINE TITLE NAME PID → --self's opening: the tab, then the truth of it (RISA-1082). The
+# opener's "Opened … tab" only says a tab opened; rotate-into.sh in it may still refuse. So wait
+# up to RISA_ROTATE_START_WAIT seconds (default 30) for it to start on this session (its first step
+# marks the record rotating, or the record is already replaced: rotate.mjs handoff-wait); none,
+# and this says so, with rotate-into's reason when it left one, and exits 1. Without iTerm2 the
+# printed command is the caller's to run: nothing to wait for.
+handoff() {
+  local line=$1 title=$2 name=$3 pid=$4 out rc=0 why secs=${RISA_ROTATE_START_WAIT:-30}
+  rm -f "$RISA_SESSIONS_DIR/$name.refused"
+  out=$("$bin/open-session.sh" --command "$line" --title "$title" --background) || rc=$?
+  [[ -z $out ]] || echo "$out"
+  ((rc == 0)) || exit "$rc"
+  [[ $out == Opened* ]] || exit 0
+  rc=0
+  why=$(node "$bin/rotate.mjs" handoff-wait "$name" "$pid" "$secs") || rc=$?
+  case $rc in
+    0) echo "The hand-off started ($why): this session (pid $pid) is about to be ended; a fresh $name opens in that tab." ;;
+    1) die "rotate --self: the hand-off did not start: $why. This session carries on (pid $pid)" ;;
+    *) die "rotate --self: the hand-off did not start: no sign of rotate-into on $name within ${secs}s (look for the tab titled $title). This session carries on (pid $pid)" ;;
+  esac
+  exit 0
+}
 
 topic="" mid_wave="" reason="" self="" brief="" brief_path=""
 while (($#)); do
@@ -55,7 +80,7 @@ while (($#)); do
     --self) self=1 ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
     --brief-path) brief_path=1 ;;
-    -h | --help) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>, --self, --brief <file>, --brief-path)" ;;
     *) [[ -z $topic ]] || die "rotate: one topic at a time"; topic=$1 ;;
   esac
@@ -92,7 +117,7 @@ if [[ -n $self ]]; then
         line+=" --captain $title"
       fi
       echo "Rotating $self_name: pid $self_pid (the calling session)${brief:+, with a brief}${title:+, as $title}."
-      exec "$bin/open-session.sh" --command "$line" --title "${title:-$self_name}" --background
+      handoff "$line" "${title:-$self_name}" "$self_name" "$self_pid"
       ;;
     inbox)
       [[ -z $mid_wave ]] || die "rotate --self: --mid-wave is for an orchestrator; $self_name is the inbox session"
@@ -100,7 +125,7 @@ if [[ -n $self ]]; then
       line="cd $(printf %q "$main") && $(printf %q "$bin/rotate-into.sh") $self_name $self_pid"
       [[ -z $reason ]] || line+=" --reason $(printf %q "$reason")"
       echo "Rotating $self_name: pid $self_pid (the calling session)."
-      exec "$bin/open-session.sh" --command "$line" --title "$self_name" --background
+      handoff "$line" "$self_name" "$self_name" "$self_pid"
       ;;
     prd)
       [[ -z $brief && -z $brief_path ]] || die "rotate --self: an orchestrator hands over through _Status_, not a brief"
@@ -198,4 +223,5 @@ fi
 line="cd $(printf %q "$dir") && $(printf %q "$bin/rotate-into.sh") $name $pid"
 [[ -z $reason ]] || line+=" --reason $(printf %q "$reason")"
 echo "Rotating $name: pid $pid (from $how)${slices:+, mid-wave (the agents of $slices end too)}."
+[[ -z $self ]] || handoff "$line" "$name" "$name" "$pid"
 exec "$bin/open-session.sh" --command "$line" --title "$name" --background
