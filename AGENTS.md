@@ -2,7 +2,7 @@
 
 Risa runs Claude sessions in the repos a machine config names (README.md). This repo is
 Risa's own code, and a configured repo of its own (`risa.json`): its sessions read the
-generic role docs in `loops/docs/` (`risa doc <role>`), with one addition: the planner's _What to ask_ (`docs/planner.md`), which the skeptic brief reads.
+generic role docs in `loops/docs/` (`risa doc <role>`), with two additions: the planner's _What to ask_ (`docs/planner.md`), which the skeptic brief reads, and the backlog's _Fix topics_ (`docs/backlog.md`).
 
 ## Working rules
 

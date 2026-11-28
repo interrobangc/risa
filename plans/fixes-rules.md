@@ -1,6 +1,6 @@
 # Rules for every fix slice
 
-For Risa's fix topic (`fixes-tooling`). Each fix slice's `Reads` field names this file. Carried over from Caretook's with B-543 (2026-11-27), without its screen and browser-check rules.
+For Risa's fix topics (`fixes-bug-urgent`, `fixes-bug`, `fixes-bug-later`, `fixes-test`, `fixes-perf`, `fixes-nit`; docs/backlog.md says which takes what). Each fix slice's `Reads` field names this file. Carried over from Caretook's with B-543 (2026-11-27), without its screen and browser-check rules.
 
 ## Shape
 
