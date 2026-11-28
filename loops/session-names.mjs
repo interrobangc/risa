@@ -3,11 +3,14 @@
 // one place that qualifies names, asks this module for; and the label a pushed
 // question leads with (ask.mjs).
 //
-// The display name is `<name> (<project>)`, then ` · <Rank> <Name>` when the
-// session has a persona: the main backlog shows `backlog (<project>)` and its
-// given admiral; a `backlog - <name>` request session gets no persona; any
-// other role's comes from the flavor module on its record name. A name already
-// qualified is kept. The record keeps the bare name the caller gave.
+// The display name is `<name> (<project>)`, led by `<Abbr> <Name> · ` when the
+// session has a persona (RISA-1039: `Adm Morrow · backlog (caretook)`, the rank's
+// short form from the flavor pack): the main backlog shows `backlog (<project>)`
+// and its given admiral; a `backlog - <name>` request session gets no persona;
+// any other role's comes from the flavor module on its record name. A name
+// already qualified is kept, in either order: the old one,
+// `<name> (<project>) · <Rank> <Name>`, still reads back (readDisplayName). The
+// record keeps the bare name the caller gave.
 //
 // CLI (the machine's flavor, from the machine config; one that doesn't load reads
 // as the default):
@@ -15,16 +18,33 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CAPTAIN_SESSION, machineFlavor } from "./captain.mjs";
-import { DEFAULT_FLAVOR, ROLES, label, personaFor, poolOf } from "./flavor.mjs";
+import { DEFAULT_FLAVOR, ROLES, label, personaFor, personaOfLabel, poolOf, shortLabel } from "./flavor.mjs";
 
 /** Whether NAME, KIND is the main backlog session (its record name and kind). */
 const isMainBacklog = (/** @type {string} */ name, /** @type {string} */ kind) =>
   name === CAPTAIN_SESSION && kind === "backlog";
 
 /**
+ * A display name read back, in either order (`Adm Morrow · backlog (caretook)`, or
+ * the old `backlog (caretook) · Admiral Morrow`): the bare name, the project, and
+ * the persona (null without one, or a label FLAVOR doesn't know); null for a name
+ * that isn't qualified.
+ * @param {string} display
+ * @returns {{ name: string, project: string, persona: import("./flavor.mjs").Persona | null } | null}
+ */
+export function readDisplayName(display, flavor = DEFAULT_FLAVOR) {
+  const old = /^(.+) \(([^()]+)\) · (.+)$/.exec(display);
+  if (old) return { name: old[1], project: old[2], persona: personaOfLabel(old[3], flavor) };
+  const m = /^(?:(.+?) · )?(.+) \(([^()]+)\)$/.exec(display);
+  if (!m) return null;
+  return { name: m[2], project: m[3], persona: m[1] ? personaOfLabel(m[1], flavor) : null };
+}
+
+/**
  * The persona of the session NAME of KIND, whose Remote Control name is REMOTE:
  * the main backlog's given admiral (one word of letters, worn with the backlog
- * pool's rank), none for any other backlog session, else the role's hashed one.
+ * pool's rank, or the persona a qualified REMOTE carries), none for any other
+ * backlog session, else the role's hashed one.
  * @param {{ name: string, kind: string, remote?: string | null }} session
  * @returns {import("./flavor.mjs").Persona | null}
  */
@@ -32,6 +52,8 @@ export function personaOf({ name, kind, remote }, flavor = DEFAULT_FLAVOR) {
   if (kind === "backlog") {
     // As flavor.mjs's sessionPersona (slice 3) reads it: one word of letters, not `backlog`.
     if (!isMainBacklog(name, kind) || !remote || remote === CAPTAIN_SESSION) return null;
+    const read = readDisplayName(remote, flavor);
+    if (read) return read.persona;
     const rank = poolOf("backlog", flavor)[0]?.rank;
     return rank && /^[A-Za-z]+$/.test(remote) ? { rank, name: remote } : null;
   }
@@ -48,10 +70,11 @@ export const sessionLabel = (session, flavor = DEFAULT_FLAVOR) => label(personaO
  */
 export function displayName({ name, kind, remote, project }, flavor = DEFAULT_FLAVOR) {
   const tag = ` (${project})`;
+  // The new order ends with the project; the old one carries it before ` · `.
   if (remote.endsWith(tag) || remote.includes(`${tag} · `)) return remote;
   const base = isMainBacklog(name, kind) ? CAPTAIN_SESSION : remote;
-  const lab = sessionLabel({ name, kind, remote }, flavor);
-  return `${base}${tag}${lab ? ` · ${lab}` : ""}`;
+  const lab = shortLabel(personaOf({ name, kind, remote }, flavor), flavor);
+  return `${lab ? `${lab} · ` : ""}${base}${tag}`;
 }
 
 const isMain = () => {

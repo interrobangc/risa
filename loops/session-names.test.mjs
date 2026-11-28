@@ -20,10 +20,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "./config.mjs";
-import { label, personaFor } from "./flavor.mjs";
+import { label, personaFor, shortLabel } from "./flavor.mjs";
 import { hasRemoteControl, remoteNamesOf } from "./keep-alive.mjs";
 import { backlogRemoteOf } from "./session-requests.mjs";
-import { displayName } from "./session-names.mjs";
+import { displayName, personaOf, readDisplayName, sessionLabel } from "./session-names.mjs";
 import { recordVerdict } from "./skeptics.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -95,8 +95,8 @@ beforeEach(() => {
 });
 
 describe("session.sh names the session for the outside", () => {
-  it("the main backlog: `backlog (<project>) · Admiral <given>`, its --name and tab title; the record keeps the admiral", () => {
-    const shown = `backlog (${PROJECT}) · Admiral Janeway`;
+  it("the main backlog: `Adm <given> · backlog (<project>)`, its --name and tab title; the record keeps the admiral", () => {
+    const shown = `Adm Janeway · backlog (${PROJECT})`;
     const r = wrap("backlog", ["--remote-control", "Janeway", "a prompt"], { RISA_TAB_TITLE: "always" });
     expect(after(r.args, "--remote-control")).toBe(shown);
     expect(after(r.args, "--name")).toBe(shown);
@@ -105,9 +105,9 @@ describe("session.sh names the session for the outside", () => {
     expect(record("backlog")).toMatchObject({ kind: "backlog", remote: "Janeway" });
   });
 
-  it("an orchestrator: `prd-t (<project>) · Captain <its hashed name>`, the same on a second start", () => {
-    const shown = `prd-t (${PROJECT}) · ${label(personaFor("prd", "prd-t"))}`;
-    expect(label(personaFor("prd", "prd-t"))).toMatch(/^Captain \S+$/);
+  it("an orchestrator: `Capt <its hashed name> · prd-t (<project>)`, the same on a second start", () => {
+    const shown = `${shortLabel(personaFor("prd", "prd-t"))} · prd-t (${PROJECT})`;
+    expect(shortLabel(personaFor("prd", "prd-t"))).toMatch(/^Capt \S+$/);
     for (let i = 0; i < 2; i++) {
       const r = wrap("prd-t", ["--remote-control", "prd-t", "x"], { RISA_TAB_TITLE: "always" });
       expect(after(r.args, "--remote-control")).toBe(shown);
@@ -141,12 +141,13 @@ describe("session.sh names the session for the outside", () => {
     expect(r.stdout).not.toContain("\x1b]0;");
   });
 
-  it("a qualified name isn't qualified twice, in either spelling of the flag", () => {
-    const q = `prd-t (${PROJECT}) · Captain Sisko`;
-    const r = wrap("prd-t", ["--remote-control", q, "x"]);
-    expect(after(r.args, "--remote-control")).toBe(q);
-    expect(after(r.args, "--name")).toBe(q);
-    expect(record("prd-t").remote).toBe(q);
+  it("a qualified name isn't qualified twice, in either order or spelling of the flag", () => {
+    for (const q of [`Capt Sisko · prd-t (${PROJECT})`, `prd-t (${PROJECT}) · Captain Sisko`]) {
+      const r = wrap("prd-t", ["--remote-control", q, "x"]);
+      expect(after(r.args, "--remote-control")).toBe(q);
+      expect(after(r.args, "--name")).toBe(q);
+      expect(record("prd-t").remote).toBe(q);
+    }
     const eq = wrap("hotfix-trim", [`--remote-control=hotfix-trim (${PROJECT})`, "x"]);
     expect(eq.args).toEqual([
       `--remote-control=hotfix-trim (${PROJECT})`,
@@ -164,7 +165,7 @@ describe("session.sh names the session for the outside", () => {
       const r = wrap("prd-t", ["--remote-control", "prd-t", flag, "mine", "x"]);
       expect(r.args.filter((a) => a === "--name" || a === "-n")).toEqual([flag]);
       expect(after(r.args, flag)).toBe("mine");
-      expect(after(r.args, "--remote-control")).toMatch(/^prd-t \(/);
+      expect(after(r.args, "--remote-control")).toMatch(/^Capt \S+ · prd-t \(/);
     }
   });
 
@@ -176,11 +177,72 @@ describe("session.sh names the session for the outside", () => {
   });
 });
 
+describe("a display name read back (RISA-1039)", () => {
+  const P = "caretook";
+  const main = { name: "backlog", kind: "backlog", project: P };
+
+  it("leads with the abbreviated rank: `Adm Morrow · backlog (caretook)`", () => {
+    expect(displayName({ ...main, remote: "Morrow" })).toBe("Adm Morrow · backlog (caretook)");
+    const lt = personaFor("slice", "slice-x");
+    expect(displayName({ name: "slice-x", kind: "slice", remote: "slice-x", project: P })).toBe(
+      `${shortLabel(lt)} · slice-x (caretook)`,
+    );
+  });
+
+  it("an old-order name is qualified and reads back to the same role, project and persona", () => {
+    const old = "backlog (caretook) · Admiral Morrow";
+    expect(displayName({ ...main, remote: old })).toBe(old);
+    const back = { name: "backlog", project: P, persona: { rank: "Admiral", name: "Morrow" } };
+    expect(readDisplayName(old)).toEqual(back);
+    expect(readDisplayName("Adm Morrow · backlog (caretook)")).toEqual(back);
+    expect(readDisplayName("hotfix-x (caretook) · Lieutenant Commander Scott")).toEqual({
+      name: "hotfix-x",
+      project: P,
+      persona: { rank: "Lieutenant Commander", name: "Scott" },
+    });
+    expect(readDisplayName("Lcdr Scott · hotfix-x (caretook)")?.persona).toEqual({
+      rank: "Lieutenant Commander",
+      name: "Scott",
+    });
+    // The main backlog's persona from a qualified record, either order; the push label keeps the full rank.
+    for (const remote of [old, "Adm Morrow · backlog (caretook)"]) {
+      expect(personaOf({ ...main, remote })).toEqual({ rank: "Admiral", name: "Morrow" });
+      expect(sessionLabel({ ...main, remote })).toBe("Admiral Morrow");
+    }
+    expect(readDisplayName("backlog - triage (caretook)")).toEqual({
+      name: "backlog - triage",
+      project: P,
+      persona: null,
+    });
+    expect(readDisplayName("Morrow")).toBeNull();
+  });
+
+  it("under flavor none, `<name> (<project>)` as before", () => {
+    expect(displayName({ ...main, remote: "backlog" }, "none")).toBe("backlog (caretook)");
+    expect(displayName({ name: "prd-t", kind: "prd", remote: "prd-t", project: P }, "none")).toBe(
+      "prd-t (caretook)",
+    );
+  });
+
+  it("the matchers find each kind under either order", () => {
+    for (const remote of ["Adm Ross · backlog (caretook)", "backlog (caretook) · Admiral Ross"]) {
+      const ps = psLine(["--remote-control", remote, "x"]);
+      expect(hasRemoteControl(ps, "backlog", CLAUDE), remote).toBe(true);
+      expect(backlogRemoteOf(ps, CLAUDE), remote).toBe("backlog");
+    }
+    for (const remote of ["Ens Kim · inbox (caretook)", "inbox (caretook) · Ensign Kim"])
+      expect(hasRemoteControl(psLine(["--remote-control", remote, "x"]), "inbox", CLAUDE)).toBe(true);
+    const req = psLine(["--remote-control", "backlog - triage (caretook)", "x"]);
+    expect(hasRemoteControl(req, "backlog", CLAUDE)).toBe(false);
+    expect(backlogRemoteOf(req, CLAUDE)).toBe("backlog-triage");
+  });
+});
+
 describe("the matchers on the new process args, unchanged", () => {
   it("the main backlog under an admiral the old captain matchers don't know is still the backlog", () => {
     const { args } = wrap("backlog", ["--remote-control", "Ross", "x"]);
     const ps = psLine(args);
-    expect(ps).toContain(`--remote-control backlog (${PROJECT}) · Admiral Ross`);
+    expect(ps).toContain(`--remote-control Adm Ross · backlog (${PROJECT})`);
     expect(remoteNamesOf("backlog").some((n) => hasRemoteControl(ps, n, CLAUDE))).toBe(true);
     expect(hasRemoteControl(ps, "backlog", CLAUDE)).toBe(true);
     expect(backlogRemoteOf(ps, CLAUDE)).toBe("backlog");

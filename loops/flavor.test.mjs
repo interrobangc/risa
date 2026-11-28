@@ -15,8 +15,11 @@ import {
   label,
   namesOf,
   personaFor,
+  personaOfLabel,
   poolOf,
   sessionPersona,
+  shortLabel,
+  shortRank,
 } from "./flavor.mjs";
 import { machineProblems } from "./machine.mjs";
 
@@ -51,6 +54,28 @@ describe("the starfleet pack", () => {
     expect(new Set(poolOf("backlog").map((p) => p.rank))).toEqual(new Set(["Admiral"]));
     expect(new Set(poolOf("prd").map((p) => p.rank))).toEqual(new Set(["Captain"]));
     expect(new Set(poolOf("inbox").map((p) => p.rank)).size).toBeGreaterThan(1);
+  });
+
+  it("gives every rank a short form, the session name's (RISA-1039)", () => {
+    const ranks = new Set(ROLES.flatMap((role) => poolOf(role, "starfleet").map((p) => p.rank)));
+    for (const rank of ranks) {
+      expect(shortRank(rank), rank).not.toBe(rank);
+      expect(shortRank(rank)).toMatch(/^[A-Z][a-z]+$/);
+    }
+    expect([...ranks].map((r) => shortRank(r)).sort()).toEqual(
+      ["Adm", "Capt", "Cmdr", "Dr", "Ens", "Lcdr", "Lt", "Yeo"].sort(),
+    );
+    expect(shortLabel({ rank: "Admiral", name: "Morrow" })).toBe("Adm Morrow");
+    expect(label({ rank: "Admiral", name: "Morrow" })).toBe("Admiral Morrow");
+    expect(shortLabel(null)).toBe("");
+    // Either form reads back to the full rank; none knows no rank.
+    expect(personaOfLabel("Lcdr Scott")).toEqual({ rank: "Lieutenant Commander", name: "Scott" });
+    expect(personaOfLabel("Lieutenant Commander Scott")).toEqual({
+      rank: "Lieutenant Commander",
+      name: "Scott",
+    });
+    expect(personaOfLabel("Bogus Scott")).toBeNull();
+    expect(personaOfLabel("Adm Morrow", "none")).toBeNull();
   });
 
   it("is the default, and the machine config's flavor picks one", () => {
