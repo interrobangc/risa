@@ -6,10 +6,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model | State   | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ------- | ------------------------------ |
+| 44    | 7    | RISA-1018 | opus  | started | —                              |
 
-No slice in flight (idle hand-over after wave 6; its slices' merges: 39 33ad69f, 40 fc0bfc6, 41 798942f, 42 c856566, 43 387b09b).
+**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file).
 
 **Wave 6 landed** 2026-11-28 in main as 1b65a5f through PR #15: slices 39–43, all opus (RISA-1015 in three parts, RISA-1016 in two). CI unit: first run 46123266140 red on an unrelated load-gate flake (filed RISA-1018), rerun green; synced with main (a8f3cb8), CI unit green there (run 46124077140). Codex clean on a8f3cb8, then again on ce3fe0b (the installed release doesn't yet carry a review over docs-only commits). Report filed; to-test/2026-11-28-0311-fixes-tooling.md; slice worktrees removed. Handbook gained "commit the plan before `risa slice`".
 
@@ -449,7 +450,7 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit test (`loops/review.test.mjs`, with stubbed `gh`): a PR clean on an earlier commit with only a `.md` commit after it reads clean; a code commit after it still reads stale.
+- Unit test (`loops/review.test.mjs`, with stubbed `gh`): a PR clean on an earlier commit with only a Markdown commit after it reads clean; a code commit after it still reads stale.
 
 ## Slice 43: risa ready's Codex line reads docs-only commits after approval as clean
 
@@ -459,4 +460,15 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 **Acceptance criteria:**
 
-- Unit test (`loops/ready.test.mjs`, with stubbed `gh`): ready's Codex line reads clean for a PR clean on an earlier commit with only a `.md` commit after it, and not for a code commit after it.
+- Unit test (`loops/ready.test.mjs`, with stubbed `gh`): ready's Codex line reads clean for a PR clean on an earlier commit with only a Markdown commit after it, and not for a code commit after it.
+
+## Slice 44: check-run's load-drop test doesn't read a half-written load file
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1018):** `loops/check-run.test.mjs`'s "waits while busy, starts when the load drops, and logs the wait" flaked on GitHub Actions (run 46123266140) with "The load dropped to - (threshold 4)". Its `busy()` and `quiet()` stubs rewrite `RISA_LOAD_FILE` with `writeFileSync` (truncate, then write), so the gate in `loops/load-gate.mjs` can read it empty, read no load, and start as if the load had dropped. Make the stubs write atomically (a temp file renamed over it). If the gate itself reads an unreadable load mid-wait as "dropped", say so in the hand-off rather than changing the gate's rule that an unreadable load isn't busy.
+
+**Acceptance criteria:**
+
+- `busy()` and `quiet()` in `loops/check-run.test.mjs` replace the load file by rename, never truncate it in place.
+- The test passes 20 runs in a row locally (`pnpm vitest run loops/check-run.test.mjs` in a loop), noted in the hand-off.
