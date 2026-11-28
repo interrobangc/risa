@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 1 green: `pnpm check` passed on e715fff (synced, up to date with main); slice 1 worktree removed. PR https://github.com/interrobangc/risa/pull/28 open, Codex review out. Next: triage review, land wave 1 (tier none), then rotate.
+**Now:** wave 1: Codex findings filed (RISA-1057–1060) and threads resolved; land needed `sync --force` (main's package.json): merged 0e2518c (project-config.md conflict, both kept, doc trimmed); `pnpm check` passed on 226294b. Next: push, Codex again, land (tier none), message prd-fixes-bug (risa), rotate.
 
 | Slice | Wave | State                                  | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------------------------------- | ---------------------------- |
@@ -19,7 +19,7 @@
 | 4     | 4    | —                                      | —                            |
 | 6     | 4    | —                                      | —                            |
 
-**Backlog:** claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
+**Backlog:** RISA-1057–1060 (Codex on PR #28, `backlog/inbox-store.mjs`) taken into this PRD at fixes-bug's request: add them to slice 2's brief. Promised prd-fixes-bug (risa): a message when wave 1 lands in main, and when `backlog/` and `loops/dispatch` stop being hot. Claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
 ## Architectural decisions
 
