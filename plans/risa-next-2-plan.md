@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Wave 4 starting** (session 2026-11-28 ~16:50Z): slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Plan anchor fixed (`loops/home.test.mjs` marked new).
+**Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Wave 4 starting** (session 2026-11-28 ~16:50Z): slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Plan anchor fixed (`loops/home.test.mjs` marked new). Sync skipped (main's changes share no file). Worktrees `risa-next-2-4`, `risa-next-2-6` made, agents spawned on opus; watch running.
 
 | Slice | Wave | State          | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------- | ---------------------------- |
@@ -16,8 +16,8 @@
 | 2     | 2    | landed (opus)  | 5ff0aae (main)               |
 | 3     | 3    | landed (opus)  | 0be4983 (main)               |
 | 5     | 3    | landed (opus)  | 0be4983 (main)               |
-| 4     | 4    | —              | —                            |
-| 6     | 4    | —              | —                            |
+| 4     | 4    | running (opus) | —                            |
+| 6     | 4    | running (opus) | —                            |
 
 **Slice 6 note (from 5's hand-off):** `prd.sh inbox` opens from the machine config's first repo with `inbox` without checking `work: true`; slice 6's keep-alive says first `work: true` repo with `inbox`: make them agree.
 
