@@ -31,6 +31,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `fixes-perf` | standing | — | — | Standing fixes topic for speed and load (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
 | `fixes-nit` | standing | — | — | Standing fixes topic for small tidies users won't notice (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
 | `fixes-bug-later` | standing | — | — | Fixes in Risa's repo that can wait: real but rare or cosmetic-adjacent, below the planned topics. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
+| `flavor-packs` | — | — | — | Very low priority (the user, 2026-11-28): new flavor packs, data only |
 
 ## Summary
 
@@ -131,6 +132,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1041 | change | triaged | fixes-nit |  | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
 | RISA-1042 | bug | ready | fixes-bug-urgent | prd/fixes-bug-urgent | risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began |
 | RISA-1043 | change | triaged | fixes-bug-later |  | backlog set takes --note TEXT (as add does), so triage is one command and one commit; the standalone backlog note command stays for a note alone |
+| RISA-1044 | feature | triaged | flavor-packs |  | Flavor pack: Battlestar Galactica. User addressed as Admiral; names are callsigns. backlog = Commanders (Adama, Cain, Fisk, Garner), prd = Captains (Starbuck, Apollo), slice = Viper pilot Lieutenants (Helo, Athena, Kat, Racetrack, Hotdog, Narcho), inbox = comms (Dualla, Gaeta), hotfix = deck crew (Chief Tyrol, Cally, Seelix), plan = Colonel (Tigh), recovery = Doctors (Cottle, Salik) |
+| RISA-1045 | feature | triaged | flavor-packs |  | Flavor packs: Star Wars, four of them: rebel (user = General; Admirals Ackbar, Holdo, Raddus; X-wing pilots; mechanics; protocol droids; medical droids), jedi (user = Grand Master; Masters, Knights, Padawans, healers), empire (user = Grand Moff; Admirals Thrawn, Piett; Captains; TIE pilots; technicians) and a mixed one drawing each role from the side that fits it best (Jedi planners, Rebel pilots, droid inbox) |
+| RISA-1046 | feature | triaged | flavor-packs |  | Flavor pack: Dune. A Great House: the user as the Padishah Emperor or a Duke, backlog = Dukes or House heads, prd = Swordmasters or Warmasters, slice = ornithopter pilots, inbox = Fremen messengers, hotfix = water engineers or Fremen craftsmen, plan = Mentats, recovery = Suk doctors |
+| RISA-1047 | feature | triaged | flavor-packs |  | Flavor pack: Lord of the Rings. The user as a Wizard of the White Council, backlog = Wizards and Elf-lords, prd = kings and stewards, slice = Rangers and Riders, inbox = hobbits and messengers, hotfix = dwarf smiths, plan = Ents and loremasters, recovery = Elvish healers |
 
 ## Items
 
@@ -1083,3 +1088,39 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): Reported by Caretook's backlog session 2026-11-28 (v0.2.0): 'risa backlog set B-1015 prd=fixes-ui status=triaged note=…' printed: can't set "note" (use status, type, title, prd, owner or commit). Text in loops/prompts/backlog.sh (also orchestrator.sh, sample-project/prompt-golden.txt). Workaround: a separate risa backlog note.
 - 2026-11-28 (Robert Bo Davis): The user's pick (2026-11-28): set gets --note, and the separate note command stays as well. The guide's triage line then reads right as written.
+
+### RISA-1044 · feature · Flavor pack: Battlestar Galactica. User addressed as Admiral; names are callsigns. backlog = Commanders (Adama, Cain, Fisk, Garner), prd = Captains (Starbuck, Apollo), slice = Viper pilot Lieutenants (Helo, Athena, Kat, Racetrack, Hotdog, Narcho), inbox = comms (Dualla, Gaeta), hotfix = deck crew (Chief Tyrol, Cally, Seelix), plan = Colonel (Tigh), recovery = Doctors (Cottle, Salik)
+
+- status: triaged
+- prd: flavor-packs
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Very low priority, the user's word (2026-11-28). Data only: a PACKS entry in loops/flavor.mjs (address, a rank and name pool per role: backlog, prd, slice, inbox, hotfix, plan, recovery), with rank short forms (RISA-1039) and a log name (RISA-1041) once those land. The user picked 'Admiral, callsigns'.
+
+### RISA-1045 · feature · Flavor packs: Star Wars, four of them: rebel (user = General; Admirals Ackbar, Holdo, Raddus; X-wing pilots; mechanics; protocol droids; medical droids), jedi (user = Grand Master; Masters, Knights, Padawans, healers), empire (user = Grand Moff; Admirals Thrawn, Piett; Captains; TIE pilots; technicians) and a mixed one drawing each role from the side that fits it best (Jedi planners, Rebel pilots, droid inbox)
+
+- status: triaged
+- prd: flavor-packs
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Very low priority, the user's word (2026-11-28). Data only: a PACKS entry in loops/flavor.mjs (address, a rank and name pool per role: backlog, prd, slice, inbox, hotfix, plan, recovery), with rank short forms (RISA-1039) and a log name (RISA-1041) once those land. The user: 'These are cheap to build, right? build out all of them.' The planner settles each pool's names.
+
+### RISA-1046 · feature · Flavor pack: Dune. A Great House: the user as the Padishah Emperor or a Duke, backlog = Dukes or House heads, prd = Swordmasters or Warmasters, slice = ornithopter pilots, inbox = Fremen messengers, hotfix = water engineers or Fremen craftsmen, plan = Mentats, recovery = Suk doctors
+
+- status: triaged
+- prd: flavor-packs
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Very low priority, the user's word (2026-11-28). Data only: a PACKS entry in loops/flavor.mjs (address, a rank and name pool per role: backlog, prd, slice, inbox, hotfix, plan, recovery), with rank short forms (RISA-1039) and a log name (RISA-1041) once those land. The user picked Dune from the suggested packs; the address and the names still need the user's word at planning.
+
+### RISA-1047 · feature · Flavor pack: Lord of the Rings. The user as a Wizard of the White Council, backlog = Wizards and Elf-lords, prd = kings and stewards, slice = Rangers and Riders, inbox = hobbits and messengers, hotfix = dwarf smiths, plan = Ents and loremasters, recovery = Elvish healers
+
+- status: triaged
+- prd: flavor-packs
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): Very low priority, the user's word (2026-11-28). Data only: a PACKS entry in loops/flavor.mjs (address, a rank and name pool per role: backlog, prd, slice, inbox, hotfix, plan, recovery), with rank short forms (RISA-1039) and a log name (RISA-1041) once those land. The user picked Lord of the Rings from the suggested packs; the address and the names still need the user's word at planning.
