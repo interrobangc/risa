@@ -13,14 +13,14 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | done | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | — | Retiring in Risa's repo (the user 2026-11-28): no new items; tooling fixes go to fixes-bug by urgency, test fixes to fixes-test. Closes once its running wave (RISA-1026) lands. Caretook keeps its own fixes-tooling. |
+| `fixes-tooling` | standing | — | `loops/recover`, `loops/rotate`, `loops/rm-done`, `loops/test-limits.test.mjs` | Retiring in Risa's repo (the user 2026-11-28): no new items; tooling fixes go to fixes-bug by urgency, test fixes to fixes-test. Closes once its running wave (RISA-1026) lands. Caretook keeps its own fixes-tooling. |
 | `fixes-bug-urgent` | standing | — | — | Urgent fixes in Risa's repo (wrong behaviour, tooling included) that go before other work: a broken release, a dead dispatcher, lost data. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
 | `risa-next` | done | — | `loops/flavor`, `loops/machine.mjs`, `loops/captain`, `loops/session.sh`, `loops/session-names`, `loops/ask.mjs`, `loops/prompt.sh`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/peers`, `loops/docs/backlog.md` | — |
 | `risa-next-2` | — | `risa-next` | `backlog/`, `loops/config`, `loops/docs/project-config.md`, `loops/docs/inbox.md`, `loops/prompts/inbox.sh`, `loops/prd.sh`, `loops/dispatch`, `loops/home` | — |
 | `risa-next-3` | — | `risa-next-2` | — | — |
 | `risa-next-4` | — | — | `loops/config`, `loops/machine.mjs`, `loops/skeptics.mjs`, `loops/project-check`, `loops/sample-project/repo.mjs`, `bin/risa`, `loops/rm.sh`, `loops/lib.sh`, `loops/setup`, `loops/second-repo`, `loops/docs/project-config.md`, `README.md` | — |
 | `fixes-test` | standing | — | — | Test fixes: flakes, the test harness, timeouts under load, ranked apart from other fixes. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
-| `fixes-bug` | standing | — | `loops/captain`, `loops/session`, `loops/time-gate`, `loops/check-run`, `loops/docs` | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
+| `fixes-bug` | standing | — | — | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | Held to be rethought (the user, 2026-11-28): written for Caretook's dev and staging branches, which Risa doesn't have (main is the only trunk). Items RISA-404, RISA-430, RISA-436, RISA-584; RISA-241 moved to fixes-bug. Cut from orchestration-3. |
 | `self-recovery-2` | done | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560); RISA-1025, 1027-1029 follow-ups. Planned held after two skeptic send-backs (a7); since released. |
 | `self-recovery-3` | — | `self-recovery-2` | `backlog/registry`, `loops/prompts/plan.sh`, `loops/sample-project/prompt-golden.txt`, `loops/rotate`, `loops/rm.sh`, `loops/new.sh`, `loops/run-log`, `loops/dispatch`, `loops/land-idle`, `loops/finish` | Replan state (RISA-998), the land-idle backstop (RISA-1040) and a background-session spike for self-recovery-4 |
@@ -156,10 +156,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1061 | bug | live | fixes-bug | prd/fixes-bug | context.mjs inboxRotate hands the inbox session 'pnpm -s -C <main> prd rotate --self', but Risa's package.json has no prd script, so the hint fails; build it from the configured command (toolCmd) runnable outside the repo |
 | RISA-1062 | chore | live | fixes-tooling | prd/fixes-tooling | Risa's risa.json commands.format is 'pnpm exec prettier --write' without --ignore-unknown, so the slice brief's format step fails whenever a .sh file is in the diff (the fixture project already passes --ignore-unknown) |
 | RISA-1063 | bug | live | fixes-bug | prd/fixes-bug | Persona draws collide across projects: drawAdmiral/nextCaptain (loops/captain.mjs) skip only this project's last name, so two projects' backlog sessions both drew Admiral Cartwright; skip names held by any live session on the machine (backlog admirals and PRD captains) |
-| RISA-1064 | bug | ready | fixes-bug | prd/fixes-bug | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
-| RISA-1065 | bug | ready | fixes-bug | prd/fixes-bug | The time gate judges the local measure on its start load only (the quiet rule) |
-| RISA-1066 | change | triaged | fixes-tooling |  | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
-| RISA-1067 | bug | in-progress | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
+| RISA-1064 | bug | live | fixes-bug | prd/fixes-bug | A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record |
+| RISA-1065 | bug | live | fixes-bug | prd/fixes-bug | The time gate judges the local measure on its start load only (the quiet rule) |
+| RISA-1066 | change | in-progress | fixes-tooling | prd/fixes-tooling | Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a… |
+| RISA-1067 | bug | ready | risa-next-2 | prd/risa-next-2 | inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting |
+| RISA-1068 | change | in-progress | fixes-tooling | prd/fixes-tooling | Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
+| RISA-1069 | change | triaged | fixes-tooling |  | Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066) |
 
 ## Items
 
@@ -1321,7 +1323,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1064 · bug · A fresh session's stepped persona is never kept: session.sh computes the display name before the record exists, so machinePersona (loops/captain.mjs) writes no persona and machineHeld reads the session as its hashed name, letting a third session draw the stepped name too; carry the chosen persona into the first record
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 47c911a
@@ -1330,7 +1332,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1065 · bug · The time gate judges the local measure on its start load only (the quiet rule)
 
-- status: ready
+- status: live
 - prd: fixes-bug
 - owner: prd/fixes-bug
 - commit: 47c911a
@@ -1340,19 +1342,38 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1066 · change · Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a…
 
+- status: in-progress
+- prd: fixes-tooling
+- owner: prd/fixes-tooling
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the inbox: Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a fixture module / As land.test.mjs/land-fixture.mjs were. Suggested by Caretook (prd-test-time-gates-2) as a sibling of the time-gate quiet-rule item; no longer Caretook's concern.
+- 2026-11-28 (Robert Bo Davis): Triaged fixes-tooling: test layout and speed, sibling of RISA-1065.
+- 2026-11-28 (prd/fixes-tooling): Narrowed to recover.test.mjs (slice 51); rotate and dispatch cut to their own items.
+
+### RISA-1067 · bug · inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting
+
+- status: ready
+- prd: risa-next-2
+- owner: prd/risa-next-2
+- commit: cd7d14c
+
+- 2026-11-28 (prd/risa-next-2): Codex P2 on PR #32 (backlog/inbox-store.mjs:284, thread PRRT_kwDOV9ctaM69Frkm); verified: urls isn't deduplicated. Take into slice 3's brief.
+
+### RISA-1068 · change · Split rotate.test.mjs along its describe groups with a rotate fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066)
+
+- status: in-progress
+- prd: fixes-tooling
+- owner: prd/fixes-tooling
+- commit:
+
+- 2026-11-28 (prd/fixes-tooling): Cut from RISA-1066 by the fixes-tooling orchestrator: one slice per test file; RISA-1066 keeps recover.test.mjs.
+
+### RISA-1069 · change · Split dispatch.test.mjs along its describe groups with a dispatch fixture module, as land.test.mjs/land-fixture.mjs were (cut from RISA-1066)
+
 - status: triaged
 - prd: fixes-tooling
 - owner:
 - commit:
 
-- 2026-11-28 (Robert Bo Davis): From the inbox: Split Risa's slow tooling tests (recover, then rotate, dispatch) along their describe groups with a fixture module / As land.test.mjs/land-fixture.mjs were. Suggested by Caretook (prd-test-time-gates-2) as a sibling of the time-gate quiet-rule item; no longer Caretook's concern.
-- 2026-11-28 (Robert Bo Davis): Triaged fixes-tooling: test layout and speed, sibling of RISA-1065.
-
-### RISA-1067 · bug · inbox-store findStoreRepo counts duplicate clone URLs: a pre-hash clone plus its new hashed clone of the same repo make the existing-clone fallback refuse as ambiguous; dedupe the URLs before counting
-
-- status: in-progress
-- prd: risa-next-2
-- owner: prd/risa-next-2
-- commit:
-
-- 2026-11-28 (prd/risa-next-2): Codex P2 on PR #32 (backlog/inbox-store.mjs:284, thread PRRT_kwDOV9ctaM69Frkm); verified: urls isn't deduplicated. Take into slice 3's brief.
+- 2026-11-28 (prd/fixes-tooling): Cut from RISA-1066 by the fixes-tooling orchestrator. Waits: loops/dispatch is risa-next-2's hot file.
