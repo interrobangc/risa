@@ -30,7 +30,7 @@
 //                             limited; else 0 (and 0 on any error: watching never hurts the work)
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
-import { clock, mergeReadings, readUsage, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
+import { clock, mergeReadings, readUsage, stallHolds, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
 export const DRAIN_PERCENT = 95;
 export const STOP_PERCENT = 98;
@@ -175,6 +175,16 @@ export function sessionDrains(readings, names, { account = null, ...opts }) {
     out[name] = d;
   }
   return out;
+}
+
+/**
+ * The sessions whose stall mark still holds at NOW (its reset ahead): a dead one is never
+ * reopened by the pick (dispatch-pick.mjs `stalled`), only resumed after its reset
+ * (resume.mjs), so a session ended on its own limited account isn't reopened at once. Pure.
+ * @param {any[]} readings @param {number} now
+ */
+export function stalledSessions(readings, now) {
+  return new Set(readings.filter((r) => stallHolds(r?.stalled, now)).map((r) => String(r.session)));
 }
 
 /** Whether anything may run a claude to probe the limit (`claude -p`): never while limited. Pure. */
