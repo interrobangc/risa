@@ -16,10 +16,13 @@
 //   shipsDir()                   RISA_SHIPS_DIR, else the main checkout's .loops/.ships
 //   readRecord / writeRecord     .ships/<version>.json: { version, startedAt,
 //                                phases: [{ name, ok, at, facts, tail, skipped? }], doneAt }
-//   takeLock / releaseLock       the folder's one .lock (pid and version), made
-//                                exclusively whatever the version: no two ships of a
-//                                project at once. A dead pid's lock is taken over
-//                                under .lock.takeover, so two takers never both win.
+//   takeLock / releaseLock       the folder's one .lock (pid and version), linked
+//                                into place whole whatever the version: no two ships
+//                                of a project at once. A dead pid's lock is taken over
+//                                under .lock.takeover, so two takers never both win;
+//                                an empty or unparsable lock is held, never dead.
+//                                A rewound record (--from, or a finished one) is
+//                                written before the first hook runs.
 //   reportText(record, project)  pure: the report's text, finished or stopped
 //   runShip(version, { dryRun, from })   the command; returns its exit code
 //
@@ -32,8 +35,8 @@
 // report (topic ship) in the asks when the ship finishes or a phase fails; --dry-run
 // runs only the check phase, writes no record and files no report.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, closeSync } from "node:fs";
-import { join } from "node:path";
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createAsk } from "./asks.mjs";
 import { isVersion, loadConfigOrExit, toolCmd } from "./config.mjs";
 import { runHook } from "./hooks.mjs";
@@ -126,18 +129,22 @@ const pidAlive = (/** @type {number} */ pid) => {
   }
 };
 
-/** Creates FILE with TEXT only when it doesn't exist; false when it does. */
+/**
+ * Creates FILE with TEXT only when it doesn't exist; false when it does. The file
+ * appears whole (a temp file linked into place), so a reader never sees it empty.
+ */
 const createExclusive = (/** @type {string} */ file, /** @type {string} */ text) => {
-  let fd;
+  const tmp = join(dirname(file), `.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`);
+  writeFileSync(tmp, text);
   try {
-    fd = openSync(file, "wx");
+    linkSync(tmp, file);
+    return true;
   } catch (e) {
     if (/** @type {NodeJS.ErrnoException} */ (e).code === "EEXIST") return false;
     throw e;
+  } finally {
+    rmSync(tmp, { force: true });
   }
-  writeFileSync(fd, text);
-  closeSync(fd);
-  return true;
 };
 
 /** The lock's holder: { pid, version }, or null when there's no lock. */
@@ -150,7 +157,9 @@ const lockHolder = (/** @type {string} */ file) => {
     throw e;
   }
   const [pid, version = "?"] = text.trim().split(/\s+/);
-  return { pid: Number(pid), version, text };
+  // An empty or unreadable lock names no holder that can be judged dead: valid is false.
+  const n = Number(pid);
+  return { pid: n, version, text, valid: Number.isInteger(n) && n > 0 };
 };
 
 /**
@@ -165,6 +174,7 @@ export function takeLock(/** @type {string} */ dir, /** @type {string} */ versio
     if (createExclusive(file, text)) return { ok: true };
     const holder = lockHolder(file);
     if (!holder) continue;
+    if (!holder.valid) return { ok: false, why: "the ship lock names no pid (another ship may hold it)" };
     if (pidAlive(holder.pid))
       return { ok: false, why: `a ship of ${holder.version} is running (pid ${holder.pid})` };
     // A dead holder: take it over, one taker at a time, re-reading inside.
@@ -282,7 +292,10 @@ export function runShip(version, { dryRun = false, from } = {}) {
     const next = nextPhases(record, { from });
     if ("refused" in next) return refuse(next.refused);
     /** @type {ShipRecord} */
-    const rec = { version, startedAt: record?.startedAt ?? nowIso(), phases: next.kept, doneAt: null };
+    const rec = { version, startedAt: record?.startedAt ?? nowIso(), phases: [...next.kept], doneAt: null };
+    // A --from or a finished record rewinds it: write that first, so a ship killed
+    // in the first hook leaves a record a plain re-run resumes at that phase.
+    if (record && JSON.stringify(record) !== JSON.stringify(rec)) writeRecord(dir, rec);
     const project = { name: config.name, cmd: toolCmd.prd };
     for (const name of next.run) {
       const phase = /** @type {{ name: string, hook: string }} */ (PHASES.find((p) => p.name === name));

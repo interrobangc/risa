@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 import { loadConfig } from "./config.mjs";
-import { nextPhases, PHASES, reportText } from "./ship.mjs";
+import { nextPhases, PHASES, reportText, takeLock } from "./ship.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
 const AT = "2026-11-28T10:00:00.000Z";
@@ -157,6 +157,8 @@ describe("prd ship", () => {
     HOME: join(root, "home"),
     STUB_LOG: log,
     STUB_FAIL: "",
+    STUB_PEEK: "",
+    STUB_PEEK_OUT: join(root, "peek.json"),
     ...extra,
   });
   const ship = (/** @type {string[]} */ args, /** @type {Record<string, string>} */ extra = {}) =>
@@ -189,6 +191,7 @@ describe("prd ship", () => {
         'echo "$hook $1 $RISA_SHIP_VERSION" >> "$STUB_LOG"',
         'echo "ran $hook"',
         'echo "fact_$hook=$1"',
+        'if [[ $STUB_PEEK == "$hook" ]]; then cp "$RISA_SHIPS_DIR/$1.json" "$STUB_PEEK_OUT"; fi',
         'if [[ $STUB_FAIL == "$hook" ]]; then echo "$hook broke" >&2; exit 4; fi',
         "",
       ].join("\n"),
@@ -309,4 +312,54 @@ describe("prd ship", () => {
     expect(calls()).toHaveLength(4);
     expect(existsSync(join(ships, ".lock"))).toBe(false);
   });
+
+  it("writes the rewound record before the first hook it reruns", () => {
+    const peek = join(root, "peek.json");
+    expect(ship(["1.2.3"], { STUB_FAIL: "shipSmoke" }).status).toBe(1);
+    // --from ship on a record failed at smoke: the ship hook sees no ship result there.
+    expect(ship(["1.2.3", "--from", "ship"], { STUB_PEEK: "ship" }).status).toBe(0);
+    const during = JSON.parse(readFileSync(peek, "utf8"));
+    expect(during.phases.map((p) => p.name)).toEqual(["check"]);
+    expect(during.doneAt).toBeNull();
+    // --from notify on the finished record: notify sees no notify result and no doneAt.
+    expect(ship(["1.2.3", "--from", "notify"], { STUB_PEEK: "shipNotify" }).status).toBe(0);
+    const again = JSON.parse(readFileSync(peek, "utf8"));
+    expect(again.phases.map((p) => p.name)).toEqual(["check", "ship", "smoke"]);
+    expect(again.doneAt).toBeNull();
+    expect(record("1.2.3").doneAt).toBeTruthy();
+  });
+
+  it("refuses an empty or unparsable lock instead of taking it over", () => {
+    for (const text of ["", "garbage\n"]) {
+      writeFileSync(join(ships, ".lock"), text);
+      const r = ship(["1.2.3"]);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("names no pid");
+      expect(readFileSync(join(ships, ".lock"), "utf8")).toBe(text);
+      expect(takeLock(ships, "1.2.3")).toMatchObject({ ok: false });
+    }
+    expect(calls()).toEqual([]);
+  });
+
+  it("gives the lock to one of many racers, its content whole as soon as it exists", async () => {
+    const shipUrl = new URL("./ship.mjs", import.meta.url).href;
+    // Each racer takes the lock, or reports why not; a holder keeps it a moment.
+    const code = `import { takeLock } from ${JSON.stringify(shipUrl)};
+      const r = takeLock(process.argv[1], "1.2." + process.pid);
+      console.log(JSON.stringify(r));
+      if (r.ok) setTimeout(() => {}, 1500);`;
+    const racers = Array.from(
+      { length: 12 },
+      () =>
+        new Promise((resolve) => {
+          const c = spawn("node", ["--input-type=module", "-e", code, ships], { env: env() });
+          let out = "";
+          c.stdout.on("data", (d) => (out += d));
+          c.on("exit", () => resolve(JSON.parse(out.trim())));
+        }),
+    );
+    const results = await Promise.all(racers);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    for (const r of results.filter((r) => !r.ok)) expect(r.why).toMatch(/is running \(pid \d+\)/);
+  }, 30_000);
 });
