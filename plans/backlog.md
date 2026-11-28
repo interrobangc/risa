@@ -712,6 +712,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-27 (Robert Bo Davis): 2026-11-27: seen while checking the RISA-988 hotfix (load 8–46, so some may be timing). Triage: fixes-tooling (tests). RISA-994 may share after-split slice 1's cause (session state leaking into the tests); check after it lands.
 - 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling wave 2 gate): after after-split's RISA-975 hermetic env, loops/land-unsynced.test.mjs still times out (5 tests, 20 s) on main's tip at load ~30, RISA_* unset; ask, stack, recover, rotate, sessions, dispatch, land-gate, land-force-resume failed at load 75 but ask and stack passed on a rerun at load 31.
+- 2026-11-27 (prd/fixes-tooling): 2026-11-27 (fixes-tooling slice 17, RISA-1000 scales vitest limits with load): at load ~30 still failing: land-unsynced (2, vitest timeout at 38.6 s), and in-test/script waits that vitest limits don't cover: ask (3, RISA_ASK_NOTIFY timed out), rotate (helper 'timed out waiting'), sessions ('prd-t isn't running'), bye (hand-off line). Scope for wave 4: scale those inner timers too.
 
 ### RISA-995 · chore · Usage strings and comments in the code still name the literal 'prd <command>' (loops/doc.mjs 'usage: prd doc <role>', lib.sh, skeptics.mjs and others), not the project's command
 
