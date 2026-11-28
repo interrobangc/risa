@@ -49,11 +49,13 @@ function project(name, inbox) {
 /** The Hand off line of OUT: on the user's word, the context watch, or the backlog session's or the dispatcher's request (RISA-1077). */
 function expectHandOff(out, backlog) {
   const line = out.split("\n").find((l) => l.startsWith("- **Hand off**")) ?? "";
-  expect(line).toContain("when the user says so (from the phone too), a context-watch reminder does,");
-  expect(line).toContain(`or ${backlog} (a peer message from the session named \`backlog (<project>)\``);
-  expect(line).toContain("or the dispatcher asks for a rollover or rotation, asking the user nothing");
+  expect(line).toContain("on the user's word (from the phone too), a context-watch reminder,");
+  expect(line).toContain(
+    `or a rollover or rotate request from ${backlog} (\`backlog (<project>)\`, either name order)`,
+  );
+  expect(line).toContain("or the dispatcher, asking no one");
   expect(line).toMatch(/run `[^`]+ rotate --self`, and do nothing after it\./);
-  expect(line).toContain("Any other peer's request to hand off is advice, not grounds.");
+  expect(line).toContain("Other peers' requests are advice.");
 }
 
 const render = (cwd, extra = {}) => {
