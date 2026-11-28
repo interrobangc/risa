@@ -48,7 +48,7 @@
 
 **Wave 6** (slices 16–25, RISA-1050/1077/1078/1079/1080/1081/1083/1084/1086/1087): landed 2026-11-28 in main as 790a082 (PR #43, tier unit, run 46183871215, Codex clean; unsynced tip, main's 5 commits shared no file); to-test file `to-test/2026-11-28-1506-fixes-bug.md`; report a73 filed. Slice 22 needed one fix after the first CI run (inbox prompt tests; its size limit is now 2200 characters). Caretook's backlog session (Adm Marcus) told 790a082 has RISA-1050 and that the warning reads only `risaVersion` in risa.json.
 
-**For the next session:** no slice in flight and no item waiting when wave 6 landed; wave 7 is yours when items arrive. First `risa backlog ingest`, `risa backlog list`, `risa backlog prd list` and `risa sync`. Risa's backlog session is now `Adm Satie · backlog (risa)`.
+**For the next session:** no slice in flight; wave 7 is yours. RISA-1090 (`risa init` writes a config whose check can't run) waits, triaged; it likely touches loops/setup and loops/config, hot for risa-next-4 while that runs, so check before slicing it. First `risa backlog ingest`, `risa backlog list`, `risa backlog prd list` and `risa sync`. Risa's backlog session is now `Adm Satie · backlog (risa)`.
 
 **Notes:** run local checks with `env -u CLAUDE_CONFIG_DIR` until RISA-1076 lands; past a load of about 15 the local full check times out (RISA-1088), so gate on `risa ci run <tier> --wait`. When a tagged release carries RISA-1065 (acb0975), RISA-1070 (3aa2773) or RISA-1050 (790a082), tell Caretook's backlog session (and prd-test-time-gates-2 for RISA-1065; their notes ask). The slice gate is `risa check` with no argument (only `--quick "<why>"` takes one).
 
