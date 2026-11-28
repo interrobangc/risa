@@ -13,14 +13,14 @@
 | Slice | Wave | Item           | Model  | State   | Merge into `prd/fixes-nit` |
 | ----- | ---- | -------------- | ------ | ------- | -------------------------- |
 | 1     | 1    | RISA-995 (1/4) | opus   | working |                            |
-| 2     | 1    | RISA-995 (2/4) | sonnet | working |                            |
+| 2     | 1    | RISA-995 (2/4) | sonnet | merged  | 7d4f33a                    |
 | 3     | 1    | RISA-995 (3/4) | sonnet | working |                            |
 | 4     | 1    | RISA-995 (4/4) | sonnet | working |                            |
 | 5     | 1    | RISA-1019      | sonnet | working |                            |
 | 6     | 1    | RISA-1041      | opus   | merged  | fdfb876                    |
 | 7     | 1    | RISA-1051      | opus   | working |                            |
 
-**Wave 1** (slices 1–7, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). RISA-995's files under `backlog/` and `loops/dispatch*` wait for a later wave: they are hot for running risa-next-2; so does `loops/docs/inbox.md` for RISA-1051. `risa anchors` warns slices 1–4 name 13–18 files: each is a one-line wording edit per file, kept as is. Items claimed, hot files set. Slices 1–7 started (worktrees `.loops/fixes-nit-<n>`, one agent each; brief from `risa prompt slice`, plus a pointer to the command-name rule for 1–4). Slice 6 handed off (a91924f: `pack.log`, `packLine`; prompt-golden regenerated) and merged (fdfb876).
+**Wave 1** (slices 1–7, all unblocked), 2026-11-28: the plan's first wave, written by this orchestrator (no plan existed). RISA-995's files under `backlog/` and `loops/dispatch*` wait for a later wave: they are hot for running risa-next-2; so does `loops/docs/inbox.md` for RISA-1051. `risa anchors` warns slices 1–4 name 13–18 files: each is a one-line wording edit per file, kept as is. Items claimed, hot files set. Slices 1–7 started (worktrees `.loops/fixes-nit-<n>`, one agent each; brief from `risa prompt slice`, plus a pointer to the command-name rule for 1–4). Slice 6 handed off (a91924f: `pack.log`, `packLine`; prompt-golden regenerated) and merged (fdfb876). Slice 2 handed off (474985a: user-facing messages already used toolCmd; comments reworded; `prd list`/`prd set` left: the backlog tool's registry subcommand) and merged (7d4f33a).
 
 ## How to run this plan
 
