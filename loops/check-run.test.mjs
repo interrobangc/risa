@@ -14,6 +14,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -275,8 +276,14 @@ describe("check-run.sh and the load gate", () => {
     });
   const last = () => parseLog(readFileSync(logFile, "utf8")).runs.at(-1);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const busy = () => writeFileSync(loadFile, "9 9 9\n");
-  const quiet = () => writeFileSync(loadFile, "1 1 1\n");
+  // Replace the load file by rename, never truncate it in place: the gate
+  // polls it, and a half-written (empty) file reads as no load (RISA-1018).
+  const setLoad = (text) => {
+    writeFileSync(`${loadFile}.tmp`, text);
+    renameSync(`${loadFile}.tmp`, loadFile);
+  };
+  const busy = () => setLoad("9 9 9\n");
+  const quiet = () => setLoad("1 1 1\n");
 
   it("waits while busy, starts when the load drops, and logs the wait", async () => {
     busy();
