@@ -120,6 +120,8 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 | RISA-1025 | change | triaged | fixes-tooling |  | dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically |
 | RISA-1026 | bug | triaged | fixes-tooling |  | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
+| RISA-1027 | bug | triaged | self-recovery-2 |  | risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key |
+| RISA-1028 | bug | triaged | self-recovery-2 |  | cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens |
 
 ## Items
 
@@ -1021,3 +1023,21 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/self-recovery-2): Seen in self-recovery-2's full check on a362002 (2026-11-28, load ~13); passes 26/26 alone.
+
+### RISA-1027 · bug · risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key
+
+- status: triaged
+- prd: self-recovery-2
+- owner:
+- commit:
+
+- 2026-11-28 (prd/self-recovery-2): Codex P2 on PR #20 (loops/finish.mjs:467). The dispatcher's finishStep (slice 3) keeps finish.reported; the CLI should read and write the same keys.
+
+### RISA-1028 · bug · cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens
+
+- status: triaged
+- prd: self-recovery-2
+- owner:
+- commit:
+
+- 2026-11-28 (prd/self-recovery-2): Codex P2 on PR #20 (loops/cost.mjs:292), reproduced by Codex. A planning folder should require a plan/<topic> branch (or none), not any non-slice branch.
