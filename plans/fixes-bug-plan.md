@@ -13,7 +13,7 @@
 | 3     | 1    | RISA-991        | opus   | merged  | 8316198                    |
 | 4     | 1    | RISA-1001 (1/2) | opus   | merged  | c5163aa                    |
 | 5     | 1    | RISA-1001 (2/2) | opus   | merged  | 3697271                    |
-| 6     | 2    | RISA-1023       | opus   | working |                            |
+| 6     | 2    | RISA-1023       | opus   | merged  | e29fab7                    |
 | 7     | 2    | RISA-1024       | sonnet | merged  | cf93d26                    |
 | 8     | 2    | RISA-1039       | opus   | working |                            |
 | 9     | 2    | RISA-1049       | opus   | working |                            |
