@@ -124,3 +124,23 @@ Stack: no · Reads: plans/fixes-rules.md, loops/docs/project-config.md · Tests:
 
 - Unit test (`loops/doc.test.mjs`): an additions `## <Heading>` lands at the end of the matching section; unmatched and headless parts append at the end.
 - Unit test (beside the new check): a heading rename with no CHANGELOG line fails, naming the doc and heading; with the line it passes; no tag passes.
+
+## Slice 10: The inbox session's rotate hint runs from anywhere
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/context.test.mjs
+
+**Build (RISA-1061):** `inboxRotate` (`loops/context.mjs`) hands the inbox session `pnpm -s -C <main> prd rotate --self`, but Risa's `package.json` has no `prd` script, so the hint fails. Build it from the configured command (`toolCmd.prd`, `loops/config.mjs`), the way the other context-watch hints in the file do, and keep it runnable from outside the repo: if the configured command needs the main checkout as its cwd, say so in the hint (`cd <main> && …`) rather than assuming a package script. Update the expectations in `loops/context.test.mjs` (around lines 315, 330, 363, 539). Don't touch `loops/dispatch*` or `loops/prd.sh` (hot for risa-next-2).
+
+**Acceptance criteria:**
+
+- Unit test (`loops/context.test.mjs`): the inbox reminder and nudge name the configured command's `rotate --self`, never `pnpm … prd`; with a project command configured it names that.
+
+## Slice 11: Persona draws don't collide across projects on one machine
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/captain.test.mjs
+
+**Build (RISA-1063):** two projects' backlog sessions both drew Admiral Cartwright, and `prd-fixes-bug` (risa) and `prd-account-security` (caretook) both got Captain Saru: `drawAdmiral` / `nextCaptain` (`loops/flavor.mjs`, `loops/captain.mjs`) skip only this project's last name, and `personaFor` is a hash of the session name alone. Skip names held by any live session on the machine: read the live session records of every repo the machine config lists (reuse the existing record readers in `loops/sessions.mjs` and `loops/machine.mjs`; don't copy them), and draw the admiral from the pool minus those; for a PRD (or other hashed role) persona, keep the hash as the starting point but step to the next pool entry free on the machine, so a name already held keeps its persona. When every name is held, fall back to today's draw. Keep `nextCaptain`'s signature (its caller in `loops/dispatch.mjs` is hot for risa-next-2: don't edit it). Say in the hand-off where the held names are read and how a persona stays stable for a session that already has one.
+
+**Acceptance criteria:**
+
+- Unit tests (`loops/captain.test.mjs`, `loops/flavor.test.mjs`): with another project's live backlog session holding an admiral, the draw never returns it; a PRD session whose hashed captain another project's live session holds gets a different one, and the same session name reads back the same persona; with every name held, the draw still returns one; flavor none unchanged.
