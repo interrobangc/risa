@@ -109,7 +109,9 @@
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
 // state: paused and why, reopen counts, the open reopen asks, the last tidy and pickup,
 // keepAlive: each kept kind's quick deaths, last open, open ask and stop; inboxReported:
-// the untrusted inbox's report filed; stopped: the last end's pid, time and why),
+// the untrusted inbox's report filed; stopped: the last end's pid, time and why;
+// home: for a project with `inbox`, this run's claims, the homes file's last fetch
+// and the reports filed, home.mjs),
 // .dispatch.log (each acting tick, and each idle one whose lines changed, and one
 // line for every way it ends: a signal, an uncaught error, a lost lock, a re-exec;
 // a gone pid with no stop mark crashed or was SIGKILLed, RISA-1037).
@@ -119,6 +121,12 @@
 // RISA_ASKS_DIR; RISA_ITERM_APP (the host layer's, host.mjs: where iTerm2 is);
 // RISA_CLAUDE_BIN (the helper's claude; its config folder: host.mjs); RISA_CLOCK_FILE (tests: epoch
 // seconds standing in for the clock).
+//
+// Home machines (home.mjs, loaded only for a project with `inbox`, at the start): each
+// tick asks it whose home the project is. Another machine's (or unknown yet) makes the
+// tick start, plan, reopen, resume, keep alive and open requested sessions for nothing,
+// with a line each tick and one report; the inbox kind stays closed unless this repo
+// keeps it and the `inbox` home is this machine's. A project without `inbox` is untouched.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -202,7 +210,7 @@ import {
 import { isLive, processOf, processTable, readRecord, readRecords, writeRecord } from "./sessions.mjs";
 import { resumeDecision, resumingOf, sessionOfBranch } from "./resume.mjs";
 import { clearStalled, markStalled, readReadings, readUsage, staleMsOf } from "./usage.mjs";
-import { branchKinds, toolCmd } from "./config.mjs";
+import { branchKinds, inboxStore, loadConfig, toolCmd } from "./config.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -216,6 +224,8 @@ export const PICKUP_TIMEOUT_MS = 120_000;
 export const REOPEN_RESET_MS = 30 * 60_000;
 /** The one-shot helper that pushes the dispatcher's own asks. */
 export const HELPER_SESSION = "dispatch-push";
+/** The marker of the home's reports (home.mjs). */
+export const HOME_SESSION = "dispatch-home";
 
 // ---- the pure parts ----------------------------------------------------------------
 
@@ -481,6 +491,7 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   keepAlive?: import("./keep-alive.mjs").KeepState,
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[], allow?: string | null },
  *   inboxReported?: boolean,
+ *   home?: import("./home.mjs").HomeState,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
  *   finish?: { reported?: string[] },
  *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
@@ -638,6 +649,20 @@ export const firstLine = (/** @type {unknown} */ e) =>
 
 /** The end hook a running dispatcher sets (RISA-1037): main's own rejection reaches it too. */
 let onEnd = /** @type {((why: string) => void) | null} */ (null);
+
+/** home.mjs, when the project has `inbox` (main loads it); null: no homes. */
+let homeModule = /** @type {typeof import("./home.mjs") | null} */ (null);
+
+/** Loads home.mjs for a project whose config has `inbox`; else null, loading nothing new. */
+export async function loadHome(env = process.env) {
+  try {
+    if (!inboxStore(loadConfig({ env }).config)) return null;
+  } catch {
+    return null;
+  }
+  homeModule = await import("./home.mjs");
+  return homeModule;
+}
 
 const releaseLock = (/** @type {string} */ lock) => {
   try {
@@ -1806,7 +1831,13 @@ function finishStep(
  */
 export function tick(
   /** @type {ReturnType<typeof pathsOf>} */ p,
-  { dryRun = false, env = process.env, say = (/** @type {string} */ l) => console.log(l), every = 60 } = {},
+  {
+    dryRun = false,
+    env = process.env,
+    say = (/** @type {string} */ l) => console.log(l),
+    every = 60,
+    home = homeModule,
+  } = {},
 ) {
   const lines = [];
   const out = (/** @type {string} */ l) => lines.push(l);
@@ -1922,6 +1953,50 @@ export function tick(
     /* no readings: none stalled */
   }
   for (const s of facts.sessions) if (!s.live && stalls.has(s.name)) s.stalled = true;
+  // The home (home.mjs, a project with `inbox` only): another machine's stops this one.
+  /** @type {string[]} */
+  const homeLines = [];
+  /** @type {string | null} */
+  let homeBlocked = null;
+  /** @type {string | null} */
+  let homeInbox = null;
+  if (home)
+    try {
+      const h = home.homeTick({
+        main: p.main,
+        state: g.state.home,
+        now,
+        dryRun,
+        env,
+        report: (text) => {
+          const r = run(
+            "node",
+            [
+              join(HERE, "ask.mjs"),
+              "ask",
+              "--topic",
+              "dispatch",
+              "--report",
+              text,
+              "--session",
+              HOME_SESSION,
+            ],
+            { cwd: p.main, env: { ...env, RISA_ASKS_DIR: p.asks } },
+          );
+          if (!r.ok) homeLines.push(`home: filing the report failed: ${(r.err || r.out).split("\n").pop()}`);
+          return r.ok;
+        },
+      });
+      if (h) {
+        homeLines.push(...h.lines);
+        homeBlocked = h.blocked;
+        homeInbox = h.inboxWhy;
+        if (!dryRun) updateState(p.state, (s) => void (s.home = h.state));
+      }
+    } catch (e) {
+      homeBlocked = `the home couldn't be read (${e instanceof Error ? e.message : String(e)})`;
+      homeLines.push(`home: ${homeBlocked}: nothing starts, plans, reopens or is kept alive here`);
+    }
   /** @type {import("./dispatch-pick.mjs").Pick} */
   let choice = pick(facts);
   // A resume takes the tick's action: the pick's waits a tick.
@@ -1936,6 +2011,16 @@ export function tick(
         ...(choice.topic && choice.action !== "none"
           ? [{ topic: choice.topic, why: `waits a tick: the resume of ${resumeOpen.session} goes first` }]
           : []),
+        ...choice.reasons,
+      ],
+    };
+  // Another machine's home: the pick's start, plan, reopen, ask or resume waits.
+  if (homeBlocked && choice.action !== "none")
+    choice = {
+      action: "none",
+      why: homeBlocked,
+      reasons: [
+        ...(choice.topic ? [{ topic: choice.topic, why: `waits: ${homeBlocked}` }] : []),
         ...choice.reasons,
       ],
     };
@@ -1965,7 +2050,7 @@ export function tick(
       0,
       `  (the 5-minute load ${Math.round((g.gate.load ?? 0) * 10) / 10} is over ${g.gate.threshold})`,
     );
-  lines.push(...head, ...resumeLines);
+  lines.push(...head, ...resumeLines, ...homeLines);
 
   // The pickup: lines pushed to origin/dev reach the main checkout. Beside the
   // pick, never in its way: a failure is one line.
@@ -2018,7 +2103,9 @@ export function tick(
   // The inbox session waits until its folder is trusted (Claude Code's own files, only read).
   /** @type {Record<string, string>} */
   const unready = {};
-  if (env.RISA_KEEP_SESSIONS !== "off") {
+  if (homeBlocked) for (const kind of ["backlog", "inbox"]) unready[kind] = homeBlocked;
+  else if (homeInbox) unready.inbox = homeInbox;
+  if (env.RISA_KEEP_SESSIONS !== "off" && !unready.inbox) {
     const why = inboxUntrusted(inboxDirOf(records.find((r) => r.name === "inbox")?.record, env));
     if (why) unready.inbox = why;
     try {
@@ -2047,6 +2134,11 @@ export function tick(
   const requested = (/** @type {boolean} */ dry) => {
     // Limited: a request waits until the reset (opening it would spend extra usage).
     if (limited) return false;
+    // Another machine's home: a requested session waits with the rest.
+    if (homeBlocked) {
+      if (dry) out(`session request: waits (${homeBlocked})`);
+      return false;
+    }
     try {
       const starting = keepDecisions.filter((d) => d.action === "open").map((d) => d.kind);
       return requestStep(p, g, { dryRun: dry, env, out, starting });
@@ -2156,7 +2248,7 @@ export function tick(
   if (requested(false)) keptActed = true;
 
   // The resume's acts: ending a live stalled session, or this tick's one resume.
-  if (resume?.decision.acts.length)
+  if (resume?.decision.acts.length && !homeBlocked)
     try {
       if (resumeActs(p, resume.decision, { now, out })) keptActed = true;
     } catch (e) {
@@ -2491,6 +2583,7 @@ async function main() {
     );
     return;
   }
+  await loadHome();
   if (o.dryRun) {
     tick(p, { dryRun: true });
     return;
