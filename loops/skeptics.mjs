@@ -17,7 +17,7 @@
 // is recorded and again when it is used: the never list is the user's. A stall
 // record (the watch's `skeptic` on a slice agent) is bound to its slice and
 // class: `waits` is a step on the never list, which only `ask` answers; its
-// `ask` lets `prd ask` file a question naming that slice.
+// `ask` lets `ask` file a question naming that slice.
 import { createHash } from "node:crypto";
 import {
   closeSync,
@@ -312,7 +312,7 @@ export function useRecord(dir, id, wanted, opts) {
   return { ...record, usedAt: usedAt(dir, id) };
 }
 
-/** The records as lines for `prd skeptic`. */
+/** The records as lines for `skeptic`. */
 export function formatRecords(records) {
   if (!records.length) return "No skeptic verdicts.";
   return records
@@ -330,7 +330,7 @@ export function formatRecords(records) {
     .join("\n");
 }
 
-// A role doc's section, as `prd doc <role> <section>` prints it, without its heading line.
+// A role doc's section, as `doc <role> <section>` prints it, without its heading line.
 const section = (role, heading, config, root) => {
   try {
     return roleDoc(role, { config, root, section: heading }).split("\n").slice(1).join("\n").trim();

@@ -2,8 +2,8 @@
 // Named backlog sessions on request. A session can't open a tab from its own
 // shell, so it files a request and the dispatcher's next tick opens it.
 //
-//   prd session request backlog <name> [--brief <file>] [--model <m>]
-//   prd session requests [--json]     pending ones, then those settled in the last day
+//   session request backlog <name> [--brief <file>] [--model <m>]
+//   session requests [--json]     pending ones, then those settled in the last day
 //
 // One JSON file per request in the main checkout's .loops/.requests
 // (RISA_REQUESTS_DIR): { id, kind, name, session (backlog-<name>), remote
@@ -331,7 +331,7 @@ export function requestNotice(
   return text(parts.map((p) => clip(p, cap)));
 }
 
-/** `prd status`'s part: the pending requests under a heading, or "". */
+/** `status`'s part: the pending requests under a heading, or "". */
 export function pendingPart(/** @type {string} */ dir) {
   const pending = readRequests(dir).filter((r) => r.state === "pending");
   if (!pending.length) return "";

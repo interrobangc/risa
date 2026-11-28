@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd status-trim: keep a plan's _Status_ short by moving finished-wave
+// status-trim: keep a plan's _Status_ short by moving finished-wave
 // history into plans/<topic>-history.md (B-598). An orchestrator runs it after
 // each landing, once the docs are folded, and commits both files.
 //

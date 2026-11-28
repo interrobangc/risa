@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// prd tidy [--yes] [--json]: collects the facts tidy.mjs sorts, prints the
+// tidy [--yes] [--json]: collects the facts tidy.mjs sorts, prints the
 // safe and ask lists, and with --yes removes the safe ones and files the ask
 // list as one report in the asks queue.
 //
@@ -9,12 +9,12 @@
 //            --prune, the stackLeftovers hook's remove, deleting tickets, logs and ended records,
 //            backlog archive for finished items; a dead lease only through
 //            lease.sh's takeover, which keeps one retaken since), then
-//            file the ask list with `prd ask --report` (none when it's empty)
+//            file the ask list with `ask --report` (none when it's empty)
 //
 // Reading runs git, the hooks' read-only forms (stackEngine status, stackReady,
 // testDb facts and orphans, stackLeftovers), `lsof` (processes' working
 // directories and listening ports), `ps` and the backlog's
-// `list --json` and `prd list --json`; it writes nothing. The main checkout is
+// `list --json` and the registry's; it writes nothing. The main checkout is
 // the repo this file is in. Env: TRUNK (dev), RISA_SESSIONS_DIR,
 // RISA_ASKS_DIR, RISA_LEASE_ROOT. The landed topics come from landed.mjs and
 // finish.mjs (landedTopics, landedWithCode), the live claudes from `ps` and
