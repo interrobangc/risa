@@ -270,6 +270,41 @@ describe("the dispatcher's part", () => {
     writeFileSync(files().state, "{}");
   });
 
+  it("reads the stop mark: stopped and why with one, dead without (RISA-1037)", () => {
+    const dead = () => false;
+    writeFileSync(files().lock, "424242\n");
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        stopped: { pid: 424242, stoppedAt: ago(2 * H), why: "uncaught exception: Error: boom" },
+      }),
+    );
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toBe(
+      "DISPATCHER: stopped (uncaught exception: Error: boom, 2h ago): start it in a tab of its own with pnpm prd dispatch\n\n",
+    );
+    // Another pid's mark: this one died.
+    writeFileSync(
+      files().state,
+      JSON.stringify({ stopped: { pid: 7, stoppedAt: ago(2 * H), why: "SIGTERM" } }),
+    );
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toMatch(
+      /^DISPATCHER: dead \(pid 424242 gone; no clean stop\)/,
+    );
+    // No lock: the mark says why, paused too.
+    rmSync(files().lock);
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        paused: { at: ago(4 * H), why: "usage limit" },
+        stopped: { pid: 7, stoppedAt: ago(2 * H), why: "SIGTERM by --stop" },
+      }),
+    );
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toMatch(
+      /^DISPATCHER: stopped \(SIGTERM by --stop, 2h ago; and paused, 4h ago: usage limit\): start it/,
+    );
+    writeFileSync(files().state, "{}");
+  });
+
   it("says whether the running dispatcher's code is current or stale (B-809)", () => {
     writeFileSync(files().lock, `${process.pid}\n`);
     writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: process.pid, at: ago(H) } }));

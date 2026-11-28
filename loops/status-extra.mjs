@@ -118,7 +118,8 @@ const pidAlive = (/** @type {number} */ pid) => {
 
 /**
  * The dispatcher's part: its state from its lock (a live pid: running; a gone
- * one: dead, no clean stop; none: stopped), its
+ * one: dead, no clean stop; none: stopped) and its stop mark (a gone pid with its
+ * mark, or none with any: stopped, why and how long ago; RISA-1037), its
  * code (current or stale against targetOf's folder) and its state file (paused and
  * why), its log's last entry (the last logged change) and its last tick's time.
  * @param {{ main?: string, lock: string, state: string, log: string }} files
@@ -142,6 +143,11 @@ export function dispatcherPart(
   const named = pid ? null : raw(files.lock);
   const gone = named !== null && !alive(named) ? named : null;
   const st = readState(files.state);
+  // Its stop mark (RISA-1037): a gone pid with its mark stopped and said why; one without crashed.
+  const mark = st.stopped && typeof st.stopped.why === "string" ? st.stopped : null;
+  const marked = mark && (gone === null || mark.pid === gone) ? mark : null;
+  const markAge =
+    marked && !Number.isNaN(Date.parse(marked.stoppedAt)) ? `, ${age(marked.stoppedAt, now)} ago` : "";
   const paused = st.paused;
   const since = paused?.at && !Number.isNaN(Date.parse(paused.at)) ? `, ${age(paused.at, now)} ago` : "";
   const why = paused ? `paused${since}: ${paused.why || "by hand"}` : "";
@@ -152,9 +158,11 @@ export function dispatcherPart(
   const ticked = typeof tickAt === "number" && Number.isFinite(tickAt);
   const state = pid
     ? `running (pid ${pid})${code}${paused ? `, ${why} (${toolCmd.prd} dispatch --resume)` : ""}`
-    : gone
+    : gone && !marked
       ? `dead (pid ${gone} gone; ${ticked ? `last tick ${span(now - tickAt)} ago, ` : ""}no clean stop)${paused ? `, and ${why}` : ""}: restart it with ${toolCmd.prd} dispatch --restart`
-      : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
+      : marked
+        ? `stopped (${marked.why}${markAge}${paused ? `; and ${why}` : ""}): start it in a tab of its own with ${toolCmd.prd} dispatch`
+        : `stopped${paused ? ` (and ${why})` : ""}: start it in a tab of its own with ${toolCmd.prd} dispatch`;
   const last = lastEntry(files.log);
   const tick = ticked
     ? `last tick ${span(now - tickAt)} ago (${new Date(tickAt).toISOString().replace(/\.\d+Z$/, "Z")})`
