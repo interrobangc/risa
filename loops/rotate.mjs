@@ -21,6 +21,12 @@
 //     would start another topic in its place. A non-standing topic: null. Both
 //     picks take the facts' `landed` (RISA-1003), so a landed-but-planned row
 //     counts as it does in the dispatcher's.
+//   - handoffOutcome({ record, pid, refusal }): whether `rotate --self`'s
+//     hand-off started (RISA-1082: the opener's "Opened … tab" only says a tab
+//     opened). Started: the record is marked rotating (rotate-into.sh's first
+//     step) or replaced (another pid: a fresh session already took it).
+//     Refused: rotate-into.sh left its refusal (refusalFile: "<pid>\t<reason>",
+//     for this pid). Else still waiting.
 //
 // CLI:
 //   node rotate.mjs clears-hot <topic>        stdin: the registry's `list
@@ -39,14 +45,20 @@
 //                                             hand-over closes the topic; exit 1
 //                                             to rotate; exit 2 when the facts
 //                                             can't be read (rotate as now)
+//   node rotate.mjs handoff-wait <name> <pid> <secs>
+//                                             waits up to SECS for the hand-off to
+//                                             start: exit 0 started; exit 1 refused,
+//                                             printing rotate-into's reason (the
+//                                             file is removed once read); exit 2
+//                                             no sign of it in time
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { branchKinds } from "./config.mjs";
 import { contextDirOf, hardLimitOf, sizeRecord } from "./context.mjs";
 import { runThrough } from "./open-session.mjs";
-import { defaultDir } from "./sessions.mjs";
+import { defaultDir, readRecord } from "./sessions.mjs";
 import { sliceStates } from "./landed.mjs";
 import { DEFAULT_CAPS, pick, worktreeKind } from "./dispatch-pick.mjs";
 
@@ -148,6 +160,48 @@ export function standingClose(facts, topic, { claimed = [] } = {}) {
   return null;
 }
 
+/** Where rotate-into.sh leaves why it refused NAME's hand-off, for `rotate --self` to read. */
+export const refusalFile = (/** @type {string} */ dir, /** @type {string} */ name) =>
+  join(dir, `${name}.refused`);
+
+/**
+ * Whether the hand-off of the session at PID has started, been refused, or not shown yet.
+ * @param {{ record: import("./sessions.mjs").SessionRecord | null, pid: number, refusal?: string | null }} facts
+ *   `refusal`: refusalFile's text, when there is one
+ * @returns {{ state: "started" | "refused" | "waiting", why?: string }}
+ */
+export function handoffOutcome({ record, pid, refusal = null }) {
+  if (record?.rotating === true) return { state: "started", why: "marked rotating" };
+  if (record?.pid && record.pid !== pid) return { state: "started", why: `replaced by pid ${record.pid}` };
+  const m = /^(\d+)\t(.*)$/s.exec(refusal ?? "");
+  if (m && Number(m[1]) === pid) return { state: "refused", why: m[2].trim() };
+  return { state: "waiting" };
+}
+
+/** Polls the record and the refusal file every STEP ms for up to SECS: handoffOutcome's last answer. */
+export async function waitHandoff(
+  /** @type {string} */ dir,
+  /** @type {string} */ name,
+  /** @type {number} */ pid,
+  /** @type {number} */ secs,
+  step = 200,
+) {
+  const file = refusalFile(dir, name);
+  const end = Date.now() + secs * 1000;
+  for (;;) {
+    let refusal = null;
+    try {
+      refusal = readFileSync(file, "utf8");
+    } catch {
+      /* none left */
+    }
+    const out = handoffOutcome({ record: readRecord(dir, name), pid, refusal });
+    if (out.state === "refused") rmSync(file, { force: true });
+    if (out.state !== "waiting" || Date.now() >= end) return out;
+    await new Promise((r) => setTimeout(r, step));
+  }
+}
+
 /** The ids of TOPIC's items in-progress under its prd/ branch (`backlog list`); throws when unreadable. */
 export function claimedItems(/** @type {string} */ main, /** @type {string} */ topic) {
   const out = execFileSync(
@@ -243,9 +297,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         );
       break;
     }
+    case "handoff-wait": {
+      const [pid, secs] = more;
+      waitHandoff(defaultDir(), arg ?? "", Number(pid), Number(secs) || 0).then((out) => {
+        if (out.why) console.log(out.why);
+        process.exit(out.state === "started" ? 0 : out.state === "refused" ? 1 : 2);
+      });
+      break;
+    }
     default:
       console.error(
-        "usage: rotate.mjs clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>... | standing-close <topic> <main>",
+        "usage: rotate.mjs clears-hot <topic> | run-through <plan> | brief-check <file> | context-hold <plan> <name> <pid> <n>... | standing-close <topic> <main> | handoff-wait <name> <pid> <secs>",
       );
       process.exit(2);
   }

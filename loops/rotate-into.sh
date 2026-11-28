@@ -19,6 +19,9 @@
 # 1. Marks the record (.loops/.sessions/prd-<topic>.json) rotating, making one
 #    when there is none (a session started before session.sh), so an opener or
 #    recovery that runs while this is cut short starts fresh, never --continue.
+#    A refusal before it ("nothing was ended") is also written to
+#    <sessions dir>/<name>.refused as "<old pid>\t<reason>", which `rotate
+#    --self` waits on (it reads and removes it), since this tab is in the background.
 # 2. Ends the old pid: TERM, then KILL after RISA_ROTATE_WAIT seconds
 #    (default 20), and waits for it to go (and for its session.sh to record the
 #    end, so that write can't land on the new record).
@@ -38,6 +41,14 @@ usage="usage: rotate-into.sh prd-<topic>|backlog[-<name>]|inbox <old pid> [--rea
 name=${1:-} old=${2:-}
 [[ ($name == prd-?* || $name == backlog || $name == backlog-?* || $name == inbox) && $old =~ ^[0-9]+$ ]] || die "$usage"
 shift 2
+# A refusal before step 1 is also left where `rotate --self` reads it (rotate.mjs refusalFile):
+# its tab is in the background, so no one sees this shell's last line (RISA-1082).
+refused=$RISA_SESSIONS_DIR/$name.refused
+die() {
+  [[ -z $refused ]] || { mkdir -p "$RISA_SESSIONS_DIR" && printf '%s\t%s\n' "$old" "$*" >"$refused"; } 2>/dev/null || true
+  echo "$*" >&2
+  exit 1
+}
 reason="" brief="" no_brief="" captain=""
 while (($#)); do
   case $1 in
@@ -83,6 +94,7 @@ wrapped=""
 [[ -n $before && $(field "$before" pid) == "$old" && -z $(field "$before" ended) ]] && wrapped=1
 
 if [[ -n $before ]]; then sessions set "$name" rotating=true; else sessions set "$name" kind=prd topic="$topic" rotating=true; fi
+refused=""
 case $kind in
   prd) what="the resume prompt" ;;
   inbox) what="the inbox prompt" ;;
