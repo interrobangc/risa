@@ -140,6 +140,16 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
 }
 
 /**
+ * SESSION's account: its reading's (`account`; a reading without one is Claude Code's
+ * default, null, never FALLBACK), else FALLBACK (the dispatcher's own) when it has no reading. Pure.
+ * @param {any[]} readings @param {string} session @param {string | null} fallback
+ */
+export function sessionAccount(readings, session, fallback) {
+  const r = readings.find((x) => x && typeof x === "object" && String(x.session) === session);
+  return r ? (r.account ?? null) : fallback;
+}
+
+/**
  * Each session's drain, from its own account's readings only. A session's account is its
  * reading's (`account`, absent for Claude Code's default); one with no reading takes ACCOUNT
  * (the dispatcher's own: host.mjs claudeAccount). Pure.
@@ -150,16 +160,12 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
  * @returns {Record<string, Drain>}
  */
 export function sessionDrains(readings, names, { account = null, ...opts }) {
-  /** @type {Map<string, string | null>} */
-  const accountOf = new Map();
-  for (const r of readings)
-    if (r && typeof r === "object") accountOf.set(String(r.session), r.account ?? null);
   /** @type {Map<string | null, Drain>} */
   const byAccount = new Map();
   /** @type {Record<string, Drain>} */
   const out = {};
   for (const name of names) {
-    const a = accountOf.has(name) ? (accountOf.get(name) ?? null) : account;
+    const a = sessionAccount(readings, name, account);
     let d = byAccount.get(a);
     if (!d) {
       const mine = readings.filter((r) => (r?.account ?? null) === a);
