@@ -372,7 +372,7 @@ export function readRules(root, config = loadConfig({ path: join(root, CONFIG_NA
 }
 
 /** The slice-size cap (B-596), which the plan brief carries beside the handbook's skeptic pass. */
-export const SLICE_SIZE_RULE = `**A slice too big:** one that would touch more than about 8 files, or more than one running topic's hot file (\`${toolCmd.backlog} prd list\`), is a send-back: split it into slices that each land on their own.`;
+export const SLICE_SIZE_RULE = `**A slice too big:** one that would change more than about 4 files, need more than one test file (its fields line's \`Check:\` names the one), share its \`Check:\` file with another slice in the wave, or touch more than one running topic's hot file (\`${toolCmd.backlog} prd list\`), is a send-back: split it into slices that each land on their own.`;
 
 const JOB = {
   ask: (r) =>
