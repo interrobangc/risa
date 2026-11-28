@@ -6,20 +6,21 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 44    | 7    | RISA-1018 | opus  | merged | 92d9344                        |
+| Slice | Wave | Item      | Model | State          | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | -------------- | ------------------------------ |
+| 45    | 8    | RISA-1020 | opus  | merged 6634dd6 | 6634dd6                        |
+| 46    | 8    | RISA-1021 | opus  | merged ff8fca0 | ff8fca0                        |
+| 47    | 8    | RISA-1022 | opus  | merged b7fd72e | b7fd72e                        |
 
-**Wave 7 started** 2026-11-28: slice 44 (RISA-1018), opus. Sync at wave start needed no merge (main's fixes-bug and risa-next landings share no file). Slice 44 handed off (check passed on 672ba10, 20/20 runs), merged 92d9344; tier none (tooling only); `pnpm test` green on 1c0c740 (2388 tests); sync needed no merge; PR #17 open, Codex review out. Slice 44 found the gate itself reads an unread load mid-wait as dropped: filed RISA-1022.
+**Wave 8** (2026-11-28): slices 45–47 merged (6634dd6, ff8fca0, b7fd72e), items ready. Tier none; `pnpm test` on b7fd72e+docs: one failure, the docs budget after the anchors fold, fixed in 104e013 (exports.test passes). Sync: no merge needed. PR #18: Codex clean on 6fd0610; the docs commits after it read stale on this install, so `review --again` is out; landing is next.
 
-**Wave 6 landed** 2026-11-28 in main as 1b65a5f through PR #15: slices 39–43, all opus (RISA-1015 in three parts, RISA-1016 in two). CI unit: first run 46123266140 red on an unrelated load-gate flake (filed RISA-1018), rerun green; synced with main (a8f3cb8), CI unit green there (run 46124077140). Codex clean on a8f3cb8, then again on ce3fe0b (the installed release doesn't yet carry a review over docs-only commits). Report filed; to-test/2026-11-28-0311-fixes-tooling.md; slice worktrees removed. Handbook gained "commit the plan before `risa slice`".
+**Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
 **The user's decisions:** the drain never ends backlog or inbox sessions on usage (wave 3). Keep it so.
 
 **For the next session:**
 
-- **Ready (triaged, fixes-tooling):** RISA-1018 (check-run.test.mjs "waits while busy, starts when the load drops" flakes on CI: the load-drop line read "-"). Check `risa backlog list` for more.
-- **Follow-ups of RISA-1015 filed** (triaged, for wave 8): RISA-1020 (anchors ignores planBudget's errors), RISA-1021 (the Check file runs twice in this repo's slice check).
+- **Ready:** none waiting beyond wave 8 (check `risa backlog list`).
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
@@ -472,3 +473,33 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 
 - `busy()` and `quiet()` in `loops/check-run.test.mjs` replace the load file by rename, never truncate it in place.
 - The test passes 20 runs in a row locally (`pnpm vitest run loops/check-run.test.mjs` in a loop), noted in the hand-off.
+
+## Slice 45: risa anchors reports a bad Model field
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/anchors.test.mjs
+
+**Build (RISA-1020):** `loops/anchors.mjs` prints `planBudget`'s warnings but drops its `errors` (an unknown Model, RISA-1015), so `risa anchors` passes a plan `risa check-plan --plan` refuses. Print each error on stderr as `check-plan.mjs` does (`slice <n>: <text>`, the same wording; reuse, don't restate it) and exit non-zero when there is one, after the anchor lines.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/anchors.test.mjs`): a plan with `Model: haiku` on an unmerged slice prints that slice's error and exits non-zero; `Model: sonnet` passes as now.
+
+## Slice 46: The slice check runs its Check file once in Risa's own repo
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-hook.test.mjs
+
+**Build (RISA-1021):** with `commands.testFile` set and a Check field, `loops/check-hook.sh` runs the Check file through `testFile` (step `unit`), then the tooling step runs the narrowed tooling tests, which in Risa's own repo (`risa.json`) include the same file: it runs twice. Skip in the tooling step any file the `unit` step already ran (passed), and say so in one line. A project whose tooling tests don't overlap runs as now.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-hook.test.mjs`, a sample repo with stub commands): a slice whose Check file is also a tooling test runs it once; a Check file outside the tooling tests leaves the tooling step as now.
+
+## Slice 47: The load gate keeps waiting through an unread load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/check-run.test.mjs
+
+**Build (RISA-1022):** `load_gate_wait` in `loops/lib.sh` ends its busy loop on any state but `busy`, so a load file that reads `unread` mid-wait (replaced, or briefly missing) prints "The load dropped to -" and starts the check. Once it has said busy, treat `unread` as still waiting (the same poll and `RISA_LOAD_WAIT` cap); before that, `unread` goes ahead as now. Change only `load_gate_wait` in `lib.sh`.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-run.test.mjs`, as slice 44's load test: the load file through `RISA_LOAD_FILE`, short poll): busy, then unread, then calm: it waits through the unread read and says the load dropped to the calm value; unread from the start doesn't wait.
