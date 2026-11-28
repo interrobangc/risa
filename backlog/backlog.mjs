@@ -99,10 +99,9 @@ import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { LookAlikeStop, lookAlikeLine } from "./inbox-edit.mjs";
 import { withLock as withLockAt } from "./lock.mjs";
-import { LookAlikeStop, lookAlikeLine, storeInbox } from "./inbox-commands.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
-import { StoreError, storeFor } from "./inbox-store.mjs";
 import { pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
 import { inboxStore, loadConfigOrExit, toolCmd } from "../loops/config.mjs";
@@ -114,6 +113,10 @@ const REL = config.paths.backlog;
 const INBOX_REL = config.paths.inbox;
 /** The project's inbox store and its file there, or null: the trunk inbox. */
 const STORE = inboxStore(config);
+// Loaded only with a store: a trunk-only project loads nothing more than before.
+const store = STORE
+  ? { ...(await import("./inbox-commands.mjs")), ...(await import("./inbox-store.mjs")) }
+  : null;
 const ARCHIVE_REL = config.paths.archive;
 /** CI's quarantine list, which `ci-file` commits with the backlog (null: the project has none). */
 const QUARANTINE_REL = config.paths.quarantine ?? null;
@@ -1236,14 +1239,14 @@ function main() {
       return console.log(`${file}\n${inboxFile}`);
     case "inbox": {
       const [sub, ...args] = pos;
-      if (STORE) {
+      if (STORE && store) {
         const at = {
-          store: storeFor(STORE.repo),
+          store: store.storeFor(STORE.repo),
           file: STORE.file,
           by: who(),
           pool: () => similarPool(read({ lenient: true }).items),
         };
-        for (const line of storeInbox(at, sub, args, opts)) console.log(line);
+        for (const line of store.storeInbox(at, sub, args, opts)) console.log(line);
         return;
       }
       if (sub === "add") return inboxAdd(args, opts);
@@ -1480,7 +1483,7 @@ try {
     );
     process.exit(3);
   }
-  if (e instanceof fmt.BacklogError || e instanceof StoreError) {
+  if (e instanceof fmt.BacklogError || (store && e instanceof store.StoreError)) {
     console.error(`backlog: ${e.message}`);
     process.exit(1);
   }
