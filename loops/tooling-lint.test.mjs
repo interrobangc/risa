@@ -1,7 +1,8 @@
 // tooling-lint.mjs on a throwaway git repo with a changed tooling file, the sample
 // project's config pointing at tier data that doesn't load. That failure only
 // shows once the lint finds a trunk to diff against, so it also tells which
-// trunk the lint read.
+// trunk the lint read. The version check runs on the same repo with a
+// package.json and v* tags added.
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,5 +85,55 @@ describe("tooling-lint", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toBe(SKIPPED);
     expect(lint(fixture({ branch: "dev", trunk: "main" }), { TRUNK: "dev" }).status).toBe(2);
+  });
+
+  describe("package.json's version against the newest tag", () => {
+    /** @param {string} version @param {string[]} tags */
+    function versioned(version, tags) {
+      const root = fixture({ branch: "main", trunk: "main" });
+      const git = (/** @type {string[]} */ ...args) =>
+        execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], {
+          cwd: root,
+        });
+      writeFileSync(join(root, "package.json"), JSON.stringify({ name: "x", version }));
+      git("add", "package.json");
+      git("commit", "-q", "-m", "version");
+      for (const tag of tags) git("tag", tag);
+      // an unreachable tag above everything never counts
+      git("checkout", "-q", "-b", "side");
+      git("commit", "-q", "--allow-empty", "-m", "side");
+      git("tag", "v9.0.0");
+      git("checkout", "-q", "work");
+      return root;
+    }
+    const run = (/** @type {string} */ root) => lint(root, { TRUNK: "elsewhere" });
+
+    it("fails in one line when a tag is above the version", () => {
+      const r = run(versioned("0.1.2", ["v0.1.1", "v0.1.10"]));
+      expect(r.status).toBe(1);
+      expect(r.stdout).toBe("");
+      expect(r.stderr).toBe(
+        "tooling lint: package.json's version 0.1.2 is below the newest tag v0.1.10; bump it (a release bumps the version, then tags)\n",
+      );
+    });
+
+    it("passes when the newest tag is equal to or below the version", () => {
+      for (const [version, tags] of /** @type {[string, string[]][]} */ ([
+        ["0.1.8", ["v0.1.7", "v0.1.8"]],
+        ["0.2.0", ["v0.1.9"]],
+        ["1.0.0", ["v0.9.12"]],
+      ])) {
+        const r = run(versioned(version, tags));
+        expect(r.status).toBe(0);
+        expect(r.stderr).toBe("");
+        expect(r.stdout).toBe(SKIPPED);
+      }
+    });
+
+    it("skips, saying so, when no tag is reachable", () => {
+      const r = run(versioned("0.1.2", []));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe(`tooling lint: no v* tag reachable from HEAD; version check skipped\n${SKIPPED}`);
+    });
   });
 });
