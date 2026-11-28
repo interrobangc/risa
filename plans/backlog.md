@@ -43,7 +43,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-459 | chore | triaged | — |  | Backlog: 151 items read 'live' because the dev-into-staging-into-main release merge (cc3e1d8b, B-33) put their commits on origin/main, though production hasn't launched; give live a real meaning (a production marker such as a tag or a recorded deploy) or show main as staging until launch |
 | RISA-467 | feature | triaged | asks-relay |  | The backlog session is the go-between for every agent's questions: agents file to the asks queue and wait, the backlog session ranks them by how soon an answer blocks real work, asks the user itself and decides which ones ping the phone |
 | RISA-477 | change | live | fixes-tooling | prd/fixes-tooling | PRD registry: a hold carries its reason |
-| RISA-560 | feature | in-progress | self-recovery-2 | prd/self-recovery-2 | A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost |
+| RISA-560 | feature | ready | self-recovery-2 | prd/self-recovery-2 | A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost |
 | RISA-584 | chore | triaged | staging-ship |  | Backlog prompt: "deploy staging" trigger that promotes dev and notifies my phone |
 | RISA-681 | bug | live | fixes-tooling | prd/fixes-tooling | Promotion prints a passing flake's tests but doesn't file them in the backlog |
 | RISA-721 | bug | live | fixes-tooling | prd/fixes-tooling | Second-zone filing opens a new item when a zone item was landed or dropped but staging still lacks the fix |
@@ -54,7 +54,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-796 | chore | triaged | risa-next-4 |  | Risa: split the project config into a folder and tidy the test rules and gates |
 | RISA-797 | plan | triaged | risa-next-4 |  | Risa: prove it on a second repo with tests, then make it usable by others |
 | RISA-799 | change | live | risa-next | prd/risa-next | Include captain name and backlog agent name so other agents can find it. |
-| RISA-811 | change | in-progress | self-recovery-2 | prd/self-recovery-2 | Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits |
+| RISA-811 | change | ready | self-recovery-2 | prd/self-recovery-2 | Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits |
 | RISA-813 | feature | live | fixes-tooling | prd/fixes-tooling | Per-task usage override: a topic the user names may start or plan between the drain line (95%) and the 98% stop, e.g. pnpm prd dispatch --allow <topic>; everything still ends at the stop |
 | RISA-814 | feature | triaged | usage-aware-drain |  | Orchestrator picks the usage drain line from the current Claude plan (e.g. ultra vs smaller plans) instead of one fixed percent |
 | RISA-815 | change | live | risa-next | prd/risa-next | Orchestrator summary for backlog handoff should include the ability to pass on directives from the… |
@@ -249,10 +249,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-560 · feature · A cost record: tokens by model per PRD and slice, from session and subagent transcripts, in pnpm prd cost
 
-- status: in-progress
+- status: ready
 - prd: self-recovery-2
 - owner: prd/self-recovery-2
-- commit:
+- commit: 3c6214c
 
 - 2026-11-22 (plan/self-recovery): Split from B-433 by the self-recovery planner. Needs a SubagentStop hook for per-slice totals, no double counting across --continue, and reconciling at rm because a session end can be missed. Unattended runs never spend extra usage, so tokens remain the measure.
 - 2026-11-27 (the Risa move, B-543): Was B-560 in Caretook; moved here with its notes. Its B- ids and scripts/ paths are Caretook's (scripts/loops/ is loops/ here).
@@ -372,10 +372,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-811 · change · Automatic cleanup finishes a landed PRD left half-done: worktree and slot still held, registry not done, an idle orchestrator session with nothing to do, a branch with only post-landing docs commits
 
-- status: in-progress
+- status: ready
 - prd: self-recovery-2
 - owner: prd/self-recovery-2
-- commit:
+- commit: 3c6214c
 
 - 2026-11-25 (Robert Bo Davis): From the planner-3 incident 2026-11-25 (B-431). Detect it in tidy or the watchdog and, unattended: land or fold the docs-only tail, rm the worktree, set done, end its sessions, report. Planner-3's sessions said 'removing worktree and ending' several times without doing it; find out why from their transcripts.
 - 2026-11-25 (Robert Bo Davis): Causes so far: B-431 (a post-landing docs commit stops rm from setting done), the new rm-deletes-own-cwd bug, B-810 (end kills a stale pid). Cleanup should also spot several sessions of one topic (planner-3-35, -88 and others were live at once).
