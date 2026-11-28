@@ -28,9 +28,10 @@ import {
   landingUnder,
   limitActions,
   probeAllowed,
+  sessionAccount,
   sessionDrains,
 } from "./drain.mjs";
-import { mergeReadings } from "./usage.mjs";
+import { markStalled, mergeReadings, readReadings } from "./usage.mjs";
 import { stubHookConfig } from "./config-fixture.mjs";
 
 const HERE = new URL(".", import.meta.url).pathname;
@@ -314,6 +315,33 @@ describe("each session on its own account", () => {
     expect(sessionDrains(readings, ["prd-new"], { ...opts, account: A })["prd-new"].state).toBe("limited");
     expect(sessionDrains(readings, ["prd-new"], { ...opts, account: B })["prd-new"].state).toBe("normal");
     expect(sessionDrains(readings, ["prd-d"], { ...opts, account: A })["prd-d"].state).toBe("normal");
+  });
+
+  it("a dispatcher on account A ends a default-account session: its mark carries null, and A's sessions stay normal", () => {
+    const dir = mkdtempSync(join(tmpdir(), "risa-drain-account-"));
+    try {
+      writeFileSync(join(dir, "prd-d.json"), JSON.stringify(reading("prd-d", null, 99)));
+      writeFileSync(join(dir, "prd-a.json"), JSON.stringify(reading("prd-a", A, 40)));
+      const before = readReadings(dir);
+      expect(sessionAccount(before, "prd-d", A)).toBe(null);
+      expect(sessionAccount(before, "prd-a", A)).toBe(A);
+      expect(sessionAccount(before, "prd-new", A)).toBe(A);
+      // As the dispatcher's limited tick marks it.
+      markStalled(dir, "prd-d", {
+        error: "limited",
+        resetsAt: NOW + 60 * MIN,
+        pid: 11,
+        now: NOW,
+        account: sessionAccount(before, "prd-d", A),
+      });
+      const after = readReadings(dir);
+      expect(after.find((r) => r.session === "prd-d").account).toBeUndefined();
+      const d = sessionDrains(after, ["prd-d", "prd-a"], { ...opts, account: A });
+      expect(d["prd-d"].state).toBe("limited");
+      expect(d["prd-a"].state).toBe("normal");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("a limited tick ends only the sessions whose own account is limited", () => {

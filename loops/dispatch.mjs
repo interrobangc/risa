@@ -132,6 +132,7 @@ import {
   drainSettings,
   landingUnder,
   limitActions,
+  sessionAccount,
   sessionDrains,
 } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
@@ -1245,7 +1246,6 @@ function drainStep(
     g.records.map((r) => r.name),
     { ...drainSettings(env), now, staleMs: staleMsOf(env), account: claudeAccount(env) },
   );
-  const accountOf = new Map(readings.map((r) => [String(r?.session), r?.account ?? null]));
   const limited =
     drain.state === "limited" || g.records.some((r) => r.live && drains[r.name]?.state === "limited");
   /** @type {string[]} */
@@ -1305,7 +1305,8 @@ function drainStep(
               resetsAt: (drains[a.session] ?? drain).resetsAt,
               pid: a.pid,
               now,
-              account: accountOf.get(a.session) ?? claudeAccount(env),
+              // A default-account session's null is kept: never the dispatcher's account.
+              account: sessionAccount(readings, a.session, claudeAccount(env)),
             });
           } catch (e) {
             marked = `its stall mark failed: ${e instanceof Error ? e.message : String(e)}`;
