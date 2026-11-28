@@ -14,7 +14,7 @@
 | 30    | 5    | RISA-986       | opus   | handed off (91ff7ef, merge 9704c53): ls.sh Holds section, dry-run reason                      | —                              |
 | 31    | 5    | RISA-994 (1/2) | opus   | agent spawned                                                                                 | —                              |
 | 32    | 5    | RISA-994 (2/2) | opus   | waiting (blocked by 31)                                                                       | —                              |
-| 33    | 5    | RISA-1006      | opus   | handed off (a9c79ad): version check, package.json 0.1.8; recheck after plan format            | —                              |
+| 33    | 5    | RISA-1006      | opus   | handed off (tip c30f407): own test 6/6; check timed out under load, CI gates                  | —                              |
 | 34    | 5    | RISA-1012      | opus   | handed off (022a664, 0cdb858): refuses before stopping; slice check red on load timeouts only | —                              |
 | 35    | 5    | RISA-1013      | opus   | handed off green (1823c19, tip 41abf2d)                                                       | —                              |
 | 36    | 5    | RISA-1014      | opus   | agent spawned                                                                                 | —                              |
