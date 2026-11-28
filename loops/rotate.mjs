@@ -37,8 +37,11 @@
 //                                             hand-over closes the topic; exit 1
 //                                             to rotate; exit 2 when the facts
 //                                             can't be read (rotate as now)
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { branchKinds } from "./config.mjs";
 import { contextDirOf, hardLimitOf, sizeRecord } from "./context.mjs";
 import { runThrough } from "./open-session.mjs";
 import { defaultDir } from "./sessions.mjs";
@@ -89,15 +92,19 @@ export function contextHold({ planText, slices, record = null, hard = hardLimitO
 
 /**
  * Why a standing topic's hand-over closes it rather than opening a fresh session, or null to rotate.
- * Call it with no slice in flight.
+ * Call it only after a landing: no slice in flight, not mid-wave, nothing but docs past the
+ * branch's last landing (rotate.sh checks those).
  * @param {import("./dispatch-pick.mjs").PickFacts} facts the dispatcher's (dispatch.mjs's gather)
  * @param {string} topic
+ * @param {{ claimed?: string[] }} [more] `claimed`: the ids of its items in-progress under its prd/ branch
  * @returns {string | null}
  */
-export function standingClose(facts, topic) {
+export function standingClose(facts, topic, { claimed = [] } = {}) {
   const rows = facts.rows ?? [];
   const row = rows.find((r) => r.topic === topic);
   if (!row?.flags?.includes("standing")) return null;
+  // A wave's items are in-progress once claimed (not counted as waiting): until they land, it isn't idle.
+  if (claimed.length) return null;
   const waiting = row.waiting ?? 0;
   if (!waiting) return "no waiting items";
   // The facts with this topic closed: its prd/ worktree gone, its row back to what the registry
@@ -133,6 +140,29 @@ export function standingClose(facts, topic) {
   if (all.action === "start" && all.topic !== topic)
     return `${waiting} waiting, under ${min}, and ${all.topic} would start in its lane`;
   return null;
+}
+
+/** The ids of TOPIC's items in-progress under its prd/ branch (`backlog list`); throws when unreadable. */
+export function claimedItems(/** @type {string} */ main, /** @type {string} */ topic) {
+  const out = execFileSync(
+    "node",
+    [
+      join(dirname(fileURLToPath(import.meta.url)), "../backlog/backlog.mjs"),
+      "list",
+      "--all",
+      "--prd",
+      topic,
+      "--json",
+    ],
+    { cwd: main, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const owner = branchKinds().branch("prd", topic);
+  return JSON.parse(out)
+    .filter(
+      (/** @type {{ status: string, owner?: string }} */ i) =>
+        i.status === "in-progress" && i.owner === owner,
+    )
+    .map((/** @type {{ id: string }} */ i) => i.id);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
@@ -189,8 +219,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       if (!row?.flags?.includes("standing")) process.exit(1);
       // The dispatcher's own facts. dispatch.mjs imports this module, so it loads once this one has
       // (a top-level await here would wait on itself).
+      const claimed = claimedItems(more[0] ?? "", arg ?? "");
+      if (claimed.length) process.exit(1);
       import("./dispatch.mjs")
-        .then(({ gather, pathsOf }) => standingClose(gather(pathsOf(more[0] ?? "")).facts, arg ?? ""))
+        .then(({ gather, pathsOf }) =>
+          standingClose(gather(pathsOf(more[0] ?? "")).facts, arg ?? "", { claimed }),
+        )
         .then(
           (why) => {
             if (!why) process.exit(1);

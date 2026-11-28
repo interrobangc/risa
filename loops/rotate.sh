@@ -16,9 +16,11 @@
 # back as a --continue agent that reloads its base and reruns its check. Drain
 # first; past the hard limit (the session's size record) it goes ahead.
 #
-# A standing (fixes) topic with no slice in flight and nothing runnable waiting
-# (rotate.mjs standing-close: the dispatcher's pick, as if the topic were
-# closed) is closed instead: its rm.sh, then its session ends, one line saying
+# After a landing (not --mid-wave, no slice worktree, nothing but docs past
+# the branch's last landing, none of its items still claimed in-progress), a
+# standing (fixes) topic with nothing runnable waiting (rotate.mjs
+# standing-close: the dispatcher's pick, as if the topic were closed) is
+# closed instead: its rm.sh, then its session ends, one line saying
 # why; the dispatcher starts it again once it has work (RISA-952).
 #
 # Then it opens rotate-into.sh in a background iTerm2 tab (the opener's
@@ -53,7 +55,7 @@ while (($#)); do
     --self) self=1 ;;
     --brief) brief=${2:?--brief <file>}; shift ;;
     --brief-path) brief_path=1 ;;
-    -h | --help) sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h | --help) sed -n '2,43p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "rotate: unknown option $1 (--mid-wave, --reason <text>, --self, --brief <file>, --brief-path)" ;;
     *) [[ -z $topic ]] || die "rotate: one topic at a time"; topic=$1 ;;
   esac
@@ -156,8 +158,19 @@ fi
 # A standing topic with no slice in flight and nothing runnable waiting closes instead (RISA-952):
 # a fresh session would hold the lane idle. Its rm (from the main checkout, so no shell is left in
 # a removed directory) leaves the row standing, not done; then the session ends here.
-# The registry first: only a standing row loads the dispatcher's facts. No registry: rotate as now.
-if [[ -z $slices ]] && rows=$(cd "$main" && node "$bin/../backlog/backlog.mjs" prd list --json 2>/dev/null); then
+# Only after a landing: not mid-wave, and nothing but docs past the branch's last landing in the
+# trunk (landed.mjs's tail, as rm.sh reads it); its claimed items are checked in rotate.mjs. The
+# registry first: only a standing row loads the dispatcher's facts. No registry: rotate as now.
+landed=""
+if [[ -z $mid_wave && -z $slices ]]; then
+  if git -C "$main" merge-base --is-ancestor "$prd_prefix$topic" "$trunk" 2>/dev/null; then
+    landed=1
+  else
+    read -r tail_kind _ < <(node "$bin/landed.mjs" tail "$main" "$prd_prefix$topic" "$trunk" "$topic" 2>/dev/null) || tail_kind=""
+    case $tail_kind in empty | plan | docs) landed=1 ;; esac
+  fi
+fi
+if [[ -n $landed ]] && rows=$(cd "$main" && node "$bin/../backlog/backlog.mjs" prd list --json 2>/dev/null); then
   rc=0
   why=$(node "$bin/rotate.mjs" standing-close "$topic" "$main" <<<"$rows") || rc=$?
   case $rc in

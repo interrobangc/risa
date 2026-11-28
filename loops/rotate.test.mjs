@@ -143,6 +143,12 @@ describe("the pure part", () => {
       ).toBeNull();
     });
 
+    it("rotates one whose wave's items are still claimed, though none waits", () => {
+      expect(
+        standingClose({ rows: [fx({ waiting: 0 })], worktrees: wts, caps }, "fx", { claimed: ["B-1"] }),
+      ).toBeNull();
+    });
+
     it("rotates a non-standing topic, as now", () => {
       expect(close([row("fx", { state: "running", waiting: 0 })])).toBeNull();
       expect(close([])).toBeNull();
@@ -436,12 +442,12 @@ Intro.
 
 ## Items
 ${items}`;
-  const item = (id, prd) => `
+  const item = (id, prd, status = "triaged", owner = "") => `
 ### ${id} · bug · Something
 
-- status: triaged
+- status: ${status}
 - prd: ${prd}
-`;
+${owner ? `- owner: ${owner}\n` : ""}`;
   const fxDir = () => join(loops, "fx");
   const setUp = (items) => {
     writeFileSync(join(main, "plans/backlog.md"), registry(items));
@@ -470,8 +476,8 @@ ${items}`;
   });
 
   it("closes one whose waiting items are all blocked: rm runs, its session ends, none opens", async () => {
-    // One item, under the minimum, and fy (four) would take the lane.
-    setUp(item("B-1", "fx") + ["B-2", "B-3", "B-4", "B-5"].map((id) => item(id, "fy")).join(""));
+    // Landed (nothing past dev), one item, and fy (four) would take the lane.
+    setUp(idle());
     const { s } = await fxSession();
     const r = run("prd.sh", ["rotate", "fx"], caps);
     expect(r.status).toBe(0);
@@ -499,6 +505,37 @@ ${items}`;
     expect(existsSync(fxDir())).toBe(true);
     process.kill(pid, "SIGTERM");
     await s.done;
+  });
+
+  /** Nothing runnable: one item while fy (four) would take the lane. */
+  const idle = () => item("B-1", "fx") + ["B-2", "B-3", "B-4", "B-5"].map((id) => item(id, "fy")).join("");
+  const rotatesAsNow = async (args) => {
+    const { s, pid } = await fxSession();
+    const r = run("prd.sh", ["rotate", "fx", ...args], caps);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`Rotating prd-fx: pid ${pid} (from its record)`);
+    expect(r.stdout).not.toContain("Closing");
+    expect(existsSync(fxDir())).toBe(true);
+    process.kill(pid, "SIGTERM");
+    await s.done;
+  };
+
+  it("rotates mid-wave as now, though nothing runnable waits", async () => {
+    setUp(idle());
+    await rotatesAsNow(["--mid-wave", "--reason", "context"]);
+  });
+
+  it("rotates as now while the branch has code past its last landing", async () => {
+    setUp(idle());
+    writeFileSync(join(fxDir(), "fix.mjs"), "export {};\n");
+    git(fxDir(), "add", "fix.mjs");
+    git(fxDir(), "commit", "-q", "-m", "fix(fx): a slice's merge, not landed");
+    await rotatesAsNow([]);
+  });
+
+  it("rotates as now while its wave's items are claimed in-progress, though none waits", async () => {
+    setUp(item("B-1", "fx", "in-progress", "prd/fx"));
+    await rotatesAsNow([]);
   });
 
   it("rotates a non-standing topic as now, with the registry there", async () => {
