@@ -7,15 +7,15 @@
 | Slice | Wave | State          | Merge into `prd/self-recovery-2` |
 | ----- | ---- | -------------- | -------------------------------- |
 | 1     | 1    | merged (opus)  | bf18c79                          |
-| 2     | 1    | working (opus) | —                                |
+| 2     | 1    | merged (opus)  | c2f1e25                          |
 | 3     | 2    | working (opus) | —                                |
 | 4     | 2    | working (opus) | —                                |
-| 5     | 2    | —              | —                                |
+| 5     | 2    | working (opus) | —                                |
 | 6     | 3    | —              | —                                |
 
 **Landing mode:** run everything through (started run-through; land each green wave unasked, ask only real questions).
 
-**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1: slice 1 merged (bf18c79); slice 2 working (opus). Slices 3 and 4 started early on opus (blocked only by 1). Land wave 1 (slices 1, 2) once 2 merges and CI is green; 3 and 4 then land as wave 2. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
+**Now (2026-11-28):** hold lifted (registry `running`). Plan anchors fixed at start (new files marked, `resumeStep` → `resumePrep`, Check fields added). Wave 1 (slices 1, 2) merged (bf18c79, c2f1e25); gate: `risa tier` says none (tooling only), so a full `risa check` on the tip stands in for CI. Slices 3, 4, 5 working on opus (started early, their blockers merged); they land as wave 2. Slice 1's Build names 6 files (anchors warns past ~4); run as planned.
 
 **Backlog:** claim each slice's items as it starts; `done` them when the last slice naming them merges. Slices 1, 3 and 4: RISA-811 (`done` after 3 and 4). Slices 2 and 5: RISA-560 (`done` after 5). Slice 6: RISA-789.
 
