@@ -147,7 +147,7 @@ Stack: no · Reads: loops/docs/recovery.md · Tests: unit · Blocked by: 3, 6 ·
 - `loops/finish-cli.test.mjs`: `finish <t>` twice on an unchanged code tail files one report; a new tip reports again; a report filed by the CLI isn't re-filed by a dispatcher tick on the same tip.
 - `loops/finish-tick.test.mjs`: with `TRUNK` set to a branch other than the configured trunk, a topic landed only into it is a finish candidate.
 - `loops/cost.test.mjs`: with a topic `plan-a` (a row or `prd/plan-a`) beside `a`, `plan-a`'s orchestrator transcripts count to `plan-a`, not to `a`'s planning; a plain planning worktree `plan-a` for topic `a` still counts as `a`'s planning.
-- The dispatch tests pass with `finish.mjs` imported statically; `grep createRequire loops/dispatch.mjs` finds nothing for `finish.mjs`.
+- The dispatch tests pass with `finish.mjs` imported statically; `loops/dispatch.mjs` no longer loads it through `createRequire`.
 - `risa check --quick "slice hand-off"` passes.
 
 **Blocked by:** 3, 6. **Blocks:** nothing.
