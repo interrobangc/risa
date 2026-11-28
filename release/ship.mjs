@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Risa's own ship steps (RISA-1053): the hooks risa.json's hooks.shipCheck and
-// hooks.ship name. loops/ship.mjs owns the phases, the record and the report; this
+// Risa's own ship steps (RISA-1053): the commands for risa.json's hooks.shipCheck and
+// hooks.ship (wired in once an installed release knows those keys). loops/ship.mjs owns the phases, the record and the report; this
 // file knows only Risa's release: its v* tags on origin, its package.json and
 // CHANGELOG.md, and its CI on main. Run from the main checkout (the hook runner's cwd).
 //

@@ -55,9 +55,7 @@
     "datastoreSeed": "true"
   },
   "hooks": {
-    "check": "sh -c 'pnpm check' --",
-    "shipCheck": "node release/ship.mjs check",
-    "ship": "node release/ship.mjs ship"
+    "check": "sh -c 'pnpm check' --"
   },
   "testProjects": {
     "tooling": ["core:unit", "tooling:unit"],
