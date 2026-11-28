@@ -26,7 +26,7 @@
 //
 // Filing one prints its id. A question then prints "Now send a PushNotification:
 // …" for the asking session to push to the keeper's phone, led by its label
-// (`Captain Sisko · `, session-names.mjs; none under the none flavor, without a
+// (`Captain Sisko · `, the full rank, session-names.mjs; none under the none flavor, without a
 // session or for the dispatcher's asks; the ask keeps the bare text); a report prints no
 // such line and is never pushed (the keeper wants pushes for questions only,
 // and only this line). Either kind also shows a macOS notification
