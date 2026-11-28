@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "./config.mjs";
 import { namesOf } from "./flavor.mjs";
-import { clearsHot, contextHold, doneFlags, slicesLeft, standingClose } from "./rotate.mjs";
+import { clearsHot, contextHold, doneFlags, handoffOutcome, slicesLeft, standingClose } from "./rotate.mjs";
 import { fixtureTierData, stubHookConfig } from "./config-fixture.mjs";
 import { pick } from "./dispatch-pick.mjs";
 import { displayName } from "./session-names.mjs";
@@ -184,6 +184,31 @@ describe("the pure part", () => {
   });
 });
 
+describe("whether rotate --self's hand-off started (RISA-1082)", () => {
+  const rec = { pid: 42, kind: "backlog" };
+  it("started once the record is marked rotating, or replaced by another pid", () => {
+    expect(handoffOutcome({ record: { ...rec, rotating: true }, pid: 42 }).state).toBe("started");
+    expect(handoffOutcome({ record: { ...rec, pid: 43 }, pid: 42 })).toEqual({
+      state: "started",
+      why: "replaced by pid 43",
+    });
+  });
+  it("refused when rotate-into left its reason for this pid; a stale one for another pid doesn't count", () => {
+    const refusal = "42\trotate-into: pid 42 isn't backlog's live session; nothing was ended\n";
+    expect(handoffOutcome({ record: rec, pid: 42, refusal })).toEqual({
+      state: "refused",
+      why: "rotate-into: pid 42 isn't backlog's live session; nothing was ended",
+    });
+    expect(handoffOutcome({ record: rec, pid: 42, refusal: refusal.replace(/^42/, "41") }).state).toBe(
+      "waiting",
+    );
+  });
+  it("still waiting with the record as it was, or none", () => {
+    expect(handoffOutcome({ record: rec, pid: 42 })).toEqual({ state: "waiting" });
+    expect(handoffOutcome({ record: null, pid: 42 })).toEqual({ state: "waiting" });
+  });
+});
+
 // The stub: records its pid, args and the record it sees at start, then
 // behaves as STUB_MODE says.
 const STUB = `#!/usr/bin/env bash
@@ -206,7 +231,18 @@ case \${STUB_MODE:-exit} in
 esac
 `;
 
-let root, main, loops, sessions, state, stub, env, wt;
+// A stand-in osascript (`osascript - <line> <title> <0|1>`) for --self's tab (with RISA_ITERM_APP at a folder that exists): FAKE_TAB
+// none opens a tab where nothing runs; run runs its line there (after removing FAKE_RM); rotating
+// marks the record rotating a moment later, as rotate-into's first step does.
+const FAKE_OSASCRIPT = `#!/usr/bin/env bash
+cat > /dev/null
+case \${FAKE_TAB:-none} in
+  run) [[ -z \${FAKE_RM:-} ]] || rm -f "$FAKE_RM"; STUB_MODE=exit bash -c "$2" > "$STUB_STATE/tab.out" 2>&1 || true ;;
+  rotating) (sleep 0.3; node "$SESSIONS_MJS" set "$STUB_NAME" rotating=true) > /dev/null 2>&1 & ;;
+esac
+`;
+
+let root, main, loops, sessions, state, stub, env, wt, tabEnv;
 const scripts = (f) => join(main, "loops", f);
 const record = (name) => JSON.parse(readFileSync(join(sessions, `${name}.json`), "utf8"));
 const stubPid = () => Number(readFileSync(join(state, "pid"), "utf8").trim());
@@ -279,6 +315,11 @@ beforeAll(() => {
   stub = join(bin, "claude-stub");
   writeFileSync(stub, STUB);
   chmodSync(stub, 0o755);
+  const tabBin = join(root, "tab-bin");
+  mkdirSync(tabBin);
+  writeFileSync(join(tabBin, "osascript"), FAKE_OSASCRIPT);
+  chmodSync(join(tabBin, "osascript"), 0o755);
+  mkdirSync(join(root, "iTerm.app"));
   execFileSync("git", ["init", "-q", "-b", "dev", main]);
   for (const [k, v] of [
     ["user.email", "test@example.com"],
@@ -320,6 +361,11 @@ beforeAll(() => {
     PRD_SH: scripts("prd.sh"),
     RISA_CONFIG: config,
     SAMPLE_STACK_STATE: join(root, "stack-state"),
+  };
+  tabEnv = {
+    PATH: `${tabBin}:${env.PATH}`,
+    RISA_ITERM_APP: join(root, "iTerm.app"),
+    SESSIONS_MJS: scripts("sessions.mjs"),
   };
 }, scaledWait(60_000));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -710,12 +756,12 @@ describe("pnpm prd rotate --self", () => {
   /** A recorded session that runs `rotate --self` from inside itself, then stays up. */
   const selfSession = async (
     name,
-    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name } = {},
+    { args = "", cwd = main, claude = ["--model", "sonnet"], remote = name, extra = {} } = {},
   ) => {
     const s = start(
       "bash",
       [scripts("session.sh"), name, "--", ...claude, "--remote-control", remote, "x"],
-      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args },
+      { STUB_MODE: "self", STUB_STAY: "1", STUB_NAME: name, STUB_ARGS: args, ...extra },
       cwd,
     );
     await until(() => existsSync(join(state, "ready")));
@@ -905,6 +951,61 @@ describe("pnpm prd rotate --self", () => {
     expect(briefed.code).toBe("1");
     expect(briefed.out).toContain("an orchestrator hands over through _Status_");
     await finish(briefed);
+  });
+
+  describe("says whether the hand-off took once its tab is open (RISA-1082)", () => {
+    const alive = (pid) => spawnSync("kill", ["-0", String(pid)]).status === 0;
+
+    it.each([
+      ["backlog", main],
+      ["prd-w", null],
+    ])(
+      "%s: rotate-into never runs in the tab: not started, exit 1, the session carries on",
+      async (name, cwd) => {
+        const old = await selfSession(name, {
+          cwd: cwd ?? wt,
+          claude: name === "backlog" ? ["--model", "sonnet"] : [],
+          extra: { ...tabEnv, FAKE_TAB: "none", RISA_ROTATE_START_WAIT: "1" },
+        });
+        expect(old.code).toBe("1");
+        expect(old.out).toMatch(/^Opened .* in a new background iTerm2 tab/m);
+        expect(old.out).toContain(`the hand-off did not start: no sign of rotate-into on ${name} within 1s`);
+        expect(old.out).toContain(`This session carries on (pid ${old.pid})`);
+        expect(old.out).not.toContain("The hand-off started");
+        expect(alive(old.pid)).toBe(true);
+        expect(record(name)).not.toHaveProperty("rotating");
+        await finish(old);
+      },
+    );
+
+    it("rotate-into refuses in the tab: not started, with its reason, and the reason's file is gone", async () => {
+      const file = join(root, "gone-brief.md");
+      writeFileSync(file, "Fictional notes.\n");
+      const old = await selfSession("backlog", {
+        args: `--brief ${file}`,
+        extra: { ...tabEnv, FAKE_TAB: "run", FAKE_RM: file },
+      });
+      expect(old.code).toBe("1");
+      expect(old.out).toContain(
+        `rotate --self: the hand-off did not start: rotate-into: can't read the brief ${file}; nothing was ended. This session carries on (pid ${old.pid})`,
+      );
+      expect(old.out).not.toContain("The hand-off started");
+      expect(existsSync(join(sessions, "backlog.refused"))).toBe(false);
+      expect(alive(old.pid)).toBe(true);
+      expect(record("backlog")).not.toHaveProperty("rotating");
+      await finish(old);
+    });
+
+    it("the record is marked rotating within the wait: the hand-off is under way, exit 0", async () => {
+      const old = await selfSession("backlog", { extra: { ...tabEnv, FAKE_TAB: "rotating" } });
+      expect(old.code).toBe("0");
+      expect(old.out).toContain(
+        `The hand-off started (marked rotating): this session (pid ${old.pid}) is about to be ended; a fresh backlog opens in that tab.`,
+      );
+      expect(old.out).not.toContain("did not start");
+      expect(record("backlog")).toMatchObject({ pid: old.pid, rotating: true });
+      await finish(old);
+    });
   });
 
   describe("the inbox session", () => {
