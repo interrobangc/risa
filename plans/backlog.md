@@ -23,9 +23,9 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `fixes-bug` | standing | — | `loops/status-trim`, `loops/prompts/backlog.sh`, `loops/prompt.test.mjs`, `loops/session-names`, `loops/flavor`, `loops/ask.mjs`, `loops/keep-alive`, `loops/session-requests`, `loops/session.sh`, `loops/session.test.mjs`, `loops/doc`, `loops/docs`, `CHANGELOG.md`, `package.json` | Fixes in Risa's repo at normal urgency (wrong behaviour or data, tooling included; plans/fixes-rules.md). Urgent ones go to fixes-bug-urgent, those that can wait to fixes-bug-later (the user 2026-11-28). |
 | `staging-ship` | hold | — | `loops/review.sh`, `loops/codex-review`, `loops/prd.sh`, `loops/land.sh`, `loops/lib.sh`, `loops/prompt.sh`, `loops/dispatch`, `loops/ask`, `ci/candidate`, `ci/promote` | Held to be rethought (the user, 2026-11-28): written for Caretook's dev and staging branches, which Risa doesn't have (main is the only trunk). Items RISA-404, RISA-430, RISA-436, RISA-584; RISA-241 moved to fixes-bug. Cut from orchestration-3. |
 | `self-recovery-2` | done | `after-split` | `loops/dispatch`, `loops/resume`, `loops/rm.sh`, `loops/prd.sh`, `loops/finish`, `loops/cost`, `loops/tidy`, `loops/sessions.mjs`, `loops/docs`, `loops/docs-budget.mjs` | Finish landed topics (RISA-811), the dead-journal report (RISA-789), the cost record (RISA-560); RISA-1025, 1027-1029 follow-ups. Planned held after two skeptic send-backs (a7); since released. |
-| `self-recovery-3` | hold | `self-recovery-2` | `backlog/registry`, `loops/prompts/plan.sh`, `loops/sample-project/prompt-golden.txt`, `loops/rotate`, `loops/rm.sh`, `loops/new.sh`, `loops/run-log`, `loops/dispatch`, `loops/land-idle`, `loops/finish` | Replan state (RISA-998), the land-idle backstop (RISA-1040) and a background-session spike for self-recovery-4 |
+| `self-recovery-3` | — | `self-recovery-2` | `backlog/registry`, `loops/prompts/plan.sh`, `loops/sample-project/prompt-golden.txt`, `loops/rotate`, `loops/rm.sh`, `loops/new.sh`, `loops/run-log`, `loops/dispatch`, `loops/land-idle`, `loops/finish` | Replan state (RISA-998), the land-idle backstop (RISA-1040) and a background-session spike for self-recovery-4 |
 | `self-recovery-4` | — | `self-recovery-3` | — | Headless sessions and machinery-owned jobs (RISA-438, RISA-912, RISA-913), cut from self-recovery-3; planned from its headless spike's findings |
-| `asks-relay` | hold | — | `loops/ask`, `loops/prompt.sh`, `loops/dispatch`, `loops/tidy`, `loops/session`, `loops/prd.sh` | The backlog session as go-between for every agent's questions, and asks queue hygiene (RISA-467, RISA-429). Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic). Held 2026-11-24 to save credits; released 2026-11-28 by the user. |
+| `asks-relay` | hold | — | `loops/ask`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/dispatch`, `loops/prd.sh`, `loops/heartbeat`, `loops/context`, `loops/host.mjs`, `loops/docs`, `docs/planner.md` | The backlog session as go-between for every agent's questions, and asks queue hygiene (RISA-467, RISA-429). Cut from inbox-agent by its planner (plans/inbox-agent-prd.md, Follow-on topic). Held 2026-11-24 to save credits; released 2026-11-28 by the user. |
 | `cross-machine-messages` | — | `risa-next-2` | — | Peer messages and notices between machines through the private inbox repo, not Remote Control, so machines on different Claude accounts keep talking; usage-aware-drain waits for it |
 | `usage-aware-drain` | — | `cross-machine-messages` | `loops/drain`, `loops/dispatch`, `loops/resume`, `loops/host`, `loops/machine`, `loops/account`, `loops/context`, `loops/rotate`, `loops/docs`, `loops/prd.sh`, `README.md` | Plan-aware drain line, after the orchestrator split |
 | `after-split-2` | done | `after-split` | `loops/lib.sh`, `loops/hooks`, `loops/rm.sh`, `loops/machine`, `loops/test-env`, `bin/risa`, `README.md` | — |
@@ -35,6 +35,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `fixes-bug-later` | standing | — | — | Fixes in Risa's repo that can wait: real but rare or cosmetic-adjacent, below the planned topics. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
 | `ship` | — | — | — | — |
 | `flavor-packs` | — | — | — | Very low priority (the user, 2026-11-28): new flavor packs, data only |
+| `queue-tender` | — | `asks-relay` | — | — |
 
 ## Summary
 
@@ -127,7 +128,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1033 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | A session that receives a task notification and never takes another turn isn't counted as stalled: Caretook's prd-fixes-bug sat 3h40m after its CI notification with its processes alive. The quiet-orchestrator watch should flag (and nudge) a session whose last transcript entry is an unanswered notification |
 | RISA-1034 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | An orchestrator can end its turn waiting on a check that has no background wait to wake it: Caretook's prd-sync-safety-3 ended its turn at 09:38Z on a browser check that had printed nothing and later wasn't running, so nothing ever woke it. The orchestrator prompt and the check wrapper should keep a background wait (or a result file the watch reads) for every check it waits on |
 | RISA-1035 | change | dropped | fixes-bug |  | Backlog and orchestrator prompts: keep queues moving the best way you know; contact the user about flow actions only when the action risks major work, data, or another critical problem |
-| RISA-1036 | plan | triaged | asks-relay |  | A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work |
+| RISA-1036 | plan | triaged | queue-tender |  | A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work |
 | RISA-1037 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The dispatcher logs why it exits: every exit path (signal, uncaught error, lost lock, clean stop) writes one line to .loops/.dispatch.log and marks .dispatch.json stopped, so a dead pid with no stop mark reads as a crash |
 | RISA-1038 | bug | live | fixes-bug-urgent | prd/fixes-bug-urgent | The inbox session finds the wrong project: run from its own directory (~/.risa/inbox, outside any repo), session.sh's find_repo falls back to the release worktree's repo (Risa's checkout), not the project prd.sh inbox ran for, so it misses that project's claudeConfigDir (starts on Claude Code's default account) and writes its session record under Risa's .loops/.sessions (the project's risa status shows it ended while it's live) |
 | RISA-1039 | change | ready | fixes-bug | prd/fixes-bug | Session display names lead with the Starfleet name and abbreviate its rank: 'Adm Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
@@ -147,6 +148,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1053 | feature | triaged | ship |  | A generic ship command, risa ship <version>: one shared scaffold of pre-checks, ship steps, a smoke test and a notification, each a hook a project overrides for how it ships (Risa: bump package.json, tag, push the tag, smoke-test the tagged install, notify pinned projects; Caretook: its staging/production promotion) |
 | RISA-1054 | bug | triaged | fixes-tooling |  | CI's docs:headings check passes vacuously: actions/checkout is shallow and fetches no tags, so loops/docs-headings.mjs finds no v* tag; fetch tags (fetch-depth: 0 or a tag fetch) in .github/workflows/ci.yml so a generic doc's heading change without a CHANGELOG line fails in CI |
 | RISA-1055 | feature | triaged | cross-machine-messages |  | Cross-machine messages through the private inbox repo: a session's message or notice to another machine's project (e.g. a ship notice to Caretook) is written to the inbox repo, that machine's dispatcher hands it to its own backlog session, and peers are found from the home-machine records, not Remote Control, which reaches only sessions on the same claude.ai account |
+| RISA-1056 | feature | triaged | self-recovery-4 |  | Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults |
 
 ## Items
 
@@ -1034,7 +1036,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 ### RISA-1036 · plan · A queue-tender role: a session whose only job is keeping the lanes moving (nudging stalled orchestrators, closing idle topics, restarting the dispatcher, reordering by the user's priorities), acting on its own and asking the user only when an action risks major work, data or something critical; today the backlog session does this between other work
 
 - status: triaged
-- prd: asks-relay
+- prd: queue-tender
 - owner:
 - commit:
 
@@ -1182,6 +1184,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/fixes-bug-urgent): Found by fixes-bug-urgent at wave 2's docs fold (2026-11-28): the fold went into prd.sh's help instead.
+- 2026-11-28 (Robert Bo Davis): Same gap in the orchestrator doc: 'risa doc orchestrator "Rules across PRDs"' prints 'no section', though the planner prompt and the skeptic brief point at it (seen by both self-recovery-3 skeptics, 2026-11-28).
 
 ### RISA-1052 · bug · session.sh resolves its own directory (bin=$(cd "$(dirname "$0")" && pwd)) before sourcing lib.sh, whose unset CDPATH now comes too late: with CDPATH set and a relative $0, cd prints the matched path and bin gets it twice, so source "$bin/lib.sh" fails. Unset CDPATH first
 
@@ -1219,3 +1222,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "The eventual goal is that this machine runs on my business claude account with the personal as backup and the other runs on my personal with the business as backup. In the current flow, this will break inter-machine communication. How are we going to get there?" Chose: a new topic after risa-next-2 (it builds the inbox repo and home claims), with usage-aware-drain (RISA-1002 account swap) after it.
+
+### RISA-1056 · feature · Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults
+
+- status: triaged
+- prd: self-recovery-4
+- owner:
+- commit:
+
+- 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "We probably also need a per role soft, urgent, hard context limits that can be overridden by each project's config." Triaged to self-recovery-4 (to-write, hand-offs and sessions that survive them), not a planned topic, so no replan; the planner defines what urgent does between soft and hard. Touches loops/context and loops/config (usage-aware-drain and risa-next-4 hot files).
