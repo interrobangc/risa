@@ -245,6 +245,21 @@ describe("the decision", () => {
     expect(decide({ requests, processes: null }).action).toBe("none");
   });
 
+  it("refuses a pending request with the repo's work switch off, saying why, and opens it with it on", () => {
+    const requests = [req("r1", "a")];
+    const off = { on: false, why: `"work": false for /tmp/sample in /tmp/machine.json` };
+    const d = decide({ requests, work: off });
+    expect(d).toMatchObject({ action: "refuse", request: { id: "r1" } });
+    expect(d.why).toContain("the work switch is off");
+    expect(d.why).toContain(off.why);
+    expect(d.why).toContain("RISA_WORK_SELF=1");
+    expect(decide({ requests: [], work: off }).action).toBe("none");
+    expect(decide({ requests, work: { on: true, why: "on by default" } })).toMatchObject({
+      action: "open",
+      request: { id: "r1" },
+    });
+  });
+
   it("refuses a live name: recorded, rotating, by hand, or just opened", () => {
     const requests = [req("r2", "a")];
     const refused = { action: "refuse", why: "`backlog - a` is already live" };

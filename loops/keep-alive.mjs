@@ -19,10 +19,15 @@
 // The third gets a question ("open again" or "stop keeping it alive") with its
 // own marker (KEEP_SESSION) and state entry, so it is never read as a reopen
 // question. "Stop" holds until the dispatcher next starts.
+//
+// The repo's work switch (machine.mjs's workSwitch, the dispatcher's
+// facts.work) off: no kind is opened, and the why says so. Session requests
+// (session-requests.mjs) read the same switch.
 import { CAPTAINS, CAPTAIN_SESSION } from "./captain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { runs } from "./sessions.mjs";
 import { CLAUDE } from "./host.mjs";
+import { WORK_VAR } from "./machine.mjs";
 
 /**
  * The two-letter machine tag v0.1.3 and v0.1.4 put before a backlog or inbox Remote Control name
@@ -41,6 +46,13 @@ export const MAX_QUICK_DEATHS = 3;
 export const QUICK_DEATH_MS = 30 * 60_000;
 /** A tab just opened has this long to start before it counts as dead. */
 export const START_GRACE_MS = 2 * 60_000;
+
+/**
+ * Why nothing opens with the work switch off (machine.mjs's workSwitch result), or null when it is on
+ * or unknown.
+ */
+export const workOffWhy = (/** @type {{ on: boolean, why: string } | null | undefined} */ work) =>
+  work && !work.on ? `the work switch is off (${work.why}; ${WORK_VAR}=1 turns it on for one process)` : null;
 
 /**
  * @typedef {{ deaths?: number, openedAt?: number, asked?: { id: string }, stopped?: boolean }} KeepEntry
@@ -95,7 +107,7 @@ export function clearKeepStops(/** @type {KeepState | undefined} */ keep) {
 /**
  * One decision per kept kind.
  * @param {{ kinds?: string[], sessions?: KeepSession[], processes?: string[] | null, keep?: KeepState,
- *   paused?: boolean, off?: boolean, now: number, claude?: string, unready?: Record<string, string> }} facts
+ *   paused?: boolean, off?: boolean, now: number, work?: { on: boolean, why: string } | null, claude?: string, unready?: Record<string, string> }} facts
  * @returns {KeepDecision[]}
  */
 export function keepAliveDecision({
@@ -108,7 +120,9 @@ export function keepAliveDecision({
   now,
   claude = CLAUDE,
   unready = {},
+  work = null,
 }) {
+  const workOff = workOffWhy(work);
   return kinds.map((kind) => {
     const none = (/** @type {string} */ why, reset = false) => ({
       kind,
@@ -117,6 +131,7 @@ export function keepAliveDecision({
       ...(reset ? { reset } : {}),
     });
     if (off) return none("RISA_KEEP_SESSIONS is off");
+    if (workOff) return none(workOff);
     if (paused) return none("the dispatcher is paused");
     const e = keep[kind] ?? {};
     if (e.stopped) return none("stopped until the dispatcher next starts");

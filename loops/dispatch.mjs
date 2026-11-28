@@ -82,12 +82,16 @@
 // command or with a landing marker; a hand-opened session's mark is only reported.
 //
 // Between ticks (never mid-tick) it compares the hash of its code (codeHash: the
-// non-test .mjs files of loops/ and backlog/, hashed at its start)
-// with the main checkout's; when a landing or the pickup changed it, it logs one
-// line and re-execs itself (process.execve: the same pid, tab and lock) on the main
-// checkout's dispatch.mjs, so it never runs old code past one tick (B-809). Its
-// start writes the hash into .dispatch.json (`code`), and `prd status` says
-// whether the running one's code is current or stale.
+// non-test .mjs files of loops/ and backlog/, hashed at its start) with its target's
+// (staleness): a dispatcher run from a checkout targets that checkout, which a landing
+// or the pickup changes; one run from a release install (~/.risa/releases/<tag>, or
+// the folder the `risa` link resolved to at its start) targets the folder `risa` now
+// points to (`risa --root`: bin/risa's own resolution), so a new install moves it
+// (RISA-981). Changed, it logs one line and re-execs (process.execve: the same pid,
+// tab and lock) on the target's dispatch.mjs, so it never runs old code past one tick
+// (B-809). Its start writes the hash, its folder and whether it follows the link into
+// .dispatch.json (`code`), and `prd status` says whether the running one's code is
+// current or stale against the same target.
 //
 // Files, in the main checkout's .loops: .dispatch.lock (the running
 // instance's pid; a lock whose pid is gone is taken over), .dispatch.json (the
@@ -109,13 +113,15 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dismissAsk, getAsk, listAsks, settleDue } from "./asks.mjs";
 import { CAPTAIN_SESSION, nextCaptain } from "./captain.mjs";
@@ -141,7 +147,7 @@ import {
   stalledSessions,
 } from "./drain.mjs";
 import { heartbeatDirOf, readHeartbeats } from "./heartbeat.mjs";
-import { workSwitch } from "./machine.mjs";
+import { MACHINE_DIR, workSwitch } from "./machine.mjs";
 import { listRecords as listLandings } from "./land-journal.mjs";
 import { landedTopics } from "./landed.mjs";
 import { briefProblem } from "./rotate.mjs";
@@ -299,8 +305,69 @@ export function codeHash(/** @type {string} */ root) {
   }
 }
 
+/** This dispatcher's own tool folder: a checkout or a release install. */
+const OWN_ROOT = join(HERE, "..");
+
 /** The hash this dispatcher's code had when it started (read now, before any landing). */
-const CODE_AT_START = codeHash(join(HERE, ".."));
+const CODE_AT_START = codeHash(OWN_ROOT);
+
+/** A path with its symlinks resolved, when it exists. @param {string} p */
+const real = (p) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+};
+
+/**
+ * The tool folder the `risa` on PATH runs from now, asked of bin/risa itself
+ * (`risa --root` prints the folder its own link resolution found), so a moved
+ * install link is seen; null when no `risa` answers with one.
+ */
+export function linkedRoot(env = process.env) {
+  try {
+    const out = execFileSync("risa", ["--root"], {
+      env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10_000,
+    }).trim();
+    return out && !out.includes("\n") && isAbsolute(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a dispatcher whose code is in OWN follows the `risa` link: it runs from
+ * a release install (a folder of HOME/.risa/releases) or from the folder the link
+ * (LINKED: linkedRoot's) resolves to now. A checkout elsewhere follows its own code.
+ * @param {string} own @param {string | null} linked @param {string} [home]
+ */
+export function followsLink(own, linked, home = homedir()) {
+  const o = real(own);
+  return (linked !== null && real(linked) === o) || dirname(o) === real(join(home, MACHINE_DIR, "releases"));
+}
+
+/** The folder a dispatcher compares and re-execs into: the link's when it follows one that answers, else its own. */
+export const codeTarget = (
+  /** @type {string} */ own,
+  /** @type {boolean | undefined} */ follows,
+  /** @type {string | null} */ linked,
+) => (follows && linked ? linked : own);
+
+/**
+ * The staleness check between ticks: the target folder (codeTarget, the link read
+ * now when FOLLOWS), its code's hash, whether that differs from STARTED, and the
+ * dispatch.mjs a re-exec runs.
+ * @param {{ started: string | null, own: string, follows: boolean, env?: NodeJS.ProcessEnv }} o
+ */
+export function staleness({ started, own, follows, env = process.env }) {
+  const root = codeTarget(own, follows, follows ? linkedRoot(env) : null);
+  const hash = codeHash(root);
+  return { root, hash, stale: staleCode(started, hash), script: join(root, "loops", "dispatch.mjs") };
+}
 
 /** Stale: both hashes known and different (an unreadable one is never stale). */
 export const staleCode = (
@@ -387,7 +454,8 @@ export function prdCapOf(/** @type {string} */ file, env = process.env) {
  *   drain?: { state?: string, unknownReported?: boolean, reported?: string[] },
  *   inboxReported?: boolean,
  *   resume?: { claimed?: Record<string, import("./resume.mjs").Claim> },
- *   code?: { hash: string | null, pid: number, at: string, every?: number } }} DispatchState */
+ *   code?: { hash: string | null, pid: number, at: string, root?: string, follows?: boolean,
+ *     every?: number } }} DispatchState */
 
 /** @returns {DispatchState} */
 export function readState(/** @type {string} */ file) {
@@ -1106,6 +1174,7 @@ function requestStep(
     max: positive(env.RISA_MAX_BACKLOG_SESSIONS, DEFAULT_MAX_BACKLOG_SESSIONS),
     now,
     claude: claudeName(env),
+    work: g.facts.work,
   });
   if (d.action === "none") {
     if (dryRun && d.why !== "no pending request") out(`session request: waits (${d.why})`);
@@ -1639,11 +1708,12 @@ export function tick(
     };
   }
   for (const s of facts.sessions) if (resume?.resuming.has(s.name)) s.resuming = true;
-  // A dead session stalled on a limit still ahead (its own account's) waits for the resume.
+  // A dead session stalled on a limit still ahead (its own account's) waits for the resume;
+  // with the usage watch off (RISA_USAGE_WATCH=off) none does: the pick reopens it.
   /** @type {Set<string>} */
   let stalls = new Set();
   try {
-    stalls = p.usage ? stalledSessions(readReadings(p.usage), facts.now) : stalls;
+    if (p.usage && !drainSettings(env).off) stalls = stalledSessions(readReadings(p.usage), facts.now);
   } catch {
     /* no readings: none stalled */
   }
@@ -1737,6 +1807,7 @@ export function tick(
     off: env.RISA_KEEP_SESSIONS === "off",
     now,
     claude: claudeName(env),
+    work: facts.work,
   });
   for (const d of keepDecisions)
     if (dryRun || d.action !== "none")
@@ -2184,11 +2255,20 @@ async function main() {
   process.on("exit", () => releaseLock(p.lock));
 
   const reexeced = o.reexec;
+  // Whether it follows the `risa` link (a release install) or its own checkout.
+  const follows = !o.once && followsLink(OWN_ROOT, linkedRoot());
   if (!o.once) {
     // A start begins again after "stop keeping it alive" (a re-exec or a --restart is no start).
     updateState(p.state, (s) => {
       if (s.keepAlive && !reexeced && o.restarted === null) s.keepAlive = clearKeepStops(s.keepAlive);
-      s.code = { hash: CODE_AT_START, pid: process.pid, at: stamp(nowOf()), every: o.every };
+      s.code = {
+        hash: CODE_AT_START,
+        pid: process.pid,
+        at: stamp(nowOf()),
+        root: OWN_ROOT,
+        follows,
+        every: o.every,
+      };
     });
     const what = reexeced
       ? `re-exec'd on new code ${CODE_AT_START} (was ${reexeced}; `
@@ -2201,11 +2281,13 @@ async function main() {
     );
   }
   let last = "";
+  /** @type {ReturnType<typeof staleness> | null} */
+  let check = null;
   const end = await runLoop({
     every: o.every,
     once: o.once,
     started: CODE_AT_START,
-    current: () => codeHash(join(HERE, "..")),
+    current: () => (check = staleness({ started: CODE_AT_START, own: OWN_ROOT, follows })).hash,
     step: () => {
       const now = nowOf();
       const quiet = [];
@@ -2219,10 +2301,17 @@ async function main() {
     },
   });
   if (end.stale) {
-    log([`re-exec: the tool's code changed (${end.from} -> ${end.to}); restarting between ticks`], nowOf());
-    console.log(`${stamp(nowOf())} re-exec: new code ${end.to} in the tool's checkout (was ${end.from})`);
+    log(
+      [
+        `re-exec: the tool's code changed (${end.from} -> ${end.to}); restarting between ticks on ${check?.script}`,
+      ],
+      nowOf(),
+    );
+    const script = check?.script ?? join(HERE, "dispatch.mjs");
+    console.log(
+      `${stamp(nowOf())} re-exec: new code ${end.to} in ${dirname(dirname(script))} (was ${end.from})`,
+    );
     const own = process.argv.slice(2).filter((a, i, all) => a !== "--reexec" && all[i - 1] !== "--reexec");
-    const script = join(HERE, "dispatch.mjs");
     const args = [...process.execArgv, script, ...own, "--reexec", end.from ?? "-"];
     const env = process.env;
     // The same pid keeps the lock (takeLock takes its own pid's back) and the tab.

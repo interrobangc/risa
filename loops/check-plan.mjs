@@ -8,6 +8,9 @@
 //     for none), the diff's own integration and component test files (space-separated)
 //   node check-plan.mjs --propose [--declared <tier>] [--repo DIR --base REF [--head REF]]
 //   → three lines: the proposed tier, why, and ok | below | refused for the declared tier
+//   node check-plan.mjs --plan <plan-file>
+//   → a plan's slice budget (planBudget, below): a warning per slice over it on
+//     stderr, then how its waves were read; always exits 0 (`prd anchors` runs it too)
 // The three modes (the project's check hook runs them, through check-hook.sh):
 //   slice  a slice's hand-off: typecheck, lint, format, every unit test, and only
 //          the integration and component test files the slice added or edited.
@@ -41,6 +44,7 @@ import { join } from "node:path";
 import { readPackages, scriptsOnlyFiles } from "./package-diff.mjs";
 import { loadConfig } from "./config.mjs";
 import { TierDataError, tierData } from "../ci/tier-data.mjs";
+import { FILE_EXT, mergedSlices, sliceFields, sliceRows, sliceSections } from "./slice-fields.mjs";
 
 /** The core's own folders, tooling while they sit in the repo (lib.sh's exempt_re too). */
 const CORE_TOOLING = ["loops", "backlog"];
@@ -379,11 +383,133 @@ export const declaredStatus = (proposed, declared) => checkPlan().declaredStatus
 /** @param {string[]} changed */
 export const planToolingLint = (changed) => checkPlan().planToolingLint(changed);
 
+// A plan's slice budget (`prd doc planner`, The plan's shape): about 4 files, one
+// test file named by the slice's Check field, and no Check file shared by two
+// slices of one wave. It only warns: an old plan without Check still passes.
+
+/** Build files past this many warn. */
+export const BUILD_FILES = 4;
+
+/**
+ * The distinct backticked files a slice's Build (or What to build) paragraph
+ * names, up to the next bold label (`**Acceptance criteria:**`) or heading.
+ */
+export function buildFiles(/** @type {string} */ body) {
+  const m = /^\*\*(?:What to )?build\b[^\n]*(?:\n(?!\*\*[^*\n]+:\*\*|#)[^\n]*)*/im.exec(body);
+  const spans = m ? [...m[0].matchAll(/`([^`\s]+)`/g)].map((f) => f[1]) : [];
+  return [...new Set(spans.filter((f) => FILE_EXT.test(f)))];
+}
+
+/**
+ * Each unmerged slice's wave, and where it was read from: the slices' `Blocked by`
+ * chains (when every one gives the field: a slice blocked by no unmerged slice is
+ * wave 1, else one past its blockers'), failing that the _Status_ table's Wave
+ * column (when it has a value for every one), failing that one wave of the slices
+ * after the last merged one.
+ * @param {string} planText
+ * @param {{ n: number, blockedBy: number[], given: string[] }[]} slices the unmerged ones
+ * @param {Set<number>} merged
+ * @returns {{ waves: Map<number, string>, wavesFrom: string }}
+ */
+export function sliceWaves(planText, slices, merged) {
+  const waves = new Map();
+  if (slices.length && slices.every((s) => s.given.includes("blocked by"))) {
+    const by = new Map(slices.map((s) => [s.n, s.blockedBy.filter((b) => !merged.has(b))]));
+    const depth = (/** @type {number} */ n, seen = new Set()) => {
+      if (seen.has(n)) return 1; // a cycle: stop counting
+      seen.add(n);
+      const up = (by.get(n) ?? []).filter((b) => by.has(b));
+      return up.length ? 1 + Math.max(...up.map((b) => depth(b, new Set(seen)))) : 1;
+    };
+    for (const s of slices) waves.set(s.n, String(depth(s.n)));
+    return { waves, wavesFrom: "waves from the slices' Blocked by chains" };
+  }
+  const status = new Map(sliceRows(planText).map((r) => [r.slice, r.cells.wave ?? ""]));
+  if (slices.length && slices.every((s) => /\S/.test(status.get(s.n) ?? ""))) {
+    for (const s of slices) waves.set(s.n, /** @type {string} */ (status.get(s.n)));
+    return { waves, wavesFrom: "waves from the Status table's Wave column" };
+  }
+  const last = Math.max(0, ...merged);
+  for (const s of slices) if (s.n > last) waves.set(s.n, "after");
+  return { waves, wavesFrom: `one wave: the slices after the last merged one (${last || "none merged"})` };
+}
+
+/**
+ * The budget warnings for a plan's open slices: those not merged and, when the
+ * plan's Status table lists any slice, listed there (status-trim moves a landed
+ * wave's rows out, so a slice with no row has landed).
+ * @param {string} planText
+ * @param {{ merged?: Set<number> }} [opts] the merged slices (default: the plan's own tables)
+ * @returns {{ warnings: { slice: number, text: string }[], wavesFrom: string }}
+ */
+export function planBudget(planText, { merged = mergedSlices([planText]) } = {}) {
+  /** @type {{ slice: number, text: string }[]} */
+  const warnings = [];
+  const slices = [];
+  const listed = new Set(sliceRows(planText).map((r) => r.slice));
+  for (const { n, body } of sliceSections(planText)) {
+    if (merged.has(n) || (listed.size && !listed.has(n))) continue;
+    const f = sliceFields(planText, n);
+    slices.push({ n, blockedBy: f.blockedBy, given: f.given, check: f.check });
+    const files = buildFiles(body);
+    if (files.length > BUILD_FILES)
+      warnings.push({
+        slice: n,
+        text: `Build names ${files.length} files (budget: about ${BUILD_FILES}): split it`,
+      });
+    if (!f.given.includes("check")) warnings.push({ slice: n, text: "no Check field (its one test file)" });
+    else if (f.check.length !== 1)
+      warnings.push({ slice: n, text: `Check names ${f.check.length} test files, not one` });
+  }
+  const { waves, wavesFrom } = sliceWaves(planText, slices, merged);
+  /** @type {Map<string, number[]>} */
+  const named = new Map();
+  for (const s of slices) {
+    if (!waves.has(s.n)) continue;
+    for (const file of s.check) {
+      const key = `${waves.get(s.n)}\0${file}`;
+      named.set(key, [...(named.get(key) ?? []), s.n]);
+    }
+  }
+  for (const [key, ns] of named)
+    if (ns.length > 1)
+      warnings.push({
+        slice: /** @type {number} */ (ns.at(-1)),
+        text: `shares its Check file ${key.split("\0")[1]} with slice ${ns.slice(0, -1).join(", ")} in one wave`,
+      });
+  return { warnings, wavesFrom };
+}
+
+/** `--plan <file>`: the budget's warnings on stderr, how waves were read; exit 0. */
+function planCli(/** @type {string} */ file) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (e) {
+    console.error(`check-plan: can't read ${file} (${e instanceof Error ? e.message : e})`);
+    process.exit(2);
+  }
+  const history = file.replace(/-plan\.md$/, "-history.md");
+  let historyText = "";
+  if (history !== file)
+    try {
+      historyText = readFileSync(history, "utf8");
+    } catch {
+      // no history yet
+    }
+  const { warnings, wavesFrom } = planBudget(text, { merged: mergedSlices([text, historyText]) });
+  for (const w of warnings) console.error(`warning: slice ${w.slice}: ${w.text}`);
+  console.log(
+    warnings.length ? `${warnings.length} budget warning(s); ${wavesFrom}` : `budget ok; ${wavesFrom}`,
+  );
+}
+
 const USAGE = `usage: check-plan.mjs --mode slice|quick|full [--repo DIR --base REF --head REF] < changed-files
-       check-plan.mjs --propose [--declared <tier>] [--repo DIR] [--base REF [--head REF] | < changed-files]`;
+       check-plan.mjs --propose [--declared <tier>] [--repo DIR] [--base REF [--head REF] | < changed-files]
+       check-plan.mjs --plan <plan-file>`;
 
 /** The CLI's flags, each taking a value but --propose. */
-const VALUED = new Set(["--mode", "--declared", "--repo", "--base", "--head"]);
+const VALUED = new Set(["--mode", "--declared", "--repo", "--base", "--head", "--plan"]);
 
 /**
  * The CLI's arguments, checked before anything reads stdin, so a wrong call
@@ -404,6 +530,10 @@ export function parseArgs(argv) {
       opts[arg.slice(2)] = value;
     } else return { ok: false, error: `unknown argument ${arg}` };
   }
+  if (opts.plan)
+    return Object.keys(opts).length > 1 || propose
+      ? { ok: false, error: "--plan goes alone" }
+      : { ok: true, propose, opts };
   if (!propose && !opts.mode) return { ok: false, error: "give --mode or --propose" };
   if (propose && opts.mode) return { ok: false, error: "--mode and --propose don't go together" };
   if (opts.head && !opts.base) return { ok: false, error: "--head needs --base" };
@@ -461,7 +591,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
   try {
-    await cli(args);
+    if (args.opts.plan) planCli(args.opts.plan);
+    else await cli(args);
   } catch (e) {
     // A rules or tier data file that doesn't load: one line, never a Node stack.
     if (!(e instanceof CheckPlanRulesError || e instanceof TierDataError)) throw e;

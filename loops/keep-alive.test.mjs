@@ -12,6 +12,7 @@ import {
   keepAliveDecision,
   keepAnswerAction,
   remoteNamesOf,
+  workOffWhy,
 } from "./keep-alive.mjs";
 import { CAPTAINS } from "./captain.mjs";
 
@@ -64,6 +65,28 @@ describe("keepAliveDecision", () => {
   it("gives nothing while paused or switched off", () => {
     expect(one({ paused: true }).action).toBe("none");
     expect(one({ off: true }).action).toBe("none");
+  });
+
+  it("opens no kind with the repo's work switch off, saying why, and acts as now with it on", () => {
+    const off = { on: false, why: `"work": false for /tmp/sample in /tmp/machine.json` };
+    const ds = decide({ work: off });
+    expect(ds.map((d) => [d.kind, d.action])).toEqual([
+      ["backlog", "none"],
+      ["inbox", "none"],
+    ]);
+    for (const d of ds) {
+      expect(d.why).toBe(workOffWhy(off));
+      expect(d.why).toContain("the work switch is off");
+      expect(d.why).toContain(off.why);
+      expect(d.why).toContain("RISA_WORK_SELF=1");
+    }
+    const on = decide({ work: { on: true, why: "on by default" } });
+    expect(on.map((d) => [d.kind, d.action])).toEqual([
+      ["backlog", "open"],
+      ["inbox", "open"],
+    ]);
+    expect(workOffWhy({ on: true, why: "x" })).toBeNull();
+    expect(workOffWhy(undefined)).toBeNull();
   });
 
   it("waits out the start grace after an open", () => {

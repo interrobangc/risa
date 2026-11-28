@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAsk, settleAsk } from "./asks.mjs";
-import { codeHash } from "./dispatch.mjs";
+import { codeHash, codeTarget } from "./dispatch.mjs";
 import { createRequest } from "./session-requests.mjs";
 import {
   againstUsual,
@@ -16,6 +16,7 @@ import {
   prdArgs,
   prdCommands,
   statusParts,
+  targetOf,
   workersPart,
 } from "./status-extra.mjs";
 
@@ -234,7 +235,7 @@ describe("the dispatcher's part", () => {
       `DISPATCHER: running (pid ${process.pid}), code current\n\n`,
     );
     expect(dispatcherPart(files(), { now: NOW, current: () => "def" })).toBe(
-      `DISPATCHER: running (pid ${process.pid}), code stale (abc; the tool's checkout has def: it re-execs before its next tick)\n\n`,
+      `DISPATCHER: running (pid ${process.pid}), code stale (abc; the tool's checkout has def: it re-execs onto ${join(HERE, "..", "loops", "dispatch.mjs")} before its next tick)\n\n`,
     );
     // A record of another pid, or none: a dispatcher from before the code check.
     writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: 4, at: ago(H) } }));
@@ -247,6 +248,53 @@ describe("the dispatcher's part", () => {
     expect(dispatcherPart(files(), { now: NOW, holder: () => null, current: () => "def" })).not.toContain(
       "code",
     );
+  });
+
+  it("names the same target the dispatcher follows: the release the link points to now (RISA-981)", () => {
+    writeFileSync(files().lock, `${process.pid}\n`);
+    const rel = join(root, "releases");
+    const v2 = join(rel, "v2");
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        code: { hash: "abc", pid: process.pid, at: ago(H), root: join(rel, "v1"), follows: true },
+      }),
+    );
+    // The target is dispatch.mjs's codeTarget: the link's folder when it follows it.
+    const seen = [];
+    const out = dispatcherPart(files(), {
+      now: NOW,
+      target: (code) => codeTarget(code.root, code.follows, v2),
+      current: (r) => (seen.push(r), "def"),
+    });
+    expect(seen).toEqual([v2]);
+    expect(out).toContain(
+      `code stale (abc; the release installed now has def: it re-execs onto ${join(v2, "loops", "dispatch.mjs")} before its next tick)`,
+    );
+    // A checkout-run one's target is its own recorded folder.
+    expect(targetOf({ hash: "abc", pid: 1, at: ago(H), root: join(rel, "co"), follows: false })).toBe(
+      join(rel, "co"),
+    );
+  });
+
+  it("shows the last tick's time beside the last logged change", () => {
+    writeFileSync(files().lock, `${process.pid}\n`);
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        code: { hash: "abc", pid: process.pid, at: ago(H) },
+        stuck: { lastTickAt: NOW - 120_000 },
+      }),
+    );
+    writeFileSync(files().log, "2026-11-21T10:01:00Z start alpha\n");
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toBe(
+      `DISPATCHER: running (pid ${process.pid}), code current\nlast: 2026-11-21T10:01:00Z start alpha · last tick 2m ago (2026-11-21T11:58:00Z)\n\n`,
+    );
+    rmSync(files().log);
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(
+      "\nlast tick 2m ago (2026-11-21T11:58:00Z)\n",
+    );
+    writeFileSync(files().state, "{}");
   });
 
   it("adds its log's last entry, without the entry's indented reasons", () => {
