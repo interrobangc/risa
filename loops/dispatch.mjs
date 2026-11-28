@@ -54,7 +54,8 @@
 //
 // Each tick also catches a stuck managed, run-through orchestrator (dispatch-stuck.mjs):
 // one question per stall that never defaults ("rotate it now", the mid-wave
-// rotation, or "leave it"). RISA_STUCK_MIN (30); RISA_STUCK_WATCH=off stops it.
+// rotation, or "leave it"). RISA_STUCK_MIN (30), RISA_STUCK_NOTIFIED_MIN (10: a
+// notification with no turn after it); RISA_STUCK_WATCH=off stops it.
 //
 // Every RISA_PICKUP_EVERY seconds (300; `off` never), on a tick that isn't
 // paused, it runs the pickup (`prd dev-sync`), so lines pushed to
@@ -147,6 +148,7 @@ import {
   stuckClock,
   stuckDecision,
   stuckSettings,
+  transcriptNotifiedAt,
 } from "./dispatch-stuck.mjs";
 import {
   LIMITED_ERROR,
@@ -954,7 +956,7 @@ function stuckStep(
 ) {
   if (env.RISA_STUCK_WATCH === "off") return false;
   const now = g.facts.now;
-  const { limitMs, gapMs } = stuckSettings(env, every);
+  const { limitMs, gapMs, notifiedMs } = stuckSettings(env, every);
   const prev = readState(p.state).stuck ?? {};
   const clockFrom = stuckClock(prev, now, gapMs);
   const sessions = g.records.map((r) => ({
@@ -966,8 +968,15 @@ function stuckStep(
     auto: r.record.auto === true,
     live: r.live,
     rotating: r.record.rotating === true,
+    notifiedAt: /** @type {number | null} */ (null),
   }));
   const watched = sessions.filter((s) => s.live && s.managed && s.auto && s.kind === "prd" && s.topic);
+  const heartbeats = watched.length ? readHeartbeats(heartbeatDirOf(p.sessions)) : [];
+  // A watched session's newest notification with no reply after it (RISA-1033).
+  for (const s of watched) {
+    const own = heartbeats.find((h) => h.session === s.name && h.pid === s.pid && !h.agent);
+    s.notifiedAt = transcriptNotifiedAt(own?.transcript);
+  }
   // The process table only when a session is watched; unreadable holds every one (busy).
   const running = new Set();
   if (watched.length) {
@@ -998,7 +1007,7 @@ function stuckStep(
     }
   const actions = stuckDecision({
     sessions,
-    heartbeats: watched.length ? readHeartbeats(heartbeatDirOf(p.sessions)) : [],
+    heartbeats,
     running,
     asks,
     watch,
@@ -1007,6 +1016,7 @@ function stuckStep(
     paused: g.facts.paused,
     clockFrom,
     limitMs,
+    notifiedMs,
     now,
   });
   if (dryRun) {

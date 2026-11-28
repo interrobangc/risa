@@ -1,9 +1,17 @@
 // The dispatcher's stuck-orchestrator follow-up (B-408): an orchestrator can't
-// watch itself, so the tick (dispatch.mjs) does. Pure: the tick gathers the
-// session records, heartbeats (heartbeat.mjs), the commands under each session,
-// the asks and the watch's files (watch.mjs), and acts.
+// watch itself, so the tick (dispatch.mjs) does. Pure (transcriptNotifiedAt aside:
+// it reads a transcript's end): the tick gathers the session records, heartbeats
+// (heartbeat.mjs), the commands under each session, the asks and the watch's files
+// (watch.mjs), and acts.
 //
-// A live, managed, run-through (`auto`) orchestrator is stuck when either:
+// A live, managed, run-through (`auto`) orchestrator is stuck when any of:
+//   - notified (RISA-1033): its newest transcript event is a delivered notification
+//     (a task notification, a cross-session or agent message) after its turn ended
+//     (a Stop, nothing running), with no turn since for RISA_STUCK_NOTIFIED_MIN
+//     (10). Claude Code sometimes never wakes for one; a busy command under it or an
+//     open question doesn't hide this one. Risa has no way to wake an idle session
+//     (the context nudge rides a hook, which an idle session never fires), so it
+//     asks at once, saying a SendMessage to it may wake it;
 //   - quiet: no heartbeat of its own for the limit (RISA_STUCK_MIN, 30), no
 //     agent of its session with a heartbeat inside the limit (a hung slice agent's
 //     old one doesn't count), and nothing running; or
@@ -26,11 +34,12 @@
 //
 // A tick gap over the gap (RISA_STUCK_GAP seconds, 600, at least three ticks;
 // a sleep, or a paused dispatcher) resets the clocks: every time counts from then.
-// Two or more going quiet within the limit of each other (a usage limit, a network
-// loss) raise one report and no question.
+// Two or more going quiet or notified within the limit of each other (a usage
+// limit, a network loss) raise one report and no question.
 //
 // The state is `stuck` in the dispatcher's state: { lastTickAt, clockFrom,
 // sessions: { <name>: StuckEntry }, reported: [<key>…] }.
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { awaitsAnswer } from "./asks.mjs";
 import { runsPrdCommand } from "./dispatch-context.mjs";
 
@@ -49,6 +58,7 @@ export function stuckSettings(/** @type {NodeJS.ProcessEnv} */ env = {}, /** @ty
   };
   return {
     limitMs: num("RISA_STUCK_MIN", 30) * MIN,
+    notifiedMs: num("RISA_STUCK_NOTIFIED_MIN", 10) * MIN,
     gapMs: Math.max(num("RISA_STUCK_GAP", 600), 3 * everyS) * 1000,
   };
 }
@@ -109,13 +119,73 @@ const latest = (/** @type {unknown[]} */ ts) => {
   return all.length ? Math.max(.../** @type {number[]} */ (all)) : null;
 };
 const iso = (/** @type {number} */ n) => new Date(n).toISOString();
+
+/** A notification's text: a task notification, or a message from another session or an agent. */
+const NOTE =
+  /^\s*(?:Another Claude session sent a message:\s*)?<(?:task-notification|cross-session-message|agent-message)\b/;
+const textOf = (/** @type {any} */ c) =>
+  typeof c === "string"
+    ? c
+    : Array.isArray(c)
+      ? c.map((p) => (typeof p?.text === "string" ? p.text : "")).join("")
+      : "";
+
+/**
+ * When a transcript's newest event is a delivered notification: its time (ms), or
+ * null when a reply (an assistant line) came after it or there is none. TEXT is the
+ * transcript's JSONL, or its end (a cut first line is skipped). Pure.
+ */
+export function notifiedAtOf(/** @type {string} */ text) {
+  let note = null;
+  let turn = null;
+  for (const line of String(text ?? "").split("\n")) {
+    if (!line.trim()) continue;
+    let e;
+    try {
+      e = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const t = ms(e?.timestamp);
+    if (t === null) continue;
+    if (e.type === "assistant") turn = turn === null ? t : Math.max(turn, t);
+    else if (
+      (e.type === "queue-operation" && e.operation === "enqueue" && NOTE.test(String(e.content ?? ""))) ||
+      (e.type === "user" && NOTE.test(textOf(e.message?.content)))
+    )
+      note = note === null ? t : Math.max(note, t);
+  }
+  return note !== null && (turn === null || note > turn) ? note : null;
+}
+
+/** How much of a transcript's end transcriptNotifiedAt reads. */
+const TAIL_BYTES = 512 * 1024;
+
+/** notifiedAtOf a transcript file's end, or null (no file, or unreadable). */
+export function transcriptNotifiedAt(/** @type {unknown} */ file) {
+  if (typeof file !== "string" || !file) return null;
+  let fd;
+  try {
+    fd = openSync(file, "r");
+    const total = fstatSync(fd).size;
+    const n = Math.min(TAIL_BYTES, total);
+    const buf = Buffer.alloc(n);
+    readSync(fd, buf, 0, n, total - n);
+    return notifiedAtOf(buf.toString("utf8"));
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 const mins = (/** @type {number} */ n) => `${Math.max(0, Math.round(n / MIN))}m`;
 
 /**
  * @typedef {{ pid: number, since: number, askId?: string, answer?: "rotate" | "leave",
  *   triedAt?: number, reported?: boolean }} StuckEntry
  * @typedef {{ name: string, pid: number, kind?: string, topic?: string, managed?: boolean,
- *   auto?: boolean, live: boolean, rotating?: boolean }} StuckSession
+ *   auto?: boolean, live: boolean, rotating?: boolean, notifiedAt?: number | null }} StuckSession
+ *   `notifiedAt`: notifiedAtOf its transcript's end
  * @typedef {{ actions?: Record<string, { action: string, since: string }> } | null} WatchState
  * @typedef {{ type: "clear", session: string, askId: string | null }
  *   | { type: "ask", session: string, pid: number, topic: string, text: string, since: number }
@@ -126,16 +196,33 @@ const mins = (/** @type {number} */ n) => `${Math.max(0, Math.round(n / MIN))}m`
 
 /**
  * The stall a watched session is in, or null. Pure.
- * @returns {{ kind: "quiet" | "watch", since: number, why: string } | null}
+ * @returns {{ kind: "quiet" | "watch" | "notified", since: number, why: string } | null}
  */
-function stallOf(
+export function stallOf(
   /** @type {StuckSession} */ s,
   /** @type {any[]} */ beats,
   /** @type {{ busy: boolean, openAsk: boolean, watch: WatchState, marks: { slice: string, at: string }[],
-   *   eff: (t: number | null) => number | null, limitMs: number, now: number }} */ f,
+   *   eff: (t: number | null) => number | null, limitMs: number, notifiedMs?: number, now: number }} */ f,
 ) {
   const own = beats.find((h) => !h.agent);
   if (!own) return null;
+  // A notification after its turn ended, and nothing since: no busy command or open
+  // question explains that (RISA-1033).
+  const turn = latest([own.lastStart, own.lastEnd, own.stoppedAt]);
+  if (
+    typeof s.notifiedAt === "number" &&
+    own.stoppedAt &&
+    !Object.keys(own.running ?? {}).length &&
+    (turn === null || s.notifiedAt > turn)
+  ) {
+    const since = /** @type {number} */ (f.eff(s.notifiedAt));
+    if (f.now - since >= (f.notifiedMs ?? 10 * MIN))
+      return {
+        kind: "notified",
+        since,
+        why: `a notification reached it ${mins(f.now - s.notifiedAt)} ago and it hasn't taken a turn since (Risa can't wake an idle session; a SendMessage to it may)`,
+      };
+  }
   const calls = Object.values(own.running ?? {}).filter(
     (c) => !["Agent", "Task"].includes(c?.tool) && !onlyWaits(c?.command),
   );
@@ -173,7 +260,7 @@ function stallOf(
  * @param {{ sessions: StuckSession[], heartbeats?: any[], running?: Set<string>, asks?: any[],
  *   watch?: Record<string, { state: WatchState, marks: { slice: string, at: string }[] }>,
  *   entries?: Record<string, StuckEntry>, reported?: string[], paused?: boolean,
- *   clockFrom?: number | null, limitMs: number, now: number }} facts `heartbeats`: every
+ *   clockFrom?: number | null, limitMs: number, notifiedMs?: number, now: number }} facts `heartbeats`: every
  *   record (heartbeat.mjs), stale ones too; `running`: sessions with a busy command under
  *   them; `asks`: every ask; `watch`: each topic's watch state and marks
  * @returns {StuckAction[]}
@@ -189,6 +276,7 @@ export function stuckDecision({
   paused = false,
   clockFrom = null,
   limitMs,
+  notifiedMs = 10 * MIN,
   now,
 }) {
   if (paused) return [];
@@ -222,6 +310,7 @@ export function stuckDecision({
         marks: watch[topic]?.marks ?? [],
         eff,
         limitMs,
+        notifiedMs,
         now,
       },
     );
@@ -248,8 +337,8 @@ export function stuckDecision({
     .map(([session, e]) => /** @type {StuckAction} */ ({ type: "clear", session, askId: openOf(e) }));
   actions.unshift(...clears);
 
-  // Several quiet at once: one report, no question.
-  const quiet = fresh.filter((f) => f.stall.kind === "quiet");
+  // Several quiet (or notified) at once: one report, no question.
+  const quiet = fresh.filter((f) => f.stall.kind === "quiet" || f.stall.kind === "notified");
   const together = quiet.filter((a) =>
     quiet.some((b) => b !== a && Math.abs(a.stall.since - b.stall.since) <= limitMs),
   );

@@ -2,6 +2,7 @@
 // so these never take one of the machine's real leases.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -26,7 +27,13 @@ const children = [];
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lease-test-")));
-  env = { ...process.env, [ROOT_VAR]: join(root, "leases"), RISA_LEASE_POLL: "1" };
+  env = {
+    ...process.env,
+    [ROOT_VAR]: join(root, "leases"),
+    RISA_LEASE_POLL: "1",
+    RISA_CHECK_LOG: join(root, "check-times.log"),
+    RISA_RUN_LOG: join(root, "run-log.jsonl"),
+  };
   for (const k of Object.keys(env)) {
     if (
       /^RISA_(BROWSER_LEASES|BROWSER_OLD_LEASES|BROWSER_SLOTS|CHECK_SLOTS|LEASES)$/.test(k) ||
@@ -213,17 +220,97 @@ describe("waiting for a worktree's lease to go (lease.sh wait, pnpm prd wait)", 
     return p;
   };
 
-  it("returns once the worktree's check lease is released", async () => {
+  // checkLine(worktree, code, extra) → a check log line as check-run.sh writes it.
+  const checkLine = (worktree, code, { step = "", failed = "" } = {}) =>
+    [
+      "2026-11-28T10:00:00Z",
+      worktree,
+      "slice/x/1",
+      "slice",
+      "slice hand-off",
+      "42",
+      "1.0",
+      "1.2",
+      String(code),
+      "3",
+      "90",
+      "0",
+      step,
+      failed,
+      "",
+      "",
+      "",
+      "unit:40",
+    ].join("\t") + "\n";
+
+  it("returns once the worktree's check lease is released, printing the result it recorded", async () => {
+    // An older result, and another worktree's, aren't this check's.
+    writeFileSync(env.RISA_CHECK_LOG, checkLine("wt-a", 1, { step: "unit", failed: "old.test.mjs" }));
     const h = await hold("check", "pnpm check (quick)", wt);
     const w = start(["wait", "check", "--worktree", "wt-a", "--timeout", "30"]);
     await until(() => w.out.includes("Waiting (up to 0m30s) for wt-a's check:"));
     expect(w.out).toMatch(/wt-a: pnpm check \(quick\) \(pid \d+/);
     await sleep(1500);
     expect(w.child.exitCode).toBeNull();
+    appendFileSync(env.RISA_CHECK_LOG, checkLine("wt-b", 1) + checkLine("wt-a", 0));
     h.child.stdin.end();
     await h.exit;
     expect(await w.exit).toBe(0);
     expect(w.out).toMatch(/wt-a's check is done \(waited/);
+    expect(w.out).toContain(`Its result, in ${env.RISA_CHECK_LOG}:`);
+    expect(w.out).toContain('passed: the slice check "slice hand-off", 42 s, started 2026-11-28T10:00:00Z');
+    expect(w.out).toContain("2026-11-28T10:00:00Z | wt-a | slice/x/1 | slice");
+    expect(w.out).not.toMatch(/failed \(exit|old\.test/);
+  });
+
+  it("says a check that vanished recorded no result, and exits 1 (not 75)", async () => {
+    writeFileSync(env.RISA_CHECK_LOG, checkLine("wt-a", 0));
+    const h = await hold("check", "pnpm check (quick)", wt);
+    const w = start(["wait", "check", "--worktree", "wt-a", "--timeout", "30"]);
+    await until(() => w.out.includes("Waiting (up to 0m30s) for wt-a's check:"));
+    h.child.kill("SIGKILL");
+    await h.exit;
+    expect(await w.exit).toBe(1);
+    expect(w.err.trim()).toBe("the check ended with no result recorded: rerun it");
+    expect(w.out).not.toContain("Its result");
+  });
+
+  it("prints a failed check's outcome, and with no check to wait for, the last one recorded", async () => {
+    writeFileSync(
+      env.RISA_CHECK_LOG,
+      checkLine("wt-a", 1, { step: "unit", failed: "a.test.mjs,b.test.mjs" }),
+    );
+    const r = cli(["wait", "check", "--worktree", "wt-a", "--timeout", "1"]);
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("wt-a holds no check lease.");
+    expect(r.out).toContain("Its last check result");
+    expect(r.out).toContain("failed (exit 1): the slice check");
+    expect(r.out).toContain("; step unit; failed: a.test.mjs,b.test.mjs");
+    const none = cli(["wait", "check", "--worktree", "wt-c", "--timeout", "1"]);
+    expect(none.status).toBe(0);
+    expect(none.out).toBe("wt-c holds no check lease.\n");
+  });
+
+  it("prints the browser checks' results from the run log", async () => {
+    const event = (worktree, check, result) =>
+      JSON.stringify({
+        time: "2026-11-28T10:00:00Z",
+        kind: "browser",
+        check,
+        result,
+        seconds: 30,
+        worktree,
+      }) + "\n";
+    writeFileSync(env.RISA_RUN_LOG, event("wt-a", "old", "fail"));
+    const h = await hold("browser", "browser check", wt);
+    const w = start(["wait", "browser", "--worktree", "wt-a", "--timeout", "30"]);
+    await until(() => w.out.includes("for wt-a's browser:"));
+    appendFileSync(env.RISA_RUN_LOG, event("wt-a", "login", "pass") + event("wt-b", "other", "fail"));
+    h.child.stdin.end();
+    await h.exit;
+    expect(await w.exit).toBe(0);
+    expect(w.out).toContain("  login: pass\n");
+    expect(w.out).not.toMatch(/"check":"(old|other)"/);
   });
 
   it("exits 75 at its timeout while the lease is held, and ignores other worktrees' holders", async () => {
