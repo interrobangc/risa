@@ -17,6 +17,12 @@
 //                in facts.reported, so a kept tip is reported once
 //       act      { end: [the recorded live sessions], rm: true }: only once every
 //                report reason is ruled out
+//   - finishPick(candidates, { paused, draining, reported }): the dispatcher's one
+//     topic this tick (finishStep in dispatch.mjs): the first in row order whose
+//     decision is act, or a report not yet filed; passing over a standing one, one
+//     that waits, a report already filed (a null decision, or its key in
+//     reported), and an act that failed at this tip (failedKey in reported).
+//     None while paused or draining.
 //   - landedWithCode(repo, topics, trunk): the topics whose last landing is in
 //     the trunk and with code past it (landed.mjs's tailOf `code`): { [topic]:
 //     { sha } }. The caller leaves standing topics out, as for landedTopics.
@@ -82,6 +88,27 @@ export const reportKey = (
   /** @type {string[]} */ reasons,
   /** @type {string | null | undefined} */ tip,
 ) => `${topic}\t${reasons.join("+")}\t${tip || "-"}`;
+
+/** The key a failed act is filed under, so the dispatcher tries it once per tip. */
+export const failedKey = (/** @type {string} */ topic, /** @type {string | null | undefined} */ tip) =>
+  reportKey(topic, ["failed"], tip);
+
+/**
+ * @template {{ topic: string, standing?: boolean, tip?: string | null, decision: FinishDecision | null }} C
+ * @param {C[]} candidates in row order
+ * @param {{ paused?: boolean, draining?: boolean, reported?: string[] }} [opts]
+ * @returns {C | null}
+ */
+export function finishPick(candidates, { paused = false, draining = false, reported = [] } = {}) {
+  if (paused || draining) return null;
+  for (const c of candidates) {
+    const d = c.decision;
+    if (c.standing || !d) continue;
+    if (d.kind === "act" && !reported.includes(failedKey(c.topic, c.tip))) return c;
+    if (d.kind === "report" && !reported.includes(d.key)) return c;
+  }
+  return null;
+}
 
 const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
