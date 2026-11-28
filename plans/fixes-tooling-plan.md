@@ -6,15 +6,15 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
-| 14 | 3 | RISA-952 | opus | started | |
-| 15 | 3 | RISA-997 | opus | started | |
-| 16 | 3 | RISA-999 | opus | started | |
-| 17 | 3 | RISA-1000 | opus | started | |
-| 18 | 3 | RISA-927 | opus | started | |
+| Slice | Wave | Item      | Model | State                                  | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | -------------------------------------- | ------------------------------ |
+| 14    | 3    | RISA-952  | opus  | agent working                          |                                |
+| 15    | 3    | RISA-997  | opus  | agent working                          |                                |
+| 16    | 3    | RISA-999  | opus  | agent working                          |                                |
+| 17    | 3    | RISA-1000 | opus  | rechecking (plan-format fix merged in) |                                |
+| 18    | 3    | RISA-927  | opus  | agent working                          |                                |
 
-**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs), 996 (Codex on PR #5, orchestrator chore).
+**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
 
 **Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
 
