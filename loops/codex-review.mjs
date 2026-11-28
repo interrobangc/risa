@@ -7,6 +7,9 @@
 //             `@codex review` asks again)
 //   findings  Codex reviewed the head and threads of its own are unresolved
 //   clean     Codex reviewed the head and none of its threads is unresolved
+//   too-long  it would be clean, but the query read only the first page of the
+//             review threads or of a thread's comments (unreadPages): an
+//             unseen open thread or later comment may be there, so it isn't
 //   out-of-credits  the head isn't reviewed and Codex's latest word on the PR
 //             is its "reached your Codex usage limits" comment: no review is
 //             coming until credits are added (review.sh doesn't wait for one)
@@ -55,8 +58,8 @@ export const PR_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       number url state headRefName headRefOid
       reviews(last: 50) { nodes { id author { login } state body submittedAt url commit { oid } } }
-      reviewThreads(first: 100) { nodes { id isResolved isOutdated path line originalLine
-        comments(first: 50) { nodes { id author { login } body url createdAt commit { oid } originalCommit { oid } } } } }
+      reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { id isResolved isOutdated path line originalLine
+        comments(first: 50) { pageInfo { hasNextPage } nodes { id author { login } body url createdAt commit { oid } originalCommit { oid } } } } }
       comments(last: 100) { nodes { id author { login } body createdAt updatedAt url
         userContentEdits(first: 100) { nodes { editedAt diff } } } }
       reactions(last: 100) { nodes { content createdAt user { login } } }
@@ -74,6 +77,19 @@ export function isCodex(login) {
 }
 
 const nodes = (conn) => conn?.nodes ?? [];
+
+/**
+ * Why the PR's state isn't read whole, or null: PR_QUERY reads one page of the
+ * review threads and of each thread's comments, and either says it has
+ * another. A verdict that would be clean is too-long instead, and nothing
+ * carries: a thread or comment past the page could be an open finding.
+ */
+export function unreadPages(pr) {
+  if (pr.reviewThreads?.pageInfo?.hasNextPage) return "more than one page of review threads";
+  const long = nodes(pr.reviewThreads).filter((t) => t.comments?.pageInfo?.hasNextPage).length;
+  if (long) return `${long} review thread${long === 1 ? "" : "s"} with more than one page of comments`;
+  return null;
+}
 
 /** Accept the full GraphQL response, its `data`, or the pullRequest node. */
 export function pullRequestOf(json) {
@@ -224,7 +240,8 @@ export function openFindings(pr) {
  * findings are listed for "findings", "stale" and "out-of-credits" (still open
  * from the older review); for "clean" and "waiting" they're empty. A head
  * Codex hasn't reviewed is "out-of-credits" instead of waiting or stale when
- * its usage-limit comment is its latest word (outOfCreditsAt). While a review runs,
+ * its usage-limit comment is its latest word (outOfCreditsAt). A clean one
+ * is "too-long" (unread names why) when the state isn't read whole. While a review runs,
  * reviewedSha is the commit of the review before it. This reads the PR's state
  * only: carried (below) adds the rule that needs the repository.
  */
@@ -249,7 +266,10 @@ export function verdict(json) {
   if (isRunning || !reviewedSha) return { state: "waiting", findings: [], ...base };
   const findings = openFindings(pr);
   if (reviewedSha !== headSha) return { state: "stale", findings, ...base };
-  return { state: findings.length ? "findings" : "clean", findings, ...base };
+  if (findings.length) return { state: "findings", findings, ...base };
+  const unread = unreadPages(pr);
+  if (unread) return { state: "too-long", findings, unread, ...base };
+  return { state: "clean", findings, ...base };
 }
 
 const short = (sha) => (sha ? sha.slice(0, 7) : "none");
@@ -368,6 +388,8 @@ export function carried(json, { repo, trunk, docs } = {}) {
   if (!repo || !trunk || !["stale", "waiting", "out-of-credits"].includes(v.state)) return v;
   if (!v.reviewedSha || v.reviewedSha === v.headSha) return v;
   if (openFindings(pullRequestOf(json)).length) return v;
+  const unread = unreadPages(pullRequestOf(json));
+  if (unread) return { ...v, notCarried: `the review is too long to read whole (${unread})` };
   let why = carryRefusal(repo, trunk, v.reviewedSha, v.headSha);
   let over = "merges";
   if (why && docs) {
@@ -391,6 +413,8 @@ export function verdictLine(v) {
         : `codex: clean on ${short(v.headSha)} (carried from ${short(v.carriedFrom)}: only plain dev merges since, the PR's diff unchanged)`;
     case "findings":
       return `codex: ${v.findings.length} open finding${v.findings.length === 1 ? "" : "s"} on ${short(v.headSha)}`;
+    case "too-long":
+      return `codex: not clean on ${short(v.headSha)}: the review is too long to read whole (${v.unread}); read the PR on GitHub, then land with --no-review`;
     case "out-of-credits":
       return `codex: out of credits, no review of ${short(v.headSha)} is coming (last reviewed ${short(v.reviewedSha)}); land with --no-review, or add credits and ask again with --again`;
     case "stale":
