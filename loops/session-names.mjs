@@ -30,10 +30,10 @@ const isMainBacklog = (/** @type {string} */ name, /** @type {string} */ kind) =
  */
 export function personaOf({ name, kind, remote }, flavor = DEFAULT_FLAVOR) {
   if (kind === "backlog") {
+    // As flavor.mjs's sessionPersona (slice 3) reads it: one word of letters, not `backlog`.
     if (!isMainBacklog(name, kind) || !remote || remote === CAPTAIN_SESSION) return null;
-    const pool = poolOf("backlog", flavor);
-    if (!pool.length) return null;
-    return { rank: (pool.find((p) => p.name === remote) ?? pool[0]).rank, name: remote };
+    const rank = poolOf("backlog", flavor)[0]?.rank;
+    return rank && /^[A-Za-z]+$/.test(remote) ? { rank, name: remote } : null;
   }
   return ROLES.includes(kind) ? personaFor(kind, name, flavor) : null;
 }
