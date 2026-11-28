@@ -6,10 +6,11 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
+| Slice | Wave | Item      | Model | State    | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | -------- | ------------------------------ |
+| 48    | 9    | RISA-1026 | opus  | starting | —                              |
 
-No slice in flight (idle hand-over after wave 8; its slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e).
+Wave 9 in flight: slice 48 (RISA-1026). Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
 
 **Wave 8 landed** 2026-11-28 in main as 845acf0 through PR #18: slices 45, 46, 47, opus (RISA-1020, RISA-1021, RISA-1022). Tooling only, tier none; `pnpm test` green after a docs-budget fix (104e013); Codex clean on c6043e7; landed on an unsynced tip (main's 5 new commits share no file). Report filed; to-test/2026-11-28-0515-fixes-tooling.md; slice worktrees removed. Docs folded: orchestrator.md (anchors exits 1 on a bad Model).
 
@@ -503,3 +504,13 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/check-run.test.mjs`, as slice 44's load test: the load file through `RISA_LOAD_FILE`, short poll): busy, then unread, then calm: it waits through the unread read and says the load dropped to the calm value; unread from the start doesn't wait.
+
+## Slice 48: The lease wait test no longer flakes under load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1026):** `loops/lease.test.mjs` "returns once the worktree's check lease is released" flakes under load (self-recovery-2's full check at load ~13; 26/26 alone): it waits (`until`) for the `Waiting (up to 0m30s) for wt-a's check:` line, then expects the holder line (`wt-a: pnpm check (quick) (pid …`) at once, but the output it has read so far ends at the wait line. Find whether the wait command writes the two lines separately (then the test should wait for both, or the command should write them in one write) and fix the cause, not the symptom alone; a fixed sleep is no fix. Look for the same wait-then-assert shape in the file's other tests and fix those too. Say in the hand-off which it was.
+
+**Acceptance criteria:**
+
+- `loops/lease.test.mjs` passes 20 runs in a row under load (for example, alongside a CPU burner such as `yes > /dev/null` on several cores), and its assertions still check the wait line, the holder line and the done line.
