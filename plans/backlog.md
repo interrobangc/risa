@@ -1192,6 +1192,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (prd/fixes-tooling): Seen 2026-11-28 at wave 12's gate on b60d88c after the account switch: pnpm test 10 failed; env -u CLAUDE_CONFIG_DIR pnpm exec vitest run loops/usage.test.mjs loops/drain.test.mjs: 51 passed. CI has no such variable, so it is green there. Likely fix in loops/test-env* or test-setup.mjs (scrub CLAUDE_CONFIG_DIR), or the fixtures writing readings for the folder the code reads (RISA-927).
 - 2026-11-28 (prd/fixes-bug): Seen again 2026-11-28 by prd-fixes-bug: wave 5's risa check on 24ac588 failed the same 10 tests in usage, drain and dispatch tests under CLAUDE_CONFIG_DIR=~/.claude-personal; the three files pass (163 tests) with it unset.
+- 2026-11-28 (prd/risa-next-4): seen again 2026-11-28 in prd/risa-next-4's full check from a session with CLAUDE_CONFIG_DIR set: 21 tests in 12 files failed; with it unset 20 of them pass (the other, a 28 s timeout in loops/land-unsynced.test.mjs 'lands when dev's tip reads file' at load 20+, passes alone)
 
 ### RISA-1077 · bug · inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it…
 
