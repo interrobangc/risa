@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through, 2026-11-28): start every ready slice, land each green wave, ask only real questions.
 
-**Now (2026-11-28):** wave 2 landed in main through PR 50 (tier unit, run 46192057493 green on `91bc0d3`, Codex clean after triage; land used an unsynced tip, so `risa sync` first). Report filed, to-test `to-test/2026-11-28-1640-ship.md`; worktrees `ship-2` and `ship-4` removed. Slice 2 merged as `d6456cd` (fix `98ee143`), slice 4 as `d4d9c3b`, both opus. Codex's two findings are in the backlog, both `fixes-bug`: RISA-1099 (a retry after a failed tag push pushes a second release commit when a backlog commit landed since: fix before the first ship) and RISA-1100 (pre-release versions compare as strings). **Next session: wave 3, slice 3 on opus.** Tell its agent in the spawn prompt: add no `hooks.shipSmoke`/`hooks.shipNotify` to `risa.json` (below); the verb table is `VERBS` in `release/ship.mjs`, `BACKLOG_PREFIX` and `TRUNK` are hard-coded there; `AGENTS.md`'s release line is slice 3's. After slice 3 lands, RISA-1053 stays open until the four hook keys are wired (a small last wave, once the release below is linked; `risa rm ship` only after it).
+**Now (2026-11-28):** wave 3 running. Waves 1 and 2 are in main (wave 2 through PR 50 as `583980c`, to-test `to-test/2026-11-28-1640-ship.md`); `risa sync` at this boundary needed no merge. **Slice 3 started:** worktree `ship-3`, branch `slice/ship/3`, one agent on opus, spawned with the overrides below (no `risa.json` change, `VERBS`, RISA-1099 and RISA-1100 left alone); `risa watch ship --wait` runs in the background. Next: its hand-off, merge, the wave gate (`risa tier`, `risa ci run`), PR, Codex, land. Codex's wave 2 findings are in the backlog, both `fixes-bug`: RISA-1099 (a retry after a failed tag push pushes a second release commit: fix before the first ship) and RISA-1100 (pre-release versions compare as strings). After slice 3 lands, RISA-1053 stays open until the four hook keys are wired (a small last wave, once the release below is linked; `risa rm ship` only after it). Checked at this start: `~/.local/bin/risa` still links v0.2.3.
 
 **Open issue, the hooks in `risa.json`:** the linked install (v0.2.3, `008e6ff`) predates slice 1 and refuses `hooks.ship*` as unknown keys, so with them in this repo's `risa.json` every `risa` command here fails (seen in `ship-2`). Decision: slices 2 and 3 land without the four hook keys; they go into `risa.json` as a last small change once a release containing `f0bb832` or later is installed and `~/.local/bin/risa` links to it (the release and relink aren't ours). The backlog session agrees with the order (and against any window on the checkout's `bin/risa`); v0.2.4 isn't cut, it is asking the user and will message this session when it is installed and linked. Slice 3's brief needs the same: no `hooks.shipSmoke`/`hooks.shipNotify` in `risa.json` until then.
 
@@ -21,7 +21,7 @@
 | 1     | 1    | merged                    | `bde2083`             |
 | 2     | 2    | merged (fix `98ee143` in) | `d6456cd`             |
 | 4     | 2    | merged                    | `d4d9c3b`             |
-| 3     | 3    | —                         | —                     |
+| 3     | 3    | started (opus)            | —                     |
 
 **Backlog:** claim RISA-1053 as slice 1 starts; it is `done` after slice 3 lands (slice 4 may land after it).
 
