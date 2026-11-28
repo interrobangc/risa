@@ -25,6 +25,7 @@ import {
   configProblems,
   flatten,
   getValue,
+  inboxStore,
   loadConfig,
   toolCommands,
 } from "./config.mjs";
@@ -263,6 +264,50 @@ describe("the loader", () => {
     }
     expect(error).toBeInstanceOf(ConfigError);
     expect(error.problems).toEqual([`${bad}: branches.trunk: must be a branch name`]);
+  });
+});
+
+describe("the inbox group", () => {
+  const REPO = "git@github.com:someone/ideas.git";
+
+  it("accepts it with both keys, and with the repo only (the file defaults to <name>.md)", () => {
+    const both = changed((c) => (c.inbox = { repo: REPO, file: "notes.md" }));
+    expect(configProblems(both)).toEqual([]);
+    expect(inboxStore(both)).toEqual({ repo: REPO, file: "notes.md" });
+    expect(getValue(both, "inbox.file")).toEqual({ known: true, value: "notes.md" });
+    const repoOnly = changed((c) => (c.inbox = { repo: REPO }));
+    expect(configProblems(repoOnly)).toEqual([]);
+    expect(inboxStore(repoOnly)).toEqual({ repo: REPO, file: `${repoOnly.name}.md` });
+  });
+
+  it("is no store when the config has no inbox group", () => {
+    expect(inboxStore(changed(() => {}))).toBeNull();
+  });
+
+  it.each([
+    [
+      "an unknown key under it",
+      (c) => (c.inbox = { repo: REPO, branch: "main" }),
+      "inbox.branch: unknown key",
+    ],
+    ["a file with no repo", (c) => (c.inbox = { file: "notes.md" }), "inbox.repo: missing"],
+    ["an empty group", (c) => (c.inbox = {}), "inbox.repo: missing"],
+    ["a value, not a group", (c) => (c.inbox = REPO), "inbox: must be a group of keys"],
+    ["a repo on two lines", (c) => (c.inbox = { repo: "a\nb" }), "inbox.repo: must be one line of text"],
+    [
+      "a file in a folder",
+      (c) => (c.inbox = { repo: REPO, file: "x/notes.md" }),
+      "inbox.file: must be a file name ending in .md",
+    ],
+    [
+      "a file that isn't Markdown",
+      (c) => (c.inbox = { repo: REPO, file: "notes.txt" }),
+      "inbox.file: must be a file name ending in .md",
+    ],
+  ])("refuses %s", (_what, change, problem) => {
+    const problems = configProblems(changed(change));
+    expect(problems.join("\n")).toContain(problem);
+    expect(problems).toHaveLength(1);
   });
 });
 
