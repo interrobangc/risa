@@ -342,10 +342,18 @@ describe("the dispatcher logs why it exits (RISA-1037)", () => {
       env: e,
       stdio: "ignore",
     });
-    const exited = new Promise((r) => child.on("exit", (code, sig) => r(code ?? sig)));
+    let gone = false;
+    const exited = new Promise((r) =>
+      child.on("exit", (code, sig) => {
+        gone = true;
+        r(code ?? sig);
+      }),
+    );
     const pid = /** @type {number} */ (child.pid);
     const end = Date.now() + 20_000;
-    while (!(lockHolder(lock) === pid && existsSync(files().state) && dstate().code?.pid === pid)) {
+    // One that throws frees its lock within a tick of taking it, so a poll can miss the
+    // hold: its recorded start and its exit say it started too.
+    while (!((lockHolder(lock) === pid || gone) && existsSync(files().state) && dstate().code?.pid === pid)) {
       if (Date.now() > end) throw new Error("the dispatcher never started");
       await new Promise((r) => setTimeout(r, 50));
     }
