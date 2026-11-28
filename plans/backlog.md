@@ -144,7 +144,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1074 | feature | triaged | usage-aware-drain |  | risa account setup\|use\|status: set up a second Claude config folder, point a repo's sessions at it,… |
 | RISA-1075 | bug | triaged | fixes-test |  | dispatch-restart test leaves its dispatchers running after it deletes their temp repo |
 | RISA-1076 | bug | triaged | fixes-tooling |  | Tests read the session's CLAUDE_CONFIG_DIR: with it set (a session on ~/.claude-personal), loops/usage.test.mjs, drain.test.mjs and dispatch.test.mjs's drain tests see no usage reading and 10 fail; with it unset they pass. The test environment should clear it as it clears RISA_* variables |
-| RISA-1077 | bug | in-progress | fixes-bug | prd/fixes-bug | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
+| RISA-1077 | bug | ready | fixes-bug | prd/fixes-bug | inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it… |
 | RISA-1078 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: a dispatcher whose project has work: false still claims the project's home on its first tick (loops/home.mjs homeTick), so a work: true machine is locked out until risa home take; check the work switch before an automatic claim |
 | RISA-1079 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: the shared inbox session is gated on its keeper project's home as well as the inbox home (loops/home.mjs: inboxWhy = blocked; loops/dispatch.mjs: homeBlocked sets unready.inbox), so with the project's home on machine A and the inbox home taken to machine B neither keeps the inbox session |
 | RISA-1080 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: an unparseable homes.json opens the home gate (loops/home.mjs homeTick catches the read error and carries on with no homes; names already in claimed are then neither away nor unknown, so blocked is null) and an away dispatcher starts work beside the real home; treat an unreadable claims file as ownership unknown |
@@ -154,7 +154,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1084 | bug | in-progress | fixes-bug | prd/fixes-bug | Home machines: the away gate stops the pick and the keep-alive but not contextStep and stuckStep (loops/dispatch.mjs), so a session on a machine that lost the project's home is still rotated into a fresh one and keeps working beside the new home; apply the project and inbox home gates to the automatic rotations |
 | RISA-1085 | bug | triaged | fixes-tooling |  | loops/check-run.test.mjs fails on GitHub's pull_request runs: it expects the logged branch not to be empty, and a PR run checks out a detached merge commit (run 46172609471 on PR #36: expected '' not to be '') |
 | RISA-1086 | bug | in-progress | fixes-bug | prd/fixes-bug | risa <command> --help (or -h) prints that command's usage and exits 0, and a command refuses an unknown flag instead of taking it as a topic or name: today only the top-level help works (loops/prd.sh), so risa plan --help ends in new.sh's topic refusal |
-| RISA-1087 | bug | in-progress | fixes-bug | prd/fixes-bug | risa usage keeps a session's old account's 5-hour reading after the session switches account |
+| RISA-1087 | bug | ready | fixes-bug | prd/fixes-bug | risa usage keeps a session's old account's 5-hour reading after the session switches account |
 | RISA-1088 | bug | triaged | fixes-test |  | Full risa check: the tooling test rerun times out when two full checks overlap at high load (1-minute load near 50 on 16 cores, both check leases held: risa-next-4 and fixes-bug): 25 then 31 tests failed across 15 and 21 files, a different set each run, nearly all 20 s test or hook timeouts in land*, recover*, rotate*, stack and load-gate tests, while the same files passed whole (131 files, 2654 tests) in pnpm check's own pass |
 
 ## Items
@@ -1198,10 +1198,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1077 · bug · inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it…
 
-- status: in-progress
+- status: ready
 - prd: fixes-bug
 - owner: prd/fixes-bug
-- commit:
+- commit: 5a22554
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: inbox session refuses a rollover hand-off the backlog session asks for, so the user has to exit it by hand / During the account rollover (2026-11-28 ~12:29) the backlog session (Admiral Marcus) told the risa inbox session to run risa rotate --self because the business account's 5h usage was at 93%. The inbox agent declined: its prompt lets it hand off only on the user's word or a context-watch reminder, never on a peer's request. The user had to exit it and let the dispatcher's keep-alive reopen it. Expected: a rollover or rotate request from the project's backlog session (or a dispatcher-driven rollover) rotates the inbox session without the user. Transcript: ~/.claude/projects/-Users-bo--risa-inbox/9d2e8124-bba2-4375-9338-3b1cf0a4ee63.jsonl
 - 2026-11-28 (Robert Bo Davis): Inbox prompt allows rotate only on the user's word; a backlog or dispatcher rollover request should rotate it. Normal urgency: rollovers are rare and exiting by hand works.
@@ -1290,10 +1290,10 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1087 · bug · risa usage keeps a session's old account's 5-hour reading after the session switches account
 
-- status: in-progress
+- status: ready
 - prd: fixes-bug
 - owner: prd/fixes-bug
-- commit:
+- commit: 4fbc7cf
 
 - 2026-11-28 (Robert Bo Davis): From the inbox: After the 2026-11-28 rollover to ~/.claude-personal, .loops/.usage/<session>.json for backlog, inbox, prd-fixes-tooling and prd-risa-next-2 kept fiveHour 94% (at 17:27Z, business account) beside account=/Users/bo/.claude-personal and fresh sevenDay readings, so risa usage and the usage watch reported 94% for the personal account until the window reset at 18:40Z. A window read under a different account (or before the account field changed) should be dropped, not merged.
 - 2026-11-28 (Robert Bo Davis): Stale fiveHour window merged across an account switch; misleads the rollover watch. Normal urgency: clears itself at the window's reset.
