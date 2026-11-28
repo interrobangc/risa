@@ -6,26 +6,21 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State  | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | ------ | ------------------------------ |
-| 14    | 3    | RISA-952  | opus  | merged | 2439fe9                        |
-| 15    | 3    | RISA-997  | opus  | merged | ac81b56                        |
-| 16    | 3    | RISA-999  | opus  | merged | 79d6fef                        |
-| 17    | 3    | RISA-1000 | opus  | merged | 6f9f1b0                        |
-| 18    | 3    | RISA-927  | opus  | merged | 10ef985                        |
+| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
+| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
 
-**Wave 3** (2026-11-27): slices 14–18. Left for wave 4: RISA-994 (recheck after 1000), 813, 915 (dispatch-pick rule 8 may already cover it), 926 (loops/machine is after-split-2's), 986 (ls.sh), 881–889 (process/docs). Merged all five (17's vitest.config conflict with 15 resolved: both kept). Slice checks were red only on load timeouts (RISA-994 notes). CI unit green on b7bb152 (run 46090524277, the first with a real verdict); sync not needed; docs folded; PR #10 open. Codex (on 2b02eab): P1 dispatch.mjs:1308 (a default-account session's null replaced by the dispatcher's account) sent to slice 18's agent; P2 rotate.sh:160 (close path fires before the wave lands) sent to slice 14's agent. Both fixed and re-merged (18: 1134fe0, 14: bbae04a); pushed da64927, threads answered and resolved. Codex round 2: P1 dispatch.mjs:1250 (a session limited on its own account is reopened by pick() before its reset) fixed by slice 18 (5d8aac8) and re-merged. Unit CI green on da64927 (run 46093565648); Unit CI green on 54e571d. Codex round 3: P1 dispatch.mjs:1251 (keep-alive reopens a session stalled on its own account) sent to slice 18, then redirected on the user's word: the drain never ends backlog or inbox sessions (any account), at most reports them (415d749, merged); P2 rotate.mjs:139 (simulated pick omits facts.landed) tracked as RISA-1003, thread answered. Codex round 4 (a9b6f2a): one P2 (watch-off override, dispatch.mjs:1622) tracked as RISA-1004, thread answered. Asking the user (via ask skeptic): land now (recommended) or fix 1003/1004 first. Next: triage, land, then rotate (session past the soft limit). RISA-881 goes in wave 4 (the user wants it before risa-next). RISA-996 closed: Codex found no major issues on PR #5 (c4ae22d1c7).
+No slice in flight (idle hand-over after wave 3).
 
-**Wave 2 landed** 2026-11-27 in main as 66e194d (PR #7): slices 8–13 (RISA-969, 681, 934, 987, 989, 993), all opus. Codex clean on bf7eebf after one P2 (RISA-999). CI (the new workflow) succeeded on the synced tip but writes no verdict (RISA-997), so it landed with `--force` on land skeptic s10's go. Report filed; slice worktrees removed.
+**Wave 3 landed** 2026-11-27 in main as a00a846 (PR #10): slices 14–18 (RISA-952, 997, 999, 1000, 927), all opus. CI unit green on a9b6f2a (run 46095529013, the first run with a real verdict: RISA-997 works). Codex went 4 rounds (3 P1s and 1 P2 fixed); landed on the user's word with `--no-review --by-user` (ask a17), its last two P2s tracked as RISA-1003 and RISA-1004. Report filed; slice worktrees removed; backlog session (risa-ee) told 952 landed (its release plan keys off it).
 
-**For the next session (wave 3):**
+**For the next session (wave 4):**
 
-- **First, on the user's word (via the backlog session):** RISA-952 (a standing PRD with nothing runnable closes itself, `prd rm`), its notes folding in RISA-982; a wave of just it is fine. RISA-811 stays out (self-recovery-2, on hold).
-- **Ready (after-split has landed):** RISA-997 (the workflow writes a verdict artifact, so `risa land`'s unit gate reads its runs: do it early, it removes the `--force`), RISA-999 (an After on an archived PRD topic), RISA-994 (land-unsynced times out on main too; recover), RISA-813, 915, 926, 927, 882, 886, 881, 883, 889, 986. Check hot files first (`risa backlog prd list`).
-- **RISA-996:** Codex asked on merged PR #5 by comment (wave 1's unreviewed diff); triage its findings to the backlog.
-- **Docs still to fold:** machinery doc: plan sessions get the context hook (RISA-880, wave 1).
-- **Gate:** the test env is hermetic now (after-split's RISA-975), so `risa check` works in a session; under load (>25) many tests time out: rerun failing files once at low load. Land skeptics run on Opus (b5c4391).
-- Slice 12's note for later: `backlog/lock.mjs` is new; tests that copy backlog/ files by name must list it.
+- **The user's decision (wave 3):** the drain never ends backlog or inbox sessions on usage, on any account; it reports them at most. Keep it so.
+- **RISA-881 first** (elephant-carpaccio slicing rules): the user wants it before risa-next is unheld; a release follows it (the backlog session handles the tag).
+- **Ready:** RISA-1003 (rotate's simulated pick omits facts.landed), RISA-1004 (watch-off override doesn't release stall-marked sessions), RISA-994 (in-test and script timers don't scale with load: ask, bye, rotate, sessions, land-unsynced; notes list them), 813, 915 (dispatch-pick rule 8 may already cover it: check first), 926 (loops/machine is after-split-2's hot file; check `risa backlog prd list`), 986, 882, 883, 886, 889.
+- **Gate:** slice checks run red on load timeouts at load 15–30 (RISA-994); the wave's CI run is the gate. bye.test's "lists each open thing…" failed under several full checks but passes alone and in CI.
+- `risa pr` pushes local main to origin as it syncs; expected.
+- Docs folded this wave: machinery (context watch, rotate's close), orchestrator rotate line.
 
 ## How to run this plan
 
