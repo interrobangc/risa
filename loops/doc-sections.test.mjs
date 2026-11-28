@@ -1,8 +1,7 @@
 // Each generic role doc ends with a pinned heading: a project's additions continue
 // the generic doc's last section (loops/doc.mjs), so a fold-in must not move it.
-import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { test } from "node:test";
+import { expect, it } from "vitest";
 
 const docs = new URL("./docs/", import.meta.url);
 
@@ -29,20 +28,19 @@ const lastHeading = (text) => {
   return last;
 };
 
-test("every generic doc is pinned", () => {
+it("pins every generic doc", () => {
   const files = readdirSync(docs)
     .filter((f) => f.endsWith(".md"))
     .sort();
-  assert.deepEqual(files, Object.keys(LAST).sort());
+  expect(files).toEqual(Object.keys(LAST).sort());
 });
 
 for (const [file, heading] of Object.entries(LAST)) {
-  test(`${file} ends with ${heading}`, () => {
+  it(`${file} ends with ${heading}`, () => {
     const got = lastHeading(readFileSync(new URL(file, docs), "utf8"));
-    assert.equal(
+    expect(
       got,
-      heading,
       `loops/docs/${file} must end with "${heading}" (now "${got}"): a project's additions continue the generic doc's last section, so keep it last`,
-    );
+    ).toBe(heading);
   });
 }
