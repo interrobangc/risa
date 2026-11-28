@@ -13,7 +13,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | PRD | Flags | After | Hot files | Doc and notes |
 | --- | ----- | ----- | --------- | ------------- |
 | `after-split` | done | — | `loops/test-setup.mjs`, `loops/test-env`, `loops/stack.test.mjs`, `loops/dispatch`, `loops/drain.test.mjs`, `loops/usage.test.mjs`, `loops/machine`, `loops/ls.sh`, `loops/docs`, `loops/docs-budget.mjs`, `loops/doc.test.mjs`, `package.json`, `vitest.config.mjs` | Fixes left by the split into Risa's own repo (B-543) |
-| `fixes-tooling` | standing | — | `loops/lease` | Retiring in Risa's repo (the user 2026-11-28): no new items; tooling fixes go to fixes-bug by urgency, test fixes to fixes-test. Closes once its running wave (RISA-1026) lands. Caretook keeps its own fixes-tooling. |
+| `fixes-tooling` | standing | — | — | Retiring in Risa's repo (the user 2026-11-28): no new items; tooling fixes go to fixes-bug by urgency, test fixes to fixes-test. Closes once its running wave (RISA-1026) lands. Caretook keeps its own fixes-tooling. |
 | `fixes-bug-urgent` | standing | — | — | Urgent fixes in Risa's repo (wrong behaviour, tooling included) that go before other work: a broken release, a dead dispatcher, lost data. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
 | `risa-next` | done | — | `loops/flavor`, `loops/machine.mjs`, `loops/captain`, `loops/session.sh`, `loops/session-names`, `loops/ask.mjs`, `loops/prompt.sh`, `loops/prompts`, `loops/prompt.test.mjs`, `loops/sample-project/prompt-golden.txt`, `loops/peers`, `loops/docs/backlog.md` | — |
 | `risa-next-2` | — | `risa-next` | `backlog/`, `loops/config`, `loops/docs/project-config.md`, `loops/docs/inbox.md`, `loops/prompts/inbox.sh`, `loops/prd.sh`, `loops/dispatch`, `loops/home` | — |
@@ -113,7 +113,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1023 | bug | triaged | fixes-bug |  | Under a release install, risa status-trim crashes: loops/status-trim.mjs imports prettier (a dev dependency), and the release folder has no node_modules, so it fails with ERR_MODULE_NOT_FOUND. Resolve prettier from the project's checkout, or skip formatting when it's missing |
 | RISA-1024 | bug | triaged | fixes-bug |  | A backlog --brief written before slice 4 (## Directives heading) gets a header naming only _From the user_ lines as the user's word, so its directives read as context: name the detected heading, or normalise it |
 | RISA-1025 | change | ready | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs loads finish.mjs lazily (createRequire, skipped when missing) because dispatch.test.mjs and its siblings copy a fixed script list; add finish.mjs to those lists and import it statically |
-| RISA-1026 | bug | ready | fixes-tooling | prd/fixes-tooling | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
+| RISA-1026 | bug | live | fixes-tooling | prd/fixes-tooling | lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line |
 | RISA-1027 | bug | ready | self-recovery-2 | prd/self-recovery-2 | risa finish <topic> (the CLI) files a fresh report on every run for an unchanged code tail or other report-only reason: it gathers with no reported keys and never persists d.key |
 | RISA-1028 | bug | ready | self-recovery-2 | prd/self-recovery-2 | cost.mjs topicFolders counts a topic named plan-<x>'s orchestrator transcripts (.loops/plan-<x>, branch prd/plan-<x>) as topic <x>'s planning tokens |
 | RISA-1029 | bug | ready | self-recovery-2 | prd/self-recovery-2 | dispatch.mjs finishStep prefilters candidates with landedTopics/landedWithCode on the configured trunk, ignoring env.TRUNK (gatherFinish and tidy honor it): a topic landed only into an overridden trunk is never auto-finished |
@@ -905,7 +905,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 ### RISA-1026 · bug · lease.test.mjs 'returns once the worktree's check lease is released' flakes under load: the wait line printed is 'Waiting (up to 0m30s)…' before the holder line
 
-- status: ready
+- status: live
 - prd: fixes-tooling
 - owner: prd/fixes-tooling
 - commit: 46bbadb
