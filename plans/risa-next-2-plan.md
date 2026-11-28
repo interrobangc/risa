@@ -8,16 +8,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 2 landed in main through PR #32 (da16403, tier none, Codex clean on 7d27160 after one finding filed as RISA-1067); to-test `to-test/2026-11-28-1108-risa-next-2.md`. **Next session: wave 3** = slices 3 and 5, both on opus; slice 3's brief takes RISA-1067 (claim it when 3 starts).
+**Now:** wave 3 running (2026-11-28): slices 3 and 5 started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
 
-| Slice | Wave | State         | Merge into `prd/risa-next-2` |
-| ----- | ---- | ------------- | ---------------------------- |
-| 1     | 1    | landed (opus) | 72d3a64                      |
-| 2     | 2    | merged (opus) | (this merge)                 |
-| 3     | 3    | —             | —                            |
-| 5     | 3    | —             | —                            |
-| 4     | 4    | —             | —                            |
-| 6     | 4    | —             | —                            |
+| Slice | Wave | State          | Merge into `prd/risa-next-2` |
+| ----- | ---- | -------------- | ---------------------------- |
+| 1     | 1    | landed (opus)  | 72d3a64                      |
+| 2     | 2    | landed (opus)  | 5ff0aae (main)               |
+| 3     | 3    | running (opus) | —                            |
+| 5     | 3    | running (opus) | —                            |
+| 4     | 4    | —              | —                            |
+| 6     | 4    | —              | —                            |
 
 **Backlog:** RISA-1057–1060 (Codex on PR #28, `backlog/inbox-store.mjs`) taken into this PRD at fixes-bug's request: add them to slice 2's brief. Promised prd-fixes-bug (risa): a message when wave 1 lands in main, and when `backlog/` and `loops/dispatch` stop being hot. Claim each slice's item as it starts. Slices 1 to 5: RISA-841 (`done` after 5). Slice 6: RISA-1007 (`done` after it).
 
