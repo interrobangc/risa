@@ -165,6 +165,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1095 | feature | triaged | fixes-tooling |  | Ship's notify hook tells projects on other machines through risa message (cross-machine-messages),… |
 | RISA-1096 | bug | triaged | fixes-tooling |  | Tests time out at high load even with the load-aware limits: prd-ship's full check at load 37-40 had 15 failures and 22 timeout lines (land-unsynced 5, recover-down 2, stack 2, ask, project-check, recover-unattended, rotate, rotate-into, rotate-standing; rotate tests ran 45-77 s); the check should wait out the load gate or the limits should scale further |
 | RISA-1097 | bug | triaged | fixes-bug |  | risa ship: a runner killed (SIGTERM) while a hook runs leaves the hook alive (runHook's spawnSync forwards no signal), and the dead runner's pid lets a second ship take over the lock, so two ships' hooks can run at once; keep the lock for the hook's lifetime (record the hook's pid or process group in the lock and check it at takeover) or stop and wait for the hook on termination |
+| RISA-1098 | bug | triaged | fixes-bug |  | A dispatcher command that times out leaves its descendants running: run() (loops/dispatch.mjs) SIGKILLs only spawnSync's direct child, so after new.sh's setup timeout the dispatcher's undo removes the worktree while an install or stack hook under it may still be writing; run bounded commands in their own process group and end the group before the failure path and cleanup |
 
 ## Items
 
@@ -1406,3 +1407,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (prd/ship): From Codex on PR 47 (ship wave 1), thread PRRT_kwDOV9ctaM69IJOG, loops/ship.mjs takeLock's dead-holder takeover. Codex reproduced it by terminating only the runner during a sleeping ship hook. Not fixed in the wave: it needs a kill of the runner mid-ship and then a second ship, and ships run only on the user's word. loops/ship is a hot file of the ship topic until it lands.
+
+### RISA-1098 · bug · A dispatcher command that times out leaves its descendants running: run() (loops/dispatch.mjs) SIGKILLs only spawnSync's direct child, so after new.sh's setup timeout the dispatcher's undo removes the worktree while an install or stack hook under it may still be writing; run bounded commands in their own process group and end the group before the failure path and cleanup
+
+- status: triaged
+- prd: fixes-bug
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-bug): Codex P2 on PR 49 (fixes-bug wave 7, slice 29, RISA-1094), thread PRRT_kwDOV9ctaM69IRAh, loops/dispatch.mjs:751; verified against the code, and slice 29's hand-off named the same gap (spawnSync has no documented detached). Codex reproduced it with a nested shell that kept writing after ETIMEDOUT. Not breaking: before RISA-1094 the same hang froze the dispatcher for good; the undo-after-timeout applies only past new.sh's 30-minute limit.
