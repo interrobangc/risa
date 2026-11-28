@@ -6,13 +6,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item | Model | State | Merge into `prd/fixes-tooling` |
-| ----- | ---- | ---- | ----- | ----- | ------------------------------ |
-| 19 | 4 | RISA-881 | opus | started | |
-| 20 | 4 | RISA-1005 | opus | waits on 19 | |
-| 21 | 4 | RISA-1003 | opus | started | |
-| 22 | 4 | RISA-1004 | opus | started | |
-| 23 | 4 | RISA-926 | opus | started | |
+| Slice | Wave | Item      | Model | State       | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | ----------- | ------------------------------ |
+| 19    | 4    | RISA-881  | opus  | started     |                                |
+| 20    | 4    | RISA-1005 | opus  | waits on 19 |                                |
+| 21    | 4    | RISA-1003 | opus  | started     |                                |
+| 22    | 4    | RISA-1004 | opus  | started     |                                |
+| 23    | 4    | RISA-926  | opus  | started     |                                |
 
 **Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running.
 
