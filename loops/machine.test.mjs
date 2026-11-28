@@ -2,15 +2,25 @@
 // side (lib.sh's find_repo and work_switch, prd.sh's refusals). Every machine
 // config here is a temp file named by RISA_MACHINE_CONFIG; none is the machine's own.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import "./config-fixture.mjs";
+import { FIXTURE_CONFIG } from "./config-fixture.mjs";
 import {
   GIT_FLOOR,
   MachineConfigError,
   claudeConfigDirOf,
+  configFor,
   gitTooOld,
   loadMachineConfig,
   machineConfigPath,
@@ -42,6 +52,18 @@ const machineFile = (/** @type {unknown} */ raw) => {
 };
 
 const SELF = { tool: { self: true } };
+
+describe("configFor", () => {
+  const has = (/** @type {string[]} */ files) => (/** @type {string} */ p) => files.includes(p);
+
+  it("gives the checkout's own risa.json when it has one, else the main checkout's", () => {
+    expect(
+      configFor({ top: "/r/.loops/x", main: "/r", exists: has(["/r/.loops/x/risa.json", "/r/risa.json"]) }),
+    ).toBe("/r/.loops/x/risa.json");
+    expect(configFor({ top: "/r/.loops/x", main: "/r", exists: has(["/r/risa.json"]) })).toBe("/r/risa.json");
+    expect(configFor({ top: "/r", main: "/r", exists: has(["/r/risa.json"]) })).toBe("/r/risa.json");
+  });
+});
 const OTHER = { tool: {} };
 
 describe("the loader", () => {
@@ -234,6 +256,128 @@ describe("the bash side", () => {
     // From this repo's directory, this repo (listed or not), and the fixture's config stays.
     const here = lib('echo "$main"', { RISA_MACHINE_CONFIG: f });
     expect(here.stdout).toBe(`${MAIN}\n`);
+  });
+});
+
+describe("the bash side, in a worktree", () => {
+  // A temp repo with the fixture project's files, listed in a temp machine config,
+  // and two worktrees: one with its own risa.json (another backlog file and id
+  // prefix, its own planner additions), one with none.
+  let main = "",
+    own = "",
+    bare = "",
+    mainCfg = "",
+    ownCfg = "",
+    f = "";
+  const git = (/** @type {string} */ cwd, /** @type {string[]} */ ...a) =>
+    execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const item = (/** @type {string} */ id) =>
+    `\n### ${id} · bug · ${id}'s item\n\n- status: inbox\n- prd:\n- owner:\n- commit:\n`;
+  beforeAll(() => {
+    main = join(tmp, "wt-main");
+    own = join(tmp, "wt-own");
+    bare = join(tmp, "wt-bare");
+    cpSync(dirname(FIXTURE_CONFIG), main, { recursive: true });
+    writeFileSync(join(main, "plans/backlog.md"), `# Backlog\n\n## PRDs\n\n## Items\n${item("B-1")}`);
+    writeFileSync(join(main, "plans/w-backlog.md"), `# Backlog\n\n## PRDs\n\n## Items\n${item("W-1")}`);
+    execFileSync("git", ["init", "-q", "-b", "dev", main]);
+    git(main, "config", "user.email", "test@example.com");
+    git(main, "config", "user.name", "Test");
+    git(main, "config", "commit.gpgsign", "false");
+    git(main, "add", ".");
+    git(main, "commit", "-q", "--no-verify", "-m", "init");
+    git(main, "worktree", "add", "-q", "-b", "own", own);
+    git(main, "worktree", "add", "-q", "-b", "bare", bare);
+    mainCfg = join(main, "risa.json");
+    ownCfg = join(own, "risa.json");
+    const cfg = JSON.parse(readFileSync(mainCfg, "utf8"));
+    cfg.backlog.idPrefix = "W";
+    cfg.backlog.zoneOverflowItem = "W-750";
+    cfg.paths.backlog = "plans/w-backlog.md";
+    writeFileSync(ownCfg, JSON.stringify(cfg, null, 2));
+    writeFileSync(join(own, "docs/planner.md"), "# The worktree's planner additions\n\nAsk the worktree.\n");
+    rmSync(join(bare, "risa.json"));
+    f = machineFile({ repos: [{ path: main }] });
+  });
+
+  /** Sources lib.sh from CWD with the config pair given ("" is unset); prints both. */
+  const found = (/** @type {string} */ cwd, /** @type {string} */ config, /** @type {string} */ mark) =>
+    spawnSync(
+      "bash",
+      ["-c", `source ${join(HERE, "lib.sh")}\necho "$RISA_CONFIG"; echo "\${RISA_CONFIG_FOUND:-}"`],
+      {
+        cwd,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          RISA_MACHINE_CONFIG: f,
+          RISA_WORK_SELF: "",
+          RISA_CONFIG: config,
+          RISA_CONFIG_FOUND: mark,
+        },
+      },
+    );
+  /** bin/risa from CWD with the config pair given. */
+  const risa = (
+    /** @type {string} */ cwd,
+    /** @type {string} */ config,
+    /** @type {string} */ mark,
+    ...args
+  ) =>
+    spawnSync("bash", [join(HERE, "../bin/risa"), ...args], {
+      cwd,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        RISA_MACHINE_CONFIG: f,
+        RISA_WORK_SELF: "",
+        RISA_CONFIG: config,
+        RISA_CONFIG_FOUND: mark,
+        BACKLOG_BY: "",
+      },
+    });
+
+  it("machine.mjs repo gives the worktree's own risa.json, else the main checkout's", () => {
+    const repo = (/** @type {string} */ cwd) =>
+      spawnSync("node", [join(HERE, "machine.mjs"), "repo", "--cwd", cwd], {
+        encoding: "utf8",
+        env: { ...process.env, RISA_MACHINE_CONFIG: f },
+      }).stdout;
+    expect(repo(own)).toBe(`${main}\n${ownCfg}\n`);
+    expect(repo(join(own, "docs"))).toBe(`${main}\n${ownCfg}\n`);
+    expect(repo(bare)).toBe(`${main}\n${mainCfg}\n`);
+    expect(repo(main)).toBe(`${main}\n${mainCfg}\n`);
+  });
+
+  it("find_repo takes the worktree's config when none is set or the set one is the found mark; a pin stays", () => {
+    expect(found(own, "", "").stdout).toBe(`${ownCfg}\n${ownCfg}\n`);
+    // A session's inheritance: the pair the main checkout's shell found.
+    expect(found(own, mainCfg, mainCfg).stdout).toBe(`${ownCfg}\n${ownCfg}\n`);
+    // No mark: RISA_CONFIG was set by hand, a pin.
+    expect(found(own, mainCfg, "").stdout).toBe(`${mainCfg}\n\n`);
+    expect(found(own, FIXTURE_CONFIG, mainCfg).stdout).toBe(`${FIXTURE_CONFIG}\n${mainCfg}\n`);
+    // A worktree without its own risa.json reads the main checkout's.
+    expect(found(bare, "", "").stdout).toBe(`${mainCfg}\n${mainCfg}\n`);
+    expect(found(main, "", "").stdout).toBe(`${mainCfg}\n${mainCfg}\n`);
+  });
+
+  it("risa backlog from the worktree reads the main checkout's config; a pin wins", () => {
+    for (const pair of [mainCfg, ownCfg]) {
+      const r = risa(own, pair, pair, "backlog", "list");
+      expect(r.stderr).toBe("");
+      expect(r.stdout).toContain("B-1");
+      expect(r.stdout).not.toContain("W-1");
+    }
+    const pinned = risa(own, ownCfg, "", "backlog", "list");
+    expect(pinned.stdout).toContain("W-1");
+    expect(pinned.stdout).not.toContain("B-1");
+  });
+
+  it("risa doc planner from the worktree prints the worktree's planner additions", () => {
+    const r = risa(own, mainCfg, mainCfg, "doc", "planner");
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("Ask the worktree.");
+    expect(r.stdout).not.toContain("The fixture project's planner additions");
   });
 });
 
