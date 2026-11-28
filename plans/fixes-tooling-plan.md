@@ -6,16 +6,16 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model  | State                                                                    | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ------ | ------------------------------------------------------------------------ | ------------------------------ |
-| 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)      | 4b888b6                        |
-| 20    | 4    | RISA-1005 | opus   | started                                                                  |                                |
-| 21    | 4    | RISA-1003 | opus   | merged                                                                   | cf9c3a4                        |
-| 22    | 4    | RISA-1004 | opus   | merged                                                                   | 0de37c9                        |
-| 23    | 4    | RISA-926  | opus   | merged                                                                   | b65e587                        |
-| 24    | 4    | RISA-981  | opus   | merged (slice check green on f0dc94b)                                    | 2d34ce6                        |
-| 25    | 4    | RISA-1009 | opus   | fixing: merge conflict with 24 in dispatch.mjs (code state), sent back   |                                |
-| 26    | 4    | RISA-1010 | sonnet | handed off (4ecc5b8, vitest fix after node:test); merges after 20, 22–25 |                                |
+| Slice | Wave | Item      | Model  | State                                                                                                 | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 19    | 4    | RISA-881  | opus   | merged (slice check: 13 load timeouts in untouched files, RISA-994)                                   | 4b888b6                        |
+| 20    | 4    | RISA-1005 | opus   | merged (adds commands.testFile and commands.staticCheck, the latter since Risa's typecheck is `true`) | 3626f71                        |
+| 21    | 4    | RISA-1003 | opus   | merged                                                                                                | cf9c3a4                        |
+| 22    | 4    | RISA-1004 | opus   | merged                                                                                                | 0de37c9                        |
+| 23    | 4    | RISA-926  | opus   | merged                                                                                                | b65e587                        |
+| 24    | 4    | RISA-981  | opus   | merged (slice check green on f0dc94b)                                                                 | 2d34ce6                        |
+| 25    | 4    | RISA-1009 | opus   | fixing: merge conflict with 24 in dispatch.mjs (code state), sent back                                |                                |
+| 26    | 4    | RISA-1010 | sonnet | handed off (4ecc5b8, vitest fix after node:test); merges after 20, 22–25                              |                                |
 
 **Wave 4** (2026-11-27): slices 19–23 written; RISA-881 split at planning (19: planner rule + plan lint; 20, RISA-1005: the slice check runs the slice's `Check:` file). RISA-915 dropped as fixed (dispatch-pick rule 8). Left for wave 5: 994 (touches rotate.test, slice 21's), 986 and 813 (dispatch, slice 22's), 882 (pairs with 881's docs), 883, 886, 889 (rotate). Hot files set. Agents spawned for 19, 21, 22, 23 (opus); their prompts note the fields reader doesn't know `Check` yet (slice 19 teaches it). Watch running. 22–24 merged ahead of 20 (disjoint files; 981 is urgent). Slice 19 also moved `mergedSlices` into slice-fields.mjs and runs the budget in `risa anchors`; its follow-up (plan.sh and skeptics' 'about 8 files') is RISA-1011. Slices 24–26 joined on the backlog session's word (RISA-981 high priority; v0.1.8 is cut once 981 and 1010 land).
 
