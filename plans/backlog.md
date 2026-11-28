@@ -33,7 +33,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | `fixes-perf` | standing | — | — | Standing fixes topic for speed and load (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
 | `fixes-nit` | standing | — | — | Standing fixes topic for small tidies users won't notice (plans/fixes-rules.md); added 2026-11-28 on the user's word so its items get a lane. |
 | `fixes-bug-later` | standing | — | — | Fixes in Risa's repo that can wait: real but rare or cosmetic-adjacent, below the planned topics. Risa-only triage rule (docs/backlog.md), the user 2026-11-28. |
-| `ship` | — | — | — | — |
+| `ship` | — | — | `loops/ship`, `loops/config.mjs`, `loops/prd.sh`, `release/`, `risa.json`, `vitest.config.mjs`, `loops/docs/ship.md`, `loops/docs-budget.mjs`, `loops/doc-sections.test.mjs`, `AGENTS.md` | — |
 | `flavor-packs` | — | — | — | Very low priority (the user, 2026-11-28): new flavor packs, data only |
 | `queue-tender` | — | `asks-relay` | — | — |
 
@@ -1227,6 +1227,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 - commit:
 
 - 2026-11-28 (Robert Bo Davis): From the user 2026-11-28: "The eventual goal is that this machine runs on my business claude account with the personal as backup and the other runs on my personal with the business as backup. In the current flow, this will break inter-machine communication. How are we going to get there?" Chose: a new topic after risa-next-2 (it builds the inbox repo and home claims), with usage-aware-drain (RISA-1002 account swap) after it.
+- 2026-11-28 (plan/ship): The ship topic's Risa notify hook (release/ship.mjs notify) tells only pinned projects on this machine and prints elsewhere=cross-machine-messages; this topic gives it the cross-machine sender (ship planner, 2026-11-28)
 
 ### RISA-1056 · feature · Per-role context limits: each role (backlog, inbox, orchestrator, slice, planner, …) has a soft, an urgent and a hard limit with tool defaults, and a project's risa.json overrides any of them per role; today loops/context.mjs has only soft and hard, set by env (RISA_CONTEXT_LIMIT, RISA_CONTEXT_HARD_LIMIT) with per-kind defaults
 
