@@ -20,6 +20,9 @@
   "roles": {
     "planner": {
       "additions": "docs/planner.md"
+    },
+    "backlog": {
+      "additions": "docs/backlog.md"
     }
   },
   "branches": {

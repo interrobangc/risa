@@ -6,13 +6,13 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave without asking, ask only real questions).
 
-| Slice | Wave | Item      | Model | State          | Merge into `prd/fixes-tooling` |
-| ----- | ---- | --------- | ----- | -------------- | ------------------------------ |
-| 45    | 8    | RISA-1020 | opus  | merged 6634dd6 | 6634dd6                        |
-| 46    | 8    | RISA-1021 | opus  | merged ff8fca0 | ff8fca0                        |
-| 47    | 8    | RISA-1022 | opus  | merged b7fd72e | b7fd72e                        |
+| Slice | Wave | Item      | Model | State                       | Merge into `prd/fixes-tooling` |
+| ----- | ---- | --------- | ----- | --------------------------- | ------------------------------ |
+| 48    | 9    | RISA-1026 | opus  | merged (handed off 172f024) | 46bbadb                        |
 
-**Wave 8** (2026-11-28): slices 45–47 merged (6634dd6, ff8fca0, b7fd72e), items ready. Tier none; `pnpm test` on b7fd72e+docs: one failure, the docs budget after the anchors fold, fixed in 104e013 (exports.test passes). Sync: no merge needed. PR #18: Codex clean on 6fd0610; the docs commits after it read stale on this install, so `review --again` is out; landing is next.
+Wave 9 green: slice 48 (RISA-1026) merged; tooling only, tier none; `pnpm test` green on fa6a59d (104 files, 2392 tests); PR and Codex review next. Wave 8's slices' merges: 45 6634dd6, 46 ff8fca0, 47 b7fd72e.
+
+**Wave 8 landed** 2026-11-28 in main as 845acf0 through PR #18: slices 45, 46, 47, opus (RISA-1020, RISA-1021, RISA-1022). Tooling only, tier none; `pnpm test` green after a docs-budget fix (104e013); Codex clean on c6043e7; landed on an unsynced tip (main's 5 new commits share no file). Report filed; to-test/2026-11-28-0515-fixes-tooling.md; slice worktrees removed. Docs folded: orchestrator.md (anchors exits 1 on a bad Model).
 
 **Wave 7 landed** 2026-11-28 in main as f1240c7 through PR #17: slice 44, opus (RISA-1018). Tooling only, tier none; `pnpm test` green; Codex clean on 556deb0 (asked again after a docs commit); landed on an unsynced tip (main's 3 new commits share no file). Report filed; to-test/2026-11-28-0412-fixes-tooling.md; slice worktree removed.
 
@@ -20,7 +20,8 @@
 
 **For the next session:**
 
-- **Ready:** none waiting beyond wave 8 (check `risa backlog list`).
+- **Moved out (2026-11-28):** RISA-1025 went to self-recovery-2 (backlog session's call): it edits the same lines as that topic's RISA-1027/1029. After wave 9 lands, if nothing is triaged for fixes-tooling, close the topic out (`risa rm fixes-tooling`) to free the lane, as the backlog session asked.
+- **Commit no Status after asking Codex:** a docs-only commit after its clean verdict reads stale on the installed release (RISA-1014/1016 land with the next tag), costing a re-review round each time.
 - **Commit and prettier-format the plan before `risa slice`:** an unformatted plan fails every slice's check at its first step (wave 6: three of five).
 - **Slice checks under load** often run out of budget; the CI run is the gate.
 - **Releases:** waves 5 and 6 need a tag (v0.1.9 after bumping package.json) before their tooling takes effect; the backlog session handles releases. A change to Risa's own risa.json needs the release that reads it installed first.
@@ -503,3 +504,13 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · C
 **Acceptance criteria:**
 
 - Unit test (`loops/check-run.test.mjs`, as slice 44's load test: the load file through `RISA_LOAD_FILE`, short poll): busy, then unread, then calm: it waits through the unread read and says the load dropped to the calm value; unread from the start doesn't wait.
+
+## Slice 48: The lease wait test no longer flakes under load
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1026):** `loops/lease.test.mjs` "returns once the worktree's check lease is released" flakes under load (self-recovery-2's full check at load ~13; 26/26 alone): it waits (`until`) for the `Waiting (up to 0m30s) for wt-a's check:` line, then expects the holder line (`wt-a: pnpm check (quick) (pid …`) at once, but the output it has read so far ends at the wait line. Find whether the wait command writes the two lines separately (then the test should wait for both, or the command should write them in one write) and fix the cause, not the symptom alone; a fixed sleep is no fix. Look for the same wait-then-assert shape in the file's other tests and fix those too. Say in the hand-off which it was.
+
+**Acceptance criteria:**
+
+- `loops/lease.test.mjs` passes 20 runs in a row under load (for example, alongside a CPU burner such as `yes > /dev/null` on several cores), and its assertions still check the wait line, the holder line and the done line.
