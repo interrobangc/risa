@@ -202,9 +202,11 @@ describe("the dispatcher's part", () => {
 
   it("prints its three states: stopped, running, paused and why", () => {
     expect(cli()).toBe("DISPATCHER: stopped: start it in a tab of its own with pnpm prd dispatch\n\n");
-    // A lock whose pid is gone is stopped too.
+    // A lock whose pid is gone is a dispatcher that died (RISA-1030).
     writeFileSync(files().lock, "999999\n");
-    expect(cli()).toMatch(/^DISPATCHER: stopped:/);
+    expect(cli()).toMatch(
+      /^DISPATCHER: dead \(pid 999999 gone; no clean stop\): restart it with pnpm prd dispatch --restart\n/,
+    );
     writeFileSync(files().lock, `${process.pid}\n`);
     writeFileSync(files().state, JSON.stringify({ code: { hash: TOOL_HASH, pid: process.pid, at: ago(H) } }));
     expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid}), code current\n\n`);
@@ -226,6 +228,46 @@ describe("the dispatcher's part", () => {
       JSON.stringify({ paused: null, code: { hash: TOOL_HASH, pid: process.pid, at: ago(H) } }),
     );
     expect(cli()).toBe(`DISPATCHER: running (pid ${process.pid}), code current\n\n`);
+  });
+
+  it("tells a dispatcher that died from one stopped on purpose (RISA-1030)", () => {
+    const dead = () => false;
+    writeFileSync(files().lock, "424242\n");
+    writeFileSync(
+      files().state,
+      JSON.stringify({ code: { hash: "abc", pid: 424242, at: ago(H) }, lastTickAt: NOW - 3 * H }),
+    );
+    writeFileSync(files().log, "2026-11-21T08:59:00Z start alpha\n");
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toBe(
+      "DISPATCHER: dead (pid 424242 gone; last tick 3h ago, no clean stop): restart it with pnpm prd dispatch --restart\n" +
+        "last: 2026-11-21T08:59:00Z start alpha · last tick 3h ago (2026-11-21T09:00:00Z)\n\n",
+    );
+    // Paused when it died: both said.
+    writeFileSync(
+      files().state,
+      JSON.stringify({ paused: { at: ago(4 * H), why: "usage limit" }, lastTickAt: NOW - 3 * H }),
+    );
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toMatch(
+      /^DISPATCHER: dead \(pid 424242 gone; last tick 3h ago, no clean stop\), and paused, 4h ago: usage limit: restart it/,
+    );
+    // No lock file (a clean stop removes it): stopped.
+    rmSync(files().lock);
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toMatch(
+      /^DISPATCHER: stopped \(and paused, 4h ago: usage limit\): start it in a tab of its own with pnpm prd dispatch\n/,
+    );
+    // A lock with no pid in it is no dispatcher's: stopped.
+    writeFileSync(files().lock, "\n");
+    expect(dispatcherPart(files(), { now: NOW, alive: dead, current: () => "abc" })).toMatch(
+      /^DISPATCHER: stopped/,
+    );
+    // A live pid: running, as before.
+    writeFileSync(files().lock, `${process.pid}\n`);
+    writeFileSync(files().state, JSON.stringify({ code: { hash: "abc", pid: process.pid, at: ago(H) } }));
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toMatch(
+      new RegExp(`^DISPATCHER: running \\(pid ${process.pid}\\), code current\n`),
+    );
+    rmSync(files().log);
+    writeFileSync(files().state, "{}");
   });
 
   it("says whether the running dispatcher's code is current or stale (B-809)", () => {
