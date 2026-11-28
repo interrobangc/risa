@@ -129,6 +129,7 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 | RISA-1039 | change | triaged | fixes-bug |  | Session display names lead with the Starfleet name: 'Admiral Morrow · backlog (caretook)', not 'backlog (caretook) · Admiral Morrow' |
 | RISA-1040 | feature | triaged | self-recovery-3 |  | An orchestrator that lands and stops without rotating is caught: rotate runs go into .run-log.jsonl, and the dispatcher nudges (then closes) a standing topic whose session sits idle after a land-end with nothing runnable, instead of leaving its lane held |
 | RISA-1041 | change | triaged | fixes-nit |  | Persona line: a status report reads as the role's log entry (captain's log), and the user's title (Fleet Admiral) is used only when speaking to the user directly (a question, an answer to them), not in narration of the session's own work |
+| RISA-1042 | bug | triaged | fixes-bug-urgent |  | risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began |
 
 ## Items
 
@@ -1061,3 +1062,12 @@ The PRD registry: **row order is the priority**. Edit it only with `risa backlog
 
 - 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'When captains are just talking about what they are doing, they should be writing to their captains log so the fleet admiral can review later. Only address fleet admiral when interacting directly with me.' The line is built in loops/flavor.mjs (~182); flavor.test.mjs checks its text.
 - 2026-11-28 (Robert Bo Davis): The user's word (2026-11-28): 'That needs to be configurable when switching color settings.' So the log's name and when to use the title come from the flavor pack, beside pack.address (e.g. a pack.log field: captain's log for the Starfleet pack, its own wording or none for other flavors), never hard-coded in flavorLine; the default flavor and any pack without the field keep a plain report voice.
+
+### RISA-1042 · bug · risa wait browser misses an active suite's earlier results: a waiter started (or restarted after exit 75) mid-suite reads the run log only from its own start offset, so an early failing browser check followed by a passing one prints only the pass and exits 0. Take the results since the suite's lease was taken, not since the wait began
+
+- status: triaged
+- prd: fixes-bug-urgent
+- owner:
+- commit:
+
+- 2026-11-28 (prd/fixes-bug-urgent): Codex finding on PR #25 (loops/lease.sh lease_wait/lease_results, RISA-1034's slice 2), verified 2026-11-28: browser.sh holds one lease for the whole suite and logs each check separately. Check waits are unaffected (one line per run, at its end). Not a regression: before RISA-1034 wait printed no result at all.
