@@ -8,7 +8,7 @@
 
 **Landing mode:** run everything through (started run-through; land each green wave, ask only real questions).
 
-**Now:** wave 3 merged (3: 9aeb2ed, 5: 1aa160b); gate green (`pnpm check` on cd7d14c, tier none, 2572 tests); slice worktrees removed; PR #34: Codex clean on 3aaff33 after two P2 findings filed as RISA-1071 (into slice 4) and RISA-1072 (into slice 6); landing. Slices 3 and 5 were started on opus from prd/risa-next-2 (sync skipped: main shares no file); RISA-1067 claimed into slice 3. Wave 2 landed in main via PR #32 (da16403); to-test `to-test/2026-11-28-1108-risa-next-2.md`.
+**Now:** wave 3 landed in main through PR #34 (8f52589, tier none, Codex clean after RISA-1071/1072 were filed into wave 4); to-test `to-test/2026-11-28-1149-risa-next-2.md`. **Next session: wave 4** = slices 4 and 6, both on opus; slice 4 takes RISA-1071, slice 6 RISA-1072 (both claimed). Sync first (main moved 7 commits, no shared files).
 
 | Slice | Wave | State          | Merge into `prd/risa-next-2` |
 | ----- | ---- | -------------- | ---------------------------- |
