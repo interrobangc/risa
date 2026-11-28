@@ -12,7 +12,7 @@
 
 | Slice | Wave | Item      | Model | State                                                                                                                           | Merge into `prd/fixes-tooling` |
 | ----- | ---- | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 53    | 12   | RISA-1073 | opus  | in flight: 91e56b4, 767ccb8 committed, tree clean; agent ended by a mid-wave rotation (account switch): respawn with --continue | —                              |
+| 53    | 12   | RISA-1073 | opus  | in flight: 91e56b4, 767ccb8 committed, tree clean; agent respawned with --continue after the account switch (2026-11-28 17:30Z) | —                              |
 
 Wave 12: slice 53 only. RISA-1069 waits while `loops/dispatch` is risa-next-2's hot file. Hot files set: loops/check-budget, loops/check-run.
 
