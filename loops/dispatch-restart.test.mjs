@@ -158,7 +158,8 @@ beforeAll(() => {
     STUB_LOCK: lock,
   };
 }, 60_000);
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+// A TERMed dispatcher may still be writing its log: retry the removal.
+afterAll(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 
 /** @type {number[]} */
 let started = [];
@@ -169,16 +170,19 @@ beforeEach(() => {
   mkdirSync(loops, { recursive: true });
   started = [];
 });
-afterEach(() => {
-  // The new dispatcher runs detached: end whatever holds the lock.
+afterEach(async () => {
+  // The new dispatcher runs detached: end whatever holds the lock, and wait for it to go.
   const pid = lockHolder(lock);
-  for (const p of [...started, ...(pid ? [pid] : [])])
+  const pids = [...started, ...(pid ? [pid] : [])];
+  for (const p of pids)
     try {
       process.kill(p, "SIGTERM");
     } catch {
       /* gone */
     }
-});
+  const end = Date.now() + 10_000;
+  while (pids.some(alive) && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+}, 15_000);
 
 describe("dispatch --restart (RISA-1009)", () => {
   it("ends the running one and starts one new one detached, keeping its --every and keep-alive", async () => {
@@ -232,6 +236,28 @@ describe("dispatch --restart (RISA-1009)", () => {
     expect(again.stdout).toContain(`pid ${now} -> ${third}`);
     expect(dstate().code).toMatchObject({ pid: third, every: 7 });
     expect(dstate().keepAlive.inbox).toEqual({ stopped: true });
+  }, 60_000);
+
+  it("with no tab to open it refuses and leaves the running one running (RISA-1012)", async () => {
+    const holder = spawn("node", [join(root, "holder.mjs"), "--every", "7"], { env, stdio: "ignore" });
+    started.push(/** @type {number} */ (holder.pid));
+    const end = Date.now() + 10_000;
+    while (lockHolder(lock) !== holder.pid && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    expect(lockHolder(lock)).toBe(holder.pid);
+
+    const headless = { ...env, RISA_ITERM_APP: join(root, "no-iTerm.app") };
+    const r = spawnSync("node", [join(main, "loops/dispatch.mjs"), "--restart"], {
+      cwd: main,
+      encoding: "utf8",
+      env: headless,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("--restart needs iTerm2");
+    expect(r.stderr).toContain(`the running one (pid ${holder.pid}) was left running`);
+    expect(alive(/** @type {number} */ (holder.pid))).toBe(true);
+    expect(lockHolder(lock)).toBe(holder.pid);
+    expect(calls("open")).toEqual([]);
+    expect(calls("pnpm")).toEqual([]);
   }, 60_000);
 
   it("with none running it starts one", async () => {

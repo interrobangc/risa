@@ -9,14 +9,16 @@
 // field gets its default (no stack, nothing extra to read, no tests named) and a
 // warning, as does a malformed one. An optional `Blocked by: slice 3` (or `3`,
 // `1, 2`, `none`) names the slices this one waits for, and an optional
-// `Check: loops/x.test.mjs` the one test file the slice's narrow check runs;
-// leaving either out is fine here (check-plan.mjs's planBudget warns on a
-// missing Check). (`prd doc planner`.)
+// `Check: loops/x.test.mjs` the one test file the slice's narrow check runs,
+// and an optional `Model: opus|sonnet` the model its agent runs on (opus when
+// left out; any other model is an error, and the command exits 1); leaving any
+// of them out is fine here (check-plan.mjs's planBudget warns on a missing
+// Check). (`prd doc planner`.)
 //
 //   node slice-fields.mjs <n> [plan-file]   (the plan on stdin when no file)
-//     prints "Stack: …", "Reads: …" and "Tests: …", warnings on stderr
-//   node slice-fields.mjs <n> [plan-file] --get stack|reads|tests|check
-//     prints one field's value only (stack: yes or no)
+//     prints "Stack: …", "Reads: …", "Tests: …" and "Model: …", warnings on stderr
+//   node slice-fields.mjs <n> [plan-file] --get stack|reads|tests|check|model
+//     prints one field's value only (stack: yes or no; model: opus or sonnet)
 // A slice's body is also read for line-number anchors (`file.mjs ~158`,
 // `:231`), which go stale on hot files: `lineAnchors` finds them, and
 // `prd anchors` (anchors.mjs) warns on each.
@@ -25,9 +27,11 @@ import { pathToFileURL } from "node:url";
 
 export const FIELDS = ["stack", "reads", "tests"];
 /** Known fields a slice may leave out without a warning. */
-export const OPTIONAL_FIELDS = ["blocked by", "check"];
+export const OPTIONAL_FIELDS = ["blocked by", "check", "model"];
+/** The models a slice may run on, the default first (haiku is a helper's, never a slice's). */
+export const MODELS = ["opus", "sonnet"];
 /** What `--get` prints. */
-const GETS = [...FIELDS, "check"];
+const GETS = [...FIELDS, "check", "model"];
 const KNOWN = [...FIELDS, ...OPTIONAL_FIELDS];
 const HEADING = /^#{2,4}\s+Slice\s+(\d+)\b/i;
 const FIELD = /^([A-Za-z]+(?:\s+[A-Za-z]+)*)\s*:\s*(.*)$/;
@@ -81,10 +85,12 @@ export function parseFieldsLine(line) {
 /**
  * The fields of slice `n` in a plan's text.
  * → { found, stack: boolean, reads: string[], readsText, tests: string[], blockedBy: number[],
- *     check: string[], given: string[], missing: string[], warnings: string[] }
+ *     check: string[], model: "opus"|"sonnet", given: string[], missing: string[],
+ *     warnings: string[], errors: string[] }
  * `given` names the fields the slice's fields line gives (lowercased).
  * `found` is false when the plan has no such slice heading. Defaults apply to
- * anything missing or malformed, and each such case adds a warning.
+ * anything missing or malformed, and each such case adds a warning; an
+ * unknown Model is an error instead (the model stays opus).
  */
 export function sliceFields(planText, n) {
   const lines = planText.split(/\r?\n/);
@@ -96,9 +102,11 @@ export function sliceFields(planText, n) {
     tests: [],
     blockedBy: [],
     check: [],
+    model: MODELS[0],
     given: [],
     missing: [],
     warnings: [],
+    errors: [],
   };
   const at = lines.findIndex((l) => {
     const m = HEADING.exec(l);
@@ -145,6 +153,11 @@ export function sliceFields(planText, n) {
     }
   }
   if ("check" in values) result.check = splitList(values.check);
+  if ("model" in values) {
+    const v = values.model.toLowerCase();
+    if (MODELS.includes(v)) result.model = /** @type {"opus"|"sonnet"} */ (v);
+    else result.errors.push(`Model must be ${MODELS.join(" or ")}, not "${values.model}"`);
+  }
   result.given = Object.keys(values);
   result.missing = FIELDS.filter((f) => !(f in values));
   for (const f of result.missing) result.warnings.push(`no ${f[0].toUpperCase()}${f.slice(1)} field`);
@@ -244,12 +257,13 @@ export function mergedSlices(/** @type {string[]} */ texts) {
   return merged;
 }
 
-/** The three lines prompt.sh prints. */
+/** The four lines prompt.sh prints. */
 export function formatFields(f) {
   return [
     `Stack: ${f.stack ? "yes" : "no"}`,
     `Reads: ${f.readsText || "nothing besides AGENTS.md"}`,
     `Tests: ${f.tests.length ? f.tests.join(", ") : "none named"}`,
+    `Model: ${f.model}`,
   ].join("\n");
 }
 
@@ -267,16 +281,19 @@ function main(argv) {
   }
   const [n, file] = args;
   if (!n || !/^\d+$/.test(n)) {
-    process.stderr.write("usage: slice-fields.mjs <n> [plan-file] [--get stack|reads|tests|check]\n");
+    process.stderr.write(`usage: slice-fields.mjs <n> [plan-file] [--get ${GETS.join("|")}]\n`);
     return 2;
   }
   const text = readFileSync(file ?? 0, "utf8");
   const f = sliceFields(text, n);
   for (const w of f.warnings) process.stderr.write(`warning: slice ${n}: ${w}\n`);
+  for (const e of f.errors) process.stderr.write(`error: slice ${n}: ${e}\n`);
+  if (f.errors.length) return 1;
   if (get === "stack") process.stdout.write(`${f.stack ? "yes" : "no"}\n`);
   else if (get === "reads") process.stdout.write(`${f.readsText}\n`);
   else if (get === "tests") process.stdout.write(`${f.tests.join(", ")}\n`);
   else if (get === "check") process.stdout.write(`${f.check.join(", ")}\n`);
+  else if (get === "model") process.stdout.write(`${f.model}\n`);
   else process.stdout.write(`${formatFields(f)}\n`);
   return 0;
 }

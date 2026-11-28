@@ -44,9 +44,14 @@ case $kind in
     # The plan's Stack field (`prd doc planner "Slice fields"`) decides: a stack only
     # for Stack: yes, or --stack. Missing, or no plan: no stack.
     plan_text=$(git -C "$main" show "${base:-$prd_prefix$topic}:$(config_get paths.plans)/$topic-plan.md" 2>/dev/null || true)
-    planned=no
+    planned=no model=opus
     if [[ -n $plan_text ]]; then
       planned=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get stack <<<"$plan_text" 2>/dev/null || echo no)
+      # The Model field: the model its agent is spawned on; an unknown one refuses.
+      if ! model=$(node "$(dirname "$0")/slice-fields.mjs" "$n" --get model <<<"$plan_text" 2>/dev/null); then
+        node "$(dirname "$0")/slice-fields.mjs" "$n" <<<"$plan_text" 2>&1 >/dev/null | grep '^error' >&2 || true
+        exit 1
+      fi
     fi
     echo "plan: slice $n says Stack: $planned${stack:+ (overridden by --stack/--no-stack)}"
     [[ $planned == yes ]] && planned=1 || planned=0
@@ -65,11 +70,12 @@ dir=$loops/$name
 [[ -e $dir ]] && { echo "$dir already exists" >&2; exit 1; }
 git -C "$main" rev-parse --verify --quiet "$base" >/dev/null || { echo "no branch $base" >&2; exit 1; }
 
-# The drain (drain.mjs): no new slice worktree near or past a usage limit. A reading
+# The drain (drain.mjs): no new slice worktree near or past a usage limit, but while
+# draining the allowance's topic (prd dispatch --allow) still makes them. A reading
 # that can't be had never refuses (watching never hurts the work).
 if [[ $kind == slice ]]; then
   drain_rc=0
-  drain_why=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check 2>/dev/null) || drain_rc=$?
+  drain_why=$(RISA_USAGE_DIR=${RISA_USAGE_DIR:-$loops/.usage} node "$(dirname "$0")/drain.mjs" check "$topic" "$loops/.drain-allow" 2>/dev/null) || drain_rc=$?
   if ((drain_rc == 3)); then echo "refused: slice $topic-$n: $drain_why" >&2; exit 1; fi
 fi
 
@@ -142,6 +148,7 @@ else
   echo "  checks       pnpm check; integration tests use $(fact summary "$test_facts")"
   echo "  a stack      $prd stack up   (dev server, browser checks), $prd stack down when done"
 fi
+[[ $kind != slice ]] || echo "  model        spawn its agent on $model (the plan's Model field)"
 if [[ $kind == prd ]]; then
   echo
   echo "Start its orchestrator in a new terminal:"

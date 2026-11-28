@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # List every worktree in .loops: name, slot, branch, commits ahead of the branch
-# it merges into, dirty state, its containers and its dev server link. Then the
+# it merges into, dirty state, its containers and its dev server link, and the
+# held PRDs (a hold's date and reason beside it). Then the
 # machine's load averages, any stale slot lease, the shared test Postgres,
 # leftovers for `prd gc` (merged slice worktrees and stacks stopped for over
 # a day), and who holds the machine-wide leases (browser checks and prd
@@ -58,6 +59,17 @@ for dir in "$loops"/*/; do
 done
 [[ -n $found ]] || echo "(no worktrees: ${prd_cmd} start <topic>)"
 echo "PRD worktrees: $(prd_count) of $max_prds${max_prds_from:+ ($max_prds_from)}"
+
+# The held PRDs (prd list's rows), each with its hold's date and reason when it has
+# one (registry.mjs's heldText); nothing, heading included, when none is held.
+holds=$(cd "$main" && node "$loops_lib_dir/../backlog/backlog.mjs" prd list --json 2>/dev/null |
+  RISA_REGISTRY="$loops_lib_dir/../backlog/registry.mjs" node --input-type=module -e '
+    const { heldText } = await import(process.env.RISA_REGISTRY);
+    let text = ""; for await (const c of process.stdin) text += c;
+    for (const r of JSON.parse(text)) if (r.flags.includes("hold") && r.state !== "done")
+      console.log(`  ${r.topic}: on hold${r.held ? ` since ${heldText(r)}` : ""}`);
+  ' 2>/dev/null) || holds=""
+[[ -z $holds ]] || printf '\nHolds\n%s\n' "$holds"
 
 # The dispatcher, recorded sessions and open asks (status-extra.mjs): sessions and asks print nothing,
 # heading included, when there are none.

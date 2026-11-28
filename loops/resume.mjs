@@ -16,7 +16,7 @@
 //     under it) or, while live, running a `prd` command; a live one is ended (TERM, KILL
 //     END_WAIT_MS later), then resumed on a later tick; a dead one is resumed, the oldest claim
 //     first, one per tick.
-import { END_WAIT_MS } from "./drain.mjs";
+import { END_WAIT_MS, drainHolds } from "./drain.mjs";
 import { ROTATING_GRACE_MS } from "./dispatch-pick.mjs";
 import { stallHolds, timeOf } from "./usage.mjs";
 import { branchKinds, toolCmd } from "./config.mjs";
@@ -49,7 +49,7 @@ export const sessionOfBranch = (/** @type {string} */ branch) => {
  * @param {{ marks: ResumeMark[], sessions: ResumeSession[], worktrees: { name: string, branch: string }[],
  *   rows?: { topic: string, state?: string, flags?: string[] }[], claimed?: Record<string, Claim>,
  *   landing?: Set<string>, commands?: Set<string> | null,
- *   drain: { state: "normal" | "draining" | "limited", why: string }, paused?: boolean, now: number,
+ *   drain: { state: "normal" | "draining" | "limited", why: string, allow?: string | null }, paused?: boolean, now: number,
  *   endWaitMs?: number }} facts
  *   landing: sessions with a landing marker or a landing under them; commands: live sessions
  *   running a `prd` command (null: the process table couldn't be read)
@@ -123,7 +123,8 @@ export function resumeDecision({
     else if (started !== null && c.since !== null && started > c.since && !(rec.pid && rec.pid === c.pid))
       out.drop.push({ session, why: "it came back meanwhile (a session started after the stall)" });
     else if (paused) out.waits.push({ session, why: "the dispatcher is paused" });
-    else if (drain.state !== "normal") out.waits.push({ session, why: `usage is ${drain.state}` });
+    else if (drainHolds(drain, session.replace(/^(prd|plan)-/, "")))
+      out.waits.push({ session, why: `usage is ${drain.state}` });
     else if (row?.flags?.includes("hold")) out.waits.push({ session, why: "its topic is on hold" });
     else if (landing.has(session))
       out.waits.push({ session, why: "it has a landing marker: a landing first" });

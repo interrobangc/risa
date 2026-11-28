@@ -17,6 +17,9 @@
 // with the reset time. An unknown reading (none, or all over RISA_USAGE_STALE_MIN old)
 // never drains: with a session live longer than that, it files one report per incident.
 // RISA_USAGE_WATCH=off: always normal.
+// The allowance (`prd dispatch --allow <topic>`, .loops/.drain-allow, read every tick): while
+// draining, that one topic still starts, plans, reopens, resumes and makes slice worktrees
+// (drainHolds); at the stop (limited) it ends like the rest.
 //
 // sessionDrains (pure): each session's drain on its own account's readings (a reading's
 // `account`, usage.mjs), so a session on another Claude config folder is drained, and ended
@@ -26,10 +29,14 @@
 // among its descendants).
 //
 //   node drain.mjs [--json]   the drain state, from the readings (RISA_USAGE_DIR)
-//   node drain.mjs check      new.sh slice's gate: exit 3 with the reason while draining or
-//                             limited; else 0 (and 0 on any error: watching never hurts the work)
+//   node drain.mjs check [<topic> [<allow-file>]]
+//                             new.sh slice's gate: exit 3 with the reason while draining (unless
+//                             TOPIC is the allowance in ALLOW-FILE) or limited; else 0 (and 0 on
+//                             any error: watching never hurts the work)
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { span } from "./asks.mjs";
+import { toolCmd } from "./config.mjs";
 import { KEPT_KINDS } from "./keep-alive.mjs";
 import { clock, mergeReadings, readUsage, stallHolds, staleMsOf, timeOf, usageDirOf } from "./usage.mjs";
 
@@ -52,20 +59,55 @@ export function drainSettings(env = process.env) {
   return { drain: Math.min(drain, stop), stop, off: env.RISA_USAGE_WATCH === "off" };
 }
 
+/** The topic name an allowance may hold (a registry topic: letters, digits, dashes). */
+const TOPIC_RE = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+
+/** Whether TEXT is a topic an allowance may name. */
+export const allowableTopic = (/** @type {string} */ text) => TOPIC_RE.test(text);
+
+/** The stored allowance (`prd dispatch --allow`, .loops/.drain-allow): its topic, or null when none. */
+export function readAllowance(/** @type {string | null | undefined} */ file) {
+  if (!file) return null;
+  let text;
+  try {
+    text = readFileSync(file, "utf8").trim();
+  } catch {
+    return null;
+  }
+  return allowableTopic(text) ? text : null;
+}
+
 /**
  * @typedef {{ state: "normal" | "draining" | "limited", resetsAt: number | null, why: string,
- *   unknown: boolean }} Drain
- *   unknown: no current reading while a session has been live longer than staleMs (report it)
+ *   unknown: boolean, allow?: string | null }} Drain
+ *   unknown: no current reading while a session has been live longer than staleMs (report it);
+ *   allow: the topic let past the drain line (drainHolds), set only while draining
  */
+
+/**
+ * Whether DRAIN holds TOPIC (no start, plan, reopen, resume or slice worktree): limited always;
+ * draining unless TOPIC is its allowance. Pure.
+ * @param {Pick<Drain, "state"> & { allow?: string | null }} drain @param {string | null | undefined} topic
+ */
+export function drainHolds(drain, topic) {
+  if (drain.state === "limited") return true;
+  if (drain.state !== "draining") return false;
+  return !topic || drain.allow !== topic;
+}
 
 /**
  * The drain state. Pure.
  * @param {ReturnType<typeof import("./usage.mjs").mergeReadings>} usage
  * @param {{ drain: number, stop: number, off?: boolean, now: number, staleMs: number,
- *   sessions?: { live: boolean, startedMs?: number | null }[], timeZone?: string }} opts
+ *   sessions?: { live: boolean, startedMs?: number | null }[], timeZone?: string,
+ *   allow?: string | null }} opts
+ *   allow: the stored allowance (readAllowance): kept only while draining
  * @returns {Drain}
  */
-export function drainDecision(usage, { drain, stop, off = false, now, staleMs, sessions = [], timeZone }) {
+export function drainDecision(
+  usage,
+  { drain, stop, off = false, now, staleMs, sessions = [], timeZone, allow = null },
+) {
   const normal = (/** @type {string} */ why, unknown = false) => ({
     state: /** @type {const} */ ("normal"),
     resetsAt: null,
@@ -117,7 +159,9 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
     return {
       state: "limited",
       resetsAt,
-      why: `${say(stopped)}, at or over the stop line ${stop}% (${until(resetsAt)})`,
+      why:
+        `${say(stopped)}, at or over the stop line ${stop}% (${until(resetsAt)})` +
+        (allow ? `; the allowance for ${allow} ends here` : ""),
       unknown: false,
     };
   }
@@ -127,8 +171,13 @@ export function drainDecision(usage, { drain, stop, off = false, now, staleMs, s
     return {
       state: "draining",
       resetsAt,
-      why: `${say(draining)}, at or over the drain line ${drain}% (${until(resetsAt)})`,
+      why:
+        `${say(draining)}, at or over the drain line ${drain}% (${until(resetsAt)})` +
+        (allow
+          ? `; ${allow} is allowed past it (${toolCmd.prd} dispatch --allow), until the stop ${stop}%`
+          : ""),
       unknown: false,
+      allow,
     };
   }
   if (!usage.known) {
@@ -297,23 +346,26 @@ export function limitActions({
 }
 
 /** The drain state from the readings in DIR, for scripts. */
-export function readDrain(/** @type {string | null} */ dir, { now = Date.now(), env = process.env } = {}) {
+export function readDrain(
+  /** @type {string | null} */ dir,
+  { now = Date.now(), env = process.env, allow = /** @type {string | null} */ (null) } = {},
+) {
   const staleMs = staleMsOf(env);
-  return drainDecision(readUsage(dir, { now, env }), { ...drainSettings(env), now, staleMs });
+  return drainDecision(readUsage(dir, { now, env }), { ...drainSettings(env), now, staleMs, allow });
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const [cmd = ""] = process.argv.slice(2);
+  const [cmd = "", topic = "", allowFile = ""] = process.argv.slice(2);
   if (cmd === "check") {
     let d;
     try {
-      d = readDrain(usageDirOf());
+      d = readDrain(usageDirOf(), { allow: readAllowance(allowFile) });
     } catch {
       process.exit(0);
     }
-    if (d.state === "normal") process.exit(0);
+    if (!drainHolds(d, topic)) process.exit(0);
     process.stdout.write(
-      `usage is ${d.state}: ${d.why}; no new slice worktree until it resets (RISA_USAGE_WATCH=off overrides)\n`,
+      `usage is ${d.state}: ${d.why}; no new slice worktree until it resets (RISA_USAGE_WATCH=off overrides; while draining, ${toolCmd.prd} dispatch --allow <topic> lets one topic past)\n`,
     );
     process.exit(3);
   }
@@ -321,7 +373,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   if (cmd === "--json") process.stdout.write(`${JSON.stringify(d, null, 2)}\n`);
   else if (cmd === "") process.stdout.write(`Drain: ${d.state}: ${d.why}\n`);
   else {
-    console.error("usage: drain.mjs [--json] | check");
+    console.error("usage: drain.mjs [--json] | check [<topic> [<allow-file>]]");
     process.exit(2);
   }
 }

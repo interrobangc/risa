@@ -5,13 +5,21 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DISPATCHER_SESSIONS } from "./asks.mjs";
 import { loadConfig } from "./config.mjs";
 import { CONTEXT_SESSION } from "./dispatch-context.mjs";
 import { DISPATCH_SESSION, KEEP_SESSION } from "./dispatch-pick.mjs";
 import { STUCK_SESSION } from "./dispatch-stuck.mjs";
 import { recordVerdict } from "./skeptics.mjs";
+import { BASE, scaledWait } from "./test-limits.mjs";
+
+// RISA-994: a busy machine slows each spawned node and hook, so the waits below
+// scale with load (unchanged at a load of 15 or under). The bounds under test
+// (a 1 s hook limit, a 1 s --wait timeout) stay fixed: they are what is checked.
+vi.setConfig({ testTimeout: scaledWait(BASE.testTimeout), hookTimeout: scaledWait(BASE.hookTimeout) });
+/** S seconds, scaled for the load, as a script's seconds argument. */
+const secs = (s) => String(Math.round(scaledWait(s * 1000) / 1000));
 
 const PRD_SH = new URL("./prd.sh", import.meta.url).pathname;
 /** The notification names the project, capitalized. */
@@ -39,8 +47,9 @@ beforeEach(() => {
     RISA_SKEPTIC_DIR: skepticDir,
     RISA_ASK_POLL: "0.2",
   };
-  for (const k of ["RISA_ASK_NOTIFY", "RISA_ASK_NOTIFY_TIMEOUT", "RISA_SESSION", "RISA_ASK_DEFAULT_MIN"])
-    delete env[k];
+  for (const k of ["RISA_ASK_NOTIFY", "RISA_SESSION", "RISA_ASK_DEFAULT_MIN"]) delete env[k];
+  // The hook's limit: ask.mjs's default 10 s, scaled, so a hook that only runs slowly isn't cut off.
+  env.RISA_ASK_NOTIFY_TIMEOUT = secs(10);
 });
 afterEach(() => {
   for (const c of children.splice(0)) if (c.exitCode === null && c.signalCode === null) c.kill("SIGKILL");
@@ -158,7 +167,7 @@ describe("pnpm prd ask", () => {
     });
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/RISA_ASK_NOTIFY timed out \(ignored\)/);
-    expect(Date.now() - t).toBeLessThan(10_000);
+    expect(Date.now() - t).toBeLessThan(scaledWait(10_000));
   });
 
   it("refuses a missing text, both kinds, no topic outside a worktree, a bad recommendation", () => {
@@ -212,7 +221,7 @@ describe("defaults on silence", () => {
 
   it("--wait on a due ask prints the option, says it was defaulted, and exits 0", async () => {
     askDefaulting(0.005); // 0.3 s
-    const w = start(["ask", "--wait", "a1", "--timeout", "15"]);
+    const w = start(["ask", "--wait", "a1", "--timeout", secs(15)]);
     expect(await w.exit).toBe(0);
     const [answer, note] = w.out.trim().split("\n");
     expect(answer).toBe("yes");
@@ -222,7 +231,7 @@ describe("defaults on silence", () => {
 
   it("--wait returns a user's answer given before the default", async () => {
     askDefaulting(1);
-    const w = start(["ask", "--wait", "a1", "--timeout", "15"]);
+    const w = start(["ask", "--wait", "a1", "--timeout", secs(15)]);
     await new Promise((r) => setTimeout(r, 400));
     expect(prd(["answer", "a1", "2"]).status).toBe(0);
     expect(await w.exit).toBe(0);
@@ -286,7 +295,7 @@ describe("defaults on silence", () => {
 describe("pnpm prd ask --wait and answer", () => {
   it("returns the answer once another process answers", async () => {
     askQuestion();
-    const w = start(["ask", "--wait", "a1", "--timeout", "15"]);
+    const w = start(["ask", "--wait", "a1", "--timeout", secs(15)]);
     await new Promise((r) => setTimeout(r, 600));
     expect(w.child.exitCode).toBe(null);
     const a = prd(["answer", "a1", "2"]);

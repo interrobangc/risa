@@ -58,6 +58,14 @@ Blocked by: 2, later · Stack: no · Reads: none · Tests: unit
 
 Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none · Check: loops/x.test.mjs
 
+## Slice 13: Sonnet
+
+Stack: no · Reads: none · Tests: unit · Check: loops/y.test.mjs · Model: Sonnet
+
+## Slice 14: Haiku is a helper's model
+
+Stack: no · Reads: none · Tests: unit · Model: haiku
+
 ## Slice 12: Two digits
 
 Stack: no | Reads: none | Tests: integration
@@ -132,6 +140,14 @@ describe("sliceFields", () => {
     expect(sliceFields(plan, 1)).toMatchObject({ check: [], given: ["stack", "reads", "tests"] });
   });
 
+  it("knows Model: sonnet parses, no field reads opus, any other model is an error", () => {
+    expect(sliceFields(plan, 13)).toMatchObject({ model: "sonnet", warnings: [], errors: [] });
+    expect(sliceFields(plan, 1)).toMatchObject({ model: "opus", errors: [] });
+    const f = sliceFields(plan, 14);
+    expect(f).toMatchObject({ model: "opus", warnings: [] });
+    expect(f.errors).toEqual(['Model must be opus or sonnet, not "haiku"']);
+  });
+
   it("only reads fields directly under the heading", () => {
     const f = sliceFields(plan, 5);
     expect(f.stack).toBe(false);
@@ -148,10 +164,10 @@ describe("sliceFields", () => {
 
   it("formats the fields for the loop's prompt", () => {
     expect(formatFields(sliceFields(plan, 1))).toBe(
-      "Stack: yes\nReads: docs/loops.md, AGENTS.md (all of it, once)\nTests: unit, e2e:invites",
+      "Stack: yes\nReads: docs/loops.md, AGENTS.md (all of it, once)\nTests: unit, e2e:invites\nModel: opus",
     );
     expect(formatFields(sliceFields(plan, 2))).toBe(
-      "Stack: no\nReads: nothing besides AGENTS.md\nTests: none named",
+      "Stack: no\nReads: nothing besides AGENTS.md\nTests: none named\nModel: opus",
     );
   });
 });
@@ -200,7 +216,7 @@ describe("the command line", () => {
   it("prints the fields of a plan on stdin, with warnings on stderr", () => {
     const r = spawnSync("node", [CLI, "3"], { input: plan, encoding: "utf8" });
     expect(r.status).toBe(0);
-    expect(r.stdout).toBe("Stack: no\nReads: handbook/sync.md\nTests: component\n");
+    expect(r.stdout).toBe("Stack: no\nReads: handbook/sync.md\nTests: component\nModel: opus\n");
     expect(r.stderr).toBe("warning: slice 3: no Stack field\n");
   });
 
@@ -213,6 +229,15 @@ describe("the command line", () => {
     );
     const check = spawnSync("node", [CLI, "10", "--get", "check"], { input: plan, encoding: "utf8" });
     expect([check.stdout, check.stderr]).toEqual(["loops/x.test.mjs\n", ""]);
+    expect(execFileSync("node", [CLI, "13", "--get", "model"], { input: plan, encoding: "utf8" })).toBe(
+      "sonnet\n",
+    );
+  });
+
+  it("refuses Model: haiku, naming opus and sonnet", () => {
+    const r = spawnSync("node", [CLI, "14", "--get", "model"], { input: plan, encoding: "utf8" });
+    expect([r.status, r.stdout]).toEqual([1, ""]);
+    expect(r.stderr).toBe('error: slice 14: Model must be opus or sonnet, not "haiku"\n');
   });
 
   it("refuses a bad slice number", () => {

@@ -649,6 +649,17 @@ describe("one tick per action", () => {
     expect(existsSync(sessions)).toBe(false);
   });
 
+  it("--dry-run prints a hold's date and reason beside it; a bare hold as before (RISA-986)", () => {
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "h", state: "hold", flags: ["hold"], held: { date: "2026-11-21", why: "waits on the user" } },
+      { topic: "k", state: "hold", flags: ["hold"] },
+    ]);
+    const out = ok(["--dry-run"]);
+    expect(out).toContain("\n  h: on hold since 2026-11-21: waits on the user\n");
+    expect(out).toContain("\n  k: on hold\n");
+  });
+
   it("refuses to run without iTerm2", () => {
     setRows([{ topic: "a", state: "planned" }]);
     const r = dispatch(["--once"], { RISA_ITERM_APP: join(root, "nowhere") });
@@ -1893,6 +1904,8 @@ describe("the stuck tick", () => {
     expect(tryAsks()).toEqual([]);
     // A paused tick writes nothing, its clocks neither.
     expect(dstate().stuck).toEqual({ lastTickAt: T0 * 1000, clockFrom: null });
+    // But the tick's own heartbeat (risa status's last tick) still moves.
+    expect(dstate().lastTickAt).toBe((T0 + 60) * 1000);
   });
 
   it("a tick gap resets the clocks: the stall counts again from the wake", () => {
@@ -2027,6 +2040,33 @@ describe("the drain", () => {
     expect(dstate().drain).toMatchObject({ state: "draining" });
     // Off: the reopen goes ahead.
     expect(ok(["--once"])).toMatch(/^\S+Z reopen prd-d/);
+  });
+
+  it("--allow: the allowed topic starts while draining, shown in --dry-run and the drain's log line (RISA-813)", () => {
+    reading(96);
+    setRows([
+      { topic: "a", state: "planned" },
+      { topic: "b", state: "planned" },
+    ]);
+    try {
+      expect(ok(["--once"], on)).toMatch(/^\S+Z nothing: usage is draining/);
+      expect(ok(["--allow", "b"])).toContain("drain allowance: b");
+      const dry = ok(["--dry-run"], on);
+      expect(dry).toMatch(/^start b:/m);
+      expect(dry).toContain("a: no start while usage is draining");
+      expect(dry).toContain(
+        "usage: allowance: b (pnpm prd dispatch --allow) starts, plans, reopens and resumes",
+      );
+      const out = ok(["--once"], on);
+      expect(out).toMatch(/^\S+Z start b/);
+      expect(out).toContain("usage: now draining: 5h 96%");
+      expect(out).toContain("b is allowed past it");
+      expect(dstate().drain).toMatchObject({ state: "draining", allow: "b" });
+      expect(ok(["--allow", "none"])).toContain("drain allowance: none (was b)");
+      expect(ok(["--dry-run"], on)).not.toContain("usage: allowance");
+    } finally {
+      rmSync(join(loops, ".drain-allow"), { force: true });
+    }
   });
 
   it("draining ends nothing, and a session in a landing is never stopped", () => {

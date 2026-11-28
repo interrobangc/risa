@@ -6,6 +6,9 @@
 //
 // The load: RISA_TEST_LOAD when set (tests, or one shell), else the load gate's
 // reading (readLoadGate in load-gate.mjs: RISA_LOAD_FILE, else the OS).
+//
+// scaledWait is the same scale for a wait inside a test (a poll's timeout, a
+// script's wait knob), whose fixed clock the Vitest limits don't reach.
 import { loadScale } from "./check-budget.mjs";
 import { parseLoad, readLoadGate } from "./load-gate.mjs";
 
@@ -28,4 +31,14 @@ export function testLimits({ load = null } = {}) {
     hookTimeout: Math.round(BASE.hookTimeout * scale),
     scale,
   };
+}
+
+/**
+ * MS, a test's own wait, scaled as the limits are: unchanged at a load of 15 or
+ * under, up to three times above it. The load is read at each call unless given.
+ * @param {number} ms
+ * @param {{ load?: number | null }} [facts]
+ */
+export function scaledWait(ms, { load = testLoad() } = {}) {
+  return Math.round(ms * loadScale(load));
 }

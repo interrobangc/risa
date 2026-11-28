@@ -332,7 +332,10 @@ describe("the brief", () => {
   it("the plan brief carries the slice-size cap; the others don't", () => {
     const brief = (kind) => skepticBrief(kind, { evidence: "x", rules: rules() });
     expect(brief("plan")).toContain(SLICE_SIZE_RULE);
-    expect(SLICE_SIZE_RULE).toContain("more than about 8 files, or more than one running topic's hot file");
+    expect(SLICE_SIZE_RULE).toContain("more than about 4 files");
+    expect(SLICE_SIZE_RULE).toContain("one test file (its fields line's `Check:` names the one)");
+    expect(SLICE_SIZE_RULE).toContain("share its `Check:` file with another slice in the wave");
+    expect(SLICE_SIZE_RULE).not.toContain("8 files");
     expect(SLICE_SIZE_RULE).toContain("split it into slices that each land on their own");
     for (const kind of ["ask", "land"]) expect(brief(kind)).not.toContain(SLICE_SIZE_RULE);
   });

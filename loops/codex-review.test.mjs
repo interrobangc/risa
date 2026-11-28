@@ -11,7 +11,7 @@
 // limit comment and marked its summary "failed". The carry rule runs against a
 // throwaway repository, with PR states built by hand in the same shape.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -356,6 +356,64 @@ describe("a clean verdict carried over dev merges", () => {
     const head = mergeDev({ "other.txt": "dev\n" });
     const v = check(pr(head, ["1".repeat(40), "completed"]));
     expect(v).toMatchObject({ state: "stale", notCarried: "1111111 isn't in this checkout" });
+  });
+
+  describe("over docs commits after the approval (--docs)", () => {
+    const docs = "\\.md$"; // lib.sh's docs_re
+    const checkDocs = (json) => carried(json, { repo, trunk: "dev", docs });
+    const planCommit = () => {
+      mkdirSync(join(repo, "plans"), { recursive: true });
+      return commit({ "plans/x-plan.md": "## Status\n\nwave 1 landed\n" }, "status");
+    };
+
+    it("reads clean when only a plan file changed since, naming the approved commit", () => {
+      const head = planCommit();
+      const json = pr(head, [reviewed, "completed"]);
+      expect(check(json).state).toBe("stale");
+      const v = checkDocs(json);
+      expect(v).toMatchObject({ state: "clean", findings: [], carriedFrom: reviewed, carriedOver: "docs" });
+      expect(verdictLine(v)).toBe(
+        `codex: clean on ${head.slice(0, 7)} (approved on ${reviewed.slice(0, 7)}: only docs changed since)`,
+      );
+      expect(checkDocs(pr(head, [head, "running"], [[reviewed, "completed"]])).state).toBe("clean");
+    });
+
+    it("isn't clean when a code file changed since too", () => {
+      planCommit();
+      const head = commit({ "mine.txt": lines(1, 5) }, "more work");
+      const v = checkDocs(pr(head, [reviewed, "completed"]));
+      expect(v.state).toBe("stale");
+      expect(v.carriedFrom).toBeUndefined();
+      expect(v.notCarried).toBe(
+        `${head.slice(0, 7)} isn't a merge of dev; mine.txt changed since, not only docs`,
+      );
+    });
+
+    it("isn't clean when the head doesn't build on the reviewed commit", () => {
+      git("checkout", "-qb", "redo", "dev");
+      const head = commit({ "notes.md": "n\n" }, "docs");
+      expect(checkDocs(pr(head, [reviewed, "completed"])).notCarried).toMatch(
+        /doesn't build on .*; the head doesn't build on /,
+      );
+    });
+
+    it("carries from the command line with --docs", () => {
+      const head = planCommit();
+      const file = join(repo, "..", `codex-docs-${head}.json`);
+      writeFileSync(file, JSON.stringify(pr(head, [reviewed, "completed"])));
+      try {
+        const run = (...args) =>
+          execFileSync("node", [CLI, file, "--line", `--repo=${repo}`, "--trunk=dev", ...args], {
+            encoding: "utf8",
+          });
+        expect(run()).toMatch(/^codex: stale /);
+        expect(run(`--docs=${docs}`)).toMatch(
+          /^codex: clean on .* \(approved on .*: only docs changed since\)/,
+        );
+      } finally {
+        rmSync(file, { force: true });
+      }
+    });
   });
 
   it("carries from the command line with --repo and --trunk only", () => {

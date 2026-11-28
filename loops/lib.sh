@@ -358,14 +358,18 @@ while IFS= read -r _p; do exempt_re+=${exempt_re:+|}${_p//./\\.}; done < <(confi
 exempt_re="(\\.md\$|^($exempt_re)(/|\$))"
 unset _p
 
+# docs_re → the files a Codex review needs no look at: Markdown (`*.md`
+# anywhere, plans included). Tooling scripts are code: they keep the review.
+# codex-review.mjs takes it too (--docs), for commits after Codex's approval.
+docs_re='\.md$'
 # docs_only BASE TIP → succeeds when BASE...TIP changes something and every
-# file it changes is Markdown (`*.md` anywhere). Tooling scripts are code: they
-# keep the Codex review. An empty diff is not docs only. --no-renames lists both
-# sides of a rename, so a code file renamed to .md isn't docs only.
+# file it changes is docs (docs_re). An empty diff is not docs only.
+# --no-renames lists both sides of a rename, so a code file renamed to .md
+# isn't docs only.
 docs_only() {
   local files
   files=$(git -C "$main" diff --name-only --no-renames "$1...$2") || return 1
-  [[ -n $files ]] && ! grep -qv '\.md$' <<< "$files"
+  [[ -n $files ]] && ! grep -qvE "$docs_re" <<< "$files"
 }
 
 # deps_re → the files whose change needs the main checkout's install.

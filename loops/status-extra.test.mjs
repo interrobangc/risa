@@ -283,7 +283,8 @@ describe("the dispatcher's part", () => {
       files().state,
       JSON.stringify({
         code: { hash: "abc", pid: process.pid, at: ago(H) },
-        stuck: { lastTickAt: NOW - 120_000 },
+        lastTickAt: NOW - 120_000,
+        stuck: { lastTickAt: NOW - 3_600_000 },
       }),
     );
     writeFileSync(files().log, "2026-11-21T10:01:00Z start alpha\n");
@@ -291,6 +292,30 @@ describe("the dispatcher's part", () => {
       `DISPATCHER: running (pid ${process.pid}), code current\nlast: 2026-11-21T10:01:00Z start alpha · last tick 2m ago (2026-11-21T11:58:00Z)\n\n`,
     );
     rmSync(files().log);
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(
+      "\nlast tick 2m ago (2026-11-21T11:58:00Z)\n",
+    );
+    // A paused dispatcher's tick still beats: the stuck watch's older time isn't shown.
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        code: { hash: "abc", pid: process.pid, at: ago(H) },
+        paused: { at: new Date(NOW - H).toISOString(), why: "t" },
+        lastTickAt: NOW - 60_000,
+        stuck: { lastTickAt: NOW - H },
+      }),
+    );
+    expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(
+      "\nlast tick 1m ago (2026-11-21T11:59:00Z)\n",
+    );
+    // A state an older release wrote has only the stuck watch's time.
+    writeFileSync(
+      files().state,
+      JSON.stringify({
+        code: { hash: "abc", pid: process.pid, at: ago(H) },
+        stuck: { lastTickAt: NOW - 120_000 },
+      }),
+    );
     expect(dispatcherPart(files(), { now: NOW, current: () => "abc" })).toContain(
       "\nlast tick 2m ago (2026-11-21T11:58:00Z)\n",
     );
