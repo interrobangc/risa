@@ -559,3 +559,13 @@ Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
 **Acceptance criteria:**
 
 - The same test names pass before and after (`pnpm exec vitest run loops/rotate loops/rm-done` lists every old test once); `loops/test-limits.test.mjs` passes naming each new file; no new file is over about 400 lines; `pnpm check` passes.
+
+## Slice 53: The slice check's budget allows for the steps it will run
+
+Stack: no · Reads: plans/fixes-rules.md · Tests: unit · Blocked by: none
+
+**Build (RISA-1073):** `loops/check-budget.mjs` takes its budget from the last passing runs of the same mode and branch kind, whatever steps they ran, so a slice touching `loops/` (which adds the tooling step) gets a budget from slice runs without it (a 15 s median, 705 s at load ~21) and `loops/check-run.sh` stops it in the tooling step with nothing failed (exit 124). The check log records each run's step times (`check-times.mjs`, `stepTimes`): make the budget allow for the steps this check will run, for example by taking only samples that ran the same steps (falling back as now with too few), or by summing a per-step usual time; choose, and say why in the hand-off. `check-run.sh` passes what the budget needs (the steps it will run) to `check-budget.mjs`; keep its fallback when the budget script fails. Keep the header comment in `check-budget.mjs` true.
+
+**Acceptance criteria:**
+
+- Unit test (`loops/check-budget.test.mjs`): fast slice runs without the tooling step and slower ones with it; a check that will run the tooling step gets a budget from the slower ones (or their step sums), one without it keeps the fast budget, and too few matching samples falls back as before.
