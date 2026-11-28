@@ -237,6 +237,38 @@ describe("the tooling step after the slice's own check (RISA-1015)", () => {
     expect(r.step).toBe("tooling");
   });
 
+  it("times its own steps, static and unit, before the tooling step's (RISA-1073)", () => {
+    expect(onSlice(3).times).toEqual([
+      expect.stringMatching(/^\d+ static$/),
+      expect.stringMatching(/^\d+ unit$/),
+      expect.stringMatching(/^\d+ tooling$/),
+    ]);
+    expect(onSlice(4).times).toEqual([
+      expect.stringMatching(/^\d+ check$/),
+      expect.stringMatching(/^\d+ tooling$/),
+    ]);
+  });
+
+  it("--steps prints the steps the check would run, and runs none (RISA-1073)", () => {
+    const steps = (n, tooling) => {
+      spawnSync("git", ["-C", own, "checkout", "-q", "-B", `part/t/${n}`]);
+      return hook(["--steps", "slice", "abc123", tooling], {}, own, own);
+    };
+    for (const [n, tooling, want] of [
+      [3, "1", "static,unit,tooling"],
+      [3, "0", "static,unit"],
+      [4, "2", "check,tooling"],
+      [4, "0", "check"],
+    ]) {
+      const r = steps(n, tooling);
+      expect(r.status, r.err).toBe(0);
+      expect(r.out).toBe(`${want}\n`);
+      expect(r.ran).toEqual([]);
+      expect(r.times).toEqual([]);
+    }
+    expect(hook(["--steps", "full", "abc123", "1"], {}, own, own).out).toBe("check,tooling\n");
+  });
+
   it("leaves the tooling step as now for a Check file outside the tooling tests (RISA-1021)", () => {
     const r = onSlice(3, "1", { STUB_LIST: "loops/other.test.mjs" });
     expect(r.status, r.err).toBe(0);
@@ -293,8 +325,7 @@ describe("the check's tooling step's times", () => {
     const times = ["slow.test.mjs:90", ...Array.from({ length: 11 }, (_, i) => `t${i}.test.mjs:${i}`)];
     const r = hook(["slice", "abc123", "1"], { STUB_TIMES: times.join(",") });
     expect(r.status).toBe(0);
-    expect(r.times).toHaveLength(1);
-    expect(r.times[0]).toMatch(/^\d+ tooling$/);
+    expect(r.times).toEqual([expect.stringMatching(/^\d+ check$/), expect.stringMatching(/^\d+ tooling$/)]);
     expect(r.slowest).toHaveLength(10);
     expect(r.slowest.slice(0, 2)).toEqual(["90 slow.test.mjs", "10 t10.test.mjs"]);
   });
@@ -302,12 +333,12 @@ describe("the check's tooling step's times", () => {
   it("times a failed step too, its rerun included", () => {
     const r = hook(["slice", "abc123", "1"], { STUB_TESTS: "a.test.mjs:2" });
     expect(r.status).toBe(1);
-    expect(r.times).toEqual([expect.stringMatching(/^\d+ tooling$/)]);
+    expect(r.times).toEqual([expect.stringMatching(/^\d+ check$/), expect.stringMatching(/^\d+ tooling$/)]);
   });
 
-  it("writes nothing when the plan runs no tooling tests", () => {
+  it("writes only the project's check's time when the plan runs no tooling tests", () => {
     const r = hook(["slice", "abc123", "0"]);
-    expect(r.times).toEqual([]);
+    expect(r.times).toEqual([expect.stringMatching(/^\d+ check$/)]);
     expect(r.slowest).toEqual([]);
   });
 });

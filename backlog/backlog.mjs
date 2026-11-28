@@ -45,6 +45,10 @@
 //                                            detail lines, "" drops them); a filed one is refused
 //   backlog inbox remove <words…>       an unfiled bullet and its details out, on origin/dev;
 //                                            a filed one is refused
+//   backlog inbox to-repo <git url>     move the trunk inbox to a private inbox store (gh must say
+//                                            private): its unfiled lines into <name>.md there, then
+//                                            one commit on origin/dev sets `inbox` and removes the
+//                                            trunk inbox (backlog/inbox-move.mjs); refused once set
 //
 // The inbox commands write through the origin writer (backlog/origin.mjs):
 // a commit built on origin/dev's tip, changing only the inbox, pushed without
@@ -52,6 +56,15 @@
 // HEAD; unpushed backlog commits of local dev go first. Then the pickup, best
 // effort: a busy main checkout only prints why it skipped. BACKLOG_PICKUP=off
 // skips the pickup (tests).
+//
+// With the config's `inbox` group (an inbox store, backlog/inbox-store.mjs), the inbox
+// commands and the list act on the project's store file instead (backlog/inbox-commands.mjs):
+// same arguments, refusals and look-alike stop, one store commit each ("on <repo> <file>
+// as <sha>"), no trunk commit and no pickup. `ingest` files the store file's new lines
+// (each item's inbox note ends with the line's key, `(inbox key <hex>)`; a key already
+// filed is skipped, so a rerun after a crash files nothing twice), then pushes trunk's
+// backlog-only commits and removes, in one store write, every line whose key origin's
+// trunk holds. The doctor names a filed line still in the store (--fix: that last step).
 //   backlog list [--all] [--prd P] [--status S] [--type T] [--owner O] [--json]
 //   backlog show B-n                    finds archived items too (list --all lists them)
 //   backlog similar <text…>             open and archived items that look like it (read only)
@@ -89,28 +102,38 @@
 // BACKLOG_BRANCH (default the config's trunk), BACKLOG_REMOTE (default origin).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as amend from "./amend.mjs";
 import * as fmt from "./format.mjs";
 import * as edits from "./inbox-edit.mjs";
+import { LookAlikeStop, lookAlikeLine } from "./inbox-edit.mjs";
 import { withLock as withLockAt } from "./lock.mjs";
 import { mergeInbox } from "./inbox-merge.mjs";
-import { pushInboxEdit } from "./origin.mjs";
+import { pushBacklogAhead, pushInboxEdit } from "./origin.mjs";
 import * as reg from "./registry.mjs";
-import { loadConfigOrExit, toolCmd } from "../loops/config.mjs";
+import { inboxStore, loadConfigOrExit, toolCmd } from "../loops/config.mjs";
 
 const { config, path: CONFIG_FILE } = loadConfigOrExit("backlog");
 const TRUNK = process.env.BACKLOG_BRANCH ?? config.branches.trunk;
 const REMOTE = process.env.BACKLOG_REMOTE ?? "origin";
 const REL = config.paths.backlog;
 const INBOX_REL = config.paths.inbox;
+/** The project's inbox store and its file there, or null: the trunk inbox. */
+const STORE = inboxStore(config);
+// Loaded only with a store: a trunk-only project loads nothing more than before.
+const store = STORE
+  ? { ...(await import("./inbox-commands.mjs")), ...(await import("./inbox-store.mjs")) }
+  : null;
 const ARCHIVE_REL = config.paths.archive;
 /** CI's quarantine list, which `ci-file` commits with the backlog (null: the project has none). */
 const QUARANTINE_REL = config.paths.quarantine ?? null;
 const PREFIX = config.branches.prefixes;
 /** The lock and temporary files in the git dir carry the project's name. */
 const NAME = config.name;
+// Loaded only for the move: no other command needs it.
+const mover =
+  process.argv[2] === "inbox" && process.argv[3] === "to-repo" ? await import("./inbox-move.mjs") : null;
 // Loaded only for ci-file: every other command works without ci/.
 const filing = process.argv[2] === "ci-file" ? await import("../ci/filing.mjs") : null;
 
@@ -427,15 +450,6 @@ function write(tool, describe, change, opts = {}) {
   });
 }
 
-/** `add` stopped on look-alikes: nothing was filed (exit 3). */
-class LookAlikeStop extends Error {
-  /** @param {ReturnType<typeof fmt.similarItems>} matches */
-  constructor(matches) {
-    super("look-alikes");
-    this.matches = matches;
-  }
-}
-
 /**
  * Open and archived items to compare a new line with, each with its status
  * from git.
@@ -454,32 +468,128 @@ function similarPool(items) {
 /**
  * File every new inbox bullet as a tracker item (status inbox) and tag it with
  * its id. A line is always filed; one with look-alikes gets a note naming them.
+ * With `storeText` (the project's inbox store file) its lines are filed instead,
+ * untagged: each item's inbox note ends with the line's key, and a line whose key
+ * an item (or an archived one) already holds is not filed again.
+ * @param {import("./format.mjs").Backlog} b
+ * @param {WriteContext["inbox"]} inbox
+ * @param {string | null} [storeText]
  */
-function ingest(b, inbox) {
+function ingest(b, inbox, storeText) {
   /** @type {{ item: import("./format.mjs").Item, similar: ReturnType<typeof fmt.similarItems> }[]} */
   const filed = [];
-  if (inbox.text === null) return filed;
+  const fromStore = storeText !== undefined;
+  const text = fromStore ? storeText : inbox.text;
+  if (text === null) return filed;
   const ctx = { by: who(), date: today() };
   const pool = similarPool(b.items);
+  const known = fromStore
+    ? fmt.inboxKeys([...b.items, ...(readArchive({ lenient: true })?.items ?? [])])
+    : null;
   // In file order. Tagging only appends to a line, so line numbers never shift.
-  for (const e of fmt.newInboxEntries(inbox.text)) {
+  for (const e of fmt.newInboxEntries(text)) {
+    const key = known ? fmt.lineKey(e) : null;
+    if (key && known?.has(key)) continue;
     const title = fmt.titleFromBullet(e.text);
     const asked = [title !== e.text.replace(/\s+/g, " ").trim() ? e.text : "", e.details]
       .filter(Boolean)
       .join("\n");
     const similar = fmt.similarItems(e.text, pool);
     const it = fmt.add(b, { type: e.type, title, status: "inbox", ...ctx });
-    if (asked) fmt.addNote(it, { text: `From the inbox: ${asked.replace(/\n/g, " / ")}`, ...ctx });
+    const from = asked ? `From the inbox: ${asked.replace(/\n/g, " / ")}` : key ? "From the inbox" : "";
+    if (from) fmt.addNote(it, { text: key ? `${from} ${fmt.keyNote(key)}` : from, ...ctx });
     if (similar.length)
       fmt.addNote(it, {
         text: `Looks like: ${similar.map((m) => `${m.id} (${m.status}${m.archived ? ", archived" : ""}) ${m.title}`).join("; ")}`,
         ...ctx,
       });
-    inbox.text = fmt.tagInboxLine(inbox.text, e.line, it.id);
+    if (key) known?.set(key, it.id);
+    else inbox.text = fmt.tagInboxLine(/** @type {string} */ (inbox.text), e.line, it.id);
     pool.push({ ...it });
     filed.push({ item: it, similar });
   }
   return filed;
+}
+
+// ---- the inbox store's filed lines ---------------------------------------
+
+/** The project's inbox store (only with a config `inbox` group). */
+const projectStore = () =>
+  /** @type {NonNullable<typeof store>} */ (store).storeFor(/** @type {{ repo: string }} */ (STORE).repo);
+
+/**
+ * After a store ingest's backlog commit: push trunk's backlog-only commits (the trunk
+ * writer's rule), then remove from the store file, in one store write, every line
+ * whose key origin's trunk's backlog (or archive) holds. A line whose item isn't on
+ * origin stays for the next ingest; an origin or store it can't reach leaves them all.
+ * Returns the lines to print.
+ */
+function settleStore() {
+  const st = /** @type {{ repo: string, file: string }} */ (STORE);
+  const tracking = `refs/remotes/${REMOTE}/${TRUNK}`;
+  const leave = (why) => [`${why}: the filed lines stay in the inbox store for the next ingest`];
+  if (tryGit(mainCheckout, "remote", "get-url", REMOTE) === null) return leave(`no ${REMOTE} remote`);
+  if (tryGit(mainCheckout, "fetch", "--quiet", REMOTE, TRUNK) === null)
+    return leave(`couldn't fetch ${REMOTE}/${TRUNK}`);
+  if (!tryGit(mainCheckout, "rev-parse", "--verify", "--quiet", tracking))
+    return leave(`${REMOTE} has no ${TRUNK}`);
+  const pushed = pushBacklogAhead({
+    main: mainCheckout,
+    remote: REMOTE,
+    trunk: TRUNK,
+    backlogFiles: BACKLOG_FILES,
+    withLock,
+  });
+  if (pushed === "refused") console.error(`${REMOTE}/${TRUNK} refused the push of the backlog commits`);
+  const onOrigin = [REL, ARCHIVE_REL].flatMap((rel) => {
+    const t = showAt(tracking, rel);
+    return t === null ? [] : fmt.parse(t, { lenient: true }).items;
+  });
+  const keys = fmt.inboxKeys(onOrigin);
+  let gone = 0;
+  let sha;
+  try {
+    sha = projectStore().write(
+      st.file,
+      (t) => {
+        if (t === null) return null;
+        const drop = fmt.newInboxEntries(t).filter((e) => keys.has(fmt.lineKey(e)));
+        gone = drop.length;
+        // Bottom up: a removal never moves the lines above it.
+        return drop.reduceRight((acc, e) => edits.removeEntry(acc, e.line), t);
+      },
+      `inbox: remove the lines filed on ${REMOTE}/${TRUNK}\n\nBy: ${who()}\n`,
+    );
+  } catch (e) {
+    if (e instanceof Error && e.name === "StoreError") return leave(e.message);
+    throw e;
+  }
+  if (!sha) return [];
+  return [
+    `removed ${gone} filed line${gone === 1 ? "" : "s"} from ${st.repo} ${st.file} as ${sha.slice(0, 7)}`,
+  ];
+}
+
+/** Store lines filed (their key in an item's note here) but still in the store: the doctor's. */
+function storeFindings() {
+  const st = /** @type {{ repo: string, file: string }} */ (STORE);
+  const text = projectStore().read(st.file);
+  if (text === null) return [];
+  const archived = readArchive({ lenient: true })?.items ?? [];
+  const keys = fmt.inboxKeys([...read({ lenient: true }).items, ...archived]);
+  return fmt.newInboxEntries(text).flatMap((e) => {
+    const id = keys.get(fmt.lineKey(e));
+    return id
+      ? [
+          {
+            id,
+            problem: `is filed, but its line ("${fmt.titleFromBullet(e.text).slice(0, 60)}") is still in the inbox store (${st.repo} ${st.file}); ingest removes it once ${id} is on ${REMOTE}/${TRUNK}`,
+            fixable: true,
+            store: true,
+          },
+        ]
+      : [];
+  });
 }
 
 // ---- the inbox on origin/dev ----------------------------------------------
@@ -572,9 +682,6 @@ function mergedInbox(fetch) {
   return mergeInbox((base && showAt(base, INBOX_REL)) ?? "", working, theirs).text;
 }
 
-/** A look-alike as a line: an item, or an unfiled inbox line. */
-const lookAlikeLine = (m) => (m.id === "inbox" ? `unfiled inbox line  ${m.title}` : fmt.similarLine(m));
-
 /** The writer's fixed parts, for one inbox command. */
 const originWrite = () => ({
   main: mainCheckout,
@@ -654,6 +761,29 @@ function findUnfiled(t, localText, words, filed) {
   const tagged = local.find((l) => l.id && key(l.text) === key(e.text));
   if (tagged) throw filed(e, /** @type {string} */ (tagged.id));
   return e;
+}
+
+/** `inbox to-repo <git url>`: the trunk inbox into a private store (backlog/inbox-move.mjs). */
+function inboxToRepo(args) {
+  if (args.length !== 1) throw new fmt.BacklogError("usage: inbox to-repo <git url>");
+  const configRel = relative(mainCheckout, CONFIG_FILE);
+  if (configRel.startsWith("..") || isAbsolute(configRel))
+    throw new fmt.BacklogError(`the config ${CONFIG_FILE} isn't in ${mainCheckout}: move it from there`);
+  const lines = /** @type {NonNullable<typeof mover>} */ (mover).moveToRepo(args[0], {
+    main: mainCheckout,
+    gitDir,
+    name: NAME,
+    remote: REMOTE,
+    trunk: TRUNK,
+    configRel,
+    inboxRel: INBOX_REL,
+    hasInbox: STORE !== null,
+    by: who(),
+    backlogFiles: BACKLOG_FILES,
+    withLock,
+  });
+  for (const line of lines) console.log(line);
+  pickup("the inbox move");
 }
 
 /** A filed line's refusal: `then` says what to do instead. */
@@ -925,7 +1055,7 @@ function archiveFinished(b, ctx, wanted = []) {
  * Fixable ones (stale statuses, the summary) are what any write repairs.
  */
 function findings() {
-  /** @type {{ id: string, problem: string, fixable: boolean }[]} */
+  /** @type {{ id: string, problem: string, fixable: boolean, store?: boolean }[]} */
   const out = [];
   const text = readFileSync(file, "utf8");
   const b = fmt.parse(text, { lenient: true });
@@ -1012,6 +1142,7 @@ function findings() {
   // The PRD registry (an old prose table is no one's to check).
   const registry = reg.parseRegistry(b.preamble);
   if (registry.format === "new") out.push(...reg.findings(registry.rows, b.items, archivedRows()));
+  if (STORE) out.push(...storeFindings());
   return out;
 }
 
@@ -1200,6 +1331,7 @@ function doctor(fix) {
       () => undefined,
       { lenient: true },
     );
+    if (found.some((f) => f.store)) for (const line of settleStore()) console.log(line);
     console.log(`fixed ${n}`);
     found = findings();
   }
@@ -1239,6 +1371,17 @@ function main() {
       return console.log(`${file}\n${inboxFile}`);
     case "inbox": {
       const [sub, ...args] = pos;
+      if (sub === "to-repo" && mover) return inboxToRepo(args);
+      if (STORE && store) {
+        const at = {
+          store: store.storeFor(STORE.repo),
+          file: STORE.file,
+          by: who(),
+          pool: () => similarPool(read({ lenient: true }).items),
+        };
+        for (const line of store.storeInbox(at, sub, args, opts)) console.log(line);
+        return;
+      }
       if (sub === "add") return inboxAdd(args, opts);
       if (sub === "move") return inboxMove(args);
       if (sub === "edit") return inboxEdit(args, opts);
@@ -1256,19 +1399,23 @@ function main() {
     }
     case "ingest": {
       pickup(`${toolCmd.backlog} ingest`); // before the lock: dev-sync takes it too
+      // A store's file is read before the lock (a fetch); its lines are filed under it.
+      const storeText = STORE ? projectStore().read(STORE.file) : undefined;
       const filed = write(
         "ingest",
         (items) => {
           const list = items.map((f) => f.item.id);
           return { ids: list, text: `file ${amend.idList(list)} from the inbox` };
         },
-        (b, ctx) => ingest(b, ctx.inbox),
+        (b, ctx) => ingest(b, ctx.inbox, storeText),
       );
       for (const { item: it, similar } of filed) {
         console.log(`${it.id}  ${it.type.padEnd(8)}  ${it.title}`);
         for (const m of similar) console.log(`  looks like ${fmt.similarLine(m)}`);
       }
-      return console.log(filed.length ? `filed ${filed.length}` : "nothing new in the inbox");
+      console.log(filed.length ? `filed ${filed.length}` : "nothing new in the inbox");
+      if (STORE) for (const line of settleStore()) console.log(line);
+      return;
     }
     case "similar": {
       const text = pos.join(" ");
@@ -1473,7 +1620,7 @@ try {
     );
     process.exit(3);
   }
-  if (e instanceof fmt.BacklogError) {
+  if (e instanceof fmt.BacklogError || (store && e instanceof store.StoreError)) {
     console.error(`backlog: ${e.message}`);
     process.exit(1);
   }

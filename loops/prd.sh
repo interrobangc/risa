@@ -58,6 +58,9 @@ ${prd_cmd} <command>
                               (--model <m>: another model, this session only; a reopen or rotation is Opus),
                               Remote Control "inbox", opened in its own directory outside the repository (\$RISA_INBOX_DIR, default ~/.risa/inbox; created);
                               the dispatcher keeps it open once you have opened it by hand and trusted the folder
+    home [take <project|inbox>]   which machine is each project's home (and the inbox session's), from the
+                              inbox store's homes.json; take moves one here: another machine's dispatcher
+                              then leaves it alone within about five minutes (a project with inbox only)
     slice <topic> <n>         a slice's worktree (orchestrators run this); a stack only for Stack: yes
     hotfix <name> [--open] [--model <m>] ["<the fix>"]   a stackless worktree on ${hotfix_prefix}<name> from dev, for a fix
                               outside any PRD (reused if it exists); --open starts its session here
@@ -410,6 +413,23 @@ case $cmd in
     # --dir and --managed are the reopen's and rotation's (open-session.mjs,
     # rotate-into.sh): the recorded directory, and the dispatcher's record. They
     # pass no --model, so a reopen or rotation is always on inbox_model.
+    # With an inbox store (the config's inbox group) it is one session for every
+    # project on this machine: opened from the main checkout of the inbox keeper
+    # (home.mjs inbox-repo: the machine config's first repo with inbox whose work
+    # switch is on, the one whose dispatcher keeps it alive; none on: the first
+    # with inbox), so its record, name and prompt are the same whichever project
+    # runs this. RISA_INBOX_FROM marks the hop, so it is made once; an inherited
+    # RISA_SESSIONS_DIR (a session's, under the project it hops from) moves to the
+    # keeper's, so the record lands there (RISA-1072).
+    if [[ -z ${RISA_INBOX_FROM:-} ]] && config_get inbox.repo > /dev/null 2>&1; then
+      home=$(node "$loops_lib_dir/home.mjs" inbox-repo) ||
+        die "inbox: no repo in the machine config has an inbox group"
+      if [[ -n $home && $(cd "$home" 2> /dev/null && pwd -P) != "$(cd "$main" && pwd -P)" ]]; then
+        [[ -z ${RISA_SESSIONS_DIR:-} ]] || export RISA_SESSIONS_DIR=$home/.loops/.sessions
+        cd "$home" && RISA_INBOX_FROM=$main exec "$loops_lib_dir/prd.sh" inbox "$@"
+      fi
+    fi
+    unset RISA_INBOX_FROM
     model=$inbox_model dir=${RISA_INBOX_DIR:-$HOME/.risa/inbox} managed=()
     while (($#)); do
       case $1 in
@@ -441,6 +461,7 @@ case $cmd in
     cd "$dir" && RISA_MAIN=$main exec "$wrapper" inbox --kind inbox ${managed[@]+"${managed[@]}"} -- --model "$model" --remote-control inbox "$prompt_text"
     ;;
   slice) work_switch slice; exec "$bin/new.sh" slice "$@" ;;
+  home) exec node "$bin/home.mjs" "$@" ;;
   hotfix)
     name=${1:?"usage: ${prd_cmd} hotfix <name> [--open] [--model <m>] [\"<the fix>\"]"}; shift; open=0 fix="" model=$agent_model
     while (($#)); do
@@ -527,9 +548,13 @@ case $cmd in
     # check-hook.sh runs it, then the tooling tests when the plan says so.
     echo "The $pmode check of the diff since ${base:0:7}${why:+ ($why)}."
     [[ $ptooling != 0 ]] && echo "The diff touches the tooling: the tooling tests join after the project's check."
+    # The steps it will run (check-hook.sh --steps) set the budget's samples
+    # (check-run.sh, RISA_CHECK_STEPS); none read, the budget takes any steps'.
     # shellcheck disable=SC2086
-    (cd "$dir" && use_node && "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
-      "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-hook.sh" "$pmode" "$base" "$ptooling" $pown)
+    (cd "$dir" && use_node &&
+      steps=$("$bin/check-hook.sh" --steps "$pmode" "$base" "$ptooling" $pown 2> /dev/null || true) &&
+      RISA_CHECK_STEPS=$steps "$bin/lease.sh" run check --label "pnpm check${pmode:+ ($pmode)}" -- \
+        "$bin/check-run.sh" "$pmode" "$why" -- "$bin/check-hook.sh" "$pmode" "$base" "$ptooling" $pown)
     if [[ $pmode == quick || $pmode == slice ]]; then
       echo "$(git -C "$dir" rev-parse HEAD) quick $base $why" > "$record"
       echo "quick check passed on $(git -C "$dir" rev-parse --short HEAD) ($(git -C "$dir" branch --show-current)): $why"

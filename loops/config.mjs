@@ -195,6 +195,10 @@ export const SHAPE = [
   ["claude.configDir", "text?"],
   // The boundary lint: the project's own folders, which no core file may name.
   ["boundary.appPaths", "path[]?"],
+  // The inbox store (backlog/inbox-store.mjs): a private repo's git URL, and this project's
+  // file there (default <name>.md). With it set, the inbox is the store's, not paths.inbox.
+  ["inbox.repo", "text?"],
+  ["inbox.file", "path?"],
 ];
 
 /** A problem with the config: `problems` has one line per field. */
@@ -297,6 +301,12 @@ export function configProblems(raw) {
   const idPrefix = has.get("backlog.idPrefix");
   if (has.has("backlog.formerIdPrefix") && has.get("backlog.formerIdPrefix") === idPrefix)
     problems.push("backlog.formerIdPrefix: must differ from backlog.idPrefix");
+  // The inbox group needs its repo; its file is a name at the store's root.
+  if (isObject(/** @type {Record<string, unknown>} */ (raw).inbox) && !has.has("inbox.repo"))
+    problems.push("inbox.repo: missing");
+  const storeFile = has.get("inbox.file");
+  if (typeof storeFile === "string" && !/^[\w][\w.-]*\.md$/.test(storeFile))
+    problems.push("inbox.file: must be a file name ending in .md (no folder)");
   const prefixes = found.filter(([key]) => key.startsWith("branches.prefixes.")).map(([, v]) => v);
   if (new Set(prefixes).size !== prefixes.length)
     problems.push("branches.prefixes: two kinds share a prefix");
@@ -461,6 +471,17 @@ export function backlogIds(config = loadConfig().config) {
     num: (id) => Number(normalize(id).slice(prefix.length)),
     normalize,
   };
+}
+
+/**
+ * The project's inbox store, or null when the config has no `inbox` group: the repo's
+ * URL and the project's file there (`inbox.file`, else `<name>.md`).
+ * @param {Record<string, any>} config a valid config
+ * @returns {{ repo: string, file: string } | null}
+ */
+export function inboxStore(config) {
+  if (!config.inbox) return null;
+  return { repo: config.inbox.repo, file: config.inbox.file ?? `${config.name}.md` };
 }
 
 /** The branch kinds, in the order a branch is matched against their prefixes. */

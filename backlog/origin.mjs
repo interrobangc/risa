@@ -65,31 +65,11 @@ export function pushInboxEdit(o) {
     if (!tryGit("rev-parse", "--verify", "--quiet", tracking))
       throw new BacklogError(`${o.remote} has no ${o.trunk}; nothing was written`);
   };
-  /** Push `sha` to the remote's trunk, never forced; the tracking ref follows. */
-  const push = (sha) => {
-    if (tryGit("push", "--quiet", o.remote, `${sha}:refs/heads/${o.trunk}`) === null) return false;
-    tryGit("update-ref", tracking, sha);
-    return true;
-  };
-  const isBacklogCommit = (sha) => {
-    const parents = git("rev-list", "--parents", "-n", "1", sha).split(" ").length - 1;
-    if (parents !== 1) return false;
-    if (!amend.parseMessage(run(o.main, ["log", "-1", "--format=%B", sha])).backlog) return false;
-    const files = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split("\n").filter(Boolean);
-    return files.length > 0 && files.every((f) => o.backlogFiles.includes(f));
-  };
+  const push = (sha) => pushTo(o, sha);
 
   fetch();
   o.precheck?.();
-  o.withLock(() => {
-    const here = git("rev-parse", local);
-    const there = git("rev-parse", tracking);
-    if (here === there || tryGit("merge-base", "--is-ancestor", there, here) === null) return;
-    const own = git("rev-list", `${there}..${here}`).split("\n").filter(Boolean);
-    if (!own.every(isBacklogCommit))
-      return log(`${o.trunk} has a commit of your own that isn't pushed: it stays yours to push`);
-    if (push(here)) log(`pushed ${own.length} backlog commit(s) of ${o.trunk} first`);
-  });
+  pushBacklogAhead({ ...o, log });
 
   const tmpIndex = join(o.gitDir, `${o.name}-inbox-index-${process.pid}`);
   try {
@@ -124,6 +104,72 @@ export function pushInboxEdit(o) {
   throw new BacklogError(
     `${o.remote}/${o.trunk} refused ${TRIES} pushes (it kept moving, or the push fails); nothing was written`,
   );
+}
+
+/**
+ * @typedef {{
+ *   main: string, remote: string, trunk: string,
+ *   backlogFiles: string[],
+ *   withLock: <T>(fn: () => T) => T,
+ *   log?: (line: string) => void,
+ * }} TrunkPush
+ */
+
+/** Push `sha` to the remote's trunk, never forced; the tracking ref follows. @param {TrunkPush} o @param {string} sha */
+function pushTo(o, sha) {
+  try {
+    run(o.main, ["push", "--quiet", o.remote, `${sha}:refs/heads/${o.trunk}`]);
+  } catch {
+    return false;
+  }
+  try {
+    run(o.main, ["update-ref", `refs/remotes/${o.remote}/${o.trunk}`, sha]);
+  } catch {
+    // the next fetch sets it
+  }
+  return true;
+}
+
+/**
+ * The trunk writer's rule, after a fetch: under the backlog lock, when local trunk is
+ * ahead of the fetched remote trunk by backlog commits only (one parent, the
+ * Backlog-Tool: trailer, only the backlog files), push it (a fast-forward). A commit of
+ * the user's own is never pushed: it is logged and nothing goes.
+ * @param {TrunkPush} o
+ * @returns {"even" | "pushed" | "own" | "behind" | "refused"} what happened:
+ *   nothing to push, pushed, a commit of the user's own in the way, local not ahead
+ *   (diverged or behind), or the push refused
+ */
+export function pushBacklogAhead(o) {
+  const log = o.log ?? ((line) => console.error(line));
+  const git = (...args) => run(o.main, args).trim();
+  const tracking = `refs/remotes/${o.remote}/${o.trunk}`;
+  const local = `refs/heads/${o.trunk}`;
+  const isBacklogCommit = (sha) => {
+    const parents = git("rev-list", "--parents", "-n", "1", sha).split(" ").length - 1;
+    if (parents !== 1) return false;
+    if (!amend.parseMessage(run(o.main, ["log", "-1", "--format=%B", sha])).backlog) return false;
+    const files = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split("\n").filter(Boolean);
+    return files.length > 0 && files.every((f) => o.backlogFiles.includes(f));
+  };
+  return o.withLock(() => {
+    const here = git("rev-parse", local);
+    const there = git("rev-parse", tracking);
+    if (here === there) return "even";
+    try {
+      run(o.main, ["merge-base", "--is-ancestor", there, here]);
+    } catch {
+      return "behind";
+    }
+    const own = git("rev-list", `${there}..${here}`).split("\n").filter(Boolean);
+    if (!own.every(isBacklogCommit)) {
+      log(`${o.trunk} has a commit of your own that isn't pushed: it stays yours to push`);
+      return "own";
+    }
+    if (!pushTo(o, here)) return "refused";
+    log(`pushed ${own.length} backlog commit(s) of ${o.trunk} first`);
+    return "pushed";
+  });
 }
 
 /** A file at a commit, or null. */
