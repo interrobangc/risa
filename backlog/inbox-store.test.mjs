@@ -1,9 +1,19 @@
 // The inbox store: a temp bare repo stands in for the private one, and each clone's
 // folder is the test's own (RISA_INBOX_STORE), never ~/.risa.
-import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BRANCH, StoreError, TRIES, cloneName, storeFor, storeRoot } from "./inbox-store.mjs";
 
@@ -43,13 +53,45 @@ describe("the store's clone", () => {
   it("is under ~/.risa/inbox-store, or the folder RISA_INBOX_STORE names, made on first use", () => {
     expect(storeRoot({ HOME: "/home/x" })).toBe("/home/x/.risa/inbox-store");
     expect(storeRoot({ HOME: "/home/x", RISA_INBOX_STORE: "/s" })).toBe("/s");
-    expect(cloneName("git@github.com:me/ideas.git")).toBe("github.com-me-ideas");
-    expect(cloneName("https://github.com/me/ideas.git")).toBe("github.com-me-ideas");
+    expect(cloneName("git@github.com:me/ideas.git")).toMatch(/^github\.com-me-ideas-[0-9a-f]{8}$/);
+    expect(cloneName("https://github.com/me/ideas.git")).toMatch(/^github\.com-me-ideas-[0-9a-f]{8}$/);
     const s = store();
     expect(s.dir.startsWith(join(root, "clones-a"))).toBe(true);
     expect(existsSync(s.dir)).toBe(false);
     expect(s.read(FILE)).toBeNull();
     expect(existsSync(join(s.dir, "HEAD"))).toBe(true);
+  });
+
+  it("gives URLs that fold to one safe name clones of their own (a hash of the URL)", () => {
+    const [a, b] = ["git@github.com:a/b-c.git", "git@github.com:a-b/c.git"];
+    expect(cloneName(a).replace(/-[0-9a-f]{8}$/, "")).toBe(cloneName(b).replace(/-[0-9a-f]{8}$/, ""));
+    expect(cloneName(a)).not.toBe(cloneName(b));
+    expect(cloneName(a)).toBe(cloneName(a));
+  });
+
+  it("works from a relative RISA_INBOX_STORE: the clone and its temp index are at absolute paths", () => {
+    const rel = relative(process.cwd(), join(root, "clones-rel"));
+    expect(isAbsolute(rel)).toBe(false);
+    const s = storeFor(remote, { env: { RISA_INBOX_STORE: rel } });
+    expect(s.dir).toBe(join(root, "clones-rel", cloneName(remote)));
+    expect(s.write(FILE, add("relative"), "m")).toMatch(/^[0-9a-f]{40}$/);
+    expect(s.read(FILE)).toBe(`${HEAD}- relative\n`);
+  });
+
+  it("ends on one clone when processes make it at once: each loser uses the winner's", async () => {
+    const clones = join(root, "clones-race");
+    const url = new URL("./inbox-store.mjs", import.meta.url).href;
+    const script = `const m = await import(${JSON.stringify(url)}); console.log(String(m.storeFor(process.argv[1]).read(${JSON.stringify(FILE)})));`;
+    store("seed").write(FILE, add("seen"), "m");
+    const outs = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        promisify(execFile)("node", ["--input-type=module", "-e", script, remote], {
+          env: { ...process.env, RISA_INBOX_STORE: clones },
+        }),
+      ),
+    );
+    for (const { stdout } of outs) expect(stdout).toBe(`${HEAD}- seen\n\n`);
+    expect(readdirSync(clones)).toEqual([cloneName(remote)]);
   });
 
   it("refuses a file that is a path", () => {
@@ -129,6 +171,17 @@ describe("read and write", () => {
     renameSync(remote, `${remote}-gone`);
     expect(a.read(FILE)).toBe(`${HEAD}- kept\n`);
     expect(() => a.write(FILE, add("lost"), "m")).toThrow(/couldn't fetch.*nothing was written/);
+  });
+
+  it("forgets the old tip when the remote is found empty: no stale read, and a write starts the branch", () => {
+    const a = store();
+    a.write(FILE, add("old"), "m");
+    rmSync(remote, { recursive: true, force: true });
+    execFileSync("git", ["init", "-q", "--bare", remote]);
+    expect(a.read(FILE)).toBeNull();
+    const sha = a.write(FILE, add("new"), "m");
+    expect(onRemote("rev-list", "--parents", "-1", BRANCH)).toBe(sha);
+    expect(a.read(FILE)).toBe(`${HEAD}- new\n`);
   });
 
   it("commits nothing for an edit that changes nothing", () => {
