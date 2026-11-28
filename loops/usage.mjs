@@ -19,7 +19,8 @@
 //     stalled?: { at, error, resetsAt, pid }, account? (the Claude config folder the
 //     session's claude used, when not Claude Code's default: host.mjs claudeAccount)
 //   A window the input leaves out keeps its last value and age; a new pid clears a stall.
-//   Each account's usage is its own: a reading counts only for its account's merge.
+//   Each account's usage is its own: a reading counts only for its account's merge, and a
+//   reading under another account than the last one's starts afresh (no window or stall kept).
 //
 // The merge (`mergeReadings`, pure): a window read more than RISA_USAGE_STALE_MIN (15)
 // ago, or past its reset, doesn't count; with none left the usage is unknown. Of the rest,
@@ -115,14 +116,20 @@ export function parseInput(input) {
 
 const iso = (/** @type {number | null} */ ms) => (ms === null ? null : new Date(ms).toISOString());
 
+/** Whether CURRENT (a stored reading, or null) was read under ACCOUNT (null: the default). */
+const sameAccount = (/** @type {any} */ current, /** @type {string | null} */ account) =>
+  (current?.account ?? null) === (account ?? null);
+
 /**
  * This session's next reading: the input's windows read now, the others kept as they were;
- * a stall kept only while the pid is the same; ACCOUNT (claudeAccount's) kept when set. Pure.
+ * a stall kept only while the pid is the same; ACCOUNT (claudeAccount's) kept when set. A
+ * current reading under another account keeps nothing: its windows were that account's. Pure.
  * @param {any} current the session's last reading, or null
  * @param {NonNullable<ReturnType<typeof parseInput>>} parsed
  * @param {{ session: string, pid: number | null, now: number, account?: string | null }} at
  */
 export function nextReading(current, parsed, { session, pid, now, account = null }) {
+  if (!sameAccount(current, account)) current = null;
   const windows = { ...(current?.windows && typeof current.windows === "object" ? current.windows : {}) };
   for (const [name, w] of Object.entries(parsed.windows))
     windows[name] = { ...w, resetsAt: iso(w.resetsAt), at: iso(now) };
@@ -415,10 +422,11 @@ export function readUsage(dir, { now = Date.now(), env = process.env, account = 
 
 /**
  * Mark SESSION stalled (the dispatcher's stop, or a StopFailure). RESETS_AT null takes the
- * last reading's. Throws on a bad name or an unwritable folder.
+ * last reading's, of ACCOUNT's readings. A current reading under another account than
+ * ACCOUNT is dropped, not kept beside the stall. Throws on a bad name or an unwritable folder.
  * @param {string} dir @param {string} session
  * @param {{ error?: string, resetsAt?: number | null, pid?: number | null, now?: number,
- *   account?: string | null }} [opts] account: the session's, for a reading it starts
+ *   account?: string | null }} [opts] account: the session's (null: the default)
  */
 export function markStalled(
   dir,
@@ -426,10 +434,16 @@ export function markStalled(
   { error = "rate_limit", resetsAt = null, pid = null, now = Date.now(), account = null } = {},
 ) {
   if (!NAME_OK.test(session)) throw new Error(`usage: a bad session name ${session}`);
-  const reset = resetsAt ?? resetFromReadings(readReadings(dir), now);
+  const reset =
+    resetsAt ??
+    resetFromReadings(
+      readReadings(dir).filter((r) => sameAccount(r, account)),
+      now,
+    );
   return updateRecord(join(dir, `${session}.json`), (current) => {
-    const next = stalledReading(current, { error, resetsAt: reset, session, pid, now });
-    if (account && !next.account) next.account = account;
+    const mine = sameAccount(current, account) ? current : null;
+    const next = stalledReading(mine, { error, resetsAt: reset, session, pid, now });
+    if (account) next.account = account;
     return next;
   });
 }
